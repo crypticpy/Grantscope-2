@@ -930,24 +930,22 @@ async def trigger_discovery_run(
     Trigger a new discovery run.
 
     Creates a discovery run record and starts the discovery process in the background.
-    Uses correct database column names: triggered_by_user, summary_report, cards_created,
-    sources_found, etc.
 
     Returns immediately with run ID. Poll GET /discovery/runs/{run_id} for status.
     """
     try:
-        # Create discovery run record with correct column names matching database schema
+        # Create discovery run record
         run_record = {
-            "status": "running",  # Use 'running' not 'queued' per DB schema
-            "triggered_by": "manual",  # API-triggered runs are manual
-            "triggered_by_user": current_user["id"],  # Correct column name (not created_by)
-            "summary_report": {  # Store config in summary_report JSONB (not config column)
+            "status": "running",
+            "triggered_by": "manual",
+            "triggered_by_user": current_user["id"],
+            "summary_report": {
                 "config": config.dict()
             },
-            "cards_created": 0,  # Correct column name (not cards_discovered)
+            "cards_created": 0,
             "cards_enriched": 0,
             "cards_deduplicated": 0,
-            "sources_found": 0,  # Correct column name (not sources_processed)
+            "sources_found": 0,
             "started_at": datetime.now().isoformat()
         }
 
@@ -982,28 +980,27 @@ async def execute_discovery_run_background(
     Background task to execute discovery run.
 
     Updates run status through lifecycle: running -> completed/failed
-    Uses correct column names matching database schema.
     """
     try:
         # TODO: Implement actual discovery logic here
         # For now, just mark as completed after a brief delay
         await asyncio.sleep(1)
 
-        # Update as completed with correct column names
+        # Update as completed
         supabase.table("discovery_runs").update({
             "status": "completed",
             "completed_at": datetime.now().isoformat(),
-            "cards_created": 0,  # Correct column name
+            "cards_created": 0,
             "cards_enriched": 0,
             "cards_deduplicated": 0,
-            "sources_found": 0  # Correct column name
+            "sources_found": 0
         }).eq("id", run_id).execute()
 
         logger.info(f"Discovery run {run_id} completed")
 
     except Exception as e:
         logger.error(f"Discovery run {run_id} failed: {str(e)}")
-        # Update as failed with correct column names
+        # Update as failed
         supabase.table("discovery_runs").update({
             "status": "failed",
             "completed_at": datetime.now().isoformat(),
