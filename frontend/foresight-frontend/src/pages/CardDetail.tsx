@@ -164,9 +164,15 @@ const CardDetail: React.FC = () => {
   useEffect(() => {
     if (slug) {
       loadCardDetail();
-      checkIfFollowing();
     }
   }, [slug]);
+
+  // Check following status after card is loaded
+  useEffect(() => {
+    if (card?.id && user) {
+      checkIfFollowing();
+    }
+  }, [card?.id, user]);
 
   const loadCardDetail = async () => {
     try {
@@ -215,14 +221,14 @@ const CardDetail: React.FC = () => {
   };
 
   const checkIfFollowing = async () => {
-    if (!user) return;
+    if (!user || !card?.id) return;
 
     try {
       const { data } = await supabase
         .from('card_follows')
         .select('id')
         .eq('user_id', user.id)
-        .eq('card_id', card?.id)
+        .eq('card_id', card.id)
         .single();
 
       setIsFollowing(!!data);

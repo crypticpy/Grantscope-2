@@ -79,7 +79,7 @@ function App() {
   return (
     <TooltipProvider delayDuration={200}>
       <AuthContextProvider value={authValue}>
-        <Router>
+        <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <div className="min-h-screen bg-brand-faded-white dark:bg-brand-dark-blue transition-colors">
             {user && <Header />}
             <main className={user ? "pt-16" : ""}>
