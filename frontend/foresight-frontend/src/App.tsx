@@ -5,6 +5,8 @@ import { TooltipProvider } from '@radix-ui/react-tooltip';
 import Header from './components/Header';
 import Dashboard from './pages/Dashboard';
 import Discover from './pages/Discover';
+import DiscoveryQueue from './pages/DiscoveryQueue';
+import DiscoveryHistory from './pages/DiscoveryHistory';
 import CardDetail from './pages/CardDetail';
 import Workstreams from './pages/Workstreams';
 import WorkstreamFeed from './pages/WorkstreamFeed';
@@ -109,6 +111,26 @@ function App() {
                 element={
                   user ? (
                     <Discover />
+                  ) : (
+                    <Navigate to="/login" replace />
+                  )
+                }
+              />
+              <Route
+                path="/discover/queue"
+                element={
+                  user ? (
+                    <DiscoveryQueue />
+                  ) : (
+                    <Navigate to="/login" replace />
+                  )
+                }
+              />
+              <Route
+                path="/discover/history"
+                element={
+                  user ? (
+                    <DiscoveryHistory />
                   ) : (
                     <Navigate to="/login" replace />
                   )

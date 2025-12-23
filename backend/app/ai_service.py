@@ -245,6 +245,91 @@ Respond with JSON:
 }}
 """
 
+DEEP_RESEARCH_REPORT_PROMPT = """You are a strategic foresight analyst creating a comprehensive intelligence report for municipal government decision-makers.
+
+Generate an in-depth strategic analysis report on "{card_name}" for the City of Austin's horizon scanning program.
+
+CURRENT CARD INFORMATION:
+Summary: {current_summary}
+Description: {current_description}
+Horizon: {horizon}
+Stage: {stage}
+Pillar: {pillar}
+
+GPT RESEARCHER FINDINGS:
+{gpt_researcher_report}
+
+ANALYZED SOURCE INSIGHTS:
+{source_insights}
+
+EXTRACTED ENTITIES:
+{entities}
+
+---
+
+Create a COMPREHENSIVE strategic intelligence report with the following sections. Be specific, cite examples, and provide actionable insights.
+
+## EXECUTIVE SUMMARY
+(3-4 sentences capturing the most critical findings and strategic implications)
+
+## TECHNOLOGY/TREND OVERVIEW
+- What it is and how it works
+- Key technical components or approaches
+- Evolution and current state of development
+
+## CURRENT LANDSCAPE ANALYSIS
+- Market maturity and adoption rates
+- Leading organizations and initiatives
+- Geographic distribution of implementations
+- Recent significant developments
+
+## MUNICIPAL APPLICATIONS
+- Specific use cases for city government
+- Examples of cities implementing this (with details)
+- Relevant city departments and stakeholders
+- Integration with existing city services/infrastructure
+
+## IMPLEMENTATION CONSIDERATIONS
+- Technical requirements and infrastructure needs
+- Resource requirements (budget, staff, timeline)
+- Procurement and vendor considerations
+- Potential implementation challenges
+
+## VENDOR & ECOSYSTEM ANALYSIS
+- Key technology providers and vendors
+- Open-source alternatives (if any)
+- Partnership and collaboration opportunities
+- Competitive landscape
+
+## RISK ASSESSMENT
+- Technical risks and limitations
+- Privacy and security concerns
+- Equity and accessibility considerations
+- Regulatory and compliance factors
+- Potential unintended consequences
+
+## STRATEGIC RECOMMENDATIONS
+(Numbered list of 3-5 specific, actionable recommendations for city decision-makers)
+
+## FUTURE OUTLOOK
+- Expected developments in next 12-24 months
+- Signals to watch for
+- Potential disruptions or game-changers
+
+## SOURCES & METHODOLOGY
+(Brief summary of research sources and approach)
+
+---
+
+Important guidelines:
+- Be SPECIFIC with examples, names, dates, and numbers where available
+- Include CITY EXAMPLES where this has been implemented
+- Make recommendations ACTIONABLE for city planners
+- Note UNCERTAINTIES and knowledge gaps
+- Keep the report between 1500-2500 words
+- Use markdown formatting for readability
+"""
+
 ENTITY_EXTRACTION_PROMPT = """Extract key entities from this research content for building a knowledge graph.
 
 Content: {content}
@@ -527,3 +612,174 @@ Respond with JSON:
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse card match response: {e}")
             return {"is_match": False, "confidence": 0.0, "reasoning": "Parse error"}
+
+    @with_retry(max_retries=MAX_RETRIES)
+    async def enhance_card_from_research(
+        self,
+        current_name: str,
+        current_summary: str,
+        current_description: str,
+        research_report: str,
+        source_summaries: List[str]
+    ) -> Dict[str, str]:
+        """
+        Generate enhanced card summary and description based on research findings.
+
+        Args:
+            current_name: Current card name
+            current_summary: Current card summary
+            current_description: Current card description
+            research_report: Full research report from GPT Researcher
+            source_summaries: List of AI summaries from analyzed sources
+
+        Returns:
+            Dict with enhanced_summary and enhanced_description
+        """
+        # Combine source insights
+        source_insights = "\n".join([f"- {s}" for s in source_summaries[:5]])
+
+        prompt = f"""You are enhancing a foresight discovery card based on new research findings.
+The card tracks an emerging technology, trend, or innovation relevant to municipal government.
+
+CURRENT CARD:
+Name: {current_name}
+Summary: {current_summary}
+Description: {current_description}
+
+NEW RESEARCH FINDINGS:
+{research_report[:3000] if research_report else "No detailed report available"}
+
+KEY SOURCE INSIGHTS:
+{source_insights or "No specific source insights"}
+
+TASK:
+1. Enhance the card's summary (1-2 sentences) to incorporate the most significant new findings
+2. Enhance the description (2-3 paragraphs) to include:
+   - Key developments and their implications
+   - Notable organizations, projects, or deployments mentioned
+   - Relevance to municipal/city government applications
+   - Maturity and adoption trends
+
+Keep the enhanced content factual, specific, and actionable. Don't just summarize - add value.
+Preserve important information from the original description while integrating new insights.
+
+Respond with JSON:
+{{
+  "enhanced_summary": "Updated 1-2 sentence summary with key new insights",
+  "enhanced_description": "Updated 2-3 paragraph description integrating new research",
+  "key_updates": ["List of 2-3 most significant new findings"]
+}}
+"""
+
+        logger.debug(f"Enhancing card from research: {current_name}")
+
+        response = self.client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+            max_tokens=1500,
+            timeout=REQUEST_TIMEOUT
+        )
+
+        try:
+            return json.loads(response.choices[0].message.content)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse card enhancement response: {e}")
+            return {
+                "enhanced_summary": current_summary,
+                "enhanced_description": current_description,
+                "key_updates": []
+            }
+
+    @with_retry(max_retries=MAX_RETRIES)
+    async def generate_deep_research_report(
+        self,
+        card_name: str,
+        current_summary: str,
+        current_description: str,
+        horizon: str,
+        stage: int,
+        pillar: str,
+        gpt_researcher_report: str,
+        source_analyses: List[Dict[str, Any]],
+        entities: List[Dict[str, str]]
+    ) -> str:
+        """
+        Generate a comprehensive strategic intelligence report for deep research.
+
+        This creates a multi-section, executive-quality report that synthesizes
+        all research findings into actionable strategic intelligence.
+
+        Args:
+            card_name: Name of the card/concept
+            current_summary: Current card summary
+            current_description: Current card description
+            horizon: H1/H2/H3 horizon classification
+            stage: Stage 1-8
+            pillar: Primary pillar code
+            gpt_researcher_report: Raw report from GPT Researcher
+            source_analyses: List of analyzed sources with summaries
+            entities: Extracted entities for context
+
+        Returns:
+            Comprehensive markdown-formatted strategic report
+        """
+        # Format source insights
+        source_insights = ""
+        for i, src in enumerate(source_analyses[:10], 1):
+            source_insights += f"\n{i}. **{src.get('title', 'Untitled')[:80]}**\n"
+            source_insights += f"   Summary: {src.get('summary', 'No summary')[:300]}\n"
+            if src.get('key_excerpts'):
+                source_insights += f"   Key insight: {src.get('key_excerpts', [''])[0][:200]}\n"
+
+        # Format entities
+        entity_str = ""
+        if entities:
+            tech_entities = [e for e in entities if e.get('type') == 'technology']
+            org_entities = [e for e in entities if e.get('type') == 'organization']
+            loc_entities = [e for e in entities if e.get('type') == 'location']
+
+            if tech_entities:
+                entity_str += f"Technologies: {', '.join(e.get('name', '') for e in tech_entities[:8])}\n"
+            if org_entities:
+                entity_str += f"Organizations: {', '.join(e.get('name', '') for e in org_entities[:8])}\n"
+            if loc_entities:
+                entity_str += f"Locations: {', '.join(e.get('name', '') for e in loc_entities[:5])}\n"
+
+        prompt = DEEP_RESEARCH_REPORT_PROMPT.format(
+            card_name=card_name,
+            current_summary=current_summary or "No current summary",
+            current_description=current_description or "No current description",
+            horizon=horizon or "H2",
+            stage=stage or 4,
+            pillar=pillar or "Not specified",
+            gpt_researcher_report=gpt_researcher_report[:8000] if gpt_researcher_report else "No GPT Researcher report available",
+            source_insights=source_insights or "No additional source insights",
+            entities=entity_str or "No entities extracted"
+        )
+
+        logger.info(f"Generating comprehensive deep research report for: {card_name}")
+
+        response = self.client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=4000,  # Allow for comprehensive report
+            timeout=REQUEST_TIMEOUT * 3  # Extended timeout for long report
+        )
+
+        report = response.choices[0].message.content
+
+        # Add metadata header
+        report_with_header = f"""# Deep Research Report: {card_name}
+
+**Generated:** {__import__('datetime').datetime.now().strftime('%B %d, %Y at %I:%M %p')}
+**Classification:** Horizon {horizon} | Stage {stage} | {pillar}
+**Sources Analyzed:** {len(source_analyses)}
+
+---
+
+{report}
+"""
+
+        logger.info(f"Generated comprehensive report ({len(report_with_header)} chars) for: {card_name}")
+        return report_with_header

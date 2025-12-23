@@ -67,3 +67,6 @@ pip-wheel-metadata/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+# Auto Claude data directory
+.auto-claude/

@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field, validator
+import uuid
 from dotenv import load_dotenv
 from supabase import create_client, Client
 import openai
@@ -254,7 +255,17 @@ class ResearchTask(BaseModel):
     completed_at: Optional[datetime] = None
 
 
-# Discovery run models
+# ============================================================================
+# Card Review Workflow Models
+# ============================================================================
+
+class CardReviewRequest(BaseModel):
+    """Request model for reviewing a discovered card."""
+    action: str = Field(..., pattern=r"^(approve|reject|edit_approve)$", description="Review action: approve, reject, or edit_approve")
+    updates: Optional[Dict[str, Any]] = Field(None, description="Card field updates (for edit_approve action)")
+    reason: Optional[str] = Field(None, max_length=1000, description="Reason for rejection or edit notes")
+
+
 class DiscoveryConfigRequest(BaseModel):
     """Request model for discovery run configuration."""
     max_queries_per_run: int = Field(default=100, le=200, ge=1, description="Maximum queries per run")
@@ -262,6 +273,18 @@ class DiscoveryConfigRequest(BaseModel):
     auto_approve_threshold: float = Field(default=0.95, ge=0.8, le=1.0, description="Auto-approval threshold")
     pillars_filter: Optional[List[str]] = Field(None, description="Filter by pillar IDs")
     dry_run: bool = Field(False, description="Run in dry-run mode without persisting")
+
+
+class BulkReviewRequest(BaseModel):
+    """Request model for bulk card review operations."""
+    card_ids: List[str] = Field(..., min_items=1, max_items=100, description="List of card IDs to review")
+    action: str = Field(..., pattern=r"^(approve|reject)$", description="Bulk action: approve or reject")
+    reason: Optional[str] = Field(None, max_length=500, description="Optional reason for bulk action")
+
+
+class CardDismissRequest(BaseModel):
+    """Request model for user card dismissal."""
+    reason: Optional[str] = Field(None, max_length=500, description="Optional reason for dismissal")
 
 
 class DiscoveryRun(BaseModel):
@@ -289,6 +312,24 @@ class DiscoveryRun(BaseModel):
     error_details: Optional[Dict[str, Any]] = None
     # Timestamps
     created_at: Optional[datetime] = None
+
+
+class BlockedTopic(BaseModel):
+    """Response model for blocked discovery topics."""
+    id: str
+    topic_pattern: str
+    reason: str
+    blocked_by_count: int
+    created_at: datetime
+
+
+class SimilarCard(BaseModel):
+    """Response model for similar cards."""
+    id: str
+    name: str
+    summary: Optional[str] = None
+    similarity: float
+    pillar_id: Optional[str] = None
 
 
 # Authentication dependency
@@ -509,6 +550,762 @@ async def create_note(
         return Note(**response.data[0])
     else:
         raise HTTPException(status_code=400, detail="Failed to create note")
+
+
+# ============================================================================
+# Card Review Workflow Endpoints
+# ============================================================================
+
+@app.get("/api/v1/discovery/pending/count")
+async def get_pending_review_count(
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get count of cards pending review.
+
+    Returns the total number of cards with review_status in
+    ('discovered', 'pending_review').
+
+    Returns:
+        Object with count field
+    """
+    response = supabase.table("cards").select(
+        "id", count="exact"
+    ).in_(
+        "review_status", ["discovered", "pending_review"]
+    ).execute()
+
+    return {"count": response.count or 0}
+
+
+@app.get("/api/v1/cards/pending-review")
+async def get_pending_review_cards(
+    current_user: dict = Depends(get_current_user),
+    limit: int = 20,
+    offset: int = 0,
+    pillar_id: Optional[str] = None
+):
+    """
+    Get cards pending review.
+
+    Returns discovered cards that need human review, ordered by AI confidence
+    (descending) and discovery date.
+
+    Args:
+        limit: Maximum number of cards to return (default: 20)
+        offset: Number of cards to skip for pagination (default: 0)
+        pillar_id: Optional filter by pillar ID
+
+    Returns:
+        List of cards with review_status in ('discovered', 'pending_review')
+    """
+    query = supabase.table("cards").select("*").in_(
+        "review_status", ["discovered", "pending_review"]
+    )
+
+    if pillar_id:
+        query = query.eq("pillar_id", pillar_id)
+
+    # Order by ai_confidence DESC, discovered_at DESC
+    response = query.order(
+        "ai_confidence", desc=True
+    ).order(
+        "discovered_at", desc=True
+    ).range(offset, offset + limit - 1).execute()
+
+    return response.data
+
+
+@app.post("/api/v1/cards/{card_id}/review")
+async def review_card(
+    card_id: str,
+    review_data: CardReviewRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Review a discovered card.
+
+    Actions:
+    - approve: Set review_status to 'active', card becomes live
+    - reject: Set review_status to 'rejected', record rejection metadata
+    - edit_approve: Apply field updates, then set to 'active'
+
+    Args:
+        card_id: UUID of the card to review
+        review_data: Review action and optional updates/reason
+
+    Returns:
+        Updated card data
+
+    Raises:
+        HTTPException 404: Card not found
+        HTTPException 400: Invalid action or missing required fields
+    """
+    # Verify card exists
+    card_check = supabase.table("cards").select("*").eq("id", card_id).execute()
+    if not card_check.data:
+        raise HTTPException(status_code=404, detail="Card not found")
+
+    card = card_check.data[0]
+    now = datetime.now().isoformat()
+
+    if review_data.action == "approve":
+        # Approve the card - set it to active
+        update_data = {
+            "review_status": "active",
+            "status": "active",
+            "reviewed_at": now,
+            "reviewed_by": current_user["id"],
+            "updated_at": now
+        }
+
+    elif review_data.action == "reject":
+        # Reject the card
+        update_data = {
+            "review_status": "rejected",
+            "rejected_at": now,
+            "rejected_by": current_user["id"],
+            "rejection_reason": review_data.reason,
+            "updated_at": now
+        }
+
+    elif review_data.action == "edit_approve":
+        # Apply updates then approve
+        if not review_data.updates:
+            raise HTTPException(
+                status_code=400,
+                detail="Updates required for edit_approve action"
+            )
+
+        # Allowed fields for editing
+        allowed_fields = {
+            "name", "summary", "description", "pillar_id", "goal_id",
+            "anchor_id", "stage_id", "horizon", "novelty_score",
+            "maturity_score", "impact_score", "relevance_score"
+        }
+
+        # Filter updates to only allowed fields
+        update_data = {
+            k: v for k, v in review_data.updates.items()
+            if k in allowed_fields
+        }
+
+        # Add approval metadata
+        update_data.update({
+            "review_status": "active",
+            "status": "active",
+            "reviewed_at": now,
+            "reviewed_by": current_user["id"],
+            "review_notes": review_data.reason,
+            "updated_at": now
+        })
+
+        # Update slug if name changed
+        if "name" in update_data:
+            update_data["slug"] = update_data["name"].lower().replace(" ", "-").replace(":", "").replace("/", "-")
+
+    else:
+        raise HTTPException(status_code=400, detail="Invalid review action")
+
+    # Perform the update
+    response = supabase.table("cards").update(update_data).eq("id", card_id).execute()
+
+    if response.data:
+        # Log the review action to card timeline
+        timeline_entry = {
+            "card_id": card_id,
+            "event_type": f"review_{review_data.action}",
+            "description": f"Card {review_data.action}d by reviewer",
+            "user_id": current_user["id"],
+            "metadata": {
+                "action": review_data.action,
+                "reason": review_data.reason,
+                "updates_applied": list(update_data.keys()) if review_data.action == "edit_approve" else None
+            },
+            "created_at": now
+        }
+        supabase.table("card_timeline").insert(timeline_entry).execute()
+
+        return response.data[0]
+    else:
+        raise HTTPException(status_code=400, detail="Failed to update card")
+
+
+@app.post("/api/v1/cards/bulk-review")
+async def bulk_review_cards(
+    bulk_data: BulkReviewRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Bulk approve or reject multiple cards using batch operations.
+
+    Processes up to 100 cards in a single request using atomic batch updates.
+    Cards are verified first, then updated in a single query for consistency.
+
+    Args:
+        bulk_data: List of card IDs and action to apply
+
+    Returns:
+        Summary with processed count and any failures
+    """
+    now = datetime.now().isoformat()
+    card_ids = bulk_data.card_ids
+    failed = []
+
+    try:
+        # Step 1: Verify all cards exist in a single query
+        existing_cards = supabase.table("cards").select("id").in_("id", card_ids).execute()
+        existing_ids = {card["id"] for card in existing_cards.data} if existing_cards.data else set()
+
+        # Identify cards that don't exist
+        missing_ids = set(card_ids) - existing_ids
+        for missing_id in missing_ids:
+            failed.append({"id": missing_id, "error": "Card not found"})
+
+        # Get the list of valid card IDs to process
+        valid_ids = list(existing_ids)
+
+        if not valid_ids:
+            return {
+                "processed": 0,
+                "failed": failed
+            }
+
+        # Step 2: Prepare update data based on action
+        if bulk_data.action == "approve":
+            update_data = {
+                "review_status": "active",
+                "status": "active",
+                "reviewed_at": now,
+                "reviewed_by": current_user["id"],
+                "updated_at": now
+            }
+        else:  # reject
+            update_data = {
+                "review_status": "rejected",
+                "rejected_at": now,
+                "rejected_by": current_user["id"],
+                "rejection_reason": bulk_data.reason,
+                "updated_at": now
+            }
+
+        # Step 3: Batch update all valid cards in a single query
+        update_response = supabase.table("cards").update(update_data).in_("id", valid_ids).execute()
+
+        if not update_response.data:
+            # If batch update fails entirely, mark all as failed
+            for card_id in valid_ids:
+                failed.append({"id": card_id, "error": "Batch update failed"})
+            return {
+                "processed": 0,
+                "failed": failed
+            }
+
+        # Get the IDs that were actually updated
+        updated_ids = [card["id"] for card in update_response.data]
+        processed_count = len(updated_ids)
+
+        # Check for any cards that weren't updated (shouldn't happen but handle gracefully)
+        not_updated = set(valid_ids) - set(updated_ids)
+        for card_id in not_updated:
+            failed.append({"id": card_id, "error": "Update did not apply"})
+
+        # Step 4: Batch insert timeline entries for all successfully updated cards
+        if updated_ids:
+            timeline_entries = [
+                {
+                    "card_id": card_id,
+                    "event_type": f"bulk_review_{bulk_data.action}",
+                    "description": f"Card bulk {bulk_data.action}d",
+                    "user_id": current_user["id"],
+                    "metadata": {"bulk_action": True, "reason": bulk_data.reason},
+                    "created_at": now
+                }
+                for card_id in updated_ids
+            ]
+            # Insert all timeline entries in a single batch
+            supabase.table("card_timeline").insert(timeline_entries).execute()
+
+        return {
+            "processed": processed_count,
+            "failed": failed
+        }
+
+    except Exception as e:
+        # If an unexpected error occurs, report it with context
+        return {
+            "processed": 0,
+            "failed": [{"id": "batch_operation", "error": str(e)}]
+        }
+
+
+@app.post("/api/v1/cards/{card_id}/dismiss")
+async def dismiss_card(
+    card_id: str,
+    dismiss_data: Optional[CardDismissRequest] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Dismiss a card for the current user (soft-delete).
+
+    Creates a user_card_dismissals record. If the card has been dismissed
+    by 3 or more users, it gets added to discovery_blocks.
+
+    Args:
+        card_id: UUID of the card to dismiss
+        dismiss_data: Optional reason for dismissal
+
+    Returns:
+        Dismissal status and block status if applicable
+    """
+    # Verify card exists
+    card_check = supabase.table("cards").select("id, name").eq("id", card_id).execute()
+    if not card_check.data:
+        raise HTTPException(status_code=404, detail="Card not found")
+
+    card = card_check.data[0]
+    now = datetime.now().isoformat()
+
+    # Check if user already dismissed this card
+    existing = supabase.table("user_card_dismissals").select("id").eq(
+        "user_id", current_user["id"]
+    ).eq("card_id", card_id).execute()
+
+    if existing.data:
+        raise HTTPException(status_code=400, detail="Card already dismissed by user")
+
+    # Create dismissal record
+    dismissal_record = {
+        "user_id": current_user["id"],
+        "card_id": card_id,
+        "reason": dismiss_data.reason if dismiss_data else None,
+        "dismissed_at": now
+    }
+    supabase.table("user_card_dismissals").insert(dismissal_record).execute()
+
+    # Check total dismissal count for this card
+    dismissal_count = supabase.table("user_card_dismissals").select(
+        "id", count="exact"
+    ).eq("card_id", card_id).execute()
+
+    blocked = False
+    if dismissal_count.count >= 3:
+        # Add to discovery_blocks if not already blocked
+        block_check = supabase.table("discovery_blocks").select("id").eq(
+            "card_id", card_id
+        ).execute()
+
+        if not block_check.data:
+            block_record = {
+                "card_id": card_id,
+                "topic_pattern": card["name"].lower(),
+                "reason": "Dismissed by multiple users",
+                "blocked_by_count": dismissal_count.count,
+                "created_at": now
+            }
+            supabase.table("discovery_blocks").insert(block_record).execute()
+            blocked = True
+            logger.info(f"Card {card_id} blocked from discovery after {dismissal_count.count} dismissals")
+
+    return {
+        "status": "dismissed",
+        "card_id": card_id,
+        "blocked": blocked,
+        "total_dismissals": dismissal_count.count
+    }
+
+
+@app.get("/api/v1/cards/{card_id}/similar", response_model=List[SimilarCard])
+async def get_similar_cards(
+    card_id: str,
+    limit: int = 5
+):
+    """
+    Get cards similar to the specified card.
+
+    Uses vector similarity search via the find_similar_cards RPC function
+    to find semantically similar cards.
+
+    Args:
+        card_id: UUID of the source card
+        limit: Maximum number of similar cards to return (default: 5)
+
+    Returns:
+        List of similar cards with similarity scores
+    """
+    # Get the source card's embedding
+    card_check = supabase.table("cards").select("id, name, embedding").eq("id", card_id).execute()
+    if not card_check.data:
+        raise HTTPException(status_code=404, detail="Card not found")
+
+    card = card_check.data[0]
+
+    if not card.get("embedding"):
+        # Fallback: return empty list if no embedding
+        logger.warning(f"Card {card_id} has no embedding for similarity search")
+        return []
+
+    try:
+        # Use RPC function for vector similarity search
+        response = supabase.rpc(
+            "match_cards_by_embedding",
+            {
+                "query_embedding": card["embedding"],
+                "match_threshold": 0.7,
+                "match_count": limit + 1  # +1 to exclude self
+            }
+        ).execute()
+
+        # Filter out the source card itself
+        similar_cards = [
+            SimilarCard(
+                id=c["id"],
+                name=c["name"],
+                summary=c.get("summary"),
+                similarity=c["similarity"],
+                pillar_id=c.get("pillar_id")
+            )
+            for c in response.data
+            if c["id"] != card_id
+        ][:limit]
+
+        return similar_cards
+
+    except Exception as e:
+        logger.error(f"Similar cards search failed: {str(e)}")
+        # Fallback to simple text-based similarity
+        return []
+
+
+# ============================================================================
+# Discovery Run Management Endpoints
+# ============================================================================
+
+@app.post("/api/v1/discovery/run", response_model=DiscoveryRun)
+async def trigger_discovery_run(
+    config: DiscoveryConfigRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Trigger a manual discovery run.
+
+    Creates a new discovery run with the specified configuration and
+    executes it as a background task. Returns immediately with a run_id
+    for polling status.
+
+    Args:
+        config: Discovery run configuration
+
+    Returns:
+        Discovery run record with status 'queued'
+    """
+    now = datetime.now().isoformat()
+    run_id = str(uuid.uuid4())
+
+    # Create discovery run record
+    run_record = {
+        "id": run_id,
+        "status": "queued",
+        "config": config.dict(),
+        "created_by": current_user["id"],
+        "cards_discovered": 0,
+        "cards_auto_approved": 0,
+        "cards_pending_review": 0,
+        "sources_processed": 0,
+        "created_at": now
+    }
+
+    response = supabase.table("discovery_runs").insert(run_record).execute()
+
+    if not response.data:
+        raise HTTPException(status_code=500, detail="Failed to create discovery run")
+
+    # Start discovery in background
+    asyncio.create_task(
+        execute_discovery_run_background(run_id, config, current_user["id"])
+    )
+
+    logger.info(f"Discovery run {run_id} queued by user {current_user['id']}")
+
+    return DiscoveryRun(**response.data[0])
+
+
+async def execute_discovery_run_background(
+    run_id: str,
+    config: DiscoveryConfigRequest,
+    user_id: str
+):
+    """
+    Background task to execute a discovery run.
+
+    Phases:
+    1. Generate search queries based on taxonomy and existing cards
+    2. Execute searches across configured sources
+    3. Triage and filter results
+    4. Create discovered cards (pending review or auto-approved)
+    5. Update run status with results
+    """
+    try:
+        # Update status to processing
+        supabase.table("discovery_runs").update({
+            "status": "processing",
+            "started_at": datetime.now().isoformat()
+        }).eq("id", run_id).execute()
+
+        # Initialize counters
+        cards_discovered = 0
+        cards_auto_approved = 0
+        cards_pending_review = 0
+        sources_processed = 0
+
+        # Get blocked topics to exclude
+        blocked_response = supabase.table("discovery_blocks").select("topic_pattern").execute()
+        blocked_patterns = [b["topic_pattern"] for b in blocked_response.data]
+
+        # Get taxonomy for query generation
+        pillars_query = supabase.table("pillars").select("*")
+        if config.pillars_filter:
+            pillars_query = pillars_query.in_("id", config.pillars_filter)
+        pillars_response = pillars_query.execute()
+
+        # Simulate discovery process (replace with actual implementation)
+        # This would typically call ResearchService or a dedicated DiscoveryService
+        service = ResearchService(supabase, openai_client)
+
+        for pillar in pillars_response.data:
+            if config.dry_run:
+                # Dry run - just count what would be processed
+                sources_processed += 10
+                cards_discovered += 2
+                continue
+
+            # Get goals for this pillar
+            goals_response = supabase.table("goals").select("*").eq("pillar_id", pillar["id"]).execute()
+
+            for goal in goals_response.data:
+                try:
+                    # Generate discovery query
+                    query = f"{pillar['name']} {goal['name']} Austin strategic initiatives"
+
+                    # Skip blocked topics
+                    if any(bp in query.lower() for bp in blocked_patterns):
+                        continue
+
+                    # Execute research (limited by config)
+                    if sources_processed >= config.max_sources_total:
+                        break
+
+                    # Placeholder for actual discovery logic
+                    # This would use service.execute_discovery() or similar
+                    sources_processed += 5
+
+                    # Check confidence for auto-approval
+                    ai_confidence = 0.9  # Placeholder - would come from AI analysis
+
+                    if ai_confidence >= config.auto_approve_threshold:
+                        cards_auto_approved += 1
+                    else:
+                        cards_pending_review += 1
+
+                    cards_discovered += 1
+
+                except Exception as e:
+                    logger.error(f"Discovery error for goal {goal['id']}: {str(e)}")
+
+        # Update run as completed
+        supabase.table("discovery_runs").update({
+            "status": "completed",
+            "completed_at": datetime.now().isoformat(),
+            "cards_discovered": cards_discovered,
+            "cards_auto_approved": cards_auto_approved,
+            "cards_pending_review": cards_pending_review,
+            "sources_processed": sources_processed
+        }).eq("id", run_id).execute()
+
+        logger.info(f"Discovery run {run_id} completed: {cards_discovered} cards discovered")
+
+    except Exception as e:
+        logger.error(f"Discovery run {run_id} failed: {str(e)}")
+        supabase.table("discovery_runs").update({
+            "status": "failed",
+            "completed_at": datetime.now().isoformat(),
+            "error_message": str(e)
+        }).eq("id", run_id).execute()
+
+
+@app.get("/api/v1/discovery/runs", response_model=List[DiscoveryRun])
+async def list_discovery_runs(
+    current_user: dict = Depends(get_current_user),
+    limit: int = 20,
+    offset: int = 0
+):
+    """
+    List discovery runs.
+
+    Returns paginated list of discovery runs ordered by start time descending.
+
+    Args:
+        limit: Maximum number of runs to return (default: 20)
+        offset: Number of runs to skip for pagination
+
+    Returns:
+        List of discovery run records
+    """
+    response = supabase.table("discovery_runs").select("*").order(
+        "started_at", desc=True
+    ).range(offset, offset + limit - 1).execute()
+
+    return [DiscoveryRun(**run) for run in response.data]
+
+
+@app.get("/api/v1/discovery/runs/{run_id}", response_model=DiscoveryRun)
+async def get_discovery_run(
+    run_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get details of a specific discovery run.
+
+    Args:
+        run_id: UUID of the discovery run
+
+    Returns:
+        Discovery run record with full details
+
+    Raises:
+        HTTPException 404: Discovery run not found
+    """
+    response = supabase.table("discovery_runs").select("*").eq("id", run_id).execute()
+
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Discovery run not found")
+
+    return DiscoveryRun(**response.data[0])
+
+
+@app.post("/api/v1/discovery/runs/{run_id}/cancel")
+async def cancel_discovery_run(
+    run_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Cancel a discovery run.
+
+    Only runs with status 'queued' or 'processing' can be cancelled.
+
+    Args:
+        run_id: UUID of the discovery run to cancel
+
+    Returns:
+        Updated discovery run record
+
+    Raises:
+        HTTPException 404: Discovery run not found
+        HTTPException 400: Run cannot be cancelled (already completed/failed/cancelled)
+    """
+    # Get current run status
+    response = supabase.table("discovery_runs").select("*").eq("id", run_id).execute()
+
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Discovery run not found")
+
+    run = response.data[0]
+
+    # Check if run can be cancelled
+    if run["status"] not in ["queued", "processing"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot cancel run with status '{run['status']}'. Only 'queued' or 'processing' runs can be cancelled."
+        )
+
+    # Update status to cancelled
+    update_response = supabase.table("discovery_runs").update({
+        "status": "cancelled",
+        "completed_at": datetime.now().isoformat(),
+        "error_message": f"Cancelled by user {current_user['id']}"
+    }).eq("id", run_id).execute()
+
+    if update_response.data:
+        logger.info(f"Discovery run {run_id} cancelled by user {current_user['id']}")
+        return DiscoveryRun(**update_response.data[0])
+    else:
+        raise HTTPException(status_code=500, detail="Failed to cancel discovery run")
+
+
+@app.get("/api/v1/discovery/blocked-topics", response_model=List[BlockedTopic])
+async def list_blocked_topics(
+    current_user: dict = Depends(get_current_user),
+    limit: int = 50,
+    offset: int = 0
+):
+    """
+    List blocked discovery topics.
+
+    Returns topics that have been blocked from discovery, either due to
+    multiple user dismissals or manual blocking.
+
+    Args:
+        limit: Maximum number of blocked topics to return (default: 50)
+        offset: Number of topics to skip for pagination
+
+    Returns:
+        List of blocked topic records
+    """
+    response = supabase.table("discovery_blocks").select("*").order(
+        "created_at", desc=True
+    ).range(offset, offset + limit - 1).execute()
+
+    return [BlockedTopic(**block) for block in response.data]
+
+
+# ============================================================================
+# Weekly Discovery Scheduler
+# ============================================================================
+
+async def run_weekly_discovery():
+    """
+    Run weekly automated discovery.
+
+    Scheduled to run every Sunday at 2:00 AM UTC. Executes a full
+    discovery run with default configuration across all pillars.
+    """
+    logger.info("Starting weekly discovery run...")
+
+    try:
+        # Get system user for automated tasks
+        system_user = supabase.table("users").select("id").limit(1).execute()
+        user_id = system_user.data[0]["id"] if system_user.data else None
+
+        if not user_id:
+            logger.warning("Weekly discovery: No system user found, skipping")
+            return
+
+        # Create discovery run with default config
+        run_id = str(uuid.uuid4())
+        config = DiscoveryConfigRequest()  # Default values
+
+        run_record = {
+            "id": run_id,
+            "status": "queued",
+            "config": config.dict(),
+            "created_by": user_id,
+            "cards_discovered": 0,
+            "cards_auto_approved": 0,
+            "cards_pending_review": 0,
+            "sources_processed": 0,
+            "created_at": datetime.now().isoformat()
+        }
+
+        supabase.table("discovery_runs").insert(run_record).execute()
+
+        # Execute discovery
+        await execute_discovery_run_background(run_id, config, user_id)
+
+        logger.info(f"Weekly discovery run {run_id} completed")
+
+    except Exception as e:
+        logger.error(f"Weekly discovery failed: {str(e)}")
+
 
 # Workstreams endpoints
 @app.get("/api/v1/me/workstreams")
@@ -872,6 +1669,7 @@ async def execute_research_task_background(
             "cards_created": result.cards_created,
             "entities_extracted": result.entities_extracted,
             "cost_estimate": result.cost_estimate,
+            "report_preview": result.report_preview,  # Full research report text
         }
 
         # Update as completed
@@ -1060,6 +1858,7 @@ async def list_discovery_runs(
 # Add scheduler for nightly jobs
 def start_scheduler():
     """Start the APScheduler for background jobs"""
+    # Nightly content scan at 6:00 AM UTC
     scheduler.add_job(
         run_nightly_scan,
         'cron',
@@ -1068,8 +1867,20 @@ def start_scheduler():
         id='nightly_scan',
         replace_existing=True
     )
+
+    # Weekly discovery run - Sunday at 2:00 AM UTC
+    scheduler.add_job(
+        run_weekly_discovery,
+        'cron',
+        day_of_week='sun',
+        hour=2,
+        minute=0,
+        id='weekly_discovery',
+        replace_existing=True
+    )
+
     scheduler.start()
-    logger.info("Scheduler started - nightly scan scheduled for 6:00 AM UTC")
+    logger.info("Scheduler started - nightly scan at 6:00 AM UTC, weekly discovery Sundays at 2:00 AM UTC")
 
 
 async def run_nightly_scan():

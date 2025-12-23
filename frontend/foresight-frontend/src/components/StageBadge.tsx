@@ -33,6 +33,7 @@ export interface StageBadgeProps {
 
 /**
  * Get color classes based on horizon alignment
+ * WCAG 2.1 AA compliant with proper dark mode contrast
  */
 function getStageColorClasses(horizonCode: string): {
   bg: string;
@@ -42,30 +43,30 @@ function getStageColorClasses(horizonCode: string): {
 } {
   const colorMap: Record<string, { bg: string; text: string; border: string; progress: string }> = {
     H1: {
-      bg: 'bg-green-50',
-      text: 'text-green-700',
-      border: 'border-green-300',
-      progress: 'bg-green-500',
+      bg: 'bg-green-50 dark:bg-green-900/30',
+      text: 'text-green-800 dark:text-green-200',
+      border: 'border-green-400 dark:border-green-600',
+      progress: 'bg-green-500 dark:bg-green-400',
     },
     H2: {
-      bg: 'bg-amber-50',
-      text: 'text-amber-700',
-      border: 'border-amber-300',
-      progress: 'bg-amber-500',
+      bg: 'bg-amber-50 dark:bg-amber-900/30',
+      text: 'text-amber-800 dark:text-amber-200',
+      border: 'border-amber-400 dark:border-amber-600',
+      progress: 'bg-amber-500 dark:bg-amber-400',
     },
     H3: {
-      bg: 'bg-purple-50',
-      text: 'text-purple-700',
-      border: 'border-purple-300',
-      progress: 'bg-purple-500',
+      bg: 'bg-purple-50 dark:bg-purple-900/30',
+      text: 'text-purple-800 dark:text-purple-200',
+      border: 'border-purple-400 dark:border-purple-600',
+      progress: 'bg-purple-500 dark:bg-purple-400',
     },
   };
 
   return colorMap[horizonCode] || {
-    bg: 'bg-gray-50',
-    text: 'text-gray-700',
-    border: 'border-gray-300',
-    progress: 'bg-gray-500',
+    bg: 'bg-gray-50 dark:bg-gray-800',
+    text: 'text-gray-800 dark:text-gray-200',
+    border: 'border-gray-400 dark:border-gray-600',
+    progress: 'bg-gray-500 dark:bg-gray-400',
   };
 }
 

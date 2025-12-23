@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Heart, Calendar, ExternalLink, FileText, TrendingUp, Eye, Info, RefreshCw, Search, Loader2 } from 'lucide-react';
+import { ArrowLeft, Heart, Calendar, ExternalLink, FileText, TrendingUp, Eye, Info, RefreshCw, Search, Loader2, ChevronDown, ChevronUp, Copy, Check } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
 import { cn } from '../lib/utils';
@@ -53,6 +54,7 @@ interface ResearchTask {
     cards_created?: string[];
     entities_extracted?: number;
     cost_estimate?: number;
+    report_preview?: string;  // Full research report text
   };
   error_message?: string;
   created_at: string;
@@ -63,12 +65,21 @@ interface Source {
   id: string;
   title: string;
   url: string;
-  summary: string;
-  source_type: string;
-  author: string;
-  publisher: string;
-  published_date: string;
-  relevance_score: number;
+  // Database fields
+  ai_summary?: string;
+  key_excerpts?: string[];
+  publication?: string;
+  full_text?: string;
+  relevance_to_card?: number;
+  api_source?: string;
+  ingested_at?: string;
+  // Legacy fields (may be null)
+  summary?: string;
+  source_type?: string;
+  author?: string;
+  publisher?: string;
+  published_date?: string;
+  relevance_score?: number;
 }
 
 interface TimelineEvent {
@@ -77,6 +88,14 @@ interface TimelineEvent {
   title: string;
   description: string;
   created_at: string;
+  metadata?: {
+    sources_found?: number;
+    sources_relevant?: number;
+    sources_added?: number;
+    entities_extracted?: number;
+    cost?: number;
+    detailed_report?: string;
+  };
 }
 
 interface Note {
@@ -98,18 +117,35 @@ const parseStageNumber = (stageId: string): number | null => {
 
 /**
  * Get score color classes based on score value
+ * WCAG 2.1 AA compliant - minimum 4.5:1 contrast ratio for text
  */
 const getScoreColorClasses = (score: number): { bg: string; text: string; border: string } => {
   if (score >= 80) {
-    return { bg: 'bg-green-100', text: 'text-green-700', border: 'border-green-300' };
+    return {
+      bg: 'bg-green-100 dark:bg-green-900/40',
+      text: 'text-green-800 dark:text-green-200',
+      border: 'border-green-400 dark:border-green-600'
+    };
   }
   if (score >= 60) {
-    return { bg: 'bg-amber-100', text: 'text-amber-700', border: 'border-amber-300' };
+    return {
+      bg: 'bg-amber-100 dark:bg-amber-900/40',
+      text: 'text-amber-800 dark:text-amber-200',
+      border: 'border-amber-400 dark:border-amber-600'
+    };
   }
   if (score >= 40) {
-    return { bg: 'bg-orange-100', text: 'text-orange-700', border: 'border-orange-300' };
+    return {
+      bg: 'bg-orange-100 dark:bg-orange-900/40',
+      text: 'text-orange-800 dark:text-orange-200',
+      border: 'border-orange-400 dark:border-orange-600'
+    };
   }
-  return { bg: 'bg-red-100', text: 'text-red-700', border: 'border-red-300' };
+  return {
+    bg: 'bg-red-100 dark:bg-red-900/40',
+    text: 'text-red-800 dark:text-red-200',
+    border: 'border-red-400 dark:border-red-600'
+  };
 };
 
 /**
@@ -160,6 +196,15 @@ const CardDetail: React.FC = () => {
   const [researchTask, setResearchTask] = useState<ResearchTask | null>(null);
   const [isResearching, setIsResearching] = useState(false);
   const [researchError, setResearchError] = useState<string | null>(null);
+  const [showReport, setShowReport] = useState(false);
+  const [reportCopied, setReportCopied] = useState(false);
+
+  // Research history state
+  const [researchHistory, setResearchHistory] = useState<ResearchTask[]>([]);
+  const [expandedReportId, setExpandedReportId] = useState<string | null>(null);
+
+  // Timeline expanded reports
+  const [expandedTimelineId, setExpandedTimelineId] = useState<string | null>(null);
 
   useEffect(() => {
     if (slug) {
@@ -209,9 +254,19 @@ const CardDetail: React.FC = () => {
           .or(`user_id.eq.${user?.id},is_private.eq.false`)
           .order('created_at', { ascending: false });
 
+        // Load research history (completed tasks only)
+        const { data: researchData } = await supabase
+          .from('research_tasks')
+          .select('*')
+          .eq('card_id', cardData.id)
+          .eq('status', 'completed')
+          .order('completed_at', { ascending: false })
+          .limit(10);
+
         setSources(sourcesData || []);
         setTimeline(timelineData || []);
         setNotes(notesData || []);
+        setResearchHistory(researchData || []);
       }
     } catch (error) {
       console.error('Error loading card detail:', error);
@@ -229,7 +284,7 @@ const CardDetail: React.FC = () => {
         .select('id')
         .eq('user_id', user.id)
         .eq('card_id', card.id)
-        .single();
+        .maybeSingle();  // Use maybeSingle to avoid 406 error when no row exists
 
       setIsFollowing(!!data);
     } catch (error) {
@@ -558,63 +613,139 @@ const CardDetail: React.FC = () => {
       {/* Research Status Banner */}
       {(isResearching || researchError || researchTask?.status === 'completed') && (
         <div className={cn(
-          'mb-6 p-4 rounded-lg border',
+          'mb-6 rounded-lg border overflow-hidden',
           isResearching && 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800',
           researchError && 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800',
           researchTask?.status === 'completed' && !isResearching && 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800'
         )}>
-          <div className="flex items-center gap-3">
-            {isResearching && (
-              <>
-                <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
-                <div>
-                  <p className="font-medium text-blue-800 dark:text-blue-200">
-                    {researchTask?.task_type === 'deep_research' ? 'Deep research in progress...' : 'Updating sources...'}
-                  </p>
-                  <p className="text-sm text-blue-600 dark:text-blue-300">
-                    This may take a minute. You can continue browsing.
-                  </p>
-                </div>
-              </>
-            )}
-            {researchError && (
-              <>
-                <div className="h-5 w-5 rounded-full bg-red-500 text-white flex items-center justify-center text-xs font-bold">!</div>
-                <div>
-                  <p className="font-medium text-red-800 dark:text-red-200">Research failed</p>
-                  <p className="text-sm text-red-600 dark:text-red-300">{researchError}</p>
-                </div>
-                <button
-                  onClick={() => setResearchError(null)}
-                  className="ml-auto text-red-600 hover:text-red-800 text-sm"
-                >
-                  Dismiss
-                </button>
-              </>
-            )}
-            {researchTask?.status === 'completed' && !isResearching && !researchError && (
-              <>
-                <div className="h-5 w-5 rounded-full bg-green-500 text-white flex items-center justify-center text-xs">✓</div>
-                <div>
-                  <p className="font-medium text-green-800 dark:text-green-200">Research completed!</p>
-                  <p className="text-sm text-green-600 dark:text-green-300">
-                    Discovered {researchTask.result_summary?.sources_found || 0} sources
-                    {researchTask.result_summary?.sources_relevant &&
-                      ` → ${researchTask.result_summary.sources_relevant} relevant`}
-                    {' → '}added {researchTask.result_summary?.sources_added || 0} new
-                    {researchTask.result_summary?.entities_extracted && researchTask.result_summary.entities_extracted > 0 &&
-                      ` • ${researchTask.result_summary.entities_extracted} entities extracted`}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setResearchTask(null)}
-                  className="ml-auto text-green-600 hover:text-green-800 text-sm"
-                >
-                  Dismiss
-                </button>
-              </>
-            )}
+          <div className="p-4">
+            <div className="flex items-center gap-3">
+              {isResearching && (
+                <>
+                  <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
+                  <div>
+                    <p className="font-medium text-blue-800 dark:text-blue-200">
+                      {researchTask?.task_type === 'deep_research' ? 'Deep research in progress...' : 'Updating sources...'}
+                    </p>
+                    <p className="text-sm text-blue-600 dark:text-blue-300">
+                      This may take a minute. You can continue browsing.
+                    </p>
+                  </div>
+                </>
+              )}
+              {researchError && (
+                <>
+                  <div className="h-5 w-5 rounded-full bg-red-500 text-white flex items-center justify-center text-xs font-bold">!</div>
+                  <div>
+                    <p className="font-medium text-red-800 dark:text-red-200">Research failed</p>
+                    <p className="text-sm text-red-600 dark:text-red-300">{researchError}</p>
+                  </div>
+                  <button
+                    onClick={() => setResearchError(null)}
+                    className="ml-auto text-red-600 hover:text-red-800 text-sm"
+                  >
+                    Dismiss
+                  </button>
+                </>
+              )}
+              {researchTask?.status === 'completed' && !isResearching && !researchError && (
+                <>
+                  <div className="h-5 w-5 rounded-full bg-green-500 text-white flex items-center justify-center text-xs">✓</div>
+                  <div className="flex-1">
+                    <p className="font-medium text-green-800 dark:text-green-200">Research completed!</p>
+                    <p className="text-sm text-green-600 dark:text-green-300">
+                      Discovered {researchTask.result_summary?.sources_found || 0} sources
+                      {researchTask.result_summary?.sources_relevant &&
+                        ` → ${researchTask.result_summary.sources_relevant} relevant`}
+                      {' → '}added {researchTask.result_summary?.sources_added || 0} new
+                      {researchTask.result_summary?.entities_extracted && researchTask.result_summary.entities_extracted > 0 &&
+                        ` • ${researchTask.result_summary.entities_extracted} entities extracted`}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {researchTask.result_summary?.report_preview && (
+                      <button
+                        onClick={() => setShowReport(!showReport)}
+                        className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-green-700 bg-green-100 hover:bg-green-200 rounded-md transition-colors"
+                      >
+                        <FileText className="h-4 w-4 mr-1.5" />
+                        {showReport ? 'Hide' : 'View'} Report
+                        {showReport ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" />}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setResearchTask(null)}
+                      className="text-green-600 hover:text-green-800 text-sm"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
+
+          {/* Collapsible Research Report */}
+          {researchTask?.status === 'completed' && showReport && researchTask.result_summary?.report_preview && (
+            <div className="border-t border-green-200 dark:border-green-800 bg-white dark:bg-gray-900">
+              <div className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Research Report
+                  </h4>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(researchTask.result_summary?.report_preview || '');
+                      setReportCopied(true);
+                      setTimeout(() => setReportCopied(false), 2000);
+                    }}
+                    className="inline-flex items-center px-2 py-1 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 dark:text-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 rounded transition-colors"
+                  >
+                    {reportCopied ? (
+                      <>
+                        <Check className="h-3 w-3 mr-1 text-green-600" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3 w-3 mr-1" />
+                        Copy Report
+                      </>
+                    )}
+                  </button>
+                </div>
+                <div className="prose prose-sm dark:prose-invert max-w-none max-h-[500px] overflow-y-auto p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <ReactMarkdown
+                    components={{
+                      // Style links
+                      a: ({ node, ...props }) => (
+                        <a {...props} className="text-blue-600 hover:text-blue-800 underline" target="_blank" rel="noopener noreferrer" />
+                      ),
+                      // Style headings
+                      h1: ({ node, ...props }) => <h1 {...props} className="text-xl font-bold text-gray-900 dark:text-white mt-4 mb-2" />,
+                      h2: ({ node, ...props }) => <h2 {...props} className="text-lg font-semibold text-gray-900 dark:text-white mt-3 mb-2" />,
+                      h3: ({ node, ...props }) => <h3 {...props} className="text-base font-semibold text-gray-800 dark:text-gray-100 mt-2 mb-1" />,
+                      // Style paragraphs
+                      p: ({ node, ...props }) => <p {...props} className="text-gray-700 dark:text-gray-300 mb-3 leading-relaxed" />,
+                      // Style lists
+                      ul: ({ node, ...props }) => <ul {...props} className="list-disc list-inside mb-3 space-y-1" />,
+                      ol: ({ node, ...props }) => <ol {...props} className="list-decimal list-inside mb-3 space-y-1" />,
+                      li: ({ node, ...props }) => <li {...props} className="text-gray-700 dark:text-gray-300" />,
+                      // Style code
+                      code: ({ node, ...props }) => <code {...props} className="bg-gray-200 dark:bg-gray-700 px-1 py-0.5 rounded text-sm" />,
+                      // Style blockquotes
+                      blockquote: ({ node, ...props }) => (
+                        <blockquote {...props} className="border-l-4 border-blue-500 pl-4 italic text-gray-600 dark:text-gray-400 my-3" />
+                      ),
+                    }}
+                  >
+                    {researchTask.result_summary.report_preview}
+                  </ReactMarkdown>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -756,6 +887,104 @@ const CardDetail: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* Research History */}
+            {researchHistory.length > 0 && (
+              <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                  <Search className="h-5 w-5 text-brand-blue" />
+                  Research History
+                </h2>
+                <div className="space-y-4">
+                  {researchHistory.map((task) => (
+                    <div
+                      key={task.id}
+                      className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden"
+                    >
+                      {/* Task header - always visible */}
+                      <button
+                        onClick={() => setExpandedReportId(expandedReportId === task.id ? null : task.id)}
+                        className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className={cn(
+                            'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium',
+                            task.task_type === 'deep_research'
+                              ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
+                              : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                          )}>
+                            {task.task_type === 'deep_research' ? 'Deep Research' : 'Update'}
+                          </span>
+                          <span className="text-sm text-gray-600 dark:text-gray-300">
+                            {task.completed_at
+                              ? new Date(task.completed_at).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })
+                              : 'Unknown date'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            {task.result_summary?.sources_found || 0} sources found
+                            {task.result_summary?.sources_added ? ` → ${task.result_summary.sources_added} added` : ''}
+                          </span>
+                          {expandedReportId === task.id ? (
+                            <ChevronUp className="h-4 w-4 text-gray-400" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4 text-gray-400" />
+                          )}
+                        </div>
+                      </button>
+
+                      {/* Expanded report content */}
+                      {expandedReportId === task.id && task.result_summary?.report_preview && (
+                        <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+                          <div className="flex items-center justify-between mb-3">
+                            <h4 className="font-medium text-gray-900 dark:text-white text-sm">Research Report</h4>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigator.clipboard.writeText(task.result_summary?.report_preview || '');
+                              }}
+                              className="inline-flex items-center px-2 py-1 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 dark:text-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 rounded transition-colors"
+                            >
+                              <Copy className="h-3 w-3 mr-1" />
+                              Copy
+                            </button>
+                          </div>
+                          <div className="prose prose-sm dark:prose-invert max-w-none max-h-[400px] overflow-y-auto p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                            <ReactMarkdown
+                              components={{
+                                a: ({ node, ...props }) => (
+                                  <a {...props} className="text-blue-600 hover:text-blue-800 underline" target="_blank" rel="noopener noreferrer" />
+                                ),
+                                h1: ({ node, ...props }) => <h1 {...props} className="text-lg font-bold text-gray-900 dark:text-white mt-3 mb-2" />,
+                                h2: ({ node, ...props }) => <h2 {...props} className="text-base font-semibold text-gray-900 dark:text-white mt-2 mb-1" />,
+                                h3: ({ node, ...props }) => <h3 {...props} className="text-sm font-semibold text-gray-800 dark:text-gray-100 mt-2 mb-1" />,
+                                p: ({ node, ...props }) => <p {...props} className="text-gray-700 dark:text-gray-300 mb-2 text-sm leading-relaxed" />,
+                                ul: ({ node, ...props }) => <ul {...props} className="list-disc list-inside mb-2 space-y-0.5" />,
+                                ol: ({ node, ...props }) => <ol {...props} className="list-decimal list-inside mb-2 space-y-0.5" />,
+                                li: ({ node, ...props }) => <li {...props} className="text-gray-700 dark:text-gray-300 text-sm" />,
+                                code: ({ node, ...props }) => <code {...props} className="bg-gray-200 dark:bg-gray-700 px-1 py-0.5 rounded text-xs" />,
+                                blockquote: ({ node, ...props }) => (
+                                  <blockquote {...props} className="border-l-4 border-blue-500 pl-3 italic text-gray-600 dark:text-gray-400 my-2 text-sm" />
+                                ),
+                              }}
+                            >
+                              {task.result_summary.report_preview}
+                            </ReactMarkdown>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Sidebar - Scores */}
@@ -798,12 +1027,12 @@ const CardDetail: React.FC = () => {
                         content={
                           <div className="max-w-[200px]">
                             <p className="font-medium mb-1">{definition.label}</p>
-                            <p className="text-xs text-gray-500">{definition.description}</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">{definition.description}</p>
                           </div>
                         }
                         side="left"
                       >
-                        <span className="text-sm text-gray-600 cursor-help border-b border-dotted border-gray-400">
+                        <span className="text-sm text-gray-700 dark:text-gray-200 cursor-help border-b border-dotted border-gray-400 dark:border-gray-500">
                           {definition.label}
                         </span>
                       </Tooltip>
@@ -825,11 +1054,46 @@ const CardDetail: React.FC = () => {
 
             {/* Maturity Score */}
             <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Maturity</h3>
+              <div className="flex items-center gap-2 mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Maturity</h3>
+                <Tooltip
+                  content={
+                    <div className="space-y-2 max-w-xs">
+                      <div className="font-semibold text-gray-900 dark:text-white">Maturity Score</div>
+                      <p className="text-sm text-gray-600 dark:text-gray-300">
+                        Indicates how developed and established this technology or trend is. Higher scores mean more mature,
+                        proven solutions with established best practices and widespread adoption.
+                      </p>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 pt-1 border-t border-gray-200 dark:border-gray-600">
+                        <div className="flex justify-between"><span>0-30:</span><span>Early/Experimental</span></div>
+                        <div className="flex justify-between"><span>31-60:</span><span>Emerging/Developing</span></div>
+                        <div className="flex justify-between"><span>61-80:</span><span>Established</span></div>
+                        <div className="flex justify-between"><span>81-100:</span><span>Mature/Mainstream</span></div>
+                      </div>
+                    </div>
+                  }
+                  side="top"
+                  contentClassName="p-3"
+                >
+                  <Info className="h-4 w-4 text-gray-400 hover:text-brand-blue cursor-help transition-colors" />
+                </Tooltip>
+              </div>
               <div className="text-center">
-                <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-brand-light-blue dark:bg-brand-blue/20 border-4 border-brand-blue/30 mb-2">
-                  <span className="text-2xl font-bold text-brand-blue">{card.maturity_score}</span>
-                </div>
+                <Tooltip
+                  content={
+                    <span>
+                      {card.maturity_score >= 81 ? 'Mature & Mainstream - Well-established with proven track record' :
+                       card.maturity_score >= 61 ? 'Established - Gaining broad adoption and validation' :
+                       card.maturity_score >= 31 ? 'Emerging - Actively developing with growing interest' :
+                       'Early Stage - Experimental or recently introduced'}
+                    </span>
+                  }
+                  side="bottom"
+                >
+                  <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-brand-light-blue dark:bg-slate-700 border-4 border-brand-blue/30 dark:border-brand-blue/50 mb-2 cursor-help">
+                    <span className="text-2xl font-bold text-brand-dark-blue dark:text-white">{card.maturity_score}</span>
+                  </div>
+                </Tooltip>
                 <p className="text-sm text-gray-500 dark:text-gray-400">Maturity Score</p>
               </div>
               {stageNumber && (
@@ -930,42 +1194,89 @@ const CardDetail: React.FC = () => {
             </div>
           ) : (
             sources.map((source) => {
-              const sourceColors = getScoreColorClasses(source.relevance_score);
+              // Use relevance_to_card (1-5 scale) scaled to 100, or legacy relevance_score
+              const relevanceScore = source.relevance_to_card
+                ? Math.round(source.relevance_to_card * 20)  // 1-5 scale → 0-100
+                : (source.relevance_score || 50);
+              const sourceColors = getScoreColorClasses(relevanceScore);
+              // Use ai_summary as primary, fallback to legacy summary
+              const displaySummary = source.ai_summary || source.summary;
+              // Use publication as publisher, fallback to legacy
+              const displayPublisher = source.publication || source.publisher;
+              // Format date - use ingested_at or published_date, handle nulls
+              const displayDate = source.ingested_at || source.published_date;
+              const formattedDate = displayDate && new Date(displayDate).getFullYear() > 1970
+                ? new Date(displayDate).toLocaleDateString()
+                : null;
+
               return (
                 <div key={source.id} className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 border-l-4 border-transparent transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-l-brand-blue">
                   <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">{source.title}</h3>
-                      <p className="text-gray-600 dark:text-gray-300 mb-3">{source.summary}</p>
-                      <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
-                        <span>{source.author}</span>
-                        <span>-</span>
-                        <span>{source.publisher}</span>
-                        <span>-</span>
-                        <span>{new Date(source.published_date).toLocaleDateString()}</span>
-                      </div>
-                    </div>
-                    <div className="ml-4 flex items-center gap-2">
-                      <span
-                        className={cn(
-                          'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border',
-                          sourceColors.bg,
-                          sourceColors.text,
-                          sourceColors.border
-                        )}
-                      >
-                        {source.relevance_score}/100
-                      </span>
-                      {source.url && (
+                    <div className="flex-1 min-w-0">
+                      {/* Title as link */}
+                      {source.url ? (
                         <a
                           href={source.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="p-2 text-gray-400 hover:text-gray-600"
+                          className="text-lg font-medium text-brand-blue hover:text-brand-dark-blue hover:underline mb-2 block"
                         >
-                          <ExternalLink className="h-4 w-4" />
+                          {source.title}
+                          <ExternalLink className="h-4 w-4 inline ml-2 opacity-50" />
                         </a>
+                      ) : (
+                        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">{source.title}</h3>
                       )}
+
+                      {/* Summary/Synopsis */}
+                      {displaySummary && (
+                        <p className="text-gray-600 dark:text-gray-300 mb-3 line-clamp-3">{displaySummary}</p>
+                      )}
+
+                      {/* Key Excerpts */}
+                      {source.key_excerpts && source.key_excerpts.length > 0 && (
+                        <div className="mb-3 pl-3 border-l-2 border-gray-200 dark:border-gray-600">
+                          <p className="text-sm text-gray-500 dark:text-gray-400 italic line-clamp-2">
+                            "{source.key_excerpts[0]}"
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Metadata row */}
+                      <div className="flex items-center flex-wrap gap-2 text-sm text-gray-500 dark:text-gray-400">
+                        {displayPublisher && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs">
+                            {displayPublisher}
+                          </span>
+                        )}
+                        {source.api_source && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 text-xs">
+                            via {source.api_source === 'gpt_researcher' ? 'GPT Researcher' : source.api_source}
+                          </span>
+                        )}
+                        {formattedDate && (
+                          <span className="text-gray-400 text-xs">
+                            {formattedDate}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Relevance score badge */}
+                    <div className="ml-4 flex-shrink-0">
+                      <div className="flex flex-col items-end gap-1">
+                        <span
+                          className={cn(
+                            'inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border',
+                            sourceColors.bg,
+                            sourceColors.text,
+                            sourceColors.border
+                          )}
+                        >
+                          {relevanceScore}%
+                        </span>
+                        <span className="text-[10px] text-gray-400">relevance</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -987,22 +1298,134 @@ const CardDetail: React.FC = () => {
             </div>
           ) : (
             <div className="divide-y divide-gray-200 dark:divide-gray-700">
-              {timeline.map((event) => (
-                <div key={event.id} className="p-6">
-                  <div className="flex items-start">
-                    <div className="flex-shrink-0">
-                      <Calendar className="h-5 w-5 text-gray-400" />
-                    </div>
-                    <div className="ml-3 flex-1">
-                      <h3 className="text-sm font-medium text-gray-900 dark:text-white">{event.title}</h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">{event.description}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                        {new Date(event.created_at).toLocaleString()}
-                      </p>
+              {timeline.map((event) => {
+                const isDeepResearch = event.event_type === 'deep_research';
+                const hasDetailedReport = isDeepResearch && event.metadata?.detailed_report;
+                const isExpanded = expandedTimelineId === event.id;
+
+                return (
+                  <div key={event.id} className={cn(
+                    "p-6",
+                    isDeepResearch && "bg-gradient-to-r from-brand-light-blue/10 to-transparent"
+                  )}>
+                    <div className="flex items-start">
+                      <div className="flex-shrink-0">
+                        {isDeepResearch ? (
+                          <div className="p-2 rounded-full bg-brand-blue/10">
+                            <Search className="h-5 w-5 text-brand-blue" />
+                          </div>
+                        ) : (
+                          <Calendar className="h-5 w-5 text-gray-400" />
+                        )}
+                      </div>
+                      <div className="ml-3 flex-1">
+                        <div className="flex items-center gap-2">
+                          <h3 className={cn(
+                            "font-medium text-gray-900 dark:text-white",
+                            isDeepResearch ? "text-base" : "text-sm"
+                          )}>{event.title}</h3>
+                          {isDeepResearch && (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gradient-to-r from-brand-blue to-extended-purple text-white shadow-sm">
+                              Strategic Intelligence Report
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">{event.description}</p>
+
+                        {/* Metadata stats for deep research - enhanced display */}
+                        {isDeepResearch && event.metadata && (
+                          <div className="flex flex-wrap items-center gap-4 mt-3">
+                            {event.metadata.sources_found !== undefined && (
+                              <div className="flex items-center gap-1.5 text-xs">
+                                <div className="w-2 h-2 rounded-full bg-brand-green"></div>
+                                <span className="text-gray-600 dark:text-gray-300">
+                                  <span className="font-semibold text-gray-900 dark:text-white">{event.metadata.sources_found}</span> sources found
+                                </span>
+                              </div>
+                            )}
+                            {event.metadata.sources_added !== undefined && (
+                              <div className="flex items-center gap-1.5 text-xs">
+                                <div className="w-2 h-2 rounded-full bg-brand-blue"></div>
+                                <span className="text-gray-600 dark:text-gray-300">
+                                  <span className="font-semibold text-gray-900 dark:text-white">{event.metadata.sources_added}</span> added
+                                </span>
+                              </div>
+                            )}
+                            {event.metadata.entities_extracted !== undefined && (
+                              <div className="flex items-center gap-1.5 text-xs">
+                                <div className="w-2 h-2 rounded-full bg-extended-purple"></div>
+                                <span className="text-gray-600 dark:text-gray-300">
+                                  <span className="font-semibold text-gray-900 dark:text-white">{event.metadata.entities_extracted}</span> entities
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Detailed Report Toggle - enhanced */}
+                        {hasDetailedReport && (
+                          <div className="mt-4">
+                            <button
+                              onClick={() => setExpandedTimelineId(isExpanded ? null : event.id)}
+                              className={cn(
+                                "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200",
+                                isExpanded
+                                  ? "bg-brand-blue text-white shadow-md hover:bg-brand-dark-blue"
+                                  : "bg-brand-light-blue text-brand-blue hover:bg-brand-blue hover:text-white"
+                              )}
+                            >
+                              <FileText className="h-4 w-4" />
+                              {isExpanded ? 'Collapse Strategic Report' : 'View Strategic Intelligence Report'}
+                              {isExpanded ? (
+                                <ChevronUp className="h-4 w-4" />
+                              ) : (
+                                <ChevronDown className="h-4 w-4" />
+                              )}
+                            </button>
+
+                            {/* Expanded Report Content - enhanced styling */}
+                            {isExpanded && (
+                              <div className="mt-4 rounded-xl border-2 border-brand-blue/20 overflow-hidden">
+                                {/* Report Header */}
+                                <div className="bg-gradient-to-r from-brand-blue to-extended-purple p-4">
+                                  <div className="flex items-center gap-3 text-white">
+                                    <FileText className="h-6 w-6" />
+                                    <div>
+                                      <h4 className="font-bold text-lg">Strategic Intelligence Report</h4>
+                                      <p className="text-white/80 text-sm">Generated {new Date(event.created_at).toLocaleDateString()}</p>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Report Content */}
+                                <div className="p-6 bg-white dark:bg-[#1d2156] max-h-[80vh] overflow-y-auto">
+                                  <div className="prose prose-sm dark:prose-invert max-w-none
+                                    prose-headings:text-brand-dark-blue dark:prose-headings:text-white
+                                    prose-h2:text-lg prose-h2:font-bold prose-h2:border-b prose-h2:border-gray-200 dark:prose-h2:border-gray-700 prose-h2:pb-2 prose-h2:mb-4 prose-h2:mt-6
+                                    prose-h3:text-base prose-h3:font-semibold
+                                    prose-strong:text-brand-dark-blue dark:prose-strong:text-brand-light-blue
+                                    prose-ul:my-2 prose-li:my-0.5
+                                    prose-p:text-gray-700 dark:prose-p:text-gray-300
+                                    prose-a:text-brand-blue hover:prose-a:text-brand-dark-blue
+                                  ">
+                                    <ReactMarkdown>
+                                      {event.metadata!.detailed_report!}
+                                    </ReactMarkdown>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+                          {new Date(event.created_at).toLocaleString()}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

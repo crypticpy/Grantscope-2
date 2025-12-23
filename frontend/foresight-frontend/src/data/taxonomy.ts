@@ -491,9 +491,35 @@ export const triageScores: TriageScore[] = [
 
 /**
  * Get a pillar by its code
+ * Supports exact match and common abbreviations
  */
 export function getPillarByCode(code: string): Pillar | undefined {
-  return pillars.find((p) => p.code === code);
+  if (!code) return undefined;
+  const upperCode = code.toUpperCase();
+
+  // Direct match
+  const direct = pillars.find((p) => p.code === upperCode);
+  if (direct) return direct;
+
+  // Handle common abbreviations/mismatches
+  const abbreviationMap: Record<string, string> = {
+    'ES': 'CH',  // Environmental/Sustainability maps to Community Health & Sustainability
+    'ENV': 'CH',
+    'HEALTH': 'CH',
+    'ECON': 'EW',
+    'GOV': 'HG',
+    'HOUSING': 'HH',
+    'MOBILITY': 'MC',
+    'INFRA': 'MC',
+    'SAFETY': 'PS',
+  };
+
+  const mappedCode = abbreviationMap[upperCode];
+  if (mappedCode) {
+    return pillars.find((p) => p.code === mappedCode);
+  }
+
+  return undefined;
 }
 
 /**
@@ -533,9 +559,48 @@ export function getHorizonByCode(code: 'H1' | 'H2' | 'H3'): Horizon | undefined 
 
 /**
  * Get an anchor by its name
+ * Supports exact match, partial match, and common abbreviations
  */
 export function getAnchorByName(name: string): Anchor | undefined {
-  return anchors.find((a) => a.name === name);
+  if (!name) return undefined;
+  const lowerName = name.toLowerCase().trim();
+
+  // Direct match (case-insensitive)
+  const direct = anchors.find((a) => a.name.toLowerCase() === lowerName);
+  if (direct) return direct;
+
+  // Partial/keyword match
+  const keywordMap: Record<string, string> = {
+    'equity': 'Equity',
+    'afford': 'Affordability',
+    'affordability': 'Affordability',
+    'innov': 'Innovation',
+    'innovation': 'Innovation',
+    'sustain': 'Sustainability & Resiliency',
+    'sustainability': 'Sustainability & Resiliency',
+    'resiliency': 'Sustainability & Resiliency',
+    'resilience': 'Sustainability & Resiliency',
+    'prevent': 'Proactive Prevention',
+    'prevention': 'Proactive Prevention',
+    'proactive': 'Proactive Prevention',
+    'trust': 'Community Trust & Relationships',
+    'community': 'Community Trust & Relationships',
+    'relationship': 'Community Trust & Relationships',
+  };
+
+  const mappedName = keywordMap[lowerName];
+  if (mappedName) {
+    return anchors.find((a) => a.name === mappedName);
+  }
+
+  // Fuzzy match - check if the anchor name contains the search term
+  const fuzzy = anchors.find((a) =>
+    a.name.toLowerCase().includes(lowerName) ||
+    lowerName.includes(a.name.toLowerCase().split(' ')[0])
+  );
+  if (fuzzy) return fuzzy;
+
+  return undefined;
 }
 
 /**

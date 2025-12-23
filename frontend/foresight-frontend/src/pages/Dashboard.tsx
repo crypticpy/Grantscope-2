@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, TrendingUp, Eye, Plus, Filter } from 'lucide-react';
+import { Calendar, TrendingUp, Eye, Plus, Filter, Star, Sparkles, ArrowRight } from 'lucide-react';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
 import { PillarBadge } from '../components/PillarBadge';
 import { HorizonBadge } from '../components/HorizonBadge';
 import { StageBadge } from '../components/StageBadge';
 import { Top25Badge } from '../components/Top25Badge';
+import { fetchPendingCount } from '../lib/discovery-api';
 
 interface Card {
   id: string;
@@ -36,6 +37,7 @@ const Dashboard: React.FC = () => {
   const [recentCards, setRecentCards] = useState<Card[]>([]);
   const [followingCards, setFollowingCards] = useState<FollowingCard[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pendingReviewCount, setPendingReviewCount] = useState(0);
   const [stats, setStats] = useState({
     totalCards: 0,
     newThisWeek: 0,
@@ -45,7 +47,21 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     loadDashboardData();
+    loadPendingCount();
   }, []);
+
+  const loadPendingCount = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        const count = await fetchPendingCount(session.access_token);
+        setPendingReviewCount(count);
+      }
+    } catch (err) {
+      // Silently fail - non-critical
+      console.debug('Could not fetch pending count:', err);
+    }
+  };
 
   const loadDashboardData = async () => {
     try {
@@ -88,7 +104,13 @@ const Dashboard: React.FC = () => {
         .gte('created_at', oneWeekAgo.toISOString());
 
       setRecentCards(recentData || []);
-      setFollowingCards(followingData || []);
+      // Transform Supabase nested response to match our interface
+      const transformedFollowing = (followingData || []).map((item: any) => ({
+        id: item.id,
+        priority: item.priority,
+        cards: item.cards as Card
+      }));
+      setFollowingCards(transformedFollowing);
       setStats({
         totalCards: totalCardsCount || 0,
         newThisWeek: newThisWeekCount || 0,
@@ -104,11 +126,29 @@ const Dashboard: React.FC = () => {
 
   const getPriorityColor = (priority: string) => {
     const colors: Record<string, string> = {
-      'high': 'bg-red-100 text-red-800',
-      'medium': 'bg-yellow-100 text-yellow-800',
-      'low': 'bg-green-100 text-green-800'
+      'high': 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+      'medium': 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
+      'low': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300'
     };
-    return colors[priority] || 'bg-gray-100 text-gray-800';
+    return colors[priority] || 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
+  };
+
+  const getPriorityBorder = (priority: string) => {
+    const borders: Record<string, string> = {
+      'high': 'border-l-red-500',
+      'medium': 'border-l-amber-500',
+      'low': 'border-l-emerald-500'
+    };
+    return borders[priority] || 'border-l-gray-300';
+  };
+
+  const getPriorityGradient = (priority: string) => {
+    const gradients: Record<string, string> = {
+      'high': 'from-red-50 dark:from-red-900/10',
+      'medium': 'from-amber-50 dark:from-amber-900/10',
+      'low': 'from-emerald-50 dark:from-emerald-900/10'
+    };
+    return gradients[priority] || 'from-gray-50 dark:from-gray-800/50';
   };
 
   // Helper to parse stage_id to number
@@ -137,71 +177,120 @@ const Dashboard: React.FC = () => {
         </p>
       </div>
 
-      {/* Stats Cards */}
+      {/* Pending Review Alert */}
+      {pendingReviewCount > 0 && (
+        <div className="mb-8">
+          <Link
+            to="/discover/queue"
+            className="block bg-gradient-to-r from-brand-blue/10 to-extended-purple/10 dark:from-brand-blue/20 dark:to-extended-purple/20 border border-brand-blue/20 dark:border-brand-blue/30 rounded-lg p-4 hover:from-brand-blue/15 hover:to-extended-purple/15 dark:hover:from-brand-blue/25 dark:hover:to-extended-purple/25 transition-all group"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex-shrink-0 p-2 bg-brand-blue/20 dark:bg-brand-blue/30 rounded-full">
+                  <Sparkles className="h-5 w-5 text-brand-blue" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-brand-dark-blue dark:text-white">
+                    {pendingReviewCount} New Discovery{pendingReviewCount !== 1 ? 'ies' : ''} Pending Review
+                  </h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    AI has found new intelligence cards. Review and approve them to add to your library.
+                  </p>
+                </div>
+              </div>
+              <div className="flex-shrink-0 flex items-center gap-1 text-brand-blue group-hover:translate-x-1 transition-transform">
+                <span className="text-sm font-medium">Review Now</span>
+                <ArrowRight className="h-4 w-4" />
+              </div>
+            </div>
+          </Link>
+        </div>
+      )}
+
+      {/* Stats Cards - Clickable KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg">
+        <Link
+          to="/discover"
+          className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg cursor-pointer group"
+        >
           <div className="flex items-center">
             <div className="flex-shrink-0">
-              <Eye className="h-8 w-8 text-brand-blue" />
+              <Eye className="h-8 w-8 text-brand-blue group-hover:scale-110 transition-transform" />
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Cards</p>
               <p className="text-2xl font-semibold text-gray-900 dark:text-white">{stats.totalCards}</p>
             </div>
           </div>
-        </div>
+        </Link>
 
-        <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg">
+        <Link
+          to="/discover?filter=new"
+          className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg cursor-pointer group"
+        >
           <div className="flex items-center">
             <div className="flex-shrink-0">
-              <TrendingUp className="h-8 w-8 text-brand-green" />
+              <TrendingUp className="h-8 w-8 text-brand-green group-hover:scale-110 transition-transform" />
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">New This Week</p>
               <p className="text-2xl font-semibold text-gray-900 dark:text-white">{stats.newThisWeek}</p>
             </div>
           </div>
-        </div>
+        </Link>
 
-        <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg">
+        <Link
+          to="/discover?filter=following"
+          className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg cursor-pointer group"
+        >
           <div className="flex items-center">
             <div className="flex-shrink-0">
-              <Calendar className="h-8 w-8 text-extended-purple" />
+              <Calendar className="h-8 w-8 text-extended-purple group-hover:scale-110 transition-transform" />
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Following</p>
               <p className="text-2xl font-semibold text-gray-900 dark:text-white">{stats.following}</p>
             </div>
           </div>
-        </div>
+        </Link>
 
-        <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg">
+        <Link
+          to="/workstreams"
+          className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg cursor-pointer group"
+        >
           <div className="flex items-center">
             <div className="flex-shrink-0">
-              <Filter className="h-8 w-8 text-extended-orange" />
+              <Filter className="h-8 w-8 text-extended-orange group-hover:scale-110 transition-transform" />
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Workstreams</p>
               <p className="text-2xl font-semibold text-gray-900 dark:text-white">{stats.workstreams}</p>
             </div>
           </div>
-        </div>
+        </Link>
       </div>
 
       {/* Following Cards */}
       {followingCards.length > 0 && (
         <div className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-            Your Followed Cards
-          </h2>
+          <div className="flex items-center gap-2 mb-4">
+            <Star className="h-5 w-5 text-amber-500 fill-amber-500" />
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+              Your Followed Cards
+            </h2>
+          </div>
           <div className="grid gap-4">
             {followingCards.slice(0, 3).map((following) => {
               const stageNum = parseStageNumber(following.cards.stage_id);
               return (
-                <div key={following.id} className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 border-l-4 border-transparent transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-l-brand-blue">
+                <div
+                  key={following.id}
+                  className={`bg-gradient-to-r ${getPriorityGradient(following.priority)} to-white dark:to-[#2d3166] rounded-lg shadow p-6 border-l-4 ${getPriorityBorder(following.priority)} transition-all duration-200 hover:-translate-y-1 hover:shadow-lg`}
+                >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        <Star className="h-4 w-4 text-amber-500 fill-amber-500 flex-shrink-0" />
                         <h3 className="text-lg font-medium text-gray-900 dark:text-white">
                           <Link
                             to={`/cards/${following.cards.slug}`}
@@ -240,8 +329,14 @@ const Dashboard: React.FC = () => {
                       </div>
                       <p className="text-gray-600 dark:text-gray-300 mb-3">{following.cards.summary}</p>
                       <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
-                        <span>Impact: {following.cards.impact_score}/100</span>
-                        <span>Relevance: {following.cards.relevance_score}/100</span>
+                        <span className="flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-brand-blue"></span>
+                          Impact: {following.cards.impact_score}/100
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-extended-purple"></span>
+                          Relevance: {following.cards.relevance_score}/100
+                        </span>
                       </div>
                     </div>
                   </div>

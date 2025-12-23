@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { Search, Filter, Grid, List, Eye, Heart } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Search, Filter, Grid, List, Eye, Heart, Clock, Star, Inbox, History } from 'lucide-react';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
 import { PillarBadge } from '../components/PillarBadge';
@@ -60,6 +60,7 @@ const getScoreColorClasses = (score: number): string => {
 
 const Discover: React.FC = () => {
   const { user } = useAuthContext();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [cards, setCards] = useState<Card[]>([]);
   const [pillars, setPillars] = useState<Pillar[]>([]);
   const [stages, setStages] = useState<Stage[]>([]);
@@ -71,6 +72,9 @@ const Discover: React.FC = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [followedCardIds, setFollowedCardIds] = useState<Set<string>>(new Set());
 
+  // Quick filter from URL params (new, following)
+  const quickFilter = searchParams.get('filter') || '';
+
   useEffect(() => {
     loadDiscoverData();
     loadFollowedCards();
@@ -78,7 +82,7 @@ const Discover: React.FC = () => {
 
   useEffect(() => {
     loadCards();
-  }, [searchTerm, selectedPillar, selectedStage, selectedHorizon]);
+  }, [searchTerm, selectedPillar, selectedStage, selectedHorizon, quickFilter, followedCardIds]);
 
   const loadDiscoverData = async () => {
     try {
@@ -120,10 +124,41 @@ const Discover: React.FC = () => {
   const loadCards = async () => {
     setLoading(true);
     try {
+      // Handle "following" filter - need to filter client-side since we have the IDs
+      if (quickFilter === 'following') {
+        if (followedCardIds.size === 0) {
+          setCards([]);
+          setLoading(false);
+          return;
+        }
+
+        let query = supabase
+          .from('cards')
+          .select('*')
+          .eq('status', 'active')
+          .in('id', Array.from(followedCardIds));
+
+        if (searchTerm) {
+          query = query.or(`name.ilike.%${searchTerm}%,summary.ilike.%${searchTerm}%`);
+        }
+
+        const { data } = await query.order('created_at', { ascending: false });
+        setCards(data || []);
+        setLoading(false);
+        return;
+      }
+
       let query = supabase
         .from('cards')
         .select('*')
         .eq('status', 'active');
+
+      // Handle "new" filter - cards from the last week
+      if (quickFilter === 'new') {
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+        query = query.gte('created_at', oneWeekAgo.toISOString());
+      }
 
       if (selectedPillar) {
         query = query.eq('pillar_id', selectedPillar);
@@ -202,10 +237,68 @@ const Discover: React.FC = () => {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-brand-dark-blue dark:text-white">Discover Intelligence</h1>
-        <p className="mt-2 text-gray-600 dark:text-gray-400">
-          Explore emerging trends and technologies relevant to Austin's strategic priorities.
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-brand-dark-blue dark:text-white">Discover Intelligence</h1>
+            <p className="mt-2 text-gray-600 dark:text-gray-400">
+              Explore emerging trends and technologies relevant to Austin's strategic priorities.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link
+              to="/discover/queue"
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              <Inbox className="w-4 h-4" />
+              Review Queue
+            </Link>
+            <Link
+              to="/discover/history"
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              <History className="w-4 h-4" />
+              Run History
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Filter Chips */}
+      <div className="flex items-center gap-3 mb-6">
+        <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Quick filters:</span>
+        <button
+          onClick={() => setSearchParams({})}
+          className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+            !quickFilter
+              ? 'bg-brand-blue text-white'
+              : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+          }`}
+        >
+          <Eye className="h-4 w-4 mr-1.5" />
+          All Cards
+        </button>
+        <button
+          onClick={() => setSearchParams({ filter: 'new' })}
+          className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+            quickFilter === 'new'
+              ? 'bg-brand-green text-white'
+              : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+          }`}
+        >
+          <Clock className="h-4 w-4 mr-1.5" />
+          New This Week
+        </button>
+        <button
+          onClick={() => setSearchParams({ filter: 'following' })}
+          className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+            quickFilter === 'following'
+              ? 'bg-extended-purple text-white'
+              : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+          }`}
+        >
+          <Star className="h-4 w-4 mr-1.5" />
+          Following
+        </button>
       </div>
 
       {/* Filters */}
