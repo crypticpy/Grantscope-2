@@ -270,14 +270,25 @@ class DiscoveryRun(BaseModel):
     started_at: datetime
     completed_at: Optional[datetime] = None
     status: str  # running, completed, failed, cancelled
-    triggered_by: str  # manual, scheduled
+    triggered_by: str  # manual, scheduled, api
     triggered_by_user: Optional[str] = None
-    summary_report: Optional[Dict[str, Any]] = None
+    # Discovery metrics
+    pillars_scanned: Optional[List[str]] = None
+    priorities_scanned: Optional[List[str]] = None
+    queries_generated: Optional[int] = None
+    sources_found: int = 0
+    sources_relevant: Optional[int] = None
     cards_created: int = 0
     cards_enriched: int = 0
     cards_deduplicated: int = 0
-    sources_found: int = 0
+    # Cost and reporting
+    estimated_cost: Optional[float] = None
+    summary_report: Optional[Dict[str, Any]] = None
+    # Error handling
     error_message: Optional[str] = None
+    error_details: Optional[Dict[str, Any]] = None
+    # Timestamps
+    created_at: Optional[datetime] = None
 
 
 # Authentication dependency
