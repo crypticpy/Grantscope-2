@@ -2,13 +2,13 @@
 
 # CORS Integration Tests for Discovery API Endpoint
 # Spec: 002-fix-cors-error-in-discovery-api-endpoint
-# Subtask: 3-1
+# Subtasks: 3-1 (preflight/auth), 3-2 (error responses)
 #
 # Usage:
 #   ./cors-integration-tests.sh           # Run basic tests (no auth required)
 #   ./cors-integration-tests.sh <token>   # Run all tests with auth token
 
-set -e
+# set -e  # Disabled to allow full test execution
 
 BACKEND_URL="http://localhost:8000"
 ORIGIN="http://localhost:5173"
@@ -145,11 +145,63 @@ else
 fi
 
 # ============================================
-# TEST 5: Disallowed Origin (no CORS headers)
+# TEST 5: 422 Validation Error (malformed JSON)
+# Subtask 3-2: Verify error responses include CORS headers
 # ============================================
 
 echo ""
-echo "--- Test 5: Disallowed Origin ---"
+echo "--- Test 5: 422 Validation Error (malformed JSON) ---"
+
+VALIDATION_RESPONSE=$(curl -s -D - -o /dev/null -X POST "$BACKEND_URL$ENDPOINT" \
+    -H "Origin: $ORIGIN" \
+    -H "Content-Type: application/json" \
+    -d 'not valid json' 2>&1)
+
+VALIDATION_STATUS=$(echo "$VALIDATION_RESPONSE" | grep "HTTP/" | head -1 | awk '{print $2}')
+VALIDATION_CORS=$(echo "$VALIDATION_RESPONSE" | grep -i "access-control-allow-origin" | grep -q "$ORIGIN" && echo "true" || echo "false")
+
+run_test "422 validation error has CORS headers" "422" "$VALIDATION_STATUS" "$VALIDATION_CORS"
+
+# ============================================
+# TEST 6: 404 Not Found
+# Subtask 3-2: Verify error responses include CORS headers
+# ============================================
+
+echo ""
+echo "--- Test 6: 404 Not Found ---"
+
+NOT_FOUND_RESPONSE=$(curl -s -D - -o /dev/null -X GET "$BACKEND_URL/api/v1/nonexistent" \
+    -H "Origin: $ORIGIN" 2>&1)
+
+NOT_FOUND_STATUS=$(echo "$NOT_FOUND_RESPONSE" | grep "HTTP/" | head -1 | awk '{print $2}')
+NOT_FOUND_CORS=$(echo "$NOT_FOUND_RESPONSE" | grep -i "access-control-allow-origin" | grep -q "$ORIGIN" && echo "true" || echo "false")
+
+run_test "404 not found has CORS headers" "404" "$NOT_FOUND_STATUS" "$NOT_FOUND_CORS"
+
+# ============================================
+# TEST 7: 405 Method Not Allowed
+# Subtask 3-2: Verify error responses include CORS headers
+# ============================================
+
+echo ""
+echo "--- Test 7: 405 Method Not Allowed ---"
+
+METHOD_NOT_ALLOWED_RESPONSE=$(curl -s -D - -o /dev/null -X PUT "$BACKEND_URL$ENDPOINT" \
+    -H "Origin: $ORIGIN" \
+    -H "Content-Type: application/json" \
+    -d '{}' 2>&1)
+
+METHOD_NOT_ALLOWED_STATUS=$(echo "$METHOD_NOT_ALLOWED_RESPONSE" | grep "HTTP/" | head -1 | awk '{print $2}')
+METHOD_NOT_ALLOWED_CORS=$(echo "$METHOD_NOT_ALLOWED_RESPONSE" | grep -i "access-control-allow-origin" | grep -q "$ORIGIN" && echo "true" || echo "false")
+
+run_test "405 method not allowed has CORS headers" "405" "$METHOD_NOT_ALLOWED_STATUS" "$METHOD_NOT_ALLOWED_CORS"
+
+# ============================================
+# TEST 8: Disallowed Origin (no CORS headers)
+# ============================================
+
+echo ""
+echo "--- Test 8: Disallowed Origin ---"
 
 BAD_ORIGIN_RESPONSE=$(curl -s -D - -o /dev/null -X OPTIONS "$BACKEND_URL$ENDPOINT" \
     -H "Origin: http://evil.com" \
