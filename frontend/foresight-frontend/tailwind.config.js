@@ -1,0 +1,100 @@
+/** @type {import('tailwindcss').Config} */
+module.exports = {
+	darkMode: ['class'],
+	content: [
+		'./pages/**/*.{ts,tsx}',
+		'./components/**/*.{ts,tsx}',
+		'./app/**/*.{ts,tsx}',
+		'./src/**/*.{ts,tsx}',
+	],
+	theme: {
+		container: {
+			center: true,
+			padding: '2rem',
+			screens: {
+				'2xl': '1400px',
+			},
+		},
+		extend: {
+			fontFamily: {
+				sans: ['Geist', 'system-ui', 'sans-serif'],
+			},
+			colors: {
+				// City of Austin Brand Colors
+				brand: {
+					blue: '#44499C',           // Logo Blue - primary
+					green: '#009F4D',          // Logo Green - accent/success
+					'faded-white': '#f7f6f5',  // Background
+					'dark-blue': '#22254E',    // Dark mode bg, dark text
+					'dark-green': '#005027',   // Supporting
+					'light-blue': '#dcf2fd',   // Light accent
+					'light-green': '#dff0e3',  // Light success
+					'compliant-green': '#008743', // Supporting
+				},
+				// Extended palette for data visualization
+				extended: {
+					red: '#F83125',
+					orange: '#FF8F00',
+					yellow: '#FFC600',
+					cyan: '#009CDE',
+					purple: '#9F3CC9',
+					brown: '#8F5201',
+				},
+				// Semantic mappings
+				border: 'hsl(var(--border))',
+				input: 'hsl(var(--input))',
+				ring: 'hsl(var(--ring))',
+				background: 'hsl(var(--background))',
+				foreground: 'hsl(var(--foreground))',
+				primary: {
+					DEFAULT: '#44499C',
+					foreground: 'hsl(var(--primary-foreground))',
+				},
+				secondary: {
+					DEFAULT: '#009F4D',
+					foreground: 'hsl(var(--secondary-foreground))',
+				},
+				accent: {
+					DEFAULT: '#dcf2fd',
+					foreground: 'hsl(var(--accent-foreground))',
+				},
+				destructive: {
+					DEFAULT: '#F83125',
+					foreground: 'hsl(var(--destructive-foreground))',
+				},
+				muted: {
+					DEFAULT: 'hsl(var(--muted))',
+					foreground: 'hsl(var(--muted-foreground))',
+				},
+				popover: {
+					DEFAULT: 'hsl(var(--popover))',
+					foreground: 'hsl(var(--popover-foreground))',
+				},
+				card: {
+					DEFAULT: 'hsl(var(--card))',
+					foreground: 'hsl(var(--card-foreground))',
+				},
+			},
+			borderRadius: {
+				lg: 'var(--radius)',
+				md: 'calc(var(--radius) - 2px)',
+				sm: 'calc(var(--radius) - 4px)',
+			},
+			keyframes: {
+				'accordion-down': {
+					from: { height: 0 },
+					to: { height: 'var(--radix-accordion-content-height)' },
+				},
+				'accordion-up': {
+					from: { height: 'var(--radix-accordion-content-height)' },
+					to: { height: 0 },
+				},
+			},
+			animation: {
+				'accordion-down': 'accordion-down 0.2s ease-out',
+				'accordion-up': 'accordion-up 0.2s ease-out',
+			},
+		},
+	},
+	plugins: [require('tailwindcss-animate')],
+}

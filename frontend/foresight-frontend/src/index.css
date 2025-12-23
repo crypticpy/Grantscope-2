@@ -1,0 +1,181 @@
+/* Geist Font - City of Austin Brand Typeface */
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Brand Colors */
+    --brand-blue: #44499C;
+    --brand-green: #009F4D;
+    --brand-faded-white: #f7f6f5;
+    --brand-dark-blue: #22254E;
+    --brand-light-blue: #dcf2fd;
+    --brand-light-green: #dff0e3;
+
+    /* Semantic Colors */
+    --background: 0 0% 100%;
+    --foreground: 228 45% 22%;
+    --card: 0 0% 100%;
+    --card-foreground: 228 45% 22%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 228 45% 22%;
+    --primary: 237 32% 44%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 153 100% 31%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 199 92% 93%;
+    --accent-foreground: 237 32% 44%;
+    --destructive: 4 96% 56%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 237 32% 44%;
+    --radius: 0.5rem;
+
+    /* Sidebar */
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 237 32% 44%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 237 32% 44%;
+  }
+
+  .dark {
+    --background: 228 45% 22%;
+    --foreground: 60 9% 98%;
+    --card: 233 39% 28%;
+    --card-foreground: 60 9% 98%;
+    --popover: 233 39% 28%;
+    --popover-foreground: 60 9% 98%;
+    --primary: 237 32% 54%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 153 100% 41%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 233 30% 25%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 233 35% 32%;
+    --accent-foreground: 60 9% 98%;
+    --destructive: 4 96% 56%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 233 30% 30%;
+    --input: 233 30% 30%;
+    --ring: 237 32% 54%;
+
+    /* Sidebar Dark */
+    --sidebar-background: 228 45% 22%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 237 32% 54%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 233 35% 28%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 233 30% 30%;
+    --sidebar-ring: 237 32% 54%;
+  }
+
+  /* Apply Geist font globally */
+  html {
+    font-family: 'Geist', system-ui, -apple-system, sans-serif;
+  }
+
+  body {
+    @apply bg-brand-faded-white text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  .dark body {
+    @apply bg-brand-dark-blue;
+  }
+}
+
+@layer components {
+  /* Card hover effect - matching meeting-transcriber */
+  .card-hover {
+    @apply transition-all duration-200 border-l-4 border-transparent;
+  }
+
+  .card-hover:hover {
+    @apply -translate-y-1 shadow-lg border-l-brand-blue;
+  }
+
+  /* Glass morphism header */
+  .glass-header {
+    @apply bg-white/80 backdrop-blur-md border-b border-gray-200/50;
+  }
+
+  .dark .glass-header {
+    @apply bg-brand-dark-blue/95 border-gray-700/50;
+  }
+
+  /* Focus ring using brand colors */
+  .focus-brand {
+    @apply focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2;
+  }
+
+  /* Button variants */
+  .btn-primary {
+    @apply bg-brand-blue text-white hover:bg-brand-dark-blue transition-colors duration-150;
+  }
+
+  .btn-secondary {
+    @apply bg-brand-light-blue text-brand-blue hover:bg-brand-blue hover:text-white transition-colors duration-150;
+  }
+}
+
+@layer utilities {
+  /* Accessibility - screen reader only */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+}
+
+/* Global focus-visible styles for keyboard navigation */
+@layer base {
+  /* Show focus ring only for keyboard navigation */
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand-blue ring-offset-2;
+  }
+
+  .dark :focus-visible {
+    @apply ring-offset-brand-dark-blue;
+  }
+
+  /* Remove default focus outline since we use ring */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* Reduced motion preference */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+img {
+  object-position: top;
+}
+
+.fixed {
+  position: fixed;
+}
