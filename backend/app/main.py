@@ -9,8 +9,9 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field, validator
 from dotenv import load_dotenv
@@ -47,6 +48,35 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
+
+
+# Global exception handler to ensure CORS headers on error responses
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """
+    Handle all unhandled exceptions and ensure CORS headers are included.
+
+    This prevents CORS errors in the browser when the server returns 500 errors,
+    as the CORSMiddleware may not add headers when an exception is raised.
+    """
+    # Get the origin from the request
+    origin = request.headers.get("origin", "")
+
+    # Build response headers - only add CORS if origin is allowed
+    headers = {}
+    if origin in ALLOWED_ORIGINS:
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+
+    # Log the error for debugging
+    logger.error(f"Unhandled exception: {type(exc).__name__}: {str(exc)}")
+
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc)},
+        headers=headers
+    )
+
 
 # Security
 security = HTTPBearer()
