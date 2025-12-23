@@ -1,0 +1,58 @@
+{
+  "files_to_modify": {
+    "backend": [
+      "backend/app/main.py"
+    ],
+    "frontend": [
+      "frontend/foresight-frontend/src/lib/discovery-api.ts"
+    ]
+  },
+  "files_to_reference": [
+    "backend/app/main.py",
+    "supabase/migrations/1766435000_discovery_schema.sql",
+    "frontend/foresight-frontend/src/lib/discovery-api.ts",
+    "frontend/foresight-frontend/src/pages/DiscoveryHistory.tsx"
+  ],
+  "patterns": {
+    "cors_middleware": "CORS configured with CORSMiddleware from fastapi.middleware.cors (lines 44-50)",
+    "api_request": "Frontend uses apiRequest helper with Bearer token auth (discovery-api.ts:89-114)",
+    "pydantic_models": "Backend uses Pydantic BaseModel for request/response validation",
+    "supabase_inserts": "All DB operations use supabase.table('name').insert/update/select pattern"
+  },
+  "existing_implementations": {
+    "description": "Discovery runs table exists but backend code uses wrong column names",
+    "relevant_files": [
+      "supabase/migrations/1766435000_discovery_schema.sql",
+      "backend/app/main.py:964-988"
+    ],
+    "database_table_schema": {
+      "table": "discovery_runs",
+      "columns": [
+        "id UUID PK",
+        "started_at TIMESTAMPTZ NOT NULL DEFAULT NOW()",
+        "completed_at TIMESTAMPTZ",
+        "status TEXT CHECK (running, completed, failed, cancelled)",
+        "pillars_scanned TEXT[]",
+        "priorities_scanned TEXT[]",
+        "queries_generated INT",
+        "sources_found INT",
+        "sources_relevant INT",
+        "cards_created INT",
+        "cards_enriched INT",
+        "cards_deduplicated INT",
+        "estimated_cost NUMERIC",
+        "error_message TEXT",
+        "error_details JSONB",
+        "summary_report JSONB",
+        "triggered_by TEXT CHECK (scheduled, manual, api)",
+        "triggered_by_user UUID FK",
+        "created_at TIMESTAMPTZ"
+      ]
+    }
+  },
+  "root_cause_analysis": {
+    "primary_issue": "Backend INSERT uses column names that don't exist in database",
+    "secondary_issue": "Backend uses 'queued' status but DB CHECK constraint only allows: running, completed, failed, cancelled",
+    "tertiary_issue": "Exception bypasses CORS middleware, so browser blocks error response"
+  }
+}

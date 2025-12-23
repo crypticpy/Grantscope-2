@@ -1,0 +1,31 @@
+{
+  "project_type": "monorepo",
+  "services": {
+    "backend": {
+      "path": "./backend",
+      "tech_stack": ["python", "fastapi", "supabase"],
+      "port": 8000,
+      "dev_command": "source venv/bin/activate && uvicorn app.main:app --reload --port 8000",
+      "test_command": "pytest"
+    },
+    "frontend": {
+      "path": "./frontend/foresight-frontend",
+      "tech_stack": ["typescript", "react", "vite"],
+      "port": 5173,
+      "dev_command": "npm run dev",
+      "test_command": "npm test"
+    }
+  },
+  "infrastructure": {
+    "docker": true,
+    "database": "supabase/postgresql",
+    "auth": "supabase_auth"
+  },
+  "conventions": {
+    "linter": "ruff",
+    "formatter": "black",
+    "testing": "pytest",
+    "frontend_linter": "eslint",
+    "frontend_formatter": "prettier"
+  }
+}
