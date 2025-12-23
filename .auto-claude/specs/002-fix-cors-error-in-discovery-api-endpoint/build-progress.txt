@@ -1,0 +1,104 @@
+=== AUTO-BUILD PROGRESS ===
+
+Project: Foresight App - Fix CORS Error in Discovery API Endpoint
+Spec: 002-fix-cors-error-in-discovery-api-endpoint
+Started: 2025-12-23
+
+Workflow Type: feature
+Rationale: Root cause identified - backend database column mismatch and missing CORS exception handler
+
+Session 1 (Planner):
+- Completed Phase 0: Deep codebase investigation
+- Created implementation_plan.json with 3 phases, 10 subtasks
+- Created init.sh startup script
+- Created project_index.json and context.json
+
+Phase Summary:
+- Phase 1 (Backend Fix): 4 subtasks, no dependencies
+  * Fix column names in discovery run INSERT
+  * Add global exception handler with CORS headers
+  * Fix background task column names
+  * Update DiscoveryRun Pydantic model
+- Phase 2 (Frontend Fix): 2 subtasks, no dependencies
+  * Update DiscoveryRun interface
+  * Update triggerDiscoveryRun config type
+- Phase 3 (Integration): 4 subtasks, depends on phases 1 & 2
+  * Test CORS preflight
+  * Test error response CORS headers
+  * E2E browser verification
+  * Database record verification
+
+Services Involved:
+- backend: FastAPI server, main fixes for schema alignment and exception handling
+- frontend: React app, type alignment for API contract
+
+Root Cause Analysis:
+1. PRIMARY: Backend INSERT uses wrong column names:
+   - 'config' -> column doesn't exist (use summary_report)
+   - 'created_by' -> should be 'triggered_by_user'
+   - 'cards_discovered' -> should be 'cards_created'
+   - 'cards_auto_approved' -> column doesn't exist
+   - 'cards_pending_review' -> column doesn't exist
+   - 'sources_processed' -> should be 'sources_found'
+2. SECONDARY: status='queued' violates CHECK constraint (only: running, completed, failed, cancelled)
+3. TERTIARY: Exception bypasses CORS middleware, browser blocks error response
+
+Parallelism Analysis:
+- Max parallel phases: 2
+- Recommended workers: 2
+- Parallel groups: [phase-1-backend-fix, phase-2-frontend-fix] can run together
+
+=== STARTUP COMMAND ===
+
+To continue building this spec, run:
+
+  source auto-claude/.venv/bin/activate && python auto-claude/run.py --spec 002 --parallel 2
+
+Or to start services for manual testing:
+
+  cd .auto-claude/specs/002-fix-cors-error-in-discovery-api-endpoint && ./init.sh
+
+=== END SESSION 1 ===
+
+=== SESSION 2: Integration Testing ===
+
+Subtask 3-1: CORS Preflight and POST Request Testing
+Date: 2025-12-23
+
+Test Results (all passing):
+
+1. OPTIONS Preflight Request
+   - Status: 200 OK
+   - CORS Headers: Present
+   - Headers verified:
+     * access-control-allow-origin: http://localhost:5173
+     * access-control-allow-credentials: true
+     * access-control-allow-methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+     * access-control-allow-headers: Accept, Accept-Language, Authorization, Content-Language, Content-Type, X-Requested-With
+   - Result: PASS
+
+2. POST Without Auth (401 Test)
+   - Status: 401 Unauthorized
+   - CORS Headers: Present
+   - access-control-allow-origin: http://localhost:5173
+   - Result: PASS (CORS headers on error response)
+
+3. POST With Invalid Token (401 Test)
+   - Status: 401 Unauthorized
+   - CORS Headers: Present
+   - access-control-allow-origin: http://localhost:5173
+   - Result: PASS (CORS headers on auth error)
+
+4. Disallowed Origin Security Test
+   - Origin: http://evil.com
+   - Status: 400 Bad Request
+   - CORS Headers: NOT present (correct security behavior)
+   - Result: PASS (only allowed origins get CORS headers)
+
+Created: cors-integration-tests.sh - Reusable test script for CORS verification
+
+Summary:
+- All CORS preflight tests pass
+- All error responses include CORS headers for allowed origins
+- Security correctly blocks disallowed origins
+- Ready for authenticated POST testing (requires valid Supabase JWT)
