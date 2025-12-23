@@ -231,15 +231,22 @@ export async function fetchDiscoveryRun(
 }
 
 /**
+ * Discovery run configuration - matches backend DiscoveryConfigRequest model
+ */
+export interface DiscoveryConfigRequest {
+  max_queries_per_run?: number;
+  max_sources_total?: number;
+  auto_approve_threshold?: number;
+  pillars_filter?: string[];
+  dry_run?: boolean;
+}
+
+/**
  * Trigger a new discovery run
  */
 export async function triggerDiscoveryRun(
   token: string,
-  config?: {
-    source_types?: string[];
-    pillar_focus?: string[];
-    max_cards?: number;
-  }
+  config?: DiscoveryConfigRequest
 ): Promise<{ run_id: string }> {
   return apiRequest<{ run_id: string }>('/api/v1/discovery/run', token, {
     method: 'POST',
