@@ -140,3 +140,67 @@ Summary:
 - Updated cors-integration-tests.sh with new error response tests (Tests 5-8)
 
 === END Subtask 3-2 ===
+
+=== Subtask 3-3: End-to-End Browser Verification ===
+Date: 2025-12-23
+
+API-Level Verification (curl tests):
+
+1. CORS Preflight Request
+   - Command: curl -si -X OPTIONS "http://localhost:8000/api/v1/discovery/run" -H "Origin: http://localhost:5173" -H "Access-Control-Request-Method: POST"
+   - Status: 200 OK
+   - Headers verified:
+     * access-control-allow-origin: http://localhost:5173
+     * access-control-allow-credentials: true
+     * access-control-allow-methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+     * access-control-allow-headers: Accept, Accept-Language, Authorization, Content-Language, Content-Type, X-Requested-With
+   - Result: PASS
+
+2. POST Without Auth (401 with CORS)
+   - Command: curl -si -X POST "http://localhost:8000/api/v1/discovery/run" -H "Origin: http://localhost:5173" -H "Content-Type: application/json" -d "{}"
+   - Status: 401 Unauthorized
+   - CORS Headers: PRESENT (access-control-allow-origin: http://localhost:5173)
+   - Body: {"detail":"Not authenticated"}
+   - Result: PASS
+
+3. 422 Validation Error (with CORS)
+   - Command: curl -si -X POST "http://localhost:8000/api/v1/discovery/run" -H "Origin: http://localhost:5173" -H "Content-Type: application/json" -d "invalid json"
+   - Status: 422 Unprocessable Entity
+   - CORS Headers: PRESENT (access-control-allow-origin: http://localhost:5173)
+   - Result: PASS
+
+4. 404 Not Found (with CORS)
+   - Command: curl -si -X GET "http://localhost:8000/api/v1/nonexistent" -H "Origin: http://localhost:5173"
+   - Status: 404 Not Found
+   - CORS Headers: PRESENT (access-control-allow-origin: http://localhost:5173)
+   - Result: PASS
+
+Frontend Code Verification:
+- DiscoveryRun interface matches backend Pydantic model: VERIFIED
+- DiscoveryConfigRequest interface matches backend model: VERIFIED
+- triggerDiscoveryRun uses correct API endpoint: VERIFIED
+- API base URL correctly configured: VERIFIED
+
+Browser Verification Checklist (manual steps):
+URL: http://localhost:5173/discover/history
+
+To verify:
+[ ] 1. Open browser DevTools (F12) -> Console tab
+[ ] 2. Navigate to http://localhost:5173/discover/history
+[ ] 3. Login if not authenticated
+[ ] 4. Observe: No CORS errors in console
+[ ] 5. Click 'Trigger Discovery' button
+[ ] 6. Observe: Request succeeds (no red errors)
+[ ] 7. Open Network tab in DevTools
+[ ] 8. Find the POST request to /api/v1/discovery/run
+[ ] 9. Check Response Headers: Access-Control-Allow-Origin: http://localhost:5173
+[ ] 10. If authenticated: Discovery run appears in list with 'running' status
+
+Summary:
+- All CORS preflight and error response tests PASS
+- Frontend TypeScript interfaces properly aligned with backend
+- Backend returns CORS headers on all response types (200, 401, 404, 422)
+- Security correctly blocks disallowed origins
+- Ready for manual browser verification with authenticated user
+
+=== END Subtask 3-3 ===
