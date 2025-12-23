@@ -224,6 +224,32 @@ class ResearchTask(BaseModel):
     completed_at: Optional[datetime] = None
 
 
+# Discovery run models
+class DiscoveryConfigRequest(BaseModel):
+    """Request model for discovery run configuration."""
+    max_queries_per_run: int = Field(default=100, le=200, ge=1, description="Maximum queries per run")
+    max_sources_total: int = Field(default=500, le=1000, ge=10, description="Maximum sources to process")
+    auto_approve_threshold: float = Field(default=0.95, ge=0.8, le=1.0, description="Auto-approval threshold")
+    pillars_filter: Optional[List[str]] = Field(None, description="Filter by pillar IDs")
+    dry_run: bool = Field(False, description="Run in dry-run mode without persisting")
+
+
+class DiscoveryRun(BaseModel):
+    """Response model for discovery run status matching database schema."""
+    id: str
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+    status: str  # running, completed, failed, cancelled
+    triggered_by: str  # manual, scheduled
+    triggered_by_user: Optional[str] = None
+    summary_report: Optional[Dict[str, Any]] = None
+    cards_created: int = 0
+    cards_enriched: int = 0
+    cards_deduplicated: int = 0
+    sources_found: int = 0
+    error_message: Optional[str] = None
+
+
 # Authentication dependency
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Get current authenticated user"""
@@ -859,6 +885,138 @@ async def list_research_tasks(
     ).order("created_at", desc=True).limit(limit).execute()
 
     return [ResearchTask(**t) for t in result.data]
+
+
+# ============================================================================
+# Discovery endpoints
+# ============================================================================
+
+@app.post("/api/v1/discovery/run", response_model=DiscoveryRun)
+async def trigger_discovery_run(
+    config: DiscoveryConfigRequest = DiscoveryConfigRequest(),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Trigger a new discovery run.
+
+    Creates a discovery run record and starts the discovery process in the background.
+    Uses correct database column names: triggered_by_user, summary_report, cards_created,
+    sources_found, etc.
+
+    Returns immediately with run ID. Poll GET /discovery/runs/{run_id} for status.
+    """
+    try:
+        # Create discovery run record with correct column names matching database schema
+        run_record = {
+            "status": "running",  # Use 'running' not 'queued' per DB schema
+            "triggered_by": "manual",  # API-triggered runs are manual
+            "triggered_by_user": current_user["id"],  # Correct column name (not created_by)
+            "summary_report": {  # Store config in summary_report JSONB (not config column)
+                "config": config.dict()
+            },
+            "cards_created": 0,  # Correct column name (not cards_discovered)
+            "cards_enriched": 0,
+            "cards_deduplicated": 0,
+            "sources_found": 0,  # Correct column name (not sources_processed)
+            "started_at": datetime.now().isoformat()
+        }
+
+        result = supabase.table("discovery_runs").insert(run_record).execute()
+
+        if not result.data:
+            raise HTTPException(status_code=500, detail="Failed to create discovery run")
+
+        run = result.data[0]
+        run_id = run["id"]
+
+        # Execute discovery in background (non-blocking)
+        asyncio.create_task(
+            execute_discovery_run_background(run_id, config, current_user["id"])
+        )
+
+        return DiscoveryRun(**run)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to trigger discovery run: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to trigger discovery run: {str(e)}")
+
+
+async def execute_discovery_run_background(
+    run_id: str,
+    config: DiscoveryConfigRequest,
+    user_id: str
+):
+    """
+    Background task to execute discovery run.
+
+    Updates run status through lifecycle: running -> completed/failed
+    Uses correct column names matching database schema.
+    """
+    try:
+        # TODO: Implement actual discovery logic here
+        # For now, just mark as completed after a brief delay
+        await asyncio.sleep(1)
+
+        # Update as completed with correct column names
+        supabase.table("discovery_runs").update({
+            "status": "completed",
+            "completed_at": datetime.now().isoformat(),
+            "cards_created": 0,  # Correct column name
+            "cards_enriched": 0,
+            "cards_deduplicated": 0,
+            "sources_found": 0  # Correct column name
+        }).eq("id", run_id).execute()
+
+        logger.info(f"Discovery run {run_id} completed")
+
+    except Exception as e:
+        logger.error(f"Discovery run {run_id} failed: {str(e)}")
+        # Update as failed with correct column names
+        supabase.table("discovery_runs").update({
+            "status": "failed",
+            "completed_at": datetime.now().isoformat(),
+            "error_message": str(e)
+        }).eq("id", run_id).execute()
+
+
+@app.get("/api/v1/discovery/runs/{run_id}", response_model=DiscoveryRun)
+async def get_discovery_run(
+    run_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get discovery run status.
+
+    Use this endpoint to poll for run completion after triggering a discovery run.
+    Status values: running, completed, failed, cancelled
+    """
+    result = supabase.table("discovery_runs").select("*").eq(
+        "id", run_id
+    ).single().execute()
+
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Discovery run not found")
+
+    return DiscoveryRun(**result.data)
+
+
+@app.get("/api/v1/discovery/runs", response_model=List[DiscoveryRun])
+async def list_discovery_runs(
+    current_user: dict = Depends(get_current_user),
+    limit: int = 20
+):
+    """
+    List recent discovery runs.
+
+    Returns the most recent runs, ordered by start time descending.
+    """
+    result = supabase.table("discovery_runs").select("*").order(
+        "started_at", desc=True
+    ).limit(limit).execute()
+
+    return [DiscoveryRun(**r) for r in result.data]
 
 
 # Add scheduler for nightly jobs
