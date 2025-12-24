@@ -41,6 +41,8 @@ interface Stage {
   sort_order: number;
 }
 
+type SortOption = 'newest' | 'oldest' | 'recently_updated' | 'least_recently_updated';
+
 /**
  * Parse stage number from stage_id string
  * e.g., "1_concept" -> 1, "2_emerging" -> 2
@@ -70,6 +72,7 @@ const Discover: React.FC = () => {
   const [selectedPillar, setSelectedPillar] = useState('');
   const [selectedStage, setSelectedStage] = useState('');
   const [selectedHorizon, setSelectedHorizon] = useState('');
+  const [sortOption, setSortOption] = useState<SortOption>('newest');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [followedCardIds, setFollowedCardIds] = useState<Set<string>>(new Set());
 
@@ -83,7 +86,7 @@ const Discover: React.FC = () => {
 
   useEffect(() => {
     loadCards();
-  }, [searchTerm, selectedPillar, selectedStage, selectedHorizon, quickFilter, followedCardIds]);
+  }, [searchTerm, selectedPillar, selectedStage, selectedHorizon, sortOption, quickFilter, followedCardIds]);
 
   const loadDiscoverData = async () => {
     try {
@@ -304,7 +307,7 @@ const Discover: React.FC = () => {
 
       {/* Filters */}
       <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
           {/* Search */}
           <div className="lg:col-span-2">
             <label htmlFor="search" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -378,6 +381,24 @@ const Discover: React.FC = () => {
               <option value="H1">H1 (0-2 years)</option>
               <option value="H2">H2 (2-5 years)</option>
               <option value="H3">H3 (5+ years)</option>
+            </select>
+          </div>
+
+          {/* Sort */}
+          <div>
+            <label htmlFor="sort" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Sort By
+            </label>
+            <select
+              id="sort"
+              className="block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+              value={sortOption}
+              onChange={(e) => setSortOption(e.target.value as SortOption)}
+            >
+              <option value="newest">Newest First</option>
+              <option value="oldest">Oldest First</option>
+              <option value="recently_updated">Recently Updated</option>
+              <option value="least_recently_updated">Least Recently Updated</option>
             </select>
           </div>
         </div>
