@@ -61,6 +61,23 @@ const getScoreColorClasses = (score: number): string => {
   return 'text-red-600 dark:text-red-400';
 };
 
+/**
+ * Get sort configuration based on selected sort option
+ */
+const getSortConfig = (option: SortOption): { column: string; ascending: boolean } => {
+  switch (option) {
+    case 'oldest':
+      return { column: 'created_at', ascending: true };
+    case 'recently_updated':
+      return { column: 'updated_at', ascending: false };
+    case 'least_recently_updated':
+      return { column: 'updated_at', ascending: true };
+    case 'newest':
+    default:
+      return { column: 'created_at', ascending: false };
+  }
+};
+
 const Discover: React.FC = () => {
   const { user } = useAuthContext();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -146,7 +163,8 @@ const Discover: React.FC = () => {
           query = query.or(`name.ilike.%${searchTerm}%,summary.ilike.%${searchTerm}%`);
         }
 
-        const { data } = await query.order('created_at', { ascending: false });
+        const sortConfig = getSortConfig(sortOption);
+        const { data } = await query.order(sortConfig.column, { ascending: sortConfig.ascending });
         setCards(data || []);
         setLoading(false);
         return;
@@ -178,7 +196,8 @@ const Discover: React.FC = () => {
         query = query.or(`name.ilike.%${searchTerm}%,summary.ilike.%${searchTerm}%`);
       }
 
-      const { data } = await query.order('created_at', { ascending: false });
+      const sortConfig = getSortConfig(sortOption);
+      const { data } = await query.order(sortConfig.column, { ascending: sortConfig.ascending });
 
       setCards(data || []);
     } catch (error) {
