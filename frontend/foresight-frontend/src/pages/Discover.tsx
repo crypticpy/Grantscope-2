@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Search, Filter, Grid, List, Eye, Heart, Clock, Star, Inbox, History } from 'lucide-react';
+import { Search, Filter, Grid, List, Eye, Heart, Clock, Star, Inbox, History, Calendar } from 'lucide-react';
+import { format, formatDistanceToNow } from 'date-fns';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
 import { PillarBadge } from '../components/PillarBadge';
@@ -75,6 +76,37 @@ const getSortConfig = (option: SortOption): { column: string; ascending: boolean
     case 'newest':
     default:
       return { column: 'created_at', ascending: false };
+  }
+};
+
+/**
+ * Format card date for display
+ * Shows relative time for recent updates, absolute date for creation
+ */
+const formatCardDate = (createdAt: string, updatedAt?: string): { label: string; text: string } => {
+  try {
+    const created = new Date(createdAt);
+    const updated = updatedAt ? new Date(updatedAt) : null;
+
+    // If updated_at exists and is different from created_at (more than 1 minute difference)
+    if (updated && Math.abs(updated.getTime() - created.getTime()) > 60000) {
+      return {
+        label: 'Updated',
+        text: formatDistanceToNow(updated, { addSuffix: true })
+      };
+    }
+
+    // Fall back to created_at with absolute date format
+    return {
+      label: 'Created',
+      text: format(created, 'MMM d, yyyy')
+    };
+  } catch {
+    // Handle invalid dates gracefully
+    return {
+      label: 'Created',
+      text: 'Unknown'
+    };
   }
 };
 
@@ -547,7 +579,7 @@ const Discover: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600 flex items-center justify-between">
                   <Link
                     to={`/cards/${card.slug}`}
                     className="inline-flex items-center text-sm text-brand-blue hover:text-brand-dark-blue dark:text-brand-blue dark:hover:text-brand-light-blue transition-colors"
@@ -555,6 +587,14 @@ const Discover: React.FC = () => {
                     <Eye className="h-4 w-4 mr-1" />
                     View Details
                   </Link>
+                  {/* Date display */}
+                  <span className="inline-flex items-center text-xs text-gray-500 dark:text-gray-400">
+                    <Calendar className="h-3 w-3 mr-1" />
+                    {(() => {
+                      const dateInfo = formatCardDate(card.created_at, card.updated_at);
+                      return `${dateInfo.label} ${dateInfo.text}`;
+                    })()}
+                  </span>
                 </div>
               </div>
             );
