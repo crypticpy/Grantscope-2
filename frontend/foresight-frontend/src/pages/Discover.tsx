@@ -1101,6 +1101,35 @@ const Discover: React.FC = () => {
         </div>
       </div>
 
+      {/* Error Banner */}
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-medium text-red-700 dark:text-red-300">{error}</p>
+              <button
+                onClick={() => {
+                  setError(null);
+                  loadCards();
+                }}
+                className="mt-2 inline-flex items-center gap-1.5 text-sm text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 transition-colors"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Try again
+              </button>
+            </div>
+            <button
+              onClick={() => setError(null)}
+              className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+              aria-label="Dismiss error"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Cards Grid/List */}
       {loading || isFilterPending ? (
         <div className="flex flex-col items-center justify-center py-12">
@@ -1111,15 +1140,108 @@ const Discover: React.FC = () => {
             </p>
           )}
         </div>
-      ) : cards.length === 0 ? (
-        <div className="text-center py-12">
-          <Filter className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No cards found</h3>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Try adjusting your filters or search terms.
+      ) : cards.length === 0 && !error ? (
+        <div className="text-center py-12 bg-white dark:bg-[#2d3166] rounded-lg shadow">
+          {/* Icon based on context */}
+          {quickFilter === 'following' ? (
+            <Star className="mx-auto h-12 w-12 text-gray-400" />
+          ) : useSemanticSearch && searchTerm ? (
+            <Sparkles className="mx-auto h-12 w-12 text-gray-400" />
+          ) : searchTerm || selectedPillar || selectedStage || selectedHorizon || dateFrom || dateTo || impactMin > 0 || relevanceMin > 0 || noveltyMin > 0 ? (
+            <Filter className="mx-auto h-12 w-12 text-gray-400" />
+          ) : (
+            <Inbox className="mx-auto h-12 w-12 text-gray-400" />
+          )}
+
+          {/* Heading based on context */}
+          <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
+            {quickFilter === 'following'
+              ? "You're Not Following Any Cards"
+              : quickFilter === 'new'
+              ? 'No New Cards This Week'
+              : useSemanticSearch && searchTerm
+              ? 'No Semantic Matches Found'
+              : searchTerm || selectedPillar || selectedStage || selectedHorizon || dateFrom || dateTo || impactMin > 0 || relevanceMin > 0 || noveltyMin > 0
+              ? 'No Cards Match Your Filters'
+              : 'No Cards Available'}
+          </h3>
+
+          {/* Helpful message based on context */}
+          <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto">
+            {quickFilter === 'following' ? (
+              <>
+                Start following cards to build your personalized feed.
+                <br />
+                <span className="text-gray-400">Click the heart icon on any card to follow it.</span>
+              </>
+            ) : quickFilter === 'new' ? (
+              'Check back soon for newly discovered intelligence cards.'
+            ) : useSemanticSearch && searchTerm ? (
+              <>
+                No cards matched your semantic search for "<strong className="text-gray-700 dark:text-gray-300">{searchTerm}</strong>".
+                <br />
+                <span className="text-gray-400">Try different keywords, or switch to standard text search.</span>
+              </>
+            ) : searchTerm ? (
+              <>
+                No cards matched your search for "<strong className="text-gray-700 dark:text-gray-300">{searchTerm}</strong>".
+                <br />
+                <span className="text-gray-400">Try different keywords or enable semantic search for broader matches.</span>
+              </>
+            ) : selectedPillar || selectedStage || selectedHorizon || dateFrom || dateTo || impactMin > 0 || relevanceMin > 0 || noveltyMin > 0 ? (
+              <>
+                Your current filter combination returned no results.
+                <br />
+                <span className="text-gray-400">Try removing some filters or adjusting score thresholds.</span>
+              </>
+            ) : (
+              'The intelligence library is empty. Cards will appear here as they are discovered.'
+            )}
           </p>
+
+          {/* Action buttons based on context */}
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            {quickFilter === 'following' && (
+              <Link
+                to="/discover"
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-brand-dark-blue transition-colors"
+              >
+                <Eye className="h-4 w-4 mr-2" />
+                Browse All Cards
+              </Link>
+            )}
+            {(searchTerm || selectedPillar || selectedStage || selectedHorizon || dateFrom || dateTo || impactMin > 0 || relevanceMin > 0 || noveltyMin > 0) && !quickFilter && (
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  setSelectedPillar('');
+                  setSelectedStage('');
+                  setSelectedHorizon('');
+                  setDateFrom('');
+                  setDateTo('');
+                  setImpactMin(0);
+                  setRelevanceMin(0);
+                  setNoveltyMin(0);
+                  setUseSemanticSearch(false);
+                }}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                <X className="h-4 w-4 mr-2" />
+                Clear All Filters
+              </button>
+            )}
+            {useSemanticSearch && searchTerm && (
+              <button
+                onClick={() => setUseSemanticSearch(false)}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                <Search className="h-4 w-4 mr-2" />
+                Try Standard Search
+              </button>
+            )}
+          </div>
         </div>
-      ) : (
+      ) : cards.length > 0 ? (
         <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' : 'space-y-4'}>
           {cards.map((card) => {
             const stageNumber = parseStageNumber(card.stage_id);
@@ -1222,7 +1344,7 @@ const Discover: React.FC = () => {
             );
           })}
         </div>
-      )}
+      ) : null}
 
         {/* Save Search Modal */}
         <SaveSearchModal
