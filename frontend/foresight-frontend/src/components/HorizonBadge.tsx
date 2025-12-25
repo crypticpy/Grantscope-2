@@ -11,6 +11,7 @@ import { Clock, TrendingUp, Sparkles } from 'lucide-react';
 import { Tooltip } from './ui/Tooltip';
 import { cn } from '../lib/utils';
 import { getHorizonByCode, type Horizon } from '../data/taxonomy';
+import { getSizeClasses, getIconSize, type BadgeSize } from '../lib/badge-utils';
 
 export interface HorizonBadgeProps {
   /** Horizon code ('H1', 'H2', or 'H3') */
@@ -72,34 +73,6 @@ function getHorizonIcon(horizonCode: string) {
   return iconMap[horizonCode] || Clock;
 }
 
-/**
- * Get size classes for the badge
- */
-function getSizeClasses(size: 'sm' | 'md' | 'lg', variant: 'badge' | 'pill'): string {
-  if (variant === 'pill') {
-    const sizeMap = {
-      sm: 'px-2 py-0.5 text-xs',
-      md: 'px-2.5 py-1 text-sm',
-      lg: 'px-3 py-1.5 text-base',
-    };
-    return sizeMap[size];
-  }
-
-  const sizeMap = {
-    sm: 'px-1.5 py-0.5 text-xs',
-    md: 'px-2 py-1 text-sm',
-    lg: 'px-3 py-1.5 text-base',
-  };
-  return sizeMap[size];
-}
-
-/**
- * Get icon size for the badge
- */
-function getIconSize(size: 'sm' | 'md' | 'lg'): number {
-  const sizeMap = { sm: 10, md: 12, lg: 14 };
-  return sizeMap[size];
-}
 
 /**
  * Tooltip content component for horizon
@@ -173,7 +146,7 @@ export function HorizonBadge({
           'inline-flex items-center gap-1 font-medium border',
           'bg-gray-100 text-gray-600 border-gray-300',
           variant === 'pill' ? 'rounded-full' : 'rounded',
-          getSizeClasses(size, variant),
+          getSizeClasses(size, { variant }),
           className
         )}
       >
@@ -184,7 +157,7 @@ export function HorizonBadge({
 
   const colors = getHorizonColorClasses(horizon);
   const Icon = getHorizonIcon(horizon);
-  const iconSize = getIconSize(size);
+  const iconSize = getIconSize(size, 'small');
 
   const badge = (
     <span
@@ -194,7 +167,7 @@ export function HorizonBadge({
         colors.text,
         colors.border,
         variant === 'pill' ? 'rounded-full' : 'rounded',
-        getSizeClasses(size, variant),
+        getSizeClasses(size, { variant }),
         !disableTooltip && 'cursor-pointer',
         className
       )}
