@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { Tooltip } from './ui/Tooltip';
 import { cn } from '../lib/utils';
+import { getSizeClasses, getIconSize, type BadgeSize } from '../lib/badge-utils';
 import { getAnchorByName, type Anchor } from '../data/taxonomy';
 
 // Icon mapping for anchors
@@ -95,25 +96,6 @@ function getAbbreviatedName(name: string): string {
   return abbreviations[name] || name;
 }
 
-/**
- * Get size classes for the badge
- */
-function getSizeClasses(size: 'sm' | 'md' | 'lg'): string {
-  const sizeMap = {
-    sm: 'px-1.5 py-0.5 text-xs gap-1',
-    md: 'px-2 py-1 text-sm gap-1.5',
-    lg: 'px-3 py-1.5 text-base gap-2',
-  };
-  return sizeMap[size];
-}
-
-/**
- * Get icon size for the badge
- */
-function getIconSize(size: 'sm' | 'md' | 'lg'): number {
-  const sizeMap = { sm: 12, md: 14, lg: 16 };
-  return sizeMap[size];
-}
 
 /**
  * Tooltip content component for anchor
@@ -167,7 +149,7 @@ export function AnchorBadge({
         className={cn(
           'inline-flex items-center rounded font-medium border',
           'bg-gray-100 text-gray-600 border-gray-300',
-          getSizeClasses(size),
+          getSizeClasses(size, { includeGap: true }),
           className
         )}
       >
@@ -192,7 +174,7 @@ export function AnchorBadge({
         colors.bg,
         colors.text,
         colors.border,
-        getSizeClasses(size),
+        getSizeClasses(size, { includeGap: true }),
         !disableTooltip && 'cursor-pointer',
         className
       )}
@@ -281,7 +263,7 @@ export function AnchorBadgeGroup({
             className={cn(
               'inline-flex items-center rounded font-medium cursor-pointer',
               'bg-gray-100 text-gray-600 border border-gray-300',
-              getSizeClasses(size)
+              getSizeClasses(size, { includeGap: true })
             )}
           >
             +{remainingCount}
