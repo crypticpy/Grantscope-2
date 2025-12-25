@@ -33,6 +33,14 @@ logger = logging.getLogger(__name__)
 # Research service import
 from app.research_service import ResearchService
 
+# Search models import
+from app.models.search import (
+    AdvancedSearchRequest,
+    SearchFilters,
+    AdvancedSearchResponse,
+    SearchResultItem,
+)
+
 # Initialize FastAPI app
 app = FastAPI(
     title="Foresight API",
@@ -621,35 +629,230 @@ async def create_card(
 
 @app.post("/api/v1/cards/search")
 async def search_cards(
-    query: str,
-    limit: int = 10
+    request: AdvancedSearchRequest
 ):
-    """Search cards using vector similarity"""
+    """
+    Advanced search for intelligence cards with filtering and vector similarity.
+
+    Supports:
+    - Text query with optional vector (semantic) search
+    - Filters: pillar_ids, stage_ids, date_range, score_thresholds
+    - Pagination with limit and offset
+
+    Returns cards sorted by relevance with search metadata.
+    """
     try:
-        # Get embedding for search query
-        embedding_response = openai_client.embeddings.create(
-            model="text-embedding-ada-002",
-            input=query
+        results = []
+        search_type = "vector" if request.use_vector_search and request.query else "text"
+
+        # Vector search path
+        if request.use_vector_search and request.query:
+            try:
+                # Get embedding for search query
+                embedding_response = openai_client.embeddings.create(
+                    model="text-embedding-ada-002",
+                    input=request.query
+                )
+                query_embedding = embedding_response.data[0].embedding
+
+                # Search using vector similarity
+                search_response = supabase.rpc(
+                    "search_cards",
+                    {
+                        "query_embedding": query_embedding,
+                        "match_threshold": 0.5,
+                        "match_count": request.limit + request.offset + 100  # Get extra for filtering
+                    }
+                ).execute()
+
+                # Process results with similarity scores
+                for item in search_response.data or []:
+                    item["search_relevance"] = item.get("similarity", 0.0)
+                results = search_response.data or []
+
+            except Exception as vector_error:
+                logger.warning(f"Vector search failed, falling back to text: {vector_error}")
+                search_type = "text"
+                results = []
+
+        # Text search path (or fallback)
+        if search_type == "text" or (not request.use_vector_search and request.query):
+            search_type = "text"
+            query_builder = supabase.table("cards").select("*")
+
+            if request.query:
+                # Text search on name and summary
+                query_builder = query_builder.or_(
+                    f"name.ilike.%{request.query}%,summary.ilike.%{request.query}%"
+                )
+
+            response = query_builder.limit(request.limit + request.offset + 100).execute()
+            results = response.data or []
+
+            # Add placeholder relevance for text search
+            for item in results:
+                item["search_relevance"] = None
+
+        # If no query provided, fetch all cards (for filter-only searches)
+        if not request.query:
+            search_type = "filter"
+            response = supabase.table("cards").select("*").limit(
+                request.limit + request.offset + 100
+            ).execute()
+            results = response.data or []
+
+        # Apply filters
+        if request.filters:
+            results = _apply_search_filters(results, request.filters)
+
+        # Get total count before pagination
+        total_count = len(results)
+
+        # Apply pagination
+        results = results[request.offset:request.offset + request.limit]
+
+        # Convert to response format
+        result_items = [
+            SearchResultItem(
+                id=item.get("id", ""),
+                name=item.get("name", ""),
+                slug=item.get("slug", ""),
+                summary=item.get("summary"),
+                description=item.get("description"),
+                pillar_id=item.get("pillar_id"),
+                goal_id=item.get("goal_id"),
+                anchor_id=item.get("anchor_id"),
+                stage_id=item.get("stage_id"),
+                horizon=item.get("horizon"),
+                novelty_score=item.get("novelty_score"),
+                maturity_score=item.get("maturity_score"),
+                impact_score=item.get("impact_score"),
+                relevance_score=item.get("relevance_score"),
+                velocity_score=item.get("velocity_score"),
+                risk_score=item.get("risk_score"),
+                opportunity_score=item.get("opportunity_score"),
+                status=item.get("status"),
+                created_at=item.get("created_at"),
+                updated_at=item.get("updated_at"),
+                search_relevance=item.get("search_relevance"),
+                match_highlights=_extract_highlights(item, request.query) if request.query else None
+            )
+            for item in results
+        ]
+
+        return AdvancedSearchResponse(
+            results=result_items,
+            total_count=total_count,
+            query=request.query,
+            filters_applied=request.filters,
+            search_type=search_type
         )
-        query_embedding = embedding_response.data[0].embedding
-        
-        # Search using vector similarity
-        search_response = supabase.rpc(
-            "search_cards",
-            {
-                "query_embedding": query_embedding,
-                "match_threshold": 0.7,
-                "match_count": limit
-            }
-        ).execute()
-        
-        return search_response.data
+
     except Exception as e:
-        # Fallback to text search
-        response = supabase.table("cards").select("*").or_(
-            f"name.ilike.%{query}%,summary.ilike.%{query}%"
-        ).limit(limit).execute()
-        return response.data
+        logger.error(f"Search error: {e}")
+        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+
+
+def _apply_search_filters(results: List[Dict[str, Any]], filters: SearchFilters) -> List[Dict[str, Any]]:
+    """Apply advanced filters to search results."""
+    filtered = results
+
+    # Filter by pillar_ids
+    if filters.pillar_ids:
+        filtered = [r for r in filtered if r.get("pillar_id") in filters.pillar_ids]
+
+    # Filter by goal_ids
+    if filters.goal_ids:
+        filtered = [r for r in filtered if r.get("goal_id") in filters.goal_ids]
+
+    # Filter by stage_ids
+    if filters.stage_ids:
+        filtered = [r for r in filtered if r.get("stage_id") in filters.stage_ids]
+
+    # Filter by horizon
+    if filters.horizon and filters.horizon != "ALL":
+        filtered = [r for r in filtered if r.get("horizon") == filters.horizon]
+
+    # Filter by status
+    if filters.status:
+        filtered = [r for r in filtered if r.get("status") == filters.status]
+
+    # Filter by date range
+    if filters.date_range:
+        if filters.date_range.start:
+            start_str = filters.date_range.start.isoformat()
+            filtered = [
+                r for r in filtered
+                if r.get("created_at") and r["created_at"][:10] >= start_str
+            ]
+        if filters.date_range.end:
+            end_str = filters.date_range.end.isoformat()
+            filtered = [
+                r for r in filtered
+                if r.get("created_at") and r["created_at"][:10] <= end_str
+            ]
+
+    # Filter by score thresholds
+    if filters.score_thresholds:
+        filtered = _apply_score_filters(filtered, filters.score_thresholds)
+
+    return filtered
+
+
+def _apply_score_filters(results: List[Dict[str, Any]], thresholds) -> List[Dict[str, Any]]:
+    """Apply score threshold filters to results."""
+    filtered = results
+
+    score_fields = [
+        ("impact_score", thresholds.impact_score),
+        ("relevance_score", thresholds.relevance_score),
+        ("novelty_score", thresholds.novelty_score),
+        ("maturity_score", thresholds.maturity_score),
+        ("velocity_score", thresholds.velocity_score),
+        ("risk_score", thresholds.risk_score),
+        ("opportunity_score", thresholds.opportunity_score),
+    ]
+
+    for field_name, threshold in score_fields:
+        if threshold:
+            if threshold.min is not None:
+                filtered = [
+                    r for r in filtered
+                    if r.get(field_name) is not None and r[field_name] >= threshold.min
+                ]
+            if threshold.max is not None:
+                filtered = [
+                    r for r in filtered
+                    if r.get(field_name) is not None and r[field_name] <= threshold.max
+                ]
+
+    return filtered
+
+
+def _extract_highlights(item: Dict[str, Any], query: str) -> Optional[List[str]]:
+    """Extract text snippets containing the search query."""
+    if not query:
+        return None
+
+    highlights = []
+    query_lower = query.lower()
+
+    # Check name
+    name = item.get("name", "") or ""
+    if query_lower in name.lower():
+        highlights.append(name)
+
+    # Check summary and extract snippet
+    summary = item.get("summary", "") or ""
+    if query_lower in summary.lower():
+        # Find position and extract context
+        pos = summary.lower().find(query_lower)
+        start = max(0, pos - 50)
+        end = min(len(summary), pos + len(query) + 50)
+        snippet = ("..." if start > 0 else "") + summary[start:end] + ("..." if end < len(summary) else "")
+        highlights.append(snippet)
+
+    return highlights if highlights else None
 
 # Card relationships
 @app.get("/api/v1/cards/{card_id}/sources")
