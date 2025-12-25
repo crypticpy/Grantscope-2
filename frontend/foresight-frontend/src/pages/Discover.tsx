@@ -753,6 +753,157 @@ const Discover: React.FC = () => {
     return parts.join(' • ') || (config.use_vector_search ? 'Semantic search' : 'All cards');
   }, []);
 
+  // Memoized card rendering function for virtualized lists
+  const renderCardItem = useCallback((card: Card) => {
+    const stageNumber = parseStageNumber(card.stage_id);
+    const isSelectedForCompare = selectedForCompare.some((c) => c.id === card.id);
+
+    return (
+      <div
+        onClick={compareMode ? () => toggleCardForCompare({ id: card.id, name: card.name }) : undefined}
+        className={`bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 border-l-4 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg relative ${
+          compareMode
+            ? isSelectedForCompare
+              ? 'border-l-extended-purple ring-2 ring-extended-purple/50 cursor-pointer'
+              : 'border-transparent hover:border-l-extended-purple/50 cursor-pointer'
+            : 'border-transparent hover:border-l-brand-blue'
+        }`}
+      >
+        {/* Compare Mode Selection Indicator */}
+        {compareMode && (
+          <div
+            className={`absolute top-3 right-3 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+              isSelectedForCompare
+                ? 'bg-extended-purple border-extended-purple text-white'
+                : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
+            }`}
+          >
+            {isSelectedForCompare && (
+              <Check className="h-4 w-4" />
+            )}
+          </div>
+        )}
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex-1">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+              {compareMode ? (
+                <span className="hover:text-extended-purple transition-colors cursor-pointer">
+                  {card.name}
+                </span>
+              ) : (
+                <Link
+                  to={`/cards/${card.slug}`}
+                  className="hover:text-brand-blue transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {card.name}
+                </Link>
+              )}
+            </h3>
+            <div className="flex items-center gap-2 flex-wrap mb-3">
+              {/* Search Relevance Badge - shown when semantic search is used */}
+              {card.search_relevance !== undefined && (
+                <span
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-extended-purple/10 text-extended-purple border border-extended-purple/30"
+                  title={`Search match: ${Math.round(card.search_relevance * 100)}% similarity to your query`}
+                >
+                  <Sparkles className="h-3 w-3" />
+                  {Math.round(card.search_relevance * 100)}% match
+                </span>
+              )}
+              <PillarBadge pillarId={card.pillar_id} showIcon size="sm" />
+              <HorizonBadge horizon={card.horizon} size="sm" />
+              {stageNumber !== null && (
+                <StageBadge stage={stageNumber} size="sm" variant="minimal" />
+              )}
+              {card.top25_relevance && card.top25_relevance.length > 0 && (
+                <Top25Badge priorities={card.top25_relevance} size="sm" showCount />
+              )}
+            </div>
+          </div>
+          {!compareMode && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleFollowCard(card.id);
+              }}
+              className={`flex-shrink-0 p-2 transition-colors ${
+                followedCardIds.has(card.id)
+                  ? 'text-red-500 hover:text-red-600'
+                  : 'text-gray-400 hover:text-red-500'
+              }`}
+              title={followedCardIds.has(card.id) ? 'Unfollow card' : 'Follow card'}
+              aria-pressed={followedCardIds.has(card.id)}
+            >
+              <Heart
+                className="h-5 w-5"
+                fill={followedCardIds.has(card.id) ? 'currentColor' : 'none'}
+              />
+            </button>
+          )}
+        </div>
+
+        <p className="text-gray-600 dark:text-gray-400 mb-4 line-clamp-3">
+          {searchTerm ? highlightText(card.summary, searchTerm) : card.summary}
+        </p>
+
+        {/* Scores */}
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="flex justify-between" title="How much this could affect Austin's operations or residents">
+            <span className="text-gray-500 dark:text-gray-400">Impact:</span>
+            <span className={getScoreColorClasses(card.impact_score)}>
+              {card.impact_score}
+            </span>
+          </div>
+          <div className="flex justify-between" title="How closely this aligns with Austin's strategic priorities">
+            <span className="text-gray-500 dark:text-gray-400">Relevance:</span>
+            <span className={getScoreColorClasses(card.relevance_score)}>
+              {card.relevance_score}
+            </span>
+          </div>
+          <div className="flex justify-between" title="How quickly this technology or trend is evolving">
+            <span className="text-gray-500 dark:text-gray-400">Velocity:</span>
+            <span className={getScoreColorClasses(card.velocity_score)}>
+              {card.velocity_score}
+            </span>
+          </div>
+          <div className="flex justify-between" title="How new or emerging this is in the market">
+            <span className="text-gray-500 dark:text-gray-400">Novelty:</span>
+            <span className={getScoreColorClasses(card.novelty_score)}>
+              {card.novelty_score}
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600 flex items-center justify-between">
+          {compareMode ? (
+            <span className="inline-flex items-center text-sm text-extended-purple">
+              <ArrowLeftRight className="h-4 w-4 mr-1" />
+              {isSelectedForCompare ? 'Selected' : 'Click to select'}
+            </span>
+          ) : (
+            <Link
+              to={`/cards/${card.slug}`}
+              className="inline-flex items-center text-sm text-brand-blue hover:text-brand-dark-blue dark:text-brand-blue dark:hover:text-brand-light-blue transition-colors"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Eye className="h-4 w-4 mr-1" />
+              View Details
+            </Link>
+          )}
+          {/* Date display */}
+          <span className="inline-flex items-center text-xs text-gray-500 dark:text-gray-400">
+            <Calendar className="h-3 w-3 mr-1" />
+            {(() => {
+              const dateInfo = formatCardDate(card.created_at, card.updated_at);
+              return `${dateInfo.label} ${dateInfo.text}`;
+            })()}
+          </span>
+        </div>
+      </div>
+    );
+  }, [compareMode, selectedForCompare, followedCardIds, searchTerm, toggleCardForCompare, toggleFollowCard]);
+
   return (
     <>
       {/* Saved Searches Sidebar */}
@@ -1485,158 +1636,29 @@ const Discover: React.FC = () => {
           </div>
         </div>
       ) : cards.length > 0 ? (
-        <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' : 'space-y-4'}>
-          {cards.map((card) => {
-            const stageNumber = parseStageNumber(card.stage_id);
-            const isSelectedForCompare = selectedForCompare.some((c) => c.id === card.id);
-
-            return (
-              <div
-                key={card.id}
-                onClick={compareMode ? () => toggleCardForCompare({ id: card.id, name: card.name }) : undefined}
-                className={`bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 border-l-4 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg relative ${
-                  compareMode
-                    ? isSelectedForCompare
-                      ? 'border-l-extended-purple ring-2 ring-extended-purple/50 cursor-pointer'
-                      : 'border-transparent hover:border-l-extended-purple/50 cursor-pointer'
-                    : 'border-transparent hover:border-l-brand-blue'
-                }`}
-              >
-                {/* Compare Mode Selection Indicator */}
-                {compareMode && (
-                  <div
-                    className={`absolute top-3 right-3 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
-                      isSelectedForCompare
-                        ? 'bg-extended-purple border-extended-purple text-white'
-                        : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
-                    }`}
-                  >
-                    {isSelectedForCompare && (
-                      <Check className="h-4 w-4" />
-                    )}
-                  </div>
-                )}
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex-1">
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                      {compareMode ? (
-                        <span className="hover:text-extended-purple transition-colors cursor-pointer">
-                          {card.name}
-                        </span>
-                      ) : (
-                        <Link
-                          to={`/cards/${card.slug}`}
-                          className="hover:text-brand-blue transition-colors"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {card.name}
-                        </Link>
-                      )}
-                    </h3>
-                    <div className="flex items-center gap-2 flex-wrap mb-3">
-                      {/* Search Relevance Badge - shown when semantic search is used */}
-                      {card.search_relevance !== undefined && (
-                        <span
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-extended-purple/10 text-extended-purple border border-extended-purple/30"
-                          title={`Search match: ${Math.round(card.search_relevance * 100)}% similarity to your query`}
-                        >
-                          <Sparkles className="h-3 w-3" />
-                          {Math.round(card.search_relevance * 100)}% match
-                        </span>
-                      )}
-                      <PillarBadge pillarId={card.pillar_id} showIcon size="sm" />
-                      <HorizonBadge horizon={card.horizon} size="sm" />
-                      {stageNumber !== null && (
-                        <StageBadge stage={stageNumber} size="sm" variant="minimal" />
-                      )}
-                      {card.top25_relevance && card.top25_relevance.length > 0 && (
-                        <Top25Badge priorities={card.top25_relevance} size="sm" showCount />
-                      )}
-                    </div>
-                  </div>
-                  {!compareMode && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleFollowCard(card.id);
-                      }}
-                      className={`flex-shrink-0 p-2 transition-colors ${
-                        followedCardIds.has(card.id)
-                          ? 'text-red-500 hover:text-red-600'
-                          : 'text-gray-400 hover:text-red-500'
-                      }`}
-                      title={followedCardIds.has(card.id) ? 'Unfollow card' : 'Follow card'}
-                      aria-pressed={followedCardIds.has(card.id)}
-                    >
-                      <Heart
-                        className="h-5 w-5"
-                        fill={followedCardIds.has(card.id) ? 'currentColor' : 'none'}
-                      />
-                    </button>
-                  )}
-                </div>
-
-                <p className="text-gray-600 dark:text-gray-400 mb-4 line-clamp-3">
-                  {searchTerm ? highlightText(card.summary, searchTerm) : card.summary}
-                </p>
-
-                {/* Scores */}
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="flex justify-between" title="How much this could affect Austin's operations or residents">
-                    <span className="text-gray-500 dark:text-gray-400">Impact:</span>
-                    <span className={getScoreColorClasses(card.impact_score)}>
-                      {card.impact_score}
-                    </span>
-                  </div>
-                  <div className="flex justify-between" title="How closely this aligns with Austin's strategic priorities">
-                    <span className="text-gray-500 dark:text-gray-400">Relevance:</span>
-                    <span className={getScoreColorClasses(card.relevance_score)}>
-                      {card.relevance_score}
-                    </span>
-                  </div>
-                  <div className="flex justify-between" title="How quickly this technology or trend is evolving">
-                    <span className="text-gray-500 dark:text-gray-400">Velocity:</span>
-                    <span className={getScoreColorClasses(card.velocity_score)}>
-                      {card.velocity_score}
-                    </span>
-                  </div>
-                  <div className="flex justify-between" title="How new or emerging this is in the market">
-                    <span className="text-gray-500 dark:text-gray-400">Novelty:</span>
-                    <span className={getScoreColorClasses(card.novelty_score)}>
-                      {card.novelty_score}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600 flex items-center justify-between">
-                  {compareMode ? (
-                    <span className="inline-flex items-center text-sm text-extended-purple">
-                      <ArrowLeftRight className="h-4 w-4 mr-1" />
-                      {isSelectedForCompare ? 'Selected' : 'Click to select'}
-                    </span>
-                  ) : (
-                    <Link
-                      to={`/cards/${card.slug}`}
-                      className="inline-flex items-center text-sm text-brand-blue hover:text-brand-dark-blue dark:text-brand-blue dark:hover:text-brand-light-blue transition-colors"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Eye className="h-4 w-4 mr-1" />
-                      View Details
-                    </Link>
-                  )}
-                  {/* Date display */}
-                  <span className="inline-flex items-center text-xs text-gray-500 dark:text-gray-400">
-                    <Calendar className="h-3 w-3 mr-1" />
-                    {(() => {
-                      const dateInfo = formatCardDate(card.created_at, card.updated_at);
-                      return `${dateInfo.label} ${dateInfo.text}`;
-                    })()}
-                  </span>
-                </div>
+        viewMode === 'list' ? (
+          // List view with virtualization for performance
+          <VirtualizedList
+            ref={virtualizedListRef}
+            items={cards}
+            renderItem={(card) => renderCardItem(card)}
+            getItemKey={(card) => card.id}
+            estimatedSize={180}
+            gap={16}
+            overscan={3}
+            scrollContainerClassName="h-[calc(100vh-280px)]"
+            ariaLabel="Intelligence cards list"
+          />
+        ) : (
+          // Grid view with standard rendering (will be virtualized in subtask 3.2)
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {cards.map((card) => (
+              <div key={card.id}>
+                {renderCardItem(card)}
               </div>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        )
       ) : null}
 
         {/* Save Search Modal */}
