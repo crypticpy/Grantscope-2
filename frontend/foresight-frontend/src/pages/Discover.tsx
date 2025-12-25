@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Search, Filter, Grid, List, Eye, Heart, Clock, Star, Inbox, History, Calendar, Sparkles, Bookmark } from 'lucide-react';
 import { supabase } from '../App';
@@ -8,6 +8,7 @@ import { HorizonBadge } from '../components/HorizonBadge';
 import { StageBadge } from '../components/StageBadge';
 import { Top25Badge } from '../components/Top25Badge';
 import { SaveSearchModal } from '../components/SaveSearchModal';
+import { SearchSidebar } from '../components/SearchSidebar';
 import { advancedSearch, AdvancedSearchRequest, SavedSearchQueryConfig } from '../lib/discovery-api';
 import { highlightText } from '../lib/highlight-utils';
 
@@ -91,6 +92,10 @@ const Discover: React.FC = () => {
 
   // Save search modal state
   const [showSaveSearchModal, setShowSaveSearchModal] = useState(false);
+
+  // Saved searches sidebar state
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
 
   // Quick filter from URL params (new, following)
   const quickFilter = searchParams.get('filter') || '';
@@ -378,9 +383,64 @@ const Discover: React.FC = () => {
     }
   };
 
+  // Apply saved search configuration
+  const handleSelectSavedSearch = useCallback((config: SavedSearchQueryConfig) => {
+    // Apply query
+    if (config.query !== undefined) {
+      setSearchTerm(config.query);
+    } else {
+      setSearchTerm('');
+    }
+
+    // Apply semantic search toggle
+    setUseSemanticSearch(config.use_vector_search ?? false);
+
+    // Apply filters
+    const filters = config.filters ?? {};
+
+    // Pillar (take first if array)
+    setSelectedPillar(filters.pillar_ids?.[0] ?? '');
+
+    // Stage (take first if array)
+    setSelectedStage(filters.stage_ids?.[0] ?? '');
+
+    // Horizon
+    setSelectedHorizon(filters.horizon && filters.horizon !== 'ALL' ? filters.horizon : '');
+
+    // Date range
+    setDateFrom(filters.date_range?.start ?? '');
+    setDateTo(filters.date_range?.end ?? '');
+
+    // Score thresholds
+    setImpactMin(filters.score_thresholds?.impact_score?.min ?? 0);
+    setRelevanceMin(filters.score_thresholds?.relevance_score?.min ?? 0);
+    setNoveltyMin(filters.score_thresholds?.novelty_score?.min ?? 0);
+
+    // Clear quick filter when applying saved search
+    setSearchParams({});
+
+    // Close sidebar after selection
+    setIsSidebarOpen(false);
+  }, [setSearchParams]);
+
+  // Handle save search success - refresh sidebar
+  const handleSaveSearchSuccess = useCallback(() => {
+    setShowSaveSearchModal(false);
+    setSidebarRefreshKey((prev) => prev + 1);
+  }, []);
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Header */}
+    <>
+      {/* Saved Searches Sidebar */}
+      <SearchSidebar
+        isOpen={isSidebarOpen}
+        onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
+        onSelectSearch={handleSelectSavedSearch}
+        refreshKey={sidebarRefreshKey}
+      />
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
       <div className="mb-8">
         <div className="flex items-center justify-between">
           <div>
@@ -390,6 +450,19 @@ const Discover: React.FC = () => {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                isSidebarOpen
+                  ? 'text-brand-blue bg-brand-light-blue dark:bg-brand-blue/20 border border-brand-blue/30'
+                  : 'text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+              }`}
+              aria-pressed={isSidebarOpen}
+              title="Toggle saved searches sidebar"
+            >
+              <Bookmark className="w-4 h-4" />
+              Saved Searches
+            </button>
             <Link
               to="/discover/queue"
               className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
@@ -847,14 +920,15 @@ const Discover: React.FC = () => {
         </div>
       )}
 
-      {/* Save Search Modal */}
-      <SaveSearchModal
-        isOpen={showSaveSearchModal}
-        onClose={() => setShowSaveSearchModal(false)}
-        onSuccess={() => setShowSaveSearchModal(false)}
-        queryConfig={currentQueryConfig}
-      />
-    </div>
+        {/* Save Search Modal */}
+        <SaveSearchModal
+          isOpen={showSaveSearchModal}
+          onClose={() => setShowSaveSearchModal(false)}
+          onSuccess={handleSaveSearchSuccess}
+          queryConfig={currentQueryConfig}
+        />
+      </div>
+    </>
   );
 };
 
