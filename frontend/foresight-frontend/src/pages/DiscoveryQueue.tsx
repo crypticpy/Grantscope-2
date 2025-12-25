@@ -277,11 +277,14 @@ const SWIPE_CONFIG = {
  * - Wrapped with React.memo to prevent unnecessary re-renders
  * - Custom comparison function compares primitive props by value
  * - Callback refs compared by reference (should be stable via useCallback at call site)
+ * - onSwipeLeft/onSwipeRight accept cardId parameter for stable callback pattern
  */
 interface SwipeableCardProps {
   cardId: string;
-  onSwipeLeft: () => void;
-  onSwipeRight: () => void;
+  /** Callback when card is swiped left - receives cardId for stable reference pattern */
+  onSwipeLeft: (cardId: string) => void;
+  /** Callback when card is swiped right - receives cardId for stable reference pattern */
+  onSwipeRight: (cardId: string) => void;
   disabled?: boolean;
   children: React.ReactNode;
   className?: string;
@@ -404,11 +407,12 @@ const SwipeableCard = React.memo(function SwipeableCard({
       const meetsVelocityThreshold = Math.abs(vx) >= SWIPE_CONFIG.velocity;
 
       // Trigger action if either threshold is met
+      // Pass cardId to callbacks for stable reference pattern
       if (meetsDistanceThreshold || meetsVelocityThreshold) {
         if (dx < 0 && mx < 0) {
-          onSwipeLeft();
+          onSwipeLeft(cardId);
         } else if (dx > 0 && mx > 0) {
-          onSwipeRight();
+          onSwipeRight(cardId);
         }
       }
     },
@@ -948,6 +952,24 @@ const DiscoveryQueue: React.FC = () => {
   }, [user, cards, pushToUndoStack, showToast]);
 
   /**
+   * Stable callback for swipe-right action (approve)
+   * Used by SwipeableCard - accepts cardId parameter for stable reference pattern
+   * This prevents creating new function references per card per render
+   */
+  const handleSwipeApprove = useCallback((cardId: string) => {
+    handleReviewAction(cardId, 'approve');
+  }, [handleReviewAction]);
+
+  /**
+   * Stable callback for swipe-left action (dismiss as irrelevant)
+   * Used by SwipeableCard - accepts cardId parameter for stable reference pattern
+   * This prevents creating new function references per card per render
+   */
+  const handleSwipeDismiss = useCallback((cardId: string) => {
+    handleDismiss(cardId, 'irrelevant');
+  }, [handleDismiss]);
+
+  /**
    * Handle bulk action
    */
   const handleBulkAction = useCallback(async (action: ReviewAction) => {
@@ -1485,8 +1507,8 @@ const DiscoveryQueue: React.FC = () => {
                     cardRefs.current.delete(card.id);
                   }
                 }}
-                onSwipeRight={() => handleReviewAction(card.id, 'approve')}
-                onSwipeLeft={() => handleDismiss(card.id, 'irrelevant')}
+                onSwipeRight={handleSwipeApprove}
+                onSwipeLeft={handleSwipeDismiss}
                 disabled={isLoading}
                 tabIndex={isFocused ? 0 : -1}
                 onClick={() => setFocusedCardIndex(index)}
