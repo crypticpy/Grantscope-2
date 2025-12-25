@@ -64,6 +64,8 @@ from app.models.history import (
     ScoreHistoryResponse,
     StageHistory,
     StageHistoryList,
+    RelatedCard,
+    RelatedCardsList,
 )
 
 # Initialize FastAPI app
@@ -1000,6 +1002,113 @@ async def get_card_stage_history(
         history=history_records,
         total_count=len(history_records),
         card_id=card_id
+    )
+
+
+@app.get("/api/v1/cards/{card_id}/related", response_model=RelatedCardsList)
+async def get_related_cards(
+    card_id: str,
+    limit: int = 20,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get cards related to the specified card for concept network visualization.
+
+    Returns cards connected to the source card through the card_relationships table,
+    including relationship metadata (type and strength) for edge visualization.
+    Relationships are bidirectional - cards appear whether they are source or target.
+
+    Args:
+        card_id: UUID of the source card to get relationships for
+        limit: Maximum number of related cards to return (default: 20)
+
+    Returns:
+        RelatedCardsList with related card details and relationship metadata
+    """
+    # First verify the card exists
+    card_response = supabase.table("cards").select("id").eq("id", card_id).execute()
+    if not card_response.data:
+        raise HTTPException(status_code=404, detail="Card not found")
+
+    # Query relationships where this card is either source or target
+    # Get relationships where card is the source
+    source_response = supabase.table("card_relationships").select(
+        "id, source_card_id, target_card_id, relationship_type, strength, created_at"
+    ).eq("source_card_id", card_id).limit(limit).execute()
+
+    # Get relationships where card is the target
+    target_response = supabase.table("card_relationships").select(
+        "id, source_card_id, target_card_id, relationship_type, strength, created_at"
+    ).eq("target_card_id", card_id).limit(limit).execute()
+
+    # Combine and deduplicate relationships
+    all_relationships = []
+    seen_relationship_ids = set()
+
+    for rel in (source_response.data or []) + (target_response.data or []):
+        if rel["id"] not in seen_relationship_ids:
+            seen_relationship_ids.add(rel["id"])
+            all_relationships.append(rel)
+
+    # If no relationships found, return empty list
+    if not all_relationships:
+        return RelatedCardsList(
+            related_cards=[],
+            total_count=0,
+            source_card_id=card_id
+        )
+
+    # Get the related card IDs (the "other" card in each relationship)
+    related_card_ids = set()
+    for rel in all_relationships:
+        if rel["source_card_id"] == card_id:
+            related_card_ids.add(rel["target_card_id"])
+        else:
+            related_card_ids.add(rel["source_card_id"])
+
+    # Fetch full card details for all related cards
+    cards_response = supabase.table("cards").select(
+        "id, name, slug, summary, pillar_id, stage_id, horizon"
+    ).in_("id", list(related_card_ids)).execute()
+
+    # Create a lookup map for cards
+    cards_map = {card["id"]: card for card in (cards_response.data or [])}
+
+    # Build the related cards list with relationship context
+    related_cards = []
+    for rel in all_relationships:
+        # Determine which card is the "related" one (not the source card_id)
+        if rel["source_card_id"] == card_id:
+            related_id = rel["target_card_id"]
+        else:
+            related_id = rel["source_card_id"]
+
+        # Get the card details
+        card_data = cards_map.get(related_id)
+        if not card_data:
+            # Skip if card doesn't exist (orphaned relationship)
+            continue
+
+        related_cards.append(RelatedCard(
+            id=card_data["id"],
+            name=card_data["name"],
+            slug=card_data["slug"],
+            summary=card_data.get("summary"),
+            pillar_id=card_data.get("pillar_id"),
+            stage_id=card_data.get("stage_id"),
+            horizon=card_data.get("horizon"),
+            relationship_type=rel["relationship_type"],
+            relationship_strength=rel.get("strength"),
+            relationship_id=rel["id"]
+        ))
+
+    # Limit the results to the specified limit
+    related_cards = related_cards[:limit]
+
+    return RelatedCardsList(
+        related_cards=related_cards,
+        total_count=len(related_cards),
+        source_card_id=card_id
     )
 
 
