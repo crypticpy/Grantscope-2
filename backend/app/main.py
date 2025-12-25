@@ -337,7 +337,8 @@ class SimilarCard(BaseModel):
 # ============================================================================
 
 # Valid pillar codes for classification validation
-VALID_PILLAR_CODES = {"CH", "MC", "ED", "EN", "LV", "TR", "SA"}
+# Must match PILLAR_DEFINITIONS in query_generator.py
+VALID_PILLAR_CODES = {"CH", "EW", "HG", "HH", "MC", "PS"}
 
 class ValidationSubmission(BaseModel):
     """Request model for submitting ground truth classification labels."""
@@ -345,7 +346,7 @@ class ValidationSubmission(BaseModel):
     ground_truth_pillar: str = Field(
         ...,
         pattern=r"^[A-Z]{2}$",
-        description="Ground truth pillar code (e.g., CH, MC, ED, EN, LV, TR, SA)"
+        description="Ground truth pillar code (CH, EW, HG, HH, MC, PS)"
     )
     reviewer_id: str = Field(..., min_length=1, description="Identifier for the reviewer")
     notes: Optional[str] = Field(None, max_length=1000, description="Optional reviewer notes")

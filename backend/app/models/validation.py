@@ -16,13 +16,14 @@ import re
 
 
 # Valid strategic pillar codes (based on Austin strategic priorities)
+# Must match PILLAR_DEFINITIONS in query_generator.py
 VALID_PILLAR_CODES = {
-    "CH",  # Community Health
-    "MC",  # Mobility & Connectivity
-    "ES",  # Economic & Sustainability
-    "GS",  # Government Services
+    "CH",  # Community Health & Sustainability
+    "EW",  # Economic & Workforce Development
+    "HG",  # High-Performing Government
+    "HH",  # Homelessness & Housing
+    "MC",  # Mobility & Critical Infrastructure
     "PS",  # Public Safety
-    "CI",  # Civic Infrastructure
 }
 
 
@@ -58,7 +59,7 @@ class ClassificationValidationCreate(BaseModel):
     ground_truth_pillar: str = Field(
         ...,
         pattern=r"^[A-Z]{2}$",
-        description="Correct strategic pillar code (e.g., CH, MC, ES, GS, PS, CI)"
+        description="Correct strategic pillar code (CH, EW, HG, HH, MC, PS)"
     )
     notes: Optional[str] = Field(
         None,
