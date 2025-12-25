@@ -502,6 +502,636 @@ class ExportService:
             plt.close(fig)  # CRITICAL: Prevent memory leaks
 
     # ========================================================================
+    # PDF Generation Methods
+    # ========================================================================
+
+    def _get_pdf_styles(self) -> Dict[str, ParagraphStyle]:
+        """
+        Create custom paragraph styles for PDF generation.
+
+        Returns:
+            Dictionary of ParagraphStyle objects
+        """
+        styles = getSampleStyleSheet()
+
+        custom_styles = {
+            'Title': ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=PDF_TITLE_FONT_SIZE,
+                textColor=PDF_COLORS["primary"],
+                spaceAfter=12,
+                alignment=TA_CENTER,
+                fontName='Helvetica-Bold',
+            ),
+            'Heading1': ParagraphStyle(
+                'CustomHeading1',
+                parent=styles['Heading1'],
+                fontSize=PDF_HEADING_FONT_SIZE,
+                textColor=PDF_COLORS["primary"],
+                spaceBefore=18,
+                spaceAfter=8,
+                fontName='Helvetica-Bold',
+            ),
+            'Heading2': ParagraphStyle(
+                'CustomHeading2',
+                parent=styles['Heading2'],
+                fontSize=PDF_BODY_FONT_SIZE + 1,
+                textColor=PDF_COLORS["secondary"],
+                spaceBefore=12,
+                spaceAfter=6,
+                fontName='Helvetica-Bold',
+            ),
+            'Body': ParagraphStyle(
+                'CustomBody',
+                parent=styles['Normal'],
+                fontSize=PDF_BODY_FONT_SIZE,
+                textColor=PDF_COLORS["dark"],
+                spaceBefore=4,
+                spaceAfter=4,
+                leading=14,
+            ),
+            'Small': ParagraphStyle(
+                'CustomSmall',
+                parent=styles['Normal'],
+                fontSize=PDF_SMALL_FONT_SIZE,
+                textColor=rl_colors.gray,
+                spaceBefore=2,
+                spaceAfter=2,
+            ),
+            'Badge': ParagraphStyle(
+                'Badge',
+                parent=styles['Normal'],
+                fontSize=PDF_SMALL_FONT_SIZE,
+                textColor=rl_colors.white,
+                alignment=TA_CENTER,
+            ),
+        }
+
+        return custom_styles
+
+    def _create_pdf_header(
+        self,
+        card_data: CardExportData,
+        styles: Dict[str, ParagraphStyle]
+    ) -> List[Any]:
+        """
+        Create PDF header elements for a card.
+
+        Args:
+            card_data: Card data to display
+            styles: PDF styles dictionary
+
+        Returns:
+            List of flowable elements for the header
+        """
+        elements = []
+
+        # Title
+        title = Paragraph(card_data.name, styles['Title'])
+        elements.append(title)
+        elements.append(Spacer(1, 6))
+
+        # Horizontal rule
+        elements.append(HRFlowable(
+            width="100%",
+            thickness=2,
+            color=PDF_COLORS["primary"],
+            spaceBefore=6,
+            spaceAfter=12
+        ))
+
+        # Metadata badges (pillar, horizon, stage)
+        badge_data = []
+        if card_data.pillar_name or card_data.pillar_id:
+            badge_data.append(('Pillar', card_data.pillar_name or card_data.pillar_id))
+        if card_data.horizon:
+            badge_data.append(('Horizon', card_data.horizon))
+        if card_data.stage_name or card_data.stage_id:
+            badge_data.append(('Stage', card_data.stage_name or card_data.stage_id))
+        if card_data.goal_name or card_data.goal_id:
+            badge_data.append(('Goal', card_data.goal_name or card_data.goal_id))
+
+        if badge_data:
+            badge_table_data = [[]]
+            for label, value in badge_data:
+                badge_text = f"<b>{label}:</b> {value}"
+                badge_table_data[0].append(Paragraph(badge_text, styles['Small']))
+
+            badge_table = Table(
+                badge_table_data,
+                colWidths=[1.5 * inch] * len(badge_data)
+            )
+            badge_table.setStyle(TableStyle([
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING', (0, 0), (-1, -1), 4),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ]))
+            elements.append(badge_table)
+            elements.append(Spacer(1, 12))
+
+        return elements
+
+    def _create_pdf_summary_section(
+        self,
+        card_data: CardExportData,
+        styles: Dict[str, ParagraphStyle]
+    ) -> List[Any]:
+        """
+        Create PDF summary section for a card.
+
+        Args:
+            card_data: Card data to display
+            styles: PDF styles dictionary
+
+        Returns:
+            List of flowable elements for the summary
+        """
+        elements = []
+
+        # Summary
+        if card_data.summary:
+            elements.append(Paragraph("Summary", styles['Heading1']))
+            elements.append(Paragraph(card_data.summary, styles['Body']))
+            elements.append(Spacer(1, 12))
+
+        # Description
+        if card_data.description:
+            elements.append(Paragraph("Description", styles['Heading1']))
+            # Truncate very long descriptions
+            description = card_data.description
+            if len(description) > 3000:
+                description = description[:3000] + "... [truncated]"
+            elements.append(Paragraph(description, styles['Body']))
+            elements.append(Spacer(1, 12))
+
+        return elements
+
+    def _create_pdf_scores_table(
+        self,
+        card_data: CardExportData,
+        styles: Dict[str, ParagraphStyle]
+    ) -> List[Any]:
+        """
+        Create PDF scores table for a card.
+
+        Args:
+            card_data: Card data to display
+            styles: PDF styles dictionary
+
+        Returns:
+            List of flowable elements for the scores section
+        """
+        elements = []
+
+        elements.append(Paragraph("Scores", styles['Heading1']))
+
+        # Build scores table
+        scores = card_data.get_all_scores()
+        table_data = [['Metric', 'Score', 'Rating']]
+
+        for name, score in scores.items():
+            score_display = self.format_score_display(score)
+
+            # Determine rating based on score
+            if score is None:
+                rating = "Not Scored"
+            elif score >= 80:
+                rating = "Excellent"
+            elif score >= 60:
+                rating = "Good"
+            elif score >= 40:
+                rating = "Fair"
+            else:
+                rating = "Low"
+
+            table_data.append([name, score_display, rating])
+
+        # Create table with styling
+        table = Table(table_data, colWidths=[2 * inch, 1 * inch, 1.5 * inch])
+        table.setStyle(TableStyle([
+            # Header styling
+            ('BACKGROUND', (0, 0), (-1, 0), PDF_COLORS["primary"]),
+            ('TEXTCOLOR', (0, 0), (-1, 0), rl_colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), PDF_BODY_FONT_SIZE),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            # Body styling
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), PDF_BODY_FONT_SIZE),
+            ('ALIGN', (1, 1), (1, -1), 'CENTER'),  # Center score column
+            ('ALIGN', (2, 1), (2, -1), 'CENTER'),  # Center rating column
+            # Alternating row colors
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [rl_colors.white, PDF_COLORS["light"]]),
+            # Grid
+            ('GRID', (0, 0), (-1, -1), 0.5, PDF_COLORS["light"]),
+            ('BOX', (0, 0), (-1, -1), 1, PDF_COLORS["primary"]),
+            # Padding
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ]))
+
+        elements.append(table)
+        elements.append(Spacer(1, 18))
+
+        return elements
+
+    def _create_pdf_chart_section(
+        self,
+        card_data: CardExportData,
+        styles: Dict[str, ParagraphStyle]
+    ) -> Tuple[List[Any], List[str]]:
+        """
+        Create PDF chart section for a card.
+
+        Args:
+            card_data: Card data to display
+            styles: PDF styles dictionary
+
+        Returns:
+            Tuple of (list of flowable elements, list of temp file paths to clean up)
+        """
+        elements = []
+        temp_files = []
+
+        # Generate bar chart
+        chart_path = self.generate_score_chart(card_data, chart_type="bar")
+
+        if chart_path:
+            temp_files.append(chart_path)
+            elements.append(Paragraph("Score Visualization", styles['Heading1']))
+
+            try:
+                img = RLImage(chart_path, width=PDF_CHART_WIDTH, height=PDF_CHART_HEIGHT)
+                elements.append(img)
+                elements.append(Spacer(1, 12))
+            except Exception as e:
+                logger.warning(f"Failed to add chart image to PDF: {e}")
+
+        return elements, temp_files
+
+    def _create_pdf_footer(
+        self,
+        card_data: CardExportData,
+        styles: Dict[str, ParagraphStyle]
+    ) -> List[Any]:
+        """
+        Create PDF footer elements for a card.
+
+        Args:
+            card_data: Card data to display
+            styles: PDF styles dictionary
+
+        Returns:
+            List of flowable elements for the footer
+        """
+        elements = []
+
+        elements.append(Spacer(1, 24))
+        elements.append(HRFlowable(
+            width="100%",
+            thickness=1,
+            color=PDF_COLORS["light"],
+            spaceBefore=6,
+            spaceAfter=6
+        ))
+
+        # Metadata footer
+        footer_parts = []
+        if card_data.created_at:
+            footer_parts.append(f"Created: {card_data.created_at.strftime('%Y-%m-%d')}")
+        if card_data.updated_at:
+            footer_parts.append(f"Updated: {card_data.updated_at.strftime('%Y-%m-%d')}")
+        footer_parts.append(f"Export Date: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+
+        footer_text = " | ".join(footer_parts)
+        elements.append(Paragraph(footer_text, styles['Small']))
+
+        # Branding
+        elements.append(Spacer(1, 6))
+        elements.append(Paragraph(
+            "Generated by Foresight Intelligence Platform",
+            styles['Small']
+        ))
+
+        return elements
+
+    async def generate_pdf(
+        self,
+        card_data: CardExportData,
+        include_charts: bool = True
+    ) -> str:
+        """
+        Generate a PDF export for an intelligence card.
+
+        Args:
+            card_data: CardExportData object containing all card information
+            include_charts: Whether to include chart visualizations
+
+        Returns:
+            Path to the generated PDF file
+
+        Raises:
+            Exception: If PDF generation fails
+        """
+        temp_files = []
+
+        try:
+            # Create temp file for PDF
+            pdf_file = tempfile.NamedTemporaryFile(
+                suffix='.pdf',
+                delete=False,
+                prefix='foresight_export_'
+            )
+            pdf_path = pdf_file.name
+            pdf_file.close()
+
+            # Create PDF document
+            doc = SimpleDocTemplate(
+                pdf_path,
+                pagesize=PDF_PAGE_SIZE,
+                rightMargin=PDF_MARGIN,
+                leftMargin=PDF_MARGIN,
+                topMargin=PDF_MARGIN,
+                bottomMargin=PDF_MARGIN
+            )
+
+            # Get styles
+            styles = self._get_pdf_styles()
+
+            # Build document elements
+            elements = []
+
+            # Header with title and badges
+            elements.extend(self._create_pdf_header(card_data, styles))
+
+            # Summary and description
+            elements.extend(self._create_pdf_summary_section(card_data, styles))
+
+            # Scores table
+            elements.extend(self._create_pdf_scores_table(card_data, styles))
+
+            # Charts (if enabled)
+            if include_charts:
+                chart_elements, chart_files = self._create_pdf_chart_section(card_data, styles)
+                elements.extend(chart_elements)
+                temp_files.extend(chart_files)
+
+            # Footer
+            elements.extend(self._create_pdf_footer(card_data, styles))
+
+            # Build PDF
+            doc.build(elements)
+
+            logger.info(f"Generated PDF export for card: {card_data.name}")
+            return pdf_path
+
+        except Exception as e:
+            logger.error(f"Error generating PDF for card {card_data.name}: {e}")
+            raise
+
+        finally:
+            # Clean up chart temp files
+            self.cleanup_temp_files(temp_files)
+
+    async def generate_workstream_pdf(
+        self,
+        workstream_id: str,
+        include_charts: bool = True,
+        max_cards: int = 50
+    ) -> str:
+        """
+        Generate a PDF report for a workstream containing all associated cards.
+
+        Args:
+            workstream_id: UUID of the workstream
+            include_charts: Whether to include chart visualizations
+            max_cards: Maximum number of cards to include
+
+        Returns:
+            Path to the generated PDF file
+
+        Raises:
+            Exception: If PDF generation fails
+        """
+        temp_files = []
+
+        try:
+            # Fetch workstream and cards
+            workstream, cards = await self.get_workstream_cards(workstream_id, max_cards)
+
+            if not workstream:
+                raise ValueError(f"Workstream {workstream_id} not found")
+
+            # Create temp file for PDF
+            pdf_file = tempfile.NamedTemporaryFile(
+                suffix='.pdf',
+                delete=False,
+                prefix='foresight_workstream_'
+            )
+            pdf_path = pdf_file.name
+            pdf_file.close()
+
+            # Create PDF document
+            doc = SimpleDocTemplate(
+                pdf_path,
+                pagesize=PDF_PAGE_SIZE,
+                rightMargin=PDF_MARGIN,
+                leftMargin=PDF_MARGIN,
+                topMargin=PDF_MARGIN,
+                bottomMargin=PDF_MARGIN
+            )
+
+            # Get styles
+            styles = self._get_pdf_styles()
+
+            # Build document elements
+            elements = []
+
+            # Title page
+            workstream_name = workstream.get('name', 'Workstream Report')
+            elements.append(Paragraph(workstream_name, styles['Title']))
+            elements.append(Spacer(1, 12))
+
+            elements.append(HRFlowable(
+                width="100%",
+                thickness=2,
+                color=PDF_COLORS["primary"],
+                spaceBefore=6,
+                spaceAfter=12
+            ))
+
+            # Workstream description
+            if workstream.get('description'):
+                elements.append(Paragraph("Overview", styles['Heading1']))
+                elements.append(Paragraph(workstream['description'], styles['Body']))
+                elements.append(Spacer(1, 12))
+
+            # Summary statistics
+            elements.append(Paragraph("Summary", styles['Heading1']))
+
+            if not cards:
+                elements.append(Paragraph(
+                    "No cards currently match this workstream criteria.",
+                    styles['Body']
+                ))
+            else:
+                summary_text = f"This workstream contains <b>{len(cards)}</b> intelligence cards."
+                if len(cards) >= max_cards:
+                    summary_text += f" (Showing first {max_cards})"
+                elements.append(Paragraph(summary_text, styles['Body']))
+                elements.append(Spacer(1, 12))
+
+                # Distribution charts
+                if include_charts and cards:
+                    # Pillar distribution
+                    pillar_counts = {}
+                    horizon_counts = {}
+                    for card in cards:
+                        pillar = card.pillar_name or card.pillar_id or "Unknown"
+                        pillar_counts[pillar] = pillar_counts.get(pillar, 0) + 1
+
+                        if card.horizon:
+                            horizon_counts[card.horizon] = horizon_counts.get(card.horizon, 0) + 1
+
+                    # Pillar chart
+                    pillar_chart_path = self.generate_pillar_distribution_chart(pillar_counts)
+                    if pillar_chart_path:
+                        temp_files.append(pillar_chart_path)
+                        try:
+                            img = RLImage(pillar_chart_path, width=PDF_CHART_WIDTH, height=PDF_CHART_HEIGHT)
+                            elements.append(img)
+                            elements.append(Spacer(1, 12))
+                        except Exception as e:
+                            logger.warning(f"Failed to add pillar chart to PDF: {e}")
+
+                    # Horizon chart
+                    horizon_chart_path = self.generate_horizon_distribution_chart(horizon_counts)
+                    if horizon_chart_path:
+                        temp_files.append(horizon_chart_path)
+                        try:
+                            img = RLImage(horizon_chart_path, width=4.5 * inch, height=3 * inch)
+                            elements.append(img)
+                            elements.append(Spacer(1, 12))
+                        except Exception as e:
+                            logger.warning(f"Failed to add horizon chart to PDF: {e}")
+
+                # Cards table summary
+                elements.append(PageBreak())
+                elements.append(Paragraph("Cards Overview", styles['Heading1']))
+
+                table_data = [['Name', 'Pillar', 'Horizon', 'Impact']]
+                for card in cards:
+                    table_data.append([
+                        card.name[:40] + ('...' if len(card.name) > 40 else ''),
+                        card.pillar_name or card.pillar_id or 'N/A',
+                        card.horizon or 'N/A',
+                        self.format_score_display(card.impact_score)
+                    ])
+
+                table = Table(table_data, colWidths=[2.5 * inch, 1.5 * inch, 0.8 * inch, 0.8 * inch])
+                table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), PDF_COLORS["primary"]),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), rl_colors.white),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, 0), PDF_BODY_FONT_SIZE),
+                    ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                    ('FONTSIZE', (0, 1), (-1, -1), PDF_SMALL_FONT_SIZE),
+                    ('ALIGN', (2, 0), (-1, -1), 'CENTER'),
+                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [rl_colors.white, PDF_COLORS["light"]]),
+                    ('GRID', (0, 0), (-1, -1), 0.5, PDF_COLORS["light"]),
+                    ('BOX', (0, 0), (-1, -1), 1, PDF_COLORS["primary"]),
+                    ('TOPPADDING', (0, 0), (-1, -1), 6),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+                ]))
+                elements.append(table)
+
+                # Individual card details (paginated)
+                elements.append(PageBreak())
+                elements.append(Paragraph("Card Details", styles['Heading1']))
+                elements.append(Spacer(1, 12))
+
+                for i, card in enumerate(cards):
+                    if i > 0:
+                        elements.append(Spacer(1, 18))
+                        elements.append(HRFlowable(
+                            width="80%",
+                            thickness=0.5,
+                            color=PDF_COLORS["light"],
+                            spaceBefore=6,
+                            spaceAfter=12
+                        ))
+
+                    # Card mini-header
+                    elements.append(Paragraph(card.name, styles['Heading2']))
+
+                    # Badges row
+                    badge_parts = []
+                    if card.pillar_name or card.pillar_id:
+                        badge_parts.append(f"<b>Pillar:</b> {card.pillar_name or card.pillar_id}")
+                    if card.horizon:
+                        badge_parts.append(f"<b>Horizon:</b> {card.horizon}")
+                    if card.stage_name or card.stage_id:
+                        badge_parts.append(f"<b>Stage:</b> {card.stage_name or card.stage_id}")
+                    if badge_parts:
+                        elements.append(Paragraph(" | ".join(badge_parts), styles['Small']))
+                        elements.append(Spacer(1, 6))
+
+                    # Summary
+                    if card.summary:
+                        elements.append(Paragraph(card.summary, styles['Body']))
+
+                    # Key scores
+                    key_scores = []
+                    if card.impact_score is not None:
+                        key_scores.append(f"Impact: {card.impact_score}")
+                    if card.relevance_score is not None:
+                        key_scores.append(f"Relevance: {card.relevance_score}")
+                    if card.maturity_score is not None:
+                        key_scores.append(f"Maturity: {card.maturity_score}")
+                    if key_scores:
+                        elements.append(Paragraph(
+                            "<i>Scores: " + " | ".join(key_scores) + "</i>",
+                            styles['Small']
+                        ))
+
+            # Footer
+            elements.append(Spacer(1, 24))
+            elements.append(HRFlowable(
+                width="100%",
+                thickness=1,
+                color=PDF_COLORS["light"],
+                spaceBefore=6,
+                spaceAfter=6
+            ))
+
+            footer_text = f"Export Date: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}"
+            elements.append(Paragraph(footer_text, styles['Small']))
+            elements.append(Paragraph(
+                "Generated by Foresight Intelligence Platform",
+                styles['Small']
+            ))
+
+            # Build PDF
+            doc.build(elements)
+
+            logger.info(f"Generated workstream PDF for: {workstream_name} with {len(cards)} cards")
+            return pdf_path
+
+        except Exception as e:
+            logger.error(f"Error generating workstream PDF {workstream_id}: {e}")
+            raise
+
+        finally:
+            # Clean up chart temp files
+            self.cleanup_temp_files(temp_files)
+
+    # ========================================================================
     # Utility Methods
     # ========================================================================
 
