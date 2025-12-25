@@ -609,7 +609,7 @@ const CardDetail: React.FC = () => {
               <button
                 onClick={() => triggerResearch('update')}
                 disabled={isResearching}
-                className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="inline-flex items-center justify-center min-h-[44px] sm:min-h-0 px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors active:scale-95"
               >
                 {isResearching && researchTask?.task_type === 'update' ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -635,7 +635,7 @@ const CardDetail: React.FC = () => {
               <button
                 onClick={() => triggerResearch('deep_research')}
                 disabled={isResearching || !canDeepResearch}
-                className="inline-flex items-center px-3 py-2 border border-brand-blue rounded-md shadow-sm text-sm font-medium text-white bg-brand-blue hover:bg-brand-dark-blue disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="inline-flex items-center justify-center min-h-[44px] sm:min-h-0 px-3 py-2 border border-brand-blue rounded-md shadow-sm text-sm font-medium text-white bg-brand-blue hover:bg-brand-dark-blue disabled:opacity-50 disabled:cursor-not-allowed transition-colors active:scale-95"
               >
                 {isResearching && researchTask?.task_type === 'deep_research' ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -660,7 +660,7 @@ const CardDetail: React.FC = () => {
                 <button
                   onClick={() => setShowExportDropdown(!showExportDropdown)}
                   disabled={isExporting}
-                  className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="inline-flex items-center justify-center min-h-[44px] sm:min-h-0 px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors active:scale-95"
                 >
                   {isExporting ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -677,21 +677,21 @@ const CardDetail: React.FC = () => {
                 <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-[#3d4176] rounded-md shadow-lg border border-gray-200 dark:border-gray-600 py-1 z-20">
                   <button
                     onClick={() => handleExport('pdf')}
-                    className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    className="w-full flex items-center min-h-[44px] sm:min-h-0 px-4 py-3 sm:py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors active:bg-gray-200 dark:active:bg-gray-600"
                   >
                     <FileText className="h-4 w-4 mr-3 text-red-500" />
                     Export as PDF
                   </button>
                   <button
                     onClick={() => handleExport('pptx')}
-                    className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    className="w-full flex items-center min-h-[44px] sm:min-h-0 px-4 py-3 sm:py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors active:bg-gray-200 dark:active:bg-gray-600"
                   >
                     <Presentation className="h-4 w-4 mr-3 text-orange-500" />
                     Export as PowerPoint
                   </button>
                   <button
                     onClick={() => handleExport('csv')}
-                    className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    className="w-full flex items-center min-h-[44px] sm:min-h-0 px-4 py-3 sm:py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors active:bg-gray-200 dark:active:bg-gray-600"
                   >
                     <FileSpreadsheet className="h-4 w-4 mr-3 text-green-500" />
                     Export as CSV
@@ -702,7 +702,7 @@ const CardDetail: React.FC = () => {
 
             <button
               onClick={toggleFollow}
-              className={`inline-flex items-center px-4 py-2 border rounded-md shadow-sm text-sm font-medium transition-colors ${
+              className={`inline-flex items-center justify-center min-h-[44px] sm:min-h-0 px-4 py-2 border rounded-md shadow-sm text-sm font-medium transition-colors active:scale-95 ${
                 isFollowing
                   ? 'border-red-300 text-red-700 bg-red-50 hover:bg-red-100'
                   : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'
