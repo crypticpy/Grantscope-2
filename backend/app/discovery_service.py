@@ -224,6 +224,126 @@ class CardActionResult:
 
 
 @dataclass
+class SourceDiversityMetrics:
+    """
+    Comprehensive source diversity metrics for observability.
+
+    Tracks multiple dimensions of diversity to ensure balanced content ingestion
+    across all 5 source categories.
+    """
+    # Category distribution
+    sources_by_category: Dict[str, int]
+    total_sources: int
+    categories_fetched: int  # Number of categories that contributed sources
+
+    # Diversity scores (0-1 scale, higher = more diverse)
+    category_coverage: float  # Percentage of categories with sources
+    balance_score: float      # How evenly distributed sources are
+    shannon_entropy: float    # Information-theoretic diversity measure
+
+    # Category-level details
+    dominant_category: Optional[str] = None
+    underrepresented_categories: List[str] = field(default_factory=list)
+
+    @classmethod
+    def compute(cls, sources_by_category: Dict[str, int]) -> "SourceDiversityMetrics":
+        """
+        Compute diversity metrics from source category counts.
+
+        Args:
+            sources_by_category: Count of sources per category
+
+        Returns:
+            SourceDiversityMetrics with all computed values
+        """
+        import math
+
+        total = sum(sources_by_category.values())
+        active_categories = [cat for cat, count in sources_by_category.items() if count > 0]
+        num_active = len(active_categories)
+        num_total_categories = 5  # Total number of source categories
+
+        # Category coverage (0-1)
+        category_coverage = num_active / num_total_categories if num_total_categories > 0 else 0.0
+
+        # Balance score: 1 - normalized standard deviation
+        # Perfect balance = 1.0, all in one category = 0.0
+        if total > 0 and num_active > 0:
+            mean_per_category = total / num_total_categories
+            variance = sum((count - mean_per_category) ** 2 for count in sources_by_category.values()) / num_total_categories
+            std_dev = math.sqrt(variance)
+            max_std_dev = mean_per_category * math.sqrt(num_total_categories - 1)  # Worst case: all in one category
+            balance_score = 1.0 - (std_dev / max_std_dev) if max_std_dev > 0 else 1.0
+        else:
+            balance_score = 0.0
+
+        # Shannon entropy (normalized to 0-1)
+        # H = -sum(p * log(p)) / log(n) where n is number of categories
+        if total > 0 and num_active > 1:
+            entropy = 0.0
+            for count in sources_by_category.values():
+                if count > 0:
+                    p = count / total
+                    entropy -= p * math.log(p)
+            max_entropy = math.log(num_total_categories)
+            shannon_entropy = entropy / max_entropy if max_entropy > 0 else 0.0
+        else:
+            shannon_entropy = 0.0
+
+        # Find dominant and underrepresented categories
+        dominant_category = None
+        underrepresented = []
+
+        if total > 0:
+            max_count = max(sources_by_category.values())
+            threshold = total / num_total_categories * 0.3  # 30% of expected average
+
+            for cat, count in sources_by_category.items():
+                if count == max_count and max_count > 0:
+                    dominant_category = cat
+                if count < threshold:
+                    underrepresented.append(cat)
+
+        return cls(
+            sources_by_category=sources_by_category,
+            total_sources=total,
+            categories_fetched=num_active,
+            category_coverage=round(category_coverage, 3),
+            balance_score=round(balance_score, 3),
+            shannon_entropy=round(shannon_entropy, 3),
+            dominant_category=dominant_category,
+            underrepresented_categories=underrepresented
+        )
+
+    def log_metrics(self, logger_instance: logging.Logger) -> None:
+        """Log diversity metrics for observability."""
+        logger_instance.info(
+            f"Source Diversity Metrics: "
+            f"coverage={self.category_coverage:.1%}, "
+            f"balance={self.balance_score:.2f}, "
+            f"entropy={self.shannon_entropy:.2f}, "
+            f"categories={self.categories_fetched}/5"
+        )
+        if self.underrepresented_categories:
+            logger_instance.warning(
+                f"Underrepresented source categories: {', '.join(self.underrepresented_categories)}"
+            )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert metrics to dictionary for storage/API response."""
+        return {
+            "sources_by_category": self.sources_by_category,
+            "total_sources": self.total_sources,
+            "categories_fetched": self.categories_fetched,
+            "category_coverage": self.category_coverage,
+            "balance_score": self.balance_score,
+            "shannon_entropy": self.shannon_entropy,
+            "dominant_category": self.dominant_category,
+            "underrepresented_categories": self.underrepresented_categories,
+        }
+
+
+@dataclass
 class MultiSourceFetchResult:
     """Result of multi-source content fetching across all 5 categories."""
     sources: List[RawSource]
@@ -232,6 +352,12 @@ class MultiSourceFetchResult:
     categories_fetched: int  # Number of categories that contributed sources
     fetch_time_seconds: float
     errors_by_category: Dict[str, List[str]]
+    diversity_metrics: Optional[SourceDiversityMetrics] = None
+
+    def __post_init__(self):
+        """Compute diversity metrics after initialization."""
+        if self.diversity_metrics is None and self.sources_by_category:
+            self.diversity_metrics = SourceDiversityMetrics.compute(self.sources_by_category)
 
     @property
     def category_diversity(self) -> float:
@@ -263,6 +389,7 @@ class DiscoveryResult:
     # Multi-source category tracking
     sources_by_category: Dict[str, int] = field(default_factory=dict)
     categories_fetched: int = 0
+    diversity_metrics: Optional[Dict[str, Any]] = None  # SourceDiversityMetrics as dict
 
     # Card stats
     cards_created: List[str] = field(default_factory=list)
@@ -342,6 +469,7 @@ class DiscoveryService:
         errors: List[str] = []
         sources_by_category: Dict[str, int] = {}
         categories_fetched: int = 0
+        diversity_metrics: Optional[SourceDiversityMetrics] = None
 
         logger.info(f"Starting discovery run {run_id} with config: {config}")
 
@@ -360,6 +488,7 @@ class DiscoveryService:
                 raw_sources.extend(multi_source_result.sources)
                 sources_by_category = multi_source_result.sources_by_category.copy()
                 categories_fetched = multi_source_result.categories_fetched
+                diversity_metrics = multi_source_result.diversity_metrics
 
                 # Add any multi-source errors to error list
                 for category, cat_errors in multi_source_result.errors_by_category.items():
@@ -405,6 +534,7 @@ class DiscoveryService:
                     sources_duplicate=0,
                     sources_by_category=sources_by_category,
                     categories_fetched=categories_fetched,
+                    diversity_metrics=diversity_metrics,
                     card_result=CardActionResult([], [], 0, 0, 0),
                     cost=0.0,
                     errors=["No queries generated and no multi-source results"],
@@ -424,6 +554,7 @@ class DiscoveryService:
                     sources_duplicate=0,
                     sources_by_category=sources_by_category,
                     categories_fetched=categories_fetched,
+                    diversity_metrics=diversity_metrics,
                     card_result=CardActionResult([], [], 0, 0, 0),
                     cost=search_cost,
                     errors=[],
@@ -468,6 +599,10 @@ class DiscoveryService:
                 )
 
             # Step 7: Finalize run
+            # Recompute diversity metrics to include query sources
+            if sources_by_category:
+                diversity_metrics = SourceDiversityMetrics.compute(sources_by_category)
+
             return await self._finalize_run(
                 run_id=run_id,
                 start_time=start_time,
@@ -479,6 +614,7 @@ class DiscoveryService:
                 sources_duplicate=dedup_result.duplicate_count,
                 sources_by_category=sources_by_category,
                 categories_fetched=categories_fetched,
+                diversity_metrics=diversity_metrics,
                 card_result=card_result,
                 cost=search_cost,
                 errors=errors,
@@ -500,6 +636,7 @@ class DiscoveryService:
                 sources_duplicate=0,
                 sources_by_category=sources_by_category,
                 categories_fetched=categories_fetched,
+                diversity_metrics=diversity_metrics,
                 card_result=CardActionResult([], [], 0, 0, 0),
                 cost=0.0,
                 errors=errors,
@@ -781,13 +918,18 @@ class DiscoveryService:
             if count > 0:
                 logger.info(f"  - {cat}: {count} sources")
 
+        # Compute diversity metrics for observability
+        diversity_metrics = SourceDiversityMetrics.compute(sources_by_category)
+        diversity_metrics.log_metrics(logger)
+
         return MultiSourceFetchResult(
             sources=all_sources,
             sources_by_category=sources_by_category,
             total_sources=len(all_sources),
             categories_fetched=categories_fetched,
             fetch_time_seconds=fetch_time,
-            errors_by_category=errors_by_category
+            errors_by_category=errors_by_category,
+            diversity_metrics=diversity_metrics
         )
 
     async def _fetch_rss_sources(
@@ -1492,7 +1634,8 @@ class DiscoveryService:
         errors: List[str],
         status: DiscoveryStatus,
         sources_by_category: Optional[Dict[str, int]] = None,
-        categories_fetched: int = 0
+        categories_fetched: int = 0,
+        diversity_metrics: Optional[SourceDiversityMetrics] = None
     ) -> DiscoveryResult:
         """
         Finalize the discovery run and generate summary report.
@@ -1504,6 +1647,7 @@ class DiscoveryService:
             status: Final status
             sources_by_category: Count of sources per category (5 categories)
             categories_fetched: Number of source categories that contributed
+            diversity_metrics: Computed source diversity metrics
 
         Returns:
             Complete DiscoveryResult
@@ -1514,6 +1658,10 @@ class DiscoveryService:
         # Default sources_by_category if not provided
         if sources_by_category is None:
             sources_by_category = {}
+
+        # Compute diversity metrics if not provided but we have category data
+        if diversity_metrics is None and sources_by_category:
+            diversity_metrics = SourceDiversityMetrics.compute(sources_by_category)
 
         # Generate summary report
         summary = self._generate_summary_report(
@@ -1528,7 +1676,8 @@ class DiscoveryService:
             card_result=card_result,
             cost=cost,
             execution_time=execution_time,
-            errors=errors
+            errors=errors,
+            diversity_metrics=diversity_metrics
         )
 
         result = DiscoveryResult(
@@ -1544,6 +1693,7 @@ class DiscoveryService:
             sources_duplicate=sources_duplicate,
             sources_by_category=sources_by_category,
             categories_fetched=categories_fetched,
+            diversity_metrics=diversity_metrics.to_dict() if diversity_metrics else None,
             cards_created=card_result.cards_created,
             cards_enriched=card_result.cards_enriched,
             sources_added=card_result.sources_added,
@@ -1575,7 +1725,8 @@ class DiscoveryService:
         execution_time: float,
         errors: List[str],
         sources_by_category: Optional[Dict[str, int]] = None,
-        categories_fetched: int = 0
+        categories_fetched: int = 0,
+        diversity_metrics: Optional[SourceDiversityMetrics] = None
     ) -> str:
         """Generate a human-readable summary report."""
         report = f"""# Discovery Run Summary
@@ -1601,6 +1752,19 @@ class DiscoveryService:
             for category, count in sources_by_category.items():
                 if count > 0:
                     report += f"- **{category}**: {count} sources\n"
+
+        # Add diversity metrics if available
+        if diversity_metrics:
+            report += f"""
+## Source Diversity Metrics
+- **Category Coverage**: {diversity_metrics.category_coverage:.1%}
+- **Balance Score**: {diversity_metrics.balance_score:.2f}
+- **Shannon Entropy**: {diversity_metrics.shannon_entropy:.2f}
+"""
+            if diversity_metrics.dominant_category:
+                report += f"- **Dominant Category**: {diversity_metrics.dominant_category}\n"
+            if diversity_metrics.underrepresented_categories:
+                report += f"- **Underrepresented**: {', '.join(diversity_metrics.underrepresented_categories)}\n"
 
         report += f"""
 ## Cards
