@@ -865,11 +865,13 @@ class DiscoveryService:
                 "pillar_id": analysis.pillars[0] if analysis.pillars else None,
                 "goal_id": analysis.goals[0] if analysis.goals else None,
 
-                # Scoring
+                # Scoring (4-dimensional: Impact, Velocity, Novelty, Risk)
                 "maturity_score": int(analysis.credibility * 20),
                 "novelty_score": int(analysis.novelty * 20),
                 "impact_score": int(analysis.impact * 20),
                 "relevance_score": int(analysis.relevance * 20),
+                "velocity_score": int(analysis.velocity * 10),  # 1-10 scale to 0-100
+                "risk_score": int(analysis.risk * 10),  # 1-10 scale to 0-100
 
                 "status": "draft",  # New cards start as draft
                 "discovery_source": "automated",
