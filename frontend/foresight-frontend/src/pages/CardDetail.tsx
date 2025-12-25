@@ -1511,22 +1511,22 @@ const CardDetail: React.FC = () => {
                             {isExpanded && (
                               <div className="mt-4 rounded-xl border-2 border-brand-blue/20 overflow-hidden">
                                 {/* Report Header */}
-                                <div className="bg-gradient-to-r from-brand-blue to-extended-purple p-4">
-                                  <div className="flex items-center gap-3 text-white">
-                                    <FileText className="h-6 w-6" />
-                                    <div>
-                                      <h4 className="font-bold text-lg">Strategic Intelligence Report</h4>
-                                      <p className="text-white/80 text-sm">Generated {new Date(event.created_at).toLocaleDateString()}</p>
+                                <div className="bg-gradient-to-r from-brand-blue to-extended-purple p-3 sm:p-4">
+                                  <div className="flex items-center gap-2 sm:gap-3 text-white">
+                                    <FileText className="h-5 w-5 sm:h-6 sm:w-6 flex-shrink-0" />
+                                    <div className="min-w-0">
+                                      <h4 className="font-bold text-base sm:text-lg">Strategic Intelligence Report</h4>
+                                      <p className="text-white/80 text-xs sm:text-sm">Generated {new Date(event.created_at).toLocaleDateString()}</p>
                                     </div>
                                   </div>
                                 </div>
 
                                 {/* Report Content */}
-                                <div className="p-6 bg-white dark:bg-[#1d2156] max-h-[80vh] overflow-y-auto">
-                                  <div className="prose prose-sm dark:prose-invert max-w-none
+                                <div className="p-4 sm:p-6 bg-white dark:bg-[#1d2156] max-h-[70vh] sm:max-h-[80vh] overflow-y-auto overflow-x-hidden">
+                                  <div className="prose prose-sm dark:prose-invert max-w-none break-words
                                     prose-headings:text-brand-dark-blue dark:prose-headings:text-white
-                                    prose-h2:text-lg prose-h2:font-bold prose-h2:border-b prose-h2:border-gray-200 dark:prose-h2:border-gray-700 prose-h2:pb-2 prose-h2:mb-4 prose-h2:mt-6
-                                    prose-h3:text-base prose-h3:font-semibold
+                                    prose-h2:text-base prose-h2:sm:text-lg prose-h2:font-bold prose-h2:border-b prose-h2:border-gray-200 dark:prose-h2:border-gray-700 prose-h2:pb-2 prose-h2:mb-4 prose-h2:mt-6
+                                    prose-h3:text-sm prose-h3:sm:text-base prose-h3:font-semibold
                                     prose-strong:text-brand-dark-blue dark:prose-strong:text-brand-light-blue
                                     prose-ul:my-2 prose-li:my-0.5
                                     prose-p:text-gray-700 dark:prose-p:text-gray-300
