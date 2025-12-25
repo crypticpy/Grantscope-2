@@ -31,6 +31,30 @@ matplotlib.use('Agg')  # Non-GUI backend - must be set before importing pyplot
 import matplotlib.pyplot as plt
 import numpy as np
 
+# PowerPoint imports
+from pptx import Presentation
+from pptx.util import Inches, Pt
+from pptx.dml.color import RGBColor
+from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
+from pptx.enum.shapes import MSO_SHAPE
+
+# ReportLab imports for PDF generation
+from reportlab.lib import colors as rl_colors
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.platypus import (
+    SimpleDocTemplate,
+    Paragraph,
+    Spacer,
+    Table,
+    TableStyle,
+    Image as RLImage,
+    PageBreak,
+    HRFlowable,
+)
+from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
+
 from supabase import Client
 
 from .models.export import (
@@ -74,6 +98,49 @@ SCORE_COLORS = {
 CHART_DPI = 300
 CHART_FIGURE_SIZE = (8, 6)
 RADAR_FIGURE_SIZE = (8, 8)
+
+# PowerPoint settings
+PPTX_SLIDE_WIDTH = Inches(13.333)  # 16:9 widescreen
+PPTX_SLIDE_HEIGHT = Inches(7.5)
+PPTX_TITLE_FONT_SIZE = Pt(44)
+PPTX_SUBTITLE_FONT_SIZE = Pt(24)
+PPTX_BODY_FONT_SIZE = Pt(18)
+PPTX_SMALL_FONT_SIZE = Pt(14)
+PPTX_MARGIN = Inches(0.5)
+PPTX_CHART_WIDTH = Inches(5)
+PPTX_CHART_HEIGHT = Inches(4)
+
+# PDF settings
+PDF_PAGE_SIZE = letter
+PDF_MARGIN = 0.75 * inch
+PDF_TITLE_FONT_SIZE = 24
+PDF_HEADING_FONT_SIZE = 14
+PDF_BODY_FONT_SIZE = 11
+PDF_SMALL_FONT_SIZE = 9
+PDF_CHART_WIDTH = 5.5 * inch
+PDF_CHART_HEIGHT = 4 * inch
+
+# ReportLab color conversion helper
+def hex_to_rl_color(hex_color: str) -> rl_colors.Color:
+    """Convert hex color string to ReportLab Color object."""
+    hex_color = hex_color.lstrip('#')
+    r = int(hex_color[0:2], 16) / 255.0
+    g = int(hex_color[2:4], 16) / 255.0
+    b = int(hex_color[4:6], 16) / 255.0
+    return rl_colors.Color(r, g, b)
+
+
+# PDF color palette using Foresight colors
+PDF_COLORS = {
+    "primary": hex_to_rl_color(FORESIGHT_COLORS["primary"]),
+    "secondary": hex_to_rl_color(FORESIGHT_COLORS["secondary"]),
+    "accent": hex_to_rl_color(FORESIGHT_COLORS["accent"]),
+    "success": hex_to_rl_color(FORESIGHT_COLORS["success"]),
+    "warning": hex_to_rl_color(FORESIGHT_COLORS["warning"]),
+    "danger": hex_to_rl_color(FORESIGHT_COLORS["danger"]),
+    "light": hex_to_rl_color(FORESIGHT_COLORS["light"]),
+    "dark": hex_to_rl_color(FORESIGHT_COLORS["dark"]),
+}
 
 
 # ============================================================================
@@ -552,3 +619,193 @@ class ExportService:
             Safe filename with extension
         """
         return get_export_filename(name, format)
+
+    # ========================================================================
+    # CSV Export Methods
+    # ========================================================================
+
+    async def generate_csv(
+        self,
+        card_data: CardExportData,
+    ) -> str:
+        """
+        Generate CSV export for a single intelligence card.
+
+        Exports card data in a tabular format suitable for analysis
+        in Excel or other spreadsheet applications. All card fields
+        and scores are included as columns.
+
+        Args:
+            card_data: Card data to export
+
+        Returns:
+            CSV string content (not file path)
+
+        Raises:
+            ValueError: If card_data is invalid
+        """
+        import pandas as pd
+
+        try:
+            # Define the CSV columns in the specified order
+            csv_columns = [
+                "id",
+                "name",
+                "summary",
+                "description",
+                "pillar_id",
+                "goal_id",
+                "stage_id",
+                "horizon",
+                "novelty_score",
+                "maturity_score",
+                "impact_score",
+                "relevance_score",
+                "velocity_score",
+                "risk_score",
+                "opportunity_score",
+            ]
+
+            # Build the row data from card_data
+            row_data = {
+                "id": card_data.id,
+                "name": card_data.name,
+                "summary": card_data.summary or "",
+                "description": card_data.description or "",
+                "pillar_id": card_data.pillar_id or "",
+                "goal_id": card_data.goal_id or "",
+                "stage_id": card_data.stage_id or "",
+                "horizon": card_data.horizon or "",
+                "novelty_score": card_data.novelty_score,
+                "maturity_score": card_data.maturity_score,
+                "impact_score": card_data.impact_score,
+                "relevance_score": card_data.relevance_score,
+                "velocity_score": card_data.velocity_score,
+                "risk_score": card_data.risk_score,
+                "opportunity_score": card_data.opportunity_score,
+            }
+
+            # Create DataFrame with single row
+            df = pd.DataFrame([row_data], columns=csv_columns)
+
+            # Convert to CSV string without index column
+            csv_content = df.to_csv(index=False)
+
+            logger.info(f"Generated CSV export for card {card_data.id}: {card_data.name}")
+
+            return csv_content
+
+        except Exception as e:
+            logger.error(f"Error generating CSV for card {card_data.id}: {e}")
+            raise ValueError(f"Failed to generate CSV export: {e}")
+
+    async def generate_csv_multi(
+        self,
+        cards: List[CardExportData],
+    ) -> str:
+        """
+        Generate CSV export for multiple intelligence cards.
+
+        Exports multiple cards as rows in a single CSV file,
+        suitable for bulk data analysis in Excel or other tools.
+
+        Args:
+            cards: List of card data to export
+
+        Returns:
+            CSV string content with multiple rows
+
+        Raises:
+            ValueError: If cards list is empty or invalid
+        """
+        import pandas as pd
+
+        if not cards:
+            logger.warning("No cards provided for CSV export")
+            return self._generate_empty_csv()
+
+        try:
+            # Define the CSV columns in the specified order
+            csv_columns = [
+                "id",
+                "name",
+                "summary",
+                "description",
+                "pillar_id",
+                "goal_id",
+                "stage_id",
+                "horizon",
+                "novelty_score",
+                "maturity_score",
+                "impact_score",
+                "relevance_score",
+                "velocity_score",
+                "risk_score",
+                "opportunity_score",
+            ]
+
+            # Build row data for all cards
+            rows = []
+            for card_data in cards:
+                row = {
+                    "id": card_data.id,
+                    "name": card_data.name,
+                    "summary": card_data.summary or "",
+                    "description": card_data.description or "",
+                    "pillar_id": card_data.pillar_id or "",
+                    "goal_id": card_data.goal_id or "",
+                    "stage_id": card_data.stage_id or "",
+                    "horizon": card_data.horizon or "",
+                    "novelty_score": card_data.novelty_score,
+                    "maturity_score": card_data.maturity_score,
+                    "impact_score": card_data.impact_score,
+                    "relevance_score": card_data.relevance_score,
+                    "velocity_score": card_data.velocity_score,
+                    "risk_score": card_data.risk_score,
+                    "opportunity_score": card_data.opportunity_score,
+                }
+                rows.append(row)
+
+            # Create DataFrame with all rows
+            df = pd.DataFrame(rows, columns=csv_columns)
+
+            # Convert to CSV string without index column
+            csv_content = df.to_csv(index=False)
+
+            logger.info(f"Generated CSV export for {len(cards)} cards")
+
+            return csv_content
+
+        except Exception as e:
+            logger.error(f"Error generating multi-card CSV: {e}")
+            raise ValueError(f"Failed to generate CSV export: {e}")
+
+    def _generate_empty_csv(self) -> str:
+        """
+        Generate an empty CSV with just headers.
+
+        Returns:
+            CSV string with headers only
+        """
+        import pandas as pd
+
+        csv_columns = [
+            "id",
+            "name",
+            "summary",
+            "description",
+            "pillar_id",
+            "goal_id",
+            "stage_id",
+            "horizon",
+            "novelty_score",
+            "maturity_score",
+            "impact_score",
+            "relevance_score",
+            "velocity_score",
+            "risk_score",
+            "opportunity_score",
+        ]
+
+        df = pd.DataFrame(columns=csv_columns)
+        return df.to_csv(index=False)
