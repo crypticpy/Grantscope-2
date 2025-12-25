@@ -32,6 +32,18 @@ interface FollowingCard {
   cards: Card;
 }
 
+/**
+ * TypeScript interface for the get_dashboard_stats RPC response.
+ * This interface ensures type safety when calling the Supabase RPC function
+ * that consolidates dashboard statistics into a single database call.
+ */
+interface DashboardStatsResponse {
+  total_cards: number;
+  new_this_week: number;
+  following: number;
+  workstreams: number;
+}
+
 const Dashboard: React.FC = () => {
   const { user } = useAuthContext();
   const [recentCards, setRecentCards] = useState<Card[]>([]);
