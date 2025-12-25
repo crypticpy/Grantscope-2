@@ -290,7 +290,8 @@ interface SwipeableCardProps {
   className?: string;
   style?: React.CSSProperties;
   tabIndex?: number;
-  onClick?: () => void;
+  /** Callback when card is clicked - receives cardId for stable reference pattern */
+  onClick?: (cardId: string) => void;
   cardRef?: (el: HTMLDivElement | null) => void;
   /** Whether we're on a mobile device (affects swipe thresholds) */
   isMobile?: boolean;
@@ -512,12 +513,17 @@ const SwipeableCard = React.memo(function SwipeableCard({
     );
   };
 
+  // Create a stable click handler that passes cardId to the onClick callback
+  const handleClick = useCallback(() => {
+    onClick?.(cardId);
+  }, [onClick, cardId]);
+
   return (
     <div
       {...bind()}
       ref={cardRef}
       tabIndex={tabIndex}
-      onClick={onClick}
+      onClick={handleClick}
       className={cn(className, 'relative')}
       style={{
         ...style,
@@ -971,6 +977,19 @@ const DiscoveryQueue: React.FC = () => {
   const handleSwipeDismiss = useCallback((cardId: string) => {
     handleDismiss(cardId, 'irrelevant');
   }, [handleDismiss]);
+
+  /**
+   * Stable callback for card click action (set focused card)
+   * Used by SwipeableCard - accepts cardId parameter for stable reference pattern
+   * This prevents creating new function references per card per render
+   * Looks up the index from filteredCards at click time to handle filter changes correctly
+   */
+  const handleCardClick = useCallback((cardId: string) => {
+    const index = filteredCards.findIndex(c => c.id === cardId);
+    if (index !== -1) {
+      setFocusedCardIndex(index);
+    }
+  }, [filteredCards]);
 
   /**
    * Handle bulk action
@@ -1534,7 +1553,7 @@ const DiscoveryQueue: React.FC = () => {
                 onSwipeLeft={handleSwipeDismiss}
                 disabled={isLoading}
                 tabIndex={isFocused ? 0 : -1}
-                onClick={() => setFocusedCardIndex(index)}
+                onClick={handleCardClick}
                 className={cn(
                   'bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6 border-l-4 transition-all duration-200',
                   isFocused
