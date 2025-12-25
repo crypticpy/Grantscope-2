@@ -26,6 +26,14 @@
 export { CardDetailHeader } from './CardDetailHeader';
 export type { CardDetailHeaderProps } from './CardDetailHeader';
 
+// Export dropdown component
+export { ExportDropdown } from './ExportDropdown';
+export type { ExportDropdownProps, ExportFormat } from './ExportDropdown';
+
+// Action buttons component
+export { CardActionButtons } from './CardActionButtons';
+export type { CardActionButtonsProps } from './CardActionButtons';
+
 // Types
 export * from './types';
 
