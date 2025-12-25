@@ -649,12 +649,12 @@ const CardDetail: React.FC = () => {
           Back to Discover
         </Link>
 
-        <div className="flex items-start justify-between">
-          <div className="flex-1">
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+          <div className="flex-1 min-w-0">
             {/* Title and Primary Badges */}
-            <div className="flex items-center flex-wrap gap-3 mb-4">
-              <h1 className="text-3xl font-bold text-brand-dark-blue dark:text-white">{card.name}</h1>
-              <div className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center flex-wrap gap-3 mb-4">
+              <h1 className="text-2xl sm:text-3xl font-bold text-brand-dark-blue dark:text-white break-words">{card.name}</h1>
+              <div className="flex items-center gap-2 flex-wrap">
                 <PillarBadge
                   pillarId={card.pillar_id}
                   goalId={card.goal_id}
@@ -677,10 +677,10 @@ const CardDetail: React.FC = () => {
             </div>
 
             {/* Summary */}
-            <p className="text-lg text-gray-600 dark:text-gray-300 mb-4">{card.summary}</p>
+            <p className="text-base sm:text-lg text-gray-600 dark:text-gray-300 mb-4 break-words">{card.summary}</p>
 
             {/* Quick Info Row */}
-            <div className="flex items-center flex-wrap gap-4 text-sm">
+            <div className="flex items-center flex-wrap gap-2 sm:gap-4 text-sm">
               {stageNumber && (
                 <StageBadge
                   stage={stageNumber}
@@ -702,7 +702,8 @@ const CardDetail: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 ml-4">
+          {/* Action buttons - horizontal scroll on mobile, wrap on larger screens */}
+          <div className="flex items-center gap-2 sm:gap-3 overflow-x-auto pb-2 lg:pb-0 lg:overflow-visible lg:flex-wrap lg:justify-end -mx-4 px-4 sm:mx-0 sm:px-0">
             {/* Compare button */}
             <Tooltip
               content={
@@ -719,7 +720,7 @@ const CardDetail: React.FC = () => {
                   sessionStorage.setItem('compareCard', JSON.stringify({ id: card.id, name: card.name }));
                   navigate('/discover?compare=true');
                 }}
-                className="inline-flex items-center px-3 py-2 border border-extended-purple/30 rounded-md shadow-sm text-sm font-medium text-extended-purple bg-extended-purple/10 hover:bg-extended-purple hover:text-white transition-colors"
+                className="inline-flex items-center justify-center min-h-[44px] sm:min-h-0 px-3 py-2 border border-extended-purple/30 rounded-md shadow-sm text-sm font-medium text-extended-purple bg-extended-purple/10 hover:bg-extended-purple hover:text-white transition-colors active:scale-95"
               >
                 <ArrowLeftRight className="h-4 w-4 mr-2" />
                 Compare
@@ -739,7 +740,7 @@ const CardDetail: React.FC = () => {
               <button
                 onClick={() => triggerResearch('update')}
                 disabled={isResearching}
-                className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="inline-flex items-center justify-center min-h-[44px] sm:min-h-0 px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors active:scale-95"
               >
                 {isResearching && researchTask?.task_type === 'update' ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -765,7 +766,7 @@ const CardDetail: React.FC = () => {
               <button
                 onClick={() => triggerResearch('deep_research')}
                 disabled={isResearching || !canDeepResearch}
-                className="inline-flex items-center px-3 py-2 border border-brand-blue rounded-md shadow-sm text-sm font-medium text-white bg-brand-blue hover:bg-brand-dark-blue disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="inline-flex items-center justify-center min-h-[44px] sm:min-h-0 px-3 py-2 border border-brand-blue rounded-md shadow-sm text-sm font-medium text-white bg-brand-blue hover:bg-brand-dark-blue disabled:opacity-50 disabled:cursor-not-allowed transition-colors active:scale-95"
               >
                 {isResearching && researchTask?.task_type === 'deep_research' ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -790,7 +791,7 @@ const CardDetail: React.FC = () => {
                 <button
                   onClick={() => setShowExportDropdown(!showExportDropdown)}
                   disabled={isExporting}
-                  className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="inline-flex items-center justify-center min-h-[44px] sm:min-h-0 px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors active:scale-95"
                 >
                   {isExporting ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -807,21 +808,21 @@ const CardDetail: React.FC = () => {
                 <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-[#3d4176] rounded-md shadow-lg border border-gray-200 dark:border-gray-600 py-1 z-20">
                   <button
                     onClick={() => handleExport('pdf')}
-                    className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    className="w-full flex items-center min-h-[44px] sm:min-h-0 px-4 py-3 sm:py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors active:bg-gray-200 dark:active:bg-gray-600"
                   >
                     <FileText className="h-4 w-4 mr-3 text-red-500" />
                     Export as PDF
                   </button>
                   <button
                     onClick={() => handleExport('pptx')}
-                    className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    className="w-full flex items-center min-h-[44px] sm:min-h-0 px-4 py-3 sm:py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors active:bg-gray-200 dark:active:bg-gray-600"
                   >
                     <Presentation className="h-4 w-4 mr-3 text-orange-500" />
                     Export as PowerPoint
                   </button>
                   <button
                     onClick={() => handleExport('csv')}
-                    className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    className="w-full flex items-center min-h-[44px] sm:min-h-0 px-4 py-3 sm:py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors active:bg-gray-200 dark:active:bg-gray-600"
                   >
                     <FileSpreadsheet className="h-4 w-4 mr-3 text-green-500" />
                     Export as CSV
@@ -832,7 +833,7 @@ const CardDetail: React.FC = () => {
 
             <button
               onClick={toggleFollow}
-              className={`inline-flex items-center px-4 py-2 border rounded-md shadow-sm text-sm font-medium transition-colors ${
+              className={`inline-flex items-center justify-center min-h-[44px] sm:min-h-0 px-4 py-2 border rounded-md shadow-sm text-sm font-medium transition-colors active:scale-95 ${
                 isFollowing
                   ? 'border-red-300 text-red-700 bg-red-50 hover:bg-red-100'
                   : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'
@@ -969,7 +970,7 @@ const CardDetail: React.FC = () => {
                     )}
                   </button>
                 </div>
-                <div className="prose prose-sm dark:prose-invert max-w-none max-h-[500px] overflow-y-auto p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                <div className="prose prose-sm dark:prose-invert max-w-none max-h-[70vh] sm:max-h-[500px] overflow-y-auto overflow-x-hidden p-3 sm:p-4 bg-gray-50 dark:bg-gray-800 rounded-lg break-words">
                   <ReactMarkdown
                     components={{
                       // Style links
@@ -1003,9 +1004,9 @@ const CardDetail: React.FC = () => {
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="border-b border-gray-200 dark:border-gray-700 mb-8">
-        <nav className="-mb-px flex space-x-8" role="tablist">
+      {/* Tabs - horizontally scrollable on mobile */}
+      <div className="border-b border-gray-200 dark:border-gray-700 mb-6 sm:mb-8 -mx-4 px-4 sm:mx-0 sm:px-0">
+        <nav className="-mb-px flex space-x-4 sm:space-x-8 overflow-x-auto scrollbar-hide" role="tablist">
           {[
             { id: 'overview', name: 'Overview', icon: Eye },
             { id: 'sources', name: 'Sources', icon: FileText },
@@ -1020,7 +1021,7 @@ const CardDetail: React.FC = () => {
                 onClick={() => setActiveTab(tab.id as any)}
                 role="tab"
                 aria-selected={activeTab === tab.id}
-                className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center transition-colors ${
+                className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center whitespace-nowrap transition-colors flex-shrink-0 ${
                   activeTab === tab.id
                     ? 'border-brand-blue text-brand-blue'
                     : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
@@ -1036,22 +1037,22 @@ const CardDetail: React.FC = () => {
 
       {/* Tab Content */}
       {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
           {/* Main Content */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-4 sm:space-y-6">
             {/* Description */}
-            <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Description</h2>
-              <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{card.description}</p>
+            <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6">
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white mb-3 sm:mb-4">Description</h2>
+              <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words text-sm sm:text-base">{card.description}</p>
             </div>
 
             {/* Classification Section */}
-            <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Classification</h2>
-              <div className="space-y-4">
+            <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6">
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white mb-3 sm:mb-4">Classification</h2>
+              <div className="space-y-3 sm:space-y-4">
                 {/* Pillar & Goal */}
-                <div className="flex items-start gap-4">
-                  <div className="w-24 text-sm font-medium text-gray-500 shrink-0">Pillar</div>
+                <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4">
+                  <div className="w-auto sm:w-24 text-xs sm:text-sm font-medium text-gray-500 shrink-0">Pillar</div>
                   <div className="flex-1">
                     <PillarBadge
                       pillarId={card.pillar_id}
@@ -1064,22 +1065,22 @@ const CardDetail: React.FC = () => {
 
                 {/* Goal */}
                 {goal && (
-                  <div className="flex items-start gap-4">
-                    <div className="w-24 text-sm font-medium text-gray-500 shrink-0">Goal</div>
+                  <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4">
+                    <div className="w-auto sm:w-24 text-xs sm:text-sm font-medium text-gray-500 shrink-0">Goal</div>
                     <div className="flex-1">
-                      <span className="inline-flex items-center gap-2 text-sm text-gray-700">
-                        <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                      <span className="inline-flex items-center flex-wrap gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
                           {goal.code}
                         </span>
-                        {goal.name}
+                        <span className="break-words">{goal.name}</span>
                       </span>
                     </div>
                   </div>
                 )}
 
                 {/* Anchor */}
-                <div className="flex items-start gap-4">
-                  <div className="w-24 text-sm font-medium text-gray-500 shrink-0">Anchor</div>
+                <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4">
+                  <div className="w-auto sm:w-24 text-xs sm:text-sm font-medium text-gray-500 shrink-0">Anchor</div>
                   <div className="flex-1">
                     {card.anchor_id ? (
                       <AnchorBadge
@@ -1093,8 +1094,8 @@ const CardDetail: React.FC = () => {
                 </div>
 
                 {/* Stage */}
-                <div className="flex items-start gap-4">
-                  <div className="w-24 text-sm font-medium text-gray-500 shrink-0">Stage</div>
+                <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4">
+                  <div className="w-auto sm:w-24 text-xs sm:text-sm font-medium text-gray-500 shrink-0">Stage</div>
                   <div className="flex-1 space-y-2">
                     {stageNumber ? (
                       <>
@@ -1104,7 +1105,7 @@ const CardDetail: React.FC = () => {
                           showName
                           size="md"
                         />
-                        <div className="max-w-xs">
+                        <div className="max-w-full sm:max-w-full sm:max-w-xs">
                           <StageProgress stage={stageNumber} showLabels />
                         </div>
                         {/* Stage Progression Timeline */}
@@ -1130,8 +1131,8 @@ const CardDetail: React.FC = () => {
                 </div>
 
                 {/* Horizon */}
-                <div className="flex items-start gap-4">
-                  <div className="w-24 text-sm font-medium text-gray-500 shrink-0">Horizon</div>
+                <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4">
+                  <div className="w-auto sm:w-24 text-xs sm:text-sm font-medium text-gray-500 shrink-0">Horizon</div>
                   <div className="flex-1">
                     <HorizonBadge
                       horizon={card.horizon}
@@ -1142,8 +1143,8 @@ const CardDetail: React.FC = () => {
                 </div>
 
                 {/* Top 25 */}
-                <div className="flex items-start gap-4">
-                  <div className="w-24 text-sm font-medium text-gray-500 shrink-0">Top 25</div>
+                <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4">
+                  <div className="w-auto sm:w-24 text-xs sm:text-sm font-medium text-gray-500 shrink-0">Top 25</div>
                   <div className="flex-1">
                     {card.top25_relevance && card.top25_relevance.length > 0 ? (
                       <Top25List
@@ -1170,8 +1171,8 @@ const CardDetail: React.FC = () => {
 
             {/* Research History */}
             {researchHistory.length > 0 && (
-              <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6">
+                <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white mb-3 sm:mb-4 flex items-center gap-2">
                   <Search className="h-5 w-5 text-brand-blue" />
                   Research History
                 </h2>
@@ -1184,9 +1185,9 @@ const CardDetail: React.FC = () => {
                       {/* Task header - always visible */}
                       <button
                         onClick={() => setExpandedReportId(expandedReportId === task.id ? null : task.id)}
-                        className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                        className="w-full px-3 sm:px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors min-h-[48px] touch-manipulation"
                       >
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                           <span className={cn(
                             'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium',
                             task.task_type === 'deep_research'
@@ -1195,7 +1196,7 @@ const CardDetail: React.FC = () => {
                           )}>
                             {task.task_type === 'deep_research' ? 'Deep Research' : 'Update'}
                           </span>
-                          <span className="text-sm text-gray-600 dark:text-gray-300">
+                          <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">
                             {task.completed_at
                               ? new Date(task.completed_at).toLocaleDateString('en-US', {
                                   month: 'short',
@@ -1207,15 +1208,15 @@ const CardDetail: React.FC = () => {
                               : 'Unknown date'}
                           </span>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3">
                           <span className="text-xs text-gray-500 dark:text-gray-400">
-                            {task.result_summary?.sources_found || 0} sources found
+                            {task.result_summary?.sources_found || 0} found
                             {task.result_summary?.sources_added ? ` → ${task.result_summary.sources_added} added` : ''}
                           </span>
                           {expandedReportId === task.id ? (
-                            <ChevronUp className="h-4 w-4 text-gray-400" />
+                            <ChevronUp className="h-5 w-5 sm:h-4 sm:w-4 text-gray-400" />
                           ) : (
-                            <ChevronDown className="h-4 w-4 text-gray-400" />
+                            <ChevronDown className="h-5 w-5 sm:h-4 sm:w-4 text-gray-400" />
                           )}
                         </div>
                       </button>
@@ -1236,7 +1237,7 @@ const CardDetail: React.FC = () => {
                               Copy
                             </button>
                           </div>
-                          <div className="prose prose-sm dark:prose-invert max-w-none max-h-[400px] overflow-y-auto p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                          <div className="prose prose-sm dark:prose-invert max-w-none max-h-[60vh] sm:max-h-[400px] overflow-y-auto overflow-x-hidden p-3 bg-gray-50 dark:bg-gray-800 rounded-lg break-words">
                             <ReactMarkdown
                               components={{
                                 a: ({ node, ...props }) => (
@@ -1267,10 +1268,10 @@ const CardDetail: React.FC = () => {
             )}
           </div>
 
-          {/* Sidebar - Scores */}
-          <div className="space-y-6">
+          {/* Sidebar - Scores (stacks below main content on mobile) */}
+          <div className="space-y-4 sm:space-y-6">
             {/* Impact Metrics */}
-            <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
+            <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Impact Metrics</h3>
                 <Tooltip
@@ -1333,12 +1334,12 @@ const CardDetail: React.FC = () => {
             </div>
 
             {/* Maturity Score */}
-            <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
+            <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6">
               <div className="flex items-center gap-2 mb-4">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Maturity</h3>
                 <Tooltip
                   content={
-                    <div className="space-y-2 max-w-xs">
+                    <div className="space-y-2 max-w-full sm:max-w-xs">
                       <div className="font-semibold text-gray-900 dark:text-white">Maturity Score</div>
                       <p className="text-sm text-gray-600 dark:text-gray-300">
                         Indicates how developed and established this technology or trend is. Higher scores mean more mature,
@@ -1390,7 +1391,7 @@ const CardDetail: React.FC = () => {
             </div>
 
             {/* Quick Stats */}
-            <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
+            <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Activity</h3>
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between">
@@ -1520,8 +1521,8 @@ const CardDetail: React.FC = () => {
                 : null;
 
               return (
-                <div key={source.id} className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 border-l-4 border-transparent transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-l-brand-blue">
-                  <div className="flex items-start justify-between">
+                <div key={source.id} className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6 border-l-4 border-transparent transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-l-brand-blue">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
                     <div className="flex-1 min-w-0">
                       {/* Title as link */}
                       {source.url ? (
@@ -1529,7 +1530,7 @@ const CardDetail: React.FC = () => {
                           href={source.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-lg font-medium text-brand-blue hover:text-brand-dark-blue hover:underline mb-2 block"
+                          className="text-base sm:text-lg font-medium text-brand-blue hover:text-brand-dark-blue hover:underline mb-2 block break-words"
                         >
                           {source.title}
                           <ExternalLink className="h-4 w-4 inline ml-2 opacity-50" />
@@ -1573,8 +1574,8 @@ const CardDetail: React.FC = () => {
                     </div>
 
                     {/* Relevance score badge */}
-                    <div className="ml-4 flex-shrink-0">
-                      <div className="flex flex-col items-end gap-1">
+                    <div className="sm:ml-4 flex-shrink-0 self-start sm:self-auto">
+                      <div className="flex flex-row sm:flex-col items-center sm:items-end gap-2 sm:gap-1">
                         <span
                           className={cn(
                             'inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border',
@@ -1615,7 +1616,7 @@ const CardDetail: React.FC = () => {
 
                 return (
                   <div key={event.id} className={cn(
-                    "p-6",
+                    "p-4 sm:p-6",
                     isDeepResearch && "bg-gradient-to-r from-brand-light-blue/10 to-transparent"
                   )}>
                     <div className="flex items-start">
@@ -1628,14 +1629,14 @@ const CardDetail: React.FC = () => {
                           <Calendar className="h-5 w-5 text-gray-400" />
                         )}
                       </div>
-                      <div className="ml-3 flex-1">
-                        <div className="flex items-center gap-2">
+                      <div className="ml-3 flex-1 min-w-0">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
                           <h3 className={cn(
-                            "font-medium text-gray-900 dark:text-white",
+                            "font-medium text-gray-900 dark:text-white break-words",
                             isDeepResearch ? "text-base" : "text-sm"
                           )}>{event.title}</h3>
                           {isDeepResearch && (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gradient-to-r from-brand-blue to-extended-purple text-white shadow-sm">
+                            <span className="inline-flex items-center px-2 sm:px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gradient-to-r from-brand-blue to-extended-purple text-white shadow-sm w-fit">
                               Strategic Intelligence Report
                             </span>
                           )}
@@ -1697,22 +1698,22 @@ const CardDetail: React.FC = () => {
                             {isExpanded && (
                               <div className="mt-4 rounded-xl border-2 border-brand-blue/20 overflow-hidden">
                                 {/* Report Header */}
-                                <div className="bg-gradient-to-r from-brand-blue to-extended-purple p-4">
-                                  <div className="flex items-center gap-3 text-white">
-                                    <FileText className="h-6 w-6" />
-                                    <div>
-                                      <h4 className="font-bold text-lg">Strategic Intelligence Report</h4>
-                                      <p className="text-white/80 text-sm">Generated {new Date(event.created_at).toLocaleDateString()}</p>
+                                <div className="bg-gradient-to-r from-brand-blue to-extended-purple p-3 sm:p-4">
+                                  <div className="flex items-center gap-2 sm:gap-3 text-white">
+                                    <FileText className="h-5 w-5 sm:h-6 sm:w-6 flex-shrink-0" />
+                                    <div className="min-w-0">
+                                      <h4 className="font-bold text-base sm:text-lg">Strategic Intelligence Report</h4>
+                                      <p className="text-white/80 text-xs sm:text-sm">Generated {new Date(event.created_at).toLocaleDateString()}</p>
                                     </div>
                                   </div>
                                 </div>
 
                                 {/* Report Content */}
-                                <div className="p-6 bg-white dark:bg-[#1d2156] max-h-[80vh] overflow-y-auto">
-                                  <div className="prose prose-sm dark:prose-invert max-w-none
+                                <div className="p-4 sm:p-6 bg-white dark:bg-[#1d2156] max-h-[70vh] sm:max-h-[80vh] overflow-y-auto overflow-x-hidden">
+                                  <div className="prose prose-sm dark:prose-invert max-w-none break-words
                                     prose-headings:text-brand-dark-blue dark:prose-headings:text-white
-                                    prose-h2:text-lg prose-h2:font-bold prose-h2:border-b prose-h2:border-gray-200 dark:prose-h2:border-gray-700 prose-h2:pb-2 prose-h2:mb-4 prose-h2:mt-6
-                                    prose-h3:text-base prose-h3:font-semibold
+                                    prose-h2:text-base prose-h2:sm:text-lg prose-h2:font-bold prose-h2:border-b prose-h2:border-gray-200 dark:prose-h2:border-gray-700 prose-h2:pb-2 prose-h2:mb-4 prose-h2:mt-6
+                                    prose-h3:text-sm prose-h3:sm:text-base prose-h3:font-semibold
                                     prose-strong:text-brand-dark-blue dark:prose-strong:text-brand-light-blue
                                     prose-ul:my-2 prose-li:my-0.5
                                     prose-p:text-gray-700 dark:prose-p:text-gray-300
@@ -1742,9 +1743,9 @@ const CardDetail: React.FC = () => {
       )}
 
       {activeTab === 'notes' && (
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           {/* Add Note */}
-          <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
+          <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Add Note</h3>
             <div className="space-y-4">
               <textarea
@@ -1776,10 +1777,10 @@ const CardDetail: React.FC = () => {
               </div>
             ) : (
               notes.map((note) => (
-                <div key={note.id} className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 border-l-4 border-transparent transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-l-brand-blue">
-                  <p className="text-gray-700 dark:text-gray-300 mb-3">{note.content}</p>
-                  <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
-                    <span>{new Date(note.created_at).toLocaleString()}</span>
+                <div key={note.id} className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6 border-l-4 border-transparent transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-l-brand-blue">
+                  <p className="text-gray-700 dark:text-gray-300 mb-3 break-words">{note.content}</p>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm text-gray-500 dark:text-gray-400">
+                    <span className="text-xs sm:text-sm">{new Date(note.created_at).toLocaleString()}</span>
                     {note.is_private && (
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200">
                         Private

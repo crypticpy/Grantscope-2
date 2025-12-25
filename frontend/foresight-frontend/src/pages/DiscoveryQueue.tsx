@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
+import { useIsMobile } from '../hooks/use-mobile';
 import { PillarBadge } from '../components/PillarBadge';
 import { HorizonBadge } from '../components/HorizonBadge';
 import { StageBadge } from '../components/StageBadge';
@@ -242,8 +243,35 @@ function ImpactScoreBadge({
 }
 
 /**
+ * Mobile-optimized swipe configuration constants
+ * Higher thresholds on mobile prevent accidental triggers during vertical scrolling
+ */
+const SWIPE_CONFIG = {
+  /** Minimum swipe distance for mobile (higher to prevent accidental triggers) */
+  mobileDistance: 80,
+  /** Minimum swipe distance for desktop */
+  desktopDistance: 50,
+  /** Minimum velocity threshold for swipe detection */
+  velocity: 0.3,
+  /** Maximum angle from horizontal (in degrees) to count as a swipe */
+  maxAngle: 30,
+  /** Offset threshold to show visual feedback */
+  feedbackThreshold: 25,
+  /** Offset threshold to show "will trigger" state */
+  triggerThreshold: 60,
+  /** Damping factor for card movement (0-1, lower = more resistance) */
+  damping: 0.4,
+} as const;
+
+/**
  * SwipeableCard wrapper component for touch gesture support
  * Handles swipe left (dismiss) and swipe right (follow) gestures
+ *
+ * Mobile Optimizations:
+ * - Higher swipe distance threshold prevents accidental triggers
+ * - Angle detection distinguishes swipes from vertical scrolling
+ * - Enhanced visual feedback with direction icons
+ * - Threshold indicators show when swipe will trigger
  */
 interface SwipeableCardProps {
   cardId: string;
@@ -256,6 +284,8 @@ interface SwipeableCardProps {
   tabIndex?: number;
   onClick?: () => void;
   cardRef?: (el: HTMLDivElement | null) => void;
+  /** Whether we're on a mobile device (affects swipe thresholds) */
+  isMobile?: boolean;
 }
 
 function SwipeableCard({
@@ -269,64 +299,173 @@ function SwipeableCard({
   tabIndex,
   onClick,
   cardRef,
+  isMobile = false,
 }: SwipeableCardProps) {
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
+  const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);
+  const [willTrigger, setWillTrigger] = useState(false);
+
+  // Use mobile or desktop distance threshold
+  const swipeDistance = isMobile ? SWIPE_CONFIG.mobileDistance : SWIPE_CONFIG.desktopDistance;
 
   const bind = useDrag(
-    ({ swipe: [swipeX], movement: [mx], dragging, tap }) => {
+    ({ movement: [mx, my], dragging, tap, velocity: [vx], direction: [dx] }) => {
       // Ignore taps - let regular click handlers work
       if (tap) return;
 
       // Don't process gestures when disabled (e.g., during loading)
       if (disabled) return;
 
+      // Calculate swipe angle to filter out vertical scrolling attempts
+      // Only process if the gesture is mostly horizontal
+      const absX = Math.abs(mx);
+      const absY = Math.abs(my);
+      const angle = Math.atan2(absY, absX) * (180 / Math.PI);
+
+      // If angle is too steep (vertical gesture), don't track as swipe
+      if (angle > SWIPE_CONFIG.maxAngle && absX < SWIPE_CONFIG.feedbackThreshold) {
+        if (isSwiping) {
+          setIsSwiping(false);
+          setSwipeOffset(0);
+          setSwipeDirection(null);
+          setWillTrigger(false);
+        }
+        return;
+      }
+
       // Update visual feedback during drag
       if (dragging) {
         setIsSwiping(true);
         setSwipeOffset(mx);
+
+        // Determine direction
+        if (mx < -SWIPE_CONFIG.feedbackThreshold) {
+          setSwipeDirection('left');
+          setWillTrigger(Math.abs(mx) >= swipeDistance);
+        } else if (mx > SWIPE_CONFIG.feedbackThreshold) {
+          setSwipeDirection('right');
+          setWillTrigger(mx >= swipeDistance);
+        } else {
+          setSwipeDirection(null);
+          setWillTrigger(false);
+        }
         return;
       }
 
       // Reset visual state when drag ends
       setIsSwiping(false);
       setSwipeOffset(0);
+      setSwipeDirection(null);
+      setWillTrigger(false);
 
-      // Process swipe action based on direction
-      if (swipeX === -1) {
-        onSwipeLeft();
-      } else if (swipeX === 1) {
-        onSwipeRight();
+      // Check if swipe meets distance and velocity thresholds
+      const meetsDistanceThreshold = Math.abs(mx) >= swipeDistance;
+      const meetsVelocityThreshold = Math.abs(vx) >= SWIPE_CONFIG.velocity;
+
+      // Trigger action if either threshold is met
+      if (meetsDistanceThreshold || meetsVelocityThreshold) {
+        if (dx < 0 && mx < 0) {
+          onSwipeLeft();
+        } else if (dx > 0 && mx > 0) {
+          onSwipeRight();
+        }
       }
     },
     {
-      swipe: {
-        distance: 50, // Minimum 50px swipe distance prevents accidents
-        velocity: 0.3, // Minimum velocity for swipe detection
-      },
       filterTaps: true, // Distinguish clicks from drags
-      axis: 'x', // Only track horizontal movement
+      axis: 'lock', // Lock to first detected axis, helps with scroll vs swipe
+      pointer: { touch: true }, // Optimize for touch
+      threshold: 10, // Minimum movement before tracking starts
     }
   );
 
-  // Calculate swipe visual feedback colors
-  const getSwipeIndicator = () => {
-    if (!isSwiping || Math.abs(swipeOffset) < 20) return {};
+  // Calculate swipe visual feedback styles
+  const getSwipeStyles = (): React.CSSProperties => {
+    if (!isSwiping || Math.abs(swipeOffset) < SWIPE_CONFIG.feedbackThreshold) {
+      return {};
+    }
 
-    if (swipeOffset < -20) {
+    // Calculate normalized intensity (0-1) based on progress toward trigger threshold
+    const progress = Math.min(Math.abs(swipeOffset) / swipeDistance, 1);
+    const intensity = progress * 0.4; // Max 40% opacity
+
+    if (swipeOffset < -SWIPE_CONFIG.feedbackThreshold) {
       // Swiping left - dismiss (red indicator)
-      const intensity = Math.min(Math.abs(swipeOffset) / 100, 0.3);
       return {
-        boxShadow: `inset -4px 0 0 0 rgba(239, 68, 68, ${intensity})`,
+        boxShadow: willTrigger
+          ? `inset -6px 0 0 0 rgba(239, 68, 68, 0.5), 0 0 20px rgba(239, 68, 68, 0.2)`
+          : `inset -4px 0 0 0 rgba(239, 68, 68, ${intensity})`,
+        backgroundColor: willTrigger ? 'rgba(239, 68, 68, 0.05)' : undefined,
       };
-    } else if (swipeOffset > 20) {
+    } else if (swipeOffset > SWIPE_CONFIG.feedbackThreshold) {
       // Swiping right - follow (green indicator)
-      const intensity = Math.min(swipeOffset / 100, 0.3);
       return {
-        boxShadow: `inset 4px 0 0 0 rgba(34, 197, 94, ${intensity})`,
+        boxShadow: willTrigger
+          ? `inset 6px 0 0 0 rgba(34, 197, 94, 0.5), 0 0 20px rgba(34, 197, 94, 0.2)`
+          : `inset 4px 0 0 0 rgba(34, 197, 94, ${intensity})`,
+        backgroundColor: willTrigger ? 'rgba(34, 197, 94, 0.05)' : undefined,
       };
     }
     return {};
+  };
+
+  // Render swipe direction indicator overlays
+  const renderSwipeIndicators = () => {
+    if (!isSwiping || !swipeDirection) return null;
+
+    const progress = Math.min(Math.abs(swipeOffset) / swipeDistance, 1);
+    const opacity = 0.3 + (progress * 0.5); // 30% to 80% opacity
+
+    return (
+      <>
+        {/* Left swipe indicator (dismiss) */}
+        {swipeDirection === 'left' && (
+          <div
+            className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none z-10"
+            style={{ opacity }}
+          >
+            <span className={cn(
+              'text-xs font-medium transition-all',
+              willTrigger ? 'text-red-600 dark:text-red-400' : 'text-red-400 dark:text-red-500'
+            )}>
+              {willTrigger ? 'Release to dismiss' : 'Dismiss'}
+            </span>
+            <div className={cn(
+              'p-1.5 rounded-full transition-all',
+              willTrigger
+                ? 'bg-red-500 text-white scale-110'
+                : 'bg-red-100 dark:bg-red-900/30 text-red-500 dark:text-red-400'
+            )}>
+              <XCircle className="h-4 w-4" />
+            </div>
+          </div>
+        )}
+
+        {/* Right swipe indicator (follow/approve) */}
+        {swipeDirection === 'right' && (
+          <div
+            className="absolute left-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none z-10"
+            style={{ opacity }}
+          >
+            <div className={cn(
+              'p-1.5 rounded-full transition-all',
+              willTrigger
+                ? 'bg-green-500 text-white scale-110'
+                : 'bg-green-100 dark:bg-green-900/30 text-green-500 dark:text-green-400'
+            )}>
+              <CheckCircle className="h-4 w-4" />
+            </div>
+            <span className={cn(
+              'text-xs font-medium transition-all',
+              willTrigger ? 'text-green-600 dark:text-green-400' : 'text-green-400 dark:text-green-500'
+            )}>
+              {willTrigger ? 'Release to approve' : 'Approve'}
+            </span>
+          </div>
+        )}
+      </>
+    );
   };
 
   return (
@@ -335,15 +474,16 @@ function SwipeableCard({
       ref={cardRef}
       tabIndex={tabIndex}
       onClick={onClick}
-      className={className}
+      className={cn(className, 'relative')}
       style={{
         ...style,
-        touchAction: 'pan-y', // Allow vertical scroll, but capture horizontal
-        transform: isSwiping ? `translateX(${swipeOffset * 0.3}px)` : undefined,
-        transition: isSwiping ? 'none' : 'transform 0.2s ease-out',
-        ...getSwipeIndicator(),
+        touchAction: 'pan-y pinch-zoom', // Allow vertical scroll and pinch zoom
+        transform: isSwiping ? `translateX(${swipeOffset * SWIPE_CONFIG.damping}px)` : undefined,
+        transition: isSwiping ? 'none' : 'transform 0.2s ease-out, box-shadow 0.2s ease-out',
+        ...getSwipeStyles(),
       }}
     >
+      {renderSwipeIndicators()}
       {children}
     </div>
   );
@@ -381,9 +521,10 @@ function UndoToast({ action, onUndo, onDismiss, timeRemaining }: UndoToastProps)
   const { verb, icon } = getActionDescription(action);
   const progressPercent = Math.max(0, (timeRemaining / UNDO_TIMEOUT_MS) * 100);
 
-  // Truncate card name if too long
-  const cardName = action.card.name.length > 40
-    ? `${action.card.name.substring(0, 37)}...`
+  // Truncate card name based on screen size (shorter on mobile)
+  const maxLength = typeof window !== 'undefined' && window.innerWidth < 640 ? 20 : 40;
+  const cardName = action.card.name.length > maxLength
+    ? `${action.card.name.substring(0, maxLength - 3)}...`
     : action.card.name;
 
   return (
@@ -391,8 +532,8 @@ function UndoToast({ action, onUndo, onDismiss, timeRemaining }: UndoToastProps)
       role="alert"
       aria-live="polite"
       className={cn(
-        'fixed bottom-6 left-1/2 -translate-x-1/2 z-50',
-        'flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg',
+        'fixed bottom-4 sm:bottom-6 left-3 right-3 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-50',
+        'flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg shadow-lg',
         'bg-white dark:bg-[#3d4176] border border-gray-200 dark:border-gray-600',
         'animate-in slide-in-from-bottom-4 fade-in duration-200'
       )}
@@ -401,31 +542,33 @@ function UndoToast({ action, onUndo, onDismiss, timeRemaining }: UndoToastProps)
       {icon}
 
       {/* Message */}
-      <span className="text-sm text-gray-700 dark:text-gray-200">
-        Card <span className="font-medium">&quot;{cardName}&quot;</span> {verb}
+      <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-200 flex-1 min-w-0 truncate">
+        <span className="font-medium">&quot;{cardName}&quot;</span> {verb}
       </span>
 
-      {/* Undo Button */}
+      {/* Undo Button - min 44px touch target */}
       <button
         onClick={onUndo}
         className={cn(
-          'inline-flex items-center gap-1.5 px-3 py-1.5 ml-2',
-          'text-sm font-medium rounded-md transition-colors',
+          'inline-flex items-center justify-center gap-1 sm:gap-1.5 px-3 sm:px-3 py-2.5 sm:py-1.5',
+          'min-h-[44px] min-w-[44px]',
+          'text-xs sm:text-sm font-medium rounded-md transition-colors flex-shrink-0',
           'bg-brand-blue/10 text-brand-blue hover:bg-brand-blue/20',
-          'dark:bg-brand-blue/20 dark:hover:bg-brand-blue/30'
+          'dark:bg-brand-blue/20 dark:hover:bg-brand-blue/30',
+          'active:scale-95'
         )}
       >
-        <Undo2 className="h-3.5 w-3.5" />
+        <Undo2 className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
         Undo
       </button>
 
-      {/* Close Button */}
+      {/* Close Button - min 44px touch target */}
       <button
         onClick={onDismiss}
-        className="p-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+        className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors flex-shrink-0 active:scale-95"
         aria-label="Dismiss notification"
       >
-        <X className="h-4 w-4" />
+        <X className="h-5 w-5" />
       </button>
 
       {/* Progress bar showing time remaining */}
@@ -441,6 +584,7 @@ function UndoToast({ action, onUndo, onDismiss, timeRemaining }: UndoToastProps)
 
 const DiscoveryQueue: React.FC = () => {
   const { user } = useAuthContext();
+  const isMobile = useIsMobile();
   const [cards, setCards] = useState<PendingCard[]>([]);
   const [pillars, setPillars] = useState<Pillar[]>([]);
   const [loading, setLoading] = useState(true);
@@ -987,53 +1131,55 @@ const DiscoveryQueue: React.FC = () => {
   }, [filteredCards.length, focusedCardIndex]);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
       {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-brand-dark-blue dark:text-white flex items-center gap-3">
-              <Sparkles className="h-8 w-8 text-brand-blue" />
-              Discovery Queue
+      <div className="mb-6 sm:mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-2xl sm:text-3xl font-bold text-brand-dark-blue dark:text-white flex items-center gap-2 sm:gap-3">
+              <Sparkles className="h-6 w-6 sm:h-8 sm:w-8 text-brand-blue flex-shrink-0" />
+              <span className="truncate">Discovery Queue</span>
             </h1>
-            <p className="mt-2 text-gray-600 dark:text-gray-400">
+            <p className="mt-1 sm:mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400">
               Review AI-discovered cards before they're added to the intelligence library.
             </p>
           </div>
           <button
             onClick={loadData}
             disabled={loading}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue disabled:opacity-50 transition-colors"
+            className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] px-3 sm:px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue disabled:opacity-50 transition-colors flex-shrink-0 active:scale-95"
           >
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
+            <RefreshCw className={`h-5 w-5 sm:h-4 sm:w-4 ${loading ? 'animate-spin' : ''} ${isMobile ? '' : 'mr-2'}`} />
+            {!isMobile && 'Refresh'}
           </button>
         </div>
 
-        {/* Stats Chips */}
-        <div className="mt-4 flex items-center gap-3 flex-wrap">
-          <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
-            <Inbox className="h-4 w-4 mr-1.5" />
-            {stats.total} Pending
-          </span>
-          {stats.high > 0 && (
-            <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
-              <CheckCircle className="h-4 w-4 mr-1.5" />
-              {stats.high} High Confidence
+        {/* Stats Chips - horizontally scrollable on mobile */}
+        <div className="mt-3 sm:mt-4 -mx-3 px-3 sm:mx-0 sm:px-0 overflow-x-auto scrollbar-hide">
+          <div className="flex items-center gap-2 sm:gap-3 flex-nowrap sm:flex-wrap min-w-max sm:min-w-0">
+            <span className="inline-flex items-center px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 whitespace-nowrap">
+              <Inbox className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1 sm:mr-1.5" />
+              {stats.total} Pending
             </span>
-          )}
-          {stats.medium > 0 && (
-            <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300">
-              <AlertTriangle className="h-4 w-4 mr-1.5" />
-              {stats.medium} Medium
-            </span>
-          )}
-          {stats.low > 0 && (
-            <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300">
-              <XCircle className="h-4 w-4 mr-1.5" />
-              {stats.low} Low
-            </span>
-          )}
+            {stats.high > 0 && (
+              <span className="inline-flex items-center px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 whitespace-nowrap">
+                <CheckCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1 sm:mr-1.5" />
+                {stats.high} High
+              </span>
+            )}
+            {stats.medium > 0 && (
+              <span className="inline-flex items-center px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 whitespace-nowrap">
+                <AlertTriangle className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1 sm:mr-1.5" />
+                {stats.medium} Med
+              </span>
+            )}
+            {stats.low > 0 && (
+              <span className="inline-flex items-center px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 whitespace-nowrap">
+                <XCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1 sm:mr-1.5" />
+                {stats.low} Low
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Progress Indicator */}
@@ -1077,10 +1223,10 @@ const DiscoveryQueue: React.FC = () => {
       )}
 
       {/* Filters */}
-      <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6 mb-4 sm:mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {/* Search */}
-          <div className="lg:col-span-2">
+          <div className="sm:col-span-2 lg:col-span-2">
             <label htmlFor="search" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Search
             </label>
@@ -1089,7 +1235,7 @@ const DiscoveryQueue: React.FC = () => {
               <input
                 type="text"
                 id="search"
-                className="pl-10 block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                className="pl-10 block w-full min-h-[44px] sm:min-h-0 border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue text-base sm:text-sm"
                 placeholder="Search pending cards..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -1100,11 +1246,11 @@ const DiscoveryQueue: React.FC = () => {
           {/* Pillar Filter */}
           <div>
             <label htmlFor="pillar" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Strategic Pillar
+              Pillar
             </label>
             <select
               id="pillar"
-              className="block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+              className="block w-full min-h-[44px] sm:min-h-0 border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue text-base sm:text-sm"
               value={selectedPillar}
               onChange={(e) => setSelectedPillar(e.target.value)}
             >
@@ -1120,11 +1266,11 @@ const DiscoveryQueue: React.FC = () => {
           {/* Confidence Filter */}
           <div>
             <label htmlFor="confidence" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              AI Confidence
+              Confidence
             </label>
             <select
               id="confidence"
-              className="block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+              className="block w-full min-h-[44px] sm:min-h-0 border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue text-base sm:text-sm"
               value={confidenceFilter}
               onChange={(e) => setConfidenceFilter(e.target.value as ConfidenceFilter)}
             >
@@ -1137,15 +1283,15 @@ const DiscoveryQueue: React.FC = () => {
         </div>
 
         {/* Selection Controls */}
-        <div className="mt-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Showing {filteredCards.length} of {cards.length} cards
+        <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
+            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+              {filteredCards.length} of {cards.length} cards
             </p>
             {filteredCards.length > 0 && (
               <button
                 onClick={selectedCards.size === filteredCards.length ? clearSelection : selectAllVisible}
-                className="text-sm text-brand-blue hover:text-brand-dark-blue dark:hover:text-brand-light-blue transition-colors"
+                className="min-h-[44px] px-2 py-2 -my-2 text-xs sm:text-sm text-brand-blue hover:text-brand-dark-blue dark:hover:text-brand-light-blue transition-colors active:scale-95"
               >
                 {selectedCards.size === filteredCards.length ? 'Deselect All' : 'Select All'}
               </button>
@@ -1154,8 +1300,8 @@ const DiscoveryQueue: React.FC = () => {
         </div>
       </div>
 
-      {/* Keyboard Shortcuts Hint - shown when cards exist and not in bulk mode */}
-      {!showBulkActions && filteredCards.length > 0 && (
+      {/* Keyboard Shortcuts Hint - hidden on mobile (touch users swipe instead) */}
+      {!isMobile && !showBulkActions && filteredCards.length > 0 && (
         <div className="mb-4 px-4 py-2 bg-gray-50 dark:bg-[#2d3166]/50 rounded-lg border border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-center gap-6 text-xs text-gray-500 dark:text-gray-400">
             <span className="flex items-center gap-1.5">
@@ -1179,35 +1325,46 @@ const DiscoveryQueue: React.FC = () => {
         </div>
       )}
 
+      {/* Mobile Swipe Hint - shown on mobile only */}
+      {isMobile && filteredCards.length > 0 && !showBulkActions && (
+        <div className="mb-3 px-3 py-2 bg-gray-50 dark:bg-[#2d3166]/50 rounded-lg border border-gray-200 dark:border-gray-700">
+          <p className="text-xs text-center text-gray-500 dark:text-gray-400">
+            Swipe right to approve • Swipe left to dismiss
+          </p>
+        </div>
+      )}
+
       {/* Bulk Actions Bar */}
       {showBulkActions && (
-        <div className="mb-6 p-4 bg-brand-light-blue dark:bg-brand-blue/20 border border-brand-blue/20 rounded-lg flex items-center justify-between">
-          <span className="text-sm font-medium text-brand-dark-blue dark:text-brand-light-blue">
-            {selectedCards.size} card{selectedCards.size !== 1 ? 's' : ''} selected
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => handleBulkAction('approve')}
-              disabled={actionLoading === 'bulk'}
-              className="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
-            >
-              <CheckCircle className="h-4 w-4 mr-1.5" />
-              Approve All
-            </button>
-            <button
-              onClick={() => handleBulkAction('reject')}
-              disabled={actionLoading === 'bulk'}
-              className="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
-            >
-              <XCircle className="h-4 w-4 mr-1.5" />
-              Reject All
-            </button>
-            <button
-              onClick={clearSelection}
-              className="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            >
-              Cancel
-            </button>
+        <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-brand-light-blue dark:bg-brand-blue/20 border border-brand-blue/20 rounded-lg">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <span className="text-sm font-medium text-brand-dark-blue dark:text-brand-light-blue">
+              {selectedCards.size} card{selectedCards.size !== 1 ? 's' : ''} selected
+            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => handleBulkAction('approve')}
+                disabled={actionLoading === 'bulk'}
+                className="inline-flex items-center justify-center min-h-[44px] px-3 sm:px-3 py-2 rounded-md text-xs sm:text-sm font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 transition-colors active:scale-95"
+              >
+                <CheckCircle className="h-4 w-4 sm:h-4 sm:w-4 mr-1.5 sm:mr-1.5" />
+                {isMobile ? 'Approve' : 'Approve All'}
+              </button>
+              <button
+                onClick={() => handleBulkAction('reject')}
+                disabled={actionLoading === 'bulk'}
+                className="inline-flex items-center justify-center min-h-[44px] px-3 sm:px-3 py-2 rounded-md text-xs sm:text-sm font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors active:scale-95"
+              >
+                <XCircle className="h-4 w-4 sm:h-4 sm:w-4 mr-1.5 sm:mr-1.5" />
+                {isMobile ? 'Reject' : 'Reject All'}
+              </button>
+              <button
+                onClick={clearSelection}
+                className="inline-flex items-center justify-center min-h-[44px] px-3 sm:px-3 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors active:scale-95"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1233,7 +1390,7 @@ const DiscoveryQueue: React.FC = () => {
               </p>
               <Link
                 to="/discover"
-                className="mt-6 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-brand-dark-blue transition-colors"
+                className="mt-6 inline-flex items-center justify-center min-h-[44px] px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-brand-dark-blue transition-colors active:scale-95"
               >
                 Browse Intelligence Library
               </Link>
@@ -1254,7 +1411,7 @@ const DiscoveryQueue: React.FC = () => {
                   setSelectedPillar('');
                   setConfidenceFilter('all');
                 }}
-                className="mt-4 inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] transition-colors"
+                className="mt-4 inline-flex items-center justify-center min-h-[44px] px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] transition-colors active:scale-95"
               >
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Clear All Filters
@@ -1263,7 +1420,7 @@ const DiscoveryQueue: React.FC = () => {
           )}
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3 sm:space-y-4">
           {filteredCards.map((card, index) => {
             const stageNumber = parseStageNumber(card.stage_id);
             const isSelected = selectedCards.has(card.id);
@@ -1275,6 +1432,7 @@ const DiscoveryQueue: React.FC = () => {
               <SwipeableCard
                 key={card.id}
                 cardId={card.id}
+                isMobile={isMobile}
                 cardRef={(el) => {
                   if (el) {
                     cardRefs.current.set(card.id, el);
@@ -1287,128 +1445,136 @@ const DiscoveryQueue: React.FC = () => {
                 disabled={isLoading}
                 tabIndex={isFocused ? 0 : -1}
                 onClick={() => setFocusedCardIndex(index)}
-                className={`bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 border-l-4 transition-all duration-200 ${
+                className={cn(
+                  'bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6 border-l-4 transition-all duration-200',
                   isFocused
                     ? 'border-l-brand-blue ring-2 ring-brand-blue/50 shadow-lg'
                     : isSelected
                       ? 'border-l-brand-blue ring-2 ring-brand-blue/20'
-                      : 'border-transparent hover:border-l-brand-blue'
-                } ${isLoading ? 'opacity-60' : ''}`}
+                      : 'border-transparent hover:border-l-brand-blue',
+                  isLoading && 'opacity-60'
+                )}
               >
-                <div className="flex items-start gap-4">
-                  {/* Checkbox */}
-                  <div className="flex-shrink-0 pt-1">
+                <div className="flex items-start gap-2 sm:gap-4">
+                  {/* Checkbox - wrapped in 44px touch target */}
+                  <label
+                    className="flex-shrink-0 flex items-center justify-center min-h-[44px] min-w-[44px] -m-2 cursor-pointer"
+                    aria-label={`Select ${card.name}`}
+                  >
                     <input
                       type="checkbox"
                       checked={isSelected}
                       onChange={() => toggleCardSelection(card.id)}
-                      className="h-4 w-4 text-brand-blue border-gray-300 dark:border-gray-600 rounded focus:ring-brand-blue"
-                      aria-label={`Select ${card.name}`}
+                      className="h-5 w-5 sm:h-4 sm:w-4 text-brand-blue border-gray-300 dark:border-gray-600 rounded focus:ring-brand-blue cursor-pointer"
                     />
-                  </div>
+                  </label>
 
                   {/* Card Content */}
                   <div className="flex-1 min-w-0">
-                    {/* Header Row */}
-                    <div className="flex items-start justify-between gap-4 mb-3">
-                      <div className="flex-1">
-                        <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                    {/* Header Row - stack on mobile */}
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4 mb-2 sm:mb-3">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-base sm:text-lg font-medium text-gray-900 dark:text-white line-clamp-2 sm:line-clamp-none">
                           {card.name}
                         </h3>
-                        <div className="mt-2 flex items-center gap-2 flex-wrap">
-                          <PillarBadge pillarId={card.pillar_id} showIcon size="sm" />
-                          <HorizonBadge horizon={card.horizon} size="sm" />
-                          {stageNumber !== null && (
-                            <StageBadge stage={stageNumber} size="sm" variant="minimal" />
-                          )}
-                          <ConfidenceBadge confidence={card.ai_confidence} size="sm" />
-                          <ImpactScoreBadge score={card.impact_score} size="sm" />
+                        {/* Badges - horizontally scrollable on mobile */}
+                        <div className="mt-1.5 sm:mt-2 -mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto scrollbar-hide">
+                          <div className="flex items-center gap-1.5 sm:gap-2 flex-nowrap sm:flex-wrap min-w-max sm:min-w-0">
+                            <PillarBadge pillarId={card.pillar_id} showIcon={!isMobile} size="sm" />
+                            <HorizonBadge horizon={card.horizon} size="sm" />
+                            {stageNumber !== null && (
+                              <StageBadge stage={stageNumber} size="sm" variant="minimal" />
+                            )}
+                            <ConfidenceBadge confidence={card.ai_confidence} size="sm" />
+                            <ImpactScoreBadge score={card.impact_score} size="sm" />
+                          </div>
                         </div>
                       </div>
 
-                      {/* Discovered Date */}
-                      <div className="flex-shrink-0 text-right">
-                        <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                      {/* Discovered Date - inline on mobile */}
+                      <div className="flex-shrink-0 flex sm:flex-col items-center sm:items-end gap-2 sm:gap-0 sm:text-right text-xs text-gray-500 dark:text-gray-400">
+                        <div className="flex items-center gap-1">
                           <Clock className="h-3 w-3" />
                           <span>{formatDiscoveredDate(card.discovered_at)}</span>
                         </div>
                         {card.source_type && (
-                          <div className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                          <span className="sm:mt-1 text-gray-400 dark:text-gray-500">
                             via {card.source_type}
-                          </div>
+                          </span>
                         )}
                       </div>
                     </div>
 
                     {/* Summary */}
-                    <p className="text-gray-600 dark:text-gray-400 mb-4 line-clamp-2">
+                    <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mb-3 sm:mb-4 line-clamp-2">
                       {card.summary}
                     </p>
 
-                    {/* Action Buttons */}
-                    <div className="flex items-center gap-2">
+                    {/* Action Buttons - min 44px touch targets on mobile */}
+                    <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                       <button
                         onClick={() => handleReviewAction(card.id, 'approve')}
                         disabled={isLoading}
-                        className="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50 disabled:opacity-50 transition-colors"
+                        className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 px-3 sm:px-3 py-2 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50 disabled:opacity-50 transition-colors active:scale-95"
                         title="Approve this card"
                       >
-                        <CheckCircle className="h-4 w-4 mr-1.5" />
-                        Approve
+                        <CheckCircle className="h-5 w-5 sm:h-4 sm:w-4 sm:mr-1.5" />
+                        <span className="hidden sm:inline ml-1.5">Approve</span>
                       </button>
 
                       <Link
                         to={`/cards/${card.slug}?mode=edit`}
-                        className="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                        className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 px-3 sm:px-3 py-2 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors active:scale-95"
                         title="Edit and approve"
                       >
-                        <Edit3 className="h-4 w-4 mr-1.5" />
-                        Edit
+                        <Edit3 className="h-5 w-5 sm:h-4 sm:w-4 sm:mr-1.5" />
+                        <span className="hidden sm:inline ml-1.5">Edit</span>
                       </Link>
 
                       <button
                         onClick={() => handleDismiss(card.id, 'irrelevant')}
                         disabled={isLoading}
-                        className="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50 disabled:opacity-50 transition-colors"
+                        className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 px-3 sm:px-3 py-2 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50 disabled:opacity-50 transition-colors active:scale-95"
                         title="Reject this card"
                       >
-                        <XCircle className="h-4 w-4 mr-1.5" />
-                        Reject
+                        <XCircle className="h-5 w-5 sm:h-4 sm:w-4 sm:mr-1.5" />
+                        <span className="hidden sm:inline ml-1.5">Reject</span>
                       </button>
 
-                      {/* More Options Dropdown */}
-                      <div className="relative">
+                      {/* More Options Dropdown - 44px touch target */}
+                      <div className="relative ml-auto sm:ml-0">
                         <button
                           onClick={() => setOpenDropdown(isDropdownOpen ? null : card.id)}
-                          className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                          className="flex items-center justify-center min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:p-1.5 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors active:scale-95"
                           title="More options"
+                          aria-label="More options"
                         >
-                          <MoreHorizontal className="h-4 w-4" />
+                          <MoreHorizontal className="h-5 w-5 sm:h-4 sm:w-4" />
                         </button>
 
                         {isDropdownOpen && (
-                          <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-[#3d4176] rounded-md shadow-lg border border-gray-200 dark:border-gray-600 py-1 z-10">
+                          <div className="absolute right-0 mt-1 w-48 sm:w-48 bg-white dark:bg-[#3d4176] rounded-md shadow-lg border border-gray-200 dark:border-gray-600 py-1 z-10">
                             <button
                               onClick={() => handleDismiss(card.id, 'duplicate')}
-                              className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
+                              className="w-full min-h-[44px] sm:min-h-0 px-4 py-3 sm:py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500"
                             >
                               Mark as Duplicate
                             </button>
                             <button
                               onClick={() => handleDismiss(card.id, 'out_of_scope')}
-                              className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
+                              className="w-full min-h-[44px] sm:min-h-0 px-4 py-3 sm:py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500"
                             >
                               Out of Scope
                             </button>
                             <button
                               onClick={() => handleDismiss(card.id, 'low_quality')}
-                              className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
+                              className="w-full min-h-[44px] sm:min-h-0 px-4 py-3 sm:py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500"
                             >
                               Low Quality
                             </button>
                             <button
                               onClick={() => handleReviewAction(card.id, 'defer')}
-                              className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
+                              className="w-full min-h-[44px] sm:min-h-0 px-4 py-3 sm:py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500"
                             >
                               Defer for Later
                             </button>

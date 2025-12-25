@@ -145,13 +145,13 @@ const Header: React.FC = () => {
             </button>
           </div>
 
-          {/* Mobile menu button */}
+          {/* Mobile menu button - 44px minimum touch target */}
           <div className="md:hidden">
             <button
               onClick={() => setIsMenuOpen(!isMenuOpen)}
               aria-expanded={isMenuOpen}
               aria-label="Toggle navigation menu"
-              className="inline-flex items-center justify-center p-2 rounded-md text-gray-600 hover:text-brand-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-brand-blue transition-colors duration-150"
+              className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] p-2 rounded-md text-gray-600 hover:text-brand-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-brand-blue active:scale-95 transition-all duration-150"
             >
               {isMenuOpen ? (
                 <X className="block h-6 w-6" />
@@ -163,7 +163,7 @@ const Header: React.FC = () => {
         </div>
       </div>
 
-      {/* Mobile Navigation */}
+      {/* Mobile Navigation - 44px minimum touch targets */}
       {isMenuOpen && (
         <div className="md:hidden">
           <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 bg-white/95 dark:bg-brand-dark-blue/95 backdrop-blur-md border-t border-gray-200/50 dark:border-gray-700/50">
@@ -177,54 +177,50 @@ const Header: React.FC = () => {
                   to={item.href}
                   onClick={() => setIsMenuOpen(false)}
                   aria-current={isActive ? 'page' : undefined}
-                  className={`block px-3 py-2 text-base font-medium rounded-md transition-colors duration-150 ${
+                  className={`flex items-center min-h-[44px] px-3 py-2 text-base font-medium rounded-md active:scale-[0.98] transition-all duration-150 ${
                     isActive
                       ? 'text-brand-blue bg-brand-blue/10'
                       : 'text-gray-600 hover:text-brand-dark-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10'
                   }`}
                 >
-                  <div className="flex items-center">
-                    <Icon className="w-5 h-5 mr-3" />
-                    {item.name}
-                    {item.badge && (
-                      <span className="ml-auto inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold leading-none text-white bg-brand-blue rounded-full">
-                        {item.badge > 99 ? '99+' : item.badge}
-                      </span>
-                    )}
-                  </div>
+                  <Icon className="w-5 h-5 mr-3 flex-shrink-0" />
+                  <span className="flex-grow">{item.name}</span>
+                  {item.badge && (
+                    <span className="ml-auto inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold leading-none text-white bg-brand-blue rounded-full">
+                      {item.badge > 99 ? '99+' : item.badge}
+                    </span>
+                  )}
                 </Link>
               );
             })}
             <div className="border-t border-gray-200/50 dark:border-gray-700/50 pt-4 mt-4">
-              {/* Theme Toggle for Mobile */}
+              {/* Theme Toggle for Mobile - 44px touch target */}
               <button
                 onClick={toggleTheme}
-                className="w-full flex items-center px-3 py-2 text-base font-medium text-gray-600 hover:text-brand-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10 rounded-md transition-colors duration-150"
+                className="w-full flex items-center min-h-[44px] px-3 py-2 text-base font-medium text-gray-600 hover:text-brand-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10 rounded-md active:scale-[0.98] transition-all duration-150"
               >
                 {isDarkMode ? (
                   <>
-                    <Sun className="w-5 h-5 mr-3" />
-                    Light Mode
+                    <Sun className="w-5 h-5 mr-3 flex-shrink-0" />
+                    <span>Light Mode</span>
                   </>
                 ) : (
                   <>
-                    <Moon className="w-5 h-5 mr-3" />
-                    Dark Mode
+                    <Moon className="w-5 h-5 mr-3 flex-shrink-0" />
+                    <span>Dark Mode</span>
                   </>
                 )}
               </button>
 
-              <div className="px-3 py-2 text-sm text-gray-600 dark:text-gray-300">
-                <span className="font-medium">{user?.email}</span>
+              <div className="px-3 py-2 min-h-[44px] flex items-center text-sm text-gray-600 dark:text-gray-300">
+                <span className="font-medium truncate">{user?.email}</span>
               </div>
               <button
                 onClick={handleSignOut}
-                className="block w-full text-left px-3 py-2 text-base font-medium text-gray-600 hover:text-brand-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10 rounded-md transition-colors duration-150"
+                className="w-full flex items-center min-h-[44px] px-3 py-2 text-base font-medium text-gray-600 hover:text-brand-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10 rounded-md active:scale-[0.98] transition-all duration-150"
               >
-                <div className="flex items-center">
-                  <LogOut className="w-5 h-5 mr-3" />
-                  Sign Out
-                </div>
+                <LogOut className="w-5 h-5 mr-3 flex-shrink-0" />
+                <span>Sign Out</span>
               </button>
             </div>
           </div>
