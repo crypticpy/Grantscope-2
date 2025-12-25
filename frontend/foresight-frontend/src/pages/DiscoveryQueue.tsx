@@ -667,6 +667,9 @@ const DiscoveryQueue: React.FC = () => {
   const [focusedCardIndex, setFocusedCardIndex] = useState<number>(-1);
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
+  // Cache for stable ref callbacks per card ID - prevents new function references on each render
+  const cardRefCallbacksCache = useRef<Map<string, (el: HTMLDivElement | null) => void>>(new Map());
+
   // Debounce ref to prevent rapid keyboard input from double-executing actions
   const lastActionTimeRef = useRef<number>(0);
 
@@ -1197,6 +1200,32 @@ const DiscoveryQueue: React.FC = () => {
     }
   }, [filteredCards.length, focusedCardIndex]);
 
+  /**
+   * Ref callback factory for card elements
+   * Returns a stable callback that updates the cardRefs Map for a specific card ID.
+   * Uses a persistent cache (cardRefCallbacksCache) to ensure the same callback instance
+   * is returned for the same card ID across renders, preventing unnecessary re-renders
+   * of SwipeableCard components.
+   *
+   * The returned function handles both mount (el !== null) and unmount (el === null) cases.
+   */
+  const getCardRefCallback = useCallback((cardId: string) => {
+    // Check cache first - return existing callback if available
+    let callback = cardRefCallbacksCache.current.get(cardId);
+    if (!callback) {
+      // Create and cache a new callback for this card ID
+      callback = (el: HTMLDivElement | null) => {
+        if (el) {
+          cardRefs.current.set(cardId, el);
+        } else {
+          cardRefs.current.delete(cardId);
+        }
+      };
+      cardRefCallbacksCache.current.set(cardId, callback);
+    }
+    return callback;
+  }, []);
+
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
       {/* Header */}
@@ -1500,13 +1529,7 @@ const DiscoveryQueue: React.FC = () => {
                 key={card.id}
                 cardId={card.id}
                 isMobile={isMobile}
-                cardRef={(el) => {
-                  if (el) {
-                    cardRefs.current.set(card.id, el);
-                  } else {
-                    cardRefs.current.delete(card.id);
-                  }
-                }}
+                cardRef={getCardRefCallback(card.id)}
                 onSwipeRight={handleSwipeApprove}
                 onSwipeLeft={handleSwipeDismiss}
                 disabled={isLoading}
