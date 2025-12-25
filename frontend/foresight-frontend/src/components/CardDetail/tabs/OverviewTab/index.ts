@@ -19,10 +19,14 @@ export type { CardClassificationProps } from './CardClassification';
 export { ResearchHistoryPanel } from './ResearchHistoryPanel';
 export type { ResearchHistoryPanelProps } from './ResearchHistoryPanel';
 
-// Future exports (as components are created):
-// export { ImpactMetricsPanel } from './ImpactMetricsPanel';
-// export type { ImpactMetricsPanelProps } from './ImpactMetricsPanel';
-// export { MaturityScorePanel } from './MaturityScorePanel';
-// export type { MaturityScorePanelProps } from './MaturityScorePanel';
-// export { ActivityStatsPanel } from './ActivityStatsPanel';
-// export type { ActivityStatsPanelProps } from './ActivityStatsPanel';
+// Impact metrics panel
+export { ImpactMetricsPanel } from './ImpactMetricsPanel';
+export type { ImpactMetricsPanelProps } from './ImpactMetricsPanel';
+
+// Maturity score with circular display and stage badge
+export { MaturityScorePanel } from './MaturityScorePanel';
+export type { MaturityScorePanelProps } from './MaturityScorePanel';
+
+// Activity stats panel with sources, events, notes, velocity trend, and timestamps
+export { ActivityStatsPanel } from './ActivityStatsPanel';
+export type { ActivityStatsPanelProps } from './ActivityStatsPanel';
