@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useDrag } from '@use-gesture/react';
+import * as Progress from '@radix-ui/react-progress';
 import {
   Search,
   Filter,
@@ -326,6 +327,9 @@ const DiscoveryQueue: React.FC = () => {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Progress tracking - stores initial count when queue was loaded
+  const [initialCardCount, setInitialCardCount] = useState<number>(0);
+
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPillar, setSelectedPillar] = useState('');
@@ -368,6 +372,10 @@ const DiscoveryQueue: React.FC = () => {
       // Load pending cards from backend API
       const pendingCards = await fetchPendingReviewCards(token);
       setCards(pendingCards);
+      // Set initial count for progress tracking (only if we have cards)
+      if (pendingCards.length > 0) {
+        setInitialCardCount(pendingCards.length);
+      }
     } catch (err) {
       console.error('Error loading discovery queue:', err);
       setError(err instanceof Error ? err.message : 'Failed to load discovery queue');
@@ -540,6 +548,14 @@ const DiscoveryQueue: React.FC = () => {
     return { total: cards.length, high, medium, low };
   }, [cards]);
 
+  // Progress tracking stats
+  const progressStats = React.useMemo(() => {
+    const reviewed = initialCardCount - cards.length;
+    const total = initialCardCount;
+    const percentage = total > 0 ? (reviewed / total) * 100 : 0;
+    return { reviewed, total, percentage };
+  }, [cards.length, initialCardCount]);
+
   // Get the currently focused card (if any)
   const focusedCardId = focusedCardIndex >= 0 && focusedCardIndex < filteredCards.length
     ? filteredCards[focusedCardIndex].id
@@ -671,6 +687,35 @@ const DiscoveryQueue: React.FC = () => {
             </span>
           )}
         </div>
+
+        {/* Progress Indicator */}
+        {progressStats.total > 0 && (
+          <div className="mt-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Review Progress
+              </span>
+              <span className="text-sm text-gray-600 dark:text-gray-400">
+                {progressStats.reviewed} of {progressStats.total} cards reviewed
+              </span>
+            </div>
+            <Progress.Root
+              className="relative h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700"
+              value={progressStats.percentage}
+            >
+              <Progress.Indicator
+                className="h-full rounded-full bg-brand-blue transition-transform duration-300 ease-out"
+                style={{ transform: `translateX(-${100 - progressStats.percentage}%)` }}
+              />
+            </Progress.Root>
+            {progressStats.percentage === 100 && progressStats.total > 0 && (
+              <p className="mt-2 text-sm text-green-600 dark:text-green-400 flex items-center gap-1.5">
+                <CheckCircle className="h-4 w-4" />
+                All cards reviewed! Great job.
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Error Banner */}
