@@ -56,6 +56,10 @@ class RawSource:
     content: str
     source_name: str
     relevance: float = 0.7
+    # Added for persistence tracking
+    published_at: Optional[str] = None
+    source_type: Optional[str] = None
+    discovered_source_id: Optional[str] = None  # ID in discovered_sources table
 
 
 @dataclass
@@ -65,6 +69,7 @@ class ProcessedSource:
     triage: TriageResult
     analysis: AnalysisResult
     embedding: List[float]
+    discovered_source_id: Optional[str] = None  # ID in discovered_sources table
 
 
 @dataclass
@@ -431,8 +436,8 @@ class ResearchService:
                 default_triage = TriageResult(
                     is_relevant=True,
                     confidence=0.65,  # Just above threshold
-                    topic_match="auto-passed (no content)",
-                    reasoning="Source passed without content - URL/title preserved for reference"
+                    primary_pillar=None,
+                    reason="Source passed without content - URL/title preserved for reference"
                 )
                 relevant.append((source, default_triage))
                 continue
@@ -453,8 +458,8 @@ class ResearchService:
                 default_triage = TriageResult(
                     is_relevant=True,
                     confidence=0.6,
-                    topic_match="triage-error-passed",
-                    reasoning=f"Triage failed: {str(e)[:100]}"
+                    primary_pillar=None,
+                    reason=f"Triage failed: {str(e)[:100]}"
                 )
                 relevant.append((source, default_triage))
 

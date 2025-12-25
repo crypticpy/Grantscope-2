@@ -474,7 +474,13 @@ Respond with JSON:
 class AIService:
     """Service for AI-powered analysis and classification."""
 
-    def __init__(self, openai_client: openai.OpenAI):
+    def __init__(self, openai_client: openai.AsyncOpenAI):
+        """
+        Initialize the AI service.
+
+        Args:
+            openai_client: AsyncOpenAI client for async operations
+        """
         self.client = openai_client
 
     @with_retry(max_retries=MAX_RETRIES)
@@ -493,7 +499,7 @@ class AIService:
 
         logger.debug(f"Generating embedding for text ({len(truncated)} chars)")
 
-        response = self.client.embeddings.create(
+        response = await self.client.embeddings.create(
             model="text-embedding-ada-002",
             input=truncated,
             timeout=REQUEST_TIMEOUT
@@ -524,7 +530,7 @@ class AIService:
 
         logger.debug(f"Triaging source: {title[:50]}...")
 
-        response = self.client.chat.completions.create(
+        response = await self.client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
@@ -574,7 +580,7 @@ class AIService:
 
         logger.info(f"Analyzing source: {title[:50]}...")
 
-        response = self.client.chat.completions.create(
+        response = await self.client.chat.completions.create(
             model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
@@ -677,7 +683,7 @@ class AIService:
 
         logger.debug("Extracting entities from content")
 
-        response = self.client.chat.completions.create(
+        response = await self.client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
@@ -711,7 +717,24 @@ class AIService:
         Returns:
             Dict with is_match, confidence, reasoning
         """
-        prompt = f"""Determine if this article belongs to the existing card or represents a new concept.
+        prompt = f"""You are helping a municipal horizon scanning system decide whether a newly discovered article should be ADDED to an existing card or whether it represents a TRULY NEW concept.
+
+IMPORTANT GUIDANCE:
+- PREFER adding to existing cards over creating new ones
+- Only say "not a match" if the concepts are fundamentally different
+- Similar concepts with different aspects/angles = SAME CARD
+- Same technology/trend in different contexts = SAME CARD
+- Evolution or update of existing concept = SAME CARD
+
+EXAMPLES OF MATCHES (is_match = true):
+- "AI Traffic Management" article → existing "Smart Traffic Systems" card ✓
+- "Electric Bus Pilot in Portland" article → existing "Electric Public Transit" card ✓
+- "5G Network Security Concerns" article → existing "5G Infrastructure" card ✓
+- "Drone Delivery for Medications" article → existing "Drone Delivery Services" card ✓
+
+EXAMPLES OF NON-MATCHES (is_match = false):
+- "Quantum Computing Advances" article → existing "AI Traffic Management" card ✗
+- "Urban Farming Initiative" article → existing "Electric Vehicle Charging" card ✗
 
 EXISTING CARD:
 Name: {existing_card_name}
@@ -721,20 +744,20 @@ NEW ARTICLE:
 Suggested concept: {source_card_name}
 Summary: {source_summary}
 
-Is this article about the same core concept as the existing card, just with new information?
-Or is it a fundamentally different concept that deserves its own card?
+Question: Is this article about the same GENERAL TOPIC AREA as the existing card?
+Even if the specific focus differs, they should be matched if they're in the same technology/trend domain.
 
 Respond with JSON:
 {{
   "is_match": true/false,
   "confidence": 0.0-1.0,
-  "reasoning": "explanation"
+  "reasoning": "brief explanation of why they match or don't match"
 }}
 """
 
         logger.debug(f"Checking card match: {source_card_name} vs {existing_card_name}")
 
-        response = self.client.chat.completions.create(
+        response = await self.client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
@@ -808,7 +831,7 @@ Respond with JSON:
 
         logger.debug(f"Enhancing card from research: {current_name}")
 
-        response = self.client.chat.completions.create(
+        response = await self.client.chat.completions.create(
             model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
@@ -895,7 +918,7 @@ Respond with JSON:
 
         logger.info(f"Generating comprehensive deep research report for: {card_name}")
 
-        response = self.client.chat.completions.create(
+        response = await self.client.chat.completions.create(
             model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=4000,  # Allow for comprehensive report

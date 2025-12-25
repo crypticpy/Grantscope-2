@@ -242,6 +242,24 @@ export interface DiscoveryConfigRequest {
 }
 
 /**
+ * Discovery system configuration (from backend env vars)
+ */
+export interface DiscoveryConfig {
+  max_queries_per_run: number;
+  max_sources_total: number;
+  max_sources_per_query: number;
+  auto_approve_threshold: number;
+  similarity_threshold: number;
+}
+
+/**
+ * Fetch current discovery configuration from server
+ */
+export async function fetchDiscoveryConfig(token: string): Promise<DiscoveryConfig> {
+  return apiRequest<DiscoveryConfig>('/api/v1/discovery/config', token);
+}
+
+/**
  * Trigger a new discovery run
  */
 export async function triggerDiscoveryRun(

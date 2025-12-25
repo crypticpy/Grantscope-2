@@ -15,6 +15,10 @@ import {
   Calendar,
   Zap,
   StopCircle,
+  Search,
+  Filter,
+  Copy,
+  Sparkles,
 } from 'lucide-react';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
@@ -22,7 +26,9 @@ import {
   fetchDiscoveryRuns,
   triggerDiscoveryRun,
   cancelDiscoveryRun,
+  fetchDiscoveryConfig,
   type DiscoveryRun,
+  type DiscoveryConfig,
 } from '../lib/discovery-api';
 
 /**
@@ -73,6 +79,115 @@ const getRelativeTime = (dateString: string): string => {
   if (diffDays === 1) return 'Yesterday';
   if (diffDays < 7) return `${diffDays} days ago`;
   return formatDate(dateString);
+};
+
+/**
+ * Progress stage info
+ */
+interface ProgressStage {
+  id: string;
+  label: string;
+  icon: React.ElementType;
+}
+
+const DISCOVERY_STAGES: ProgressStage[] = [
+  { id: 'queries', label: 'Generate Queries', icon: FileText },
+  { id: 'search', label: 'Search Sources', icon: Search },
+  { id: 'triage', label: 'Triage Results', icon: Filter },
+  { id: 'blocked', label: 'Filter Blocked', icon: StopCircle },
+  { id: 'dedupe', label: 'Deduplicate', icon: Copy },
+  { id: 'cards', label: 'Create Cards', icon: Sparkles },
+];
+
+/**
+ * Progress indicator for running discovery
+ */
+const ProgressIndicator: React.FC<{
+  progress: {
+    current_stage?: string;
+    message?: string;
+    stages?: Record<string, string>;
+    stats?: Record<string, number>;
+  } | null;
+}> = ({ progress }) => {
+  if (!progress) {
+    return (
+      <div className="text-sm text-gray-500 dark:text-gray-400 italic">
+        Starting discovery run...
+      </div>
+    );
+  }
+
+  const { current_stage, message, stages, stats } = progress;
+
+  return (
+    <div className="space-y-3">
+      {/* Current message */}
+      {message && (
+        <div className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          <span>{message}</span>
+        </div>
+      )}
+
+      {/* Stage progress bar */}
+      <div className="flex items-center gap-1">
+        {DISCOVERY_STAGES.map((stage, idx) => {
+          const status = stages?.[stage.id] || 'pending';
+          const Icon = stage.icon;
+          const isActive = stage.id === current_stage;
+
+          return (
+            <div key={stage.id} className="flex items-center">
+              <div
+                className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${
+                  status === 'completed'
+                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                    : status === 'in_progress'
+                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                    : 'bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-500'
+                }`}
+                title={stage.label}
+              >
+                {status === 'completed' ? (
+                  <CheckCircle className="w-3 h-3" />
+                ) : status === 'in_progress' ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Icon className="w-3 h-3" />
+                )}
+                <span className="hidden sm:inline">{stage.label}</span>
+              </div>
+              {idx < DISCOVERY_STAGES.length - 1 && (
+                <ChevronRight className="w-3 h-3 text-gray-300 dark:text-gray-600 ml-1" />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Live stats */}
+      {stats && Object.keys(stats).length > 0 && (
+        <div className="flex flex-wrap gap-3 text-xs text-gray-600 dark:text-gray-400">
+          {stats.queries_generated !== undefined && (
+            <span>Queries: {stats.queries_generated}</span>
+          )}
+          {stats.sources_found !== undefined && (
+            <span>Sources: {stats.sources_found}</span>
+          )}
+          {stats.sources_relevant !== undefined && (
+            <span>Relevant: {stats.sources_relevant}</span>
+          )}
+          {stats.duplicates !== undefined && (
+            <span>Duplicates: {stats.duplicates}</span>
+          )}
+          {stats.new_concepts !== undefined && (
+            <span>New: {stats.new_concepts}</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
 };
 
 /**
@@ -150,11 +265,11 @@ const RunRow: React.FC<{
 
   return (
     <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full px-4 py-3 flex items-center justify-between bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
-      >
-        <div className="flex items-center gap-4">
+      <div className="w-full px-4 py-3 flex items-center justify-between bg-white dark:bg-gray-800">
+        <div
+          onClick={() => setExpanded(!expanded)}
+          className="flex items-center gap-4 cursor-pointer hover:opacity-80 transition-opacity flex-1"
+        >
           <StatusBadge status={run.status} />
           <div className="text-left">
             <div className="font-medium text-gray-900 dark:text-gray-100">
@@ -174,11 +289,11 @@ const RunRow: React.FC<{
             </div>
             <div className="flex items-center gap-1.5 text-green-600 dark:text-green-400">
               <TrendingUp className="w-4 h-4" />
-              <span>{run.cards_created} created</span>
+              <span>{run.cards_created || 0} created</span>
             </div>
             <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
               <RefreshCw className="w-4 h-4" />
-              <span>{run.cards_updated} updated</span>
+              <span>{run.cards_enriched || 0} updated</span>
             </div>
             <div className="flex items-center gap-1.5 text-gray-500">
               <Clock className="w-4 h-4" />
@@ -188,10 +303,7 @@ const RunRow: React.FC<{
 
           {run.status === 'running' && (
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onCancel(run.id);
-              }}
+              onClick={() => onCancel(run.id)}
               disabled={cancelling}
               className="p-1.5 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/20 rounded transition-colors disabled:opacity-50"
               title="Cancel run"
@@ -204,13 +316,27 @@ const RunRow: React.FC<{
             </button>
           )}
 
-          <ChevronRight
-            className={`w-5 h-5 text-gray-400 transition-transform ${
-              expanded ? 'rotate-90' : ''
-            }`}
+          <div
+            onClick={() => setExpanded(!expanded)}
+            className="cursor-pointer p-1"
+          >
+            <ChevronRight
+              className={`w-5 h-5 text-gray-400 transition-transform ${
+                expanded ? 'rotate-90' : ''
+              }`}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Progress indicator for running jobs - always visible */}
+      {run.status === 'running' && (
+        <div className="px-4 py-3 bg-blue-50 dark:bg-blue-900/10 border-t border-blue-200 dark:border-blue-800">
+          <ProgressIndicator
+            progress={(run.summary_report as { progress?: { current_stage?: string; message?: string; stages?: Record<string, string>; stats?: Record<string, number> } })?.progress || null}
           />
         </div>
-      </button>
+      )}
 
       {expanded && (
         <div className="px-4 py-3 bg-gray-50 dark:bg-gray-850 border-t border-gray-200 dark:border-gray-700">
@@ -222,11 +348,11 @@ const RunRow: React.FC<{
             </div>
             <div className="text-sm">
               <span className="text-gray-500">Created:</span>{' '}
-              <span className="font-medium text-green-600">{run.cards_created}</span>
+              <span className="font-medium text-green-600">{run.cards_created || 0}</span>
             </div>
             <div className="text-sm">
               <span className="text-gray-500">Updated:</span>{' '}
-              <span className="font-medium text-blue-600">{run.cards_updated}</span>
+              <span className="font-medium text-blue-600">{run.cards_enriched || 0}</span>
             </div>
             <div className="text-sm">
               <span className="text-gray-500">Duration:</span>{' '}
@@ -311,16 +437,39 @@ const RunRow: React.FC<{
 const DiscoveryHistory: React.FC = () => {
   const { user } = useAuthContext();
   const [runs, setRuns] = useState<DiscoveryRun[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [triggerLoading, setTriggerLoading] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [discoveryConfig, setDiscoveryConfig] = useState<DiscoveryConfig | null>(null);
 
-  const loadRuns = useCallback(async () => {
+  // Fetch discovery config on mount
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          const config = await fetchDiscoveryConfig(session.access_token);
+          setDiscoveryConfig(config);
+        }
+      } catch (err) {
+        console.error('Failed to load discovery config:', err);
+      }
+    };
+    loadConfig();
+  }, []);
+
+  const loadRuns = useCallback(async (isInitial = false) => {
     if (!user) return;
 
     try {
-      setLoading(true);
+      // Only show full-page spinner on initial load
+      if (isInitial) {
+        setInitialLoading(true);
+      } else {
+        setRefreshing(true);
+      }
       setError(null);
 
       const { data: { session } } = await supabase.auth.getSession();
@@ -334,12 +483,13 @@ const DiscoveryHistory: React.FC = () => {
       console.error('Failed to load discovery runs:', err);
       setError(err instanceof Error ? err.message : 'Failed to load runs');
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
+      setRefreshing(false);
     }
   }, [user]);
 
   useEffect(() => {
-    loadRuns();
+    loadRuns(true); // Initial load with full spinner
   }, [loadRuns]);
 
   // Poll for updates if there's a running job
@@ -347,7 +497,8 @@ const DiscoveryHistory: React.FC = () => {
     const hasRunning = runs.some((r) => r.status === 'running');
     if (!hasRunning) return;
 
-    const interval = setInterval(loadRuns, 10000); // Poll every 10 seconds
+    // Poll every 3 seconds for progress updates during active runs
+    const interval = setInterval(() => loadRuns(false), 3000);
     return () => clearInterval(interval);
   }, [runs, loadRuns]);
 
@@ -364,7 +515,7 @@ const DiscoveryHistory: React.FC = () => {
       }
 
       await triggerDiscoveryRun(session.access_token);
-      await loadRuns();
+      await loadRuns(false);
     } catch (err) {
       console.error('Failed to trigger discovery run:', err);
       setError(err instanceof Error ? err.message : 'Failed to trigger run');
@@ -385,7 +536,7 @@ const DiscoveryHistory: React.FC = () => {
       }
 
       await cancelDiscoveryRun(session.access_token, runId);
-      await loadRuns();
+      await loadRuns(false);
     } catch (err) {
       console.error('Failed to cancel run:', err);
       setError(err instanceof Error ? err.message : 'Failed to cancel run');
@@ -398,9 +549,9 @@ const DiscoveryHistory: React.FC = () => {
   const stats = {
     totalRuns: runs.length,
     successfulRuns: runs.filter((r) => r.status === 'completed').length,
-    totalCardsCreated: runs.reduce((sum, r) => sum + r.cards_created, 0),
-    totalCardsUpdated: runs.reduce((sum, r) => sum + r.cards_updated, 0),
-    totalSources: runs.reduce((sum, r) => sum + r.sources_found, 0),
+    totalCardsCreated: runs.reduce((sum, r) => sum + (r.cards_created || 0), 0),
+    totalCardsUpdated: runs.reduce((sum, r) => sum + (r.cards_enriched || 0), 0),
+    totalSources: runs.reduce((sum, r) => sum + (r.sources_found || 0), 0),
   };
 
   const hasRunningJob = runs.some((r) => r.status === 'running');
@@ -428,12 +579,12 @@ const DiscoveryHistory: React.FC = () => {
             </div>
             <div className="flex items-center gap-3">
               <button
-                onClick={loadRuns}
-                disabled={loading}
+                onClick={() => loadRuns(false)}
+                disabled={refreshing}
                 className="p-2 text-gray-600 dark:text-gray-400 hover:text-brand-blue hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors disabled:opacity-50"
                 title="Refresh"
               >
-                <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
               </button>
               <button
                 onClick={handleTriggerRun}
@@ -462,7 +613,7 @@ const DiscoveryHistory: React.FC = () => {
         </div>
 
         {/* Stats */}
-        {!loading && runs.length > 0 && (
+        {!initialLoading && runs.length > 0 && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <StatCard
               label="Total Runs"
@@ -499,15 +650,15 @@ const DiscoveryHistory: React.FC = () => {
           </div>
         )}
 
-        {/* Loading */}
-        {loading && (
+        {/* Loading - only on initial page load */}
+        {initialLoading && (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="w-8 h-8 animate-spin text-brand-blue" />
           </div>
         )}
 
         {/* Empty State */}
-        {!loading && runs.length === 0 && (
+        {!initialLoading && runs.length === 0 && (
           <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
             <Clock className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
@@ -537,7 +688,7 @@ const DiscoveryHistory: React.FC = () => {
         )}
 
         {/* Runs List */}
-        {!loading && runs.length > 0 && (
+        {!initialLoading && runs.length > 0 && (
           <div className="space-y-3">
             {runs.map((run) => (
               <RunRow

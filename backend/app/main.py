@@ -266,10 +266,19 @@ class CardReviewRequest(BaseModel):
     reason: Optional[str] = Field(None, max_length=1000, description="Reason for rejection or edit notes")
 
 
+def get_discovery_max_queries():
+    """Get max queries from environment."""
+    return int(os.getenv("DISCOVERY_MAX_QUERIES", "100"))
+
+def get_discovery_max_sources():
+    """Get max sources from environment."""
+    return int(os.getenv("DISCOVERY_MAX_SOURCES_TOTAL", "500"))
+
+
 class DiscoveryConfigRequest(BaseModel):
     """Request model for discovery run configuration."""
-    max_queries_per_run: int = Field(default=100, le=200, ge=1, description="Maximum queries per run")
-    max_sources_total: int = Field(default=500, le=1000, ge=10, description="Maximum sources to process")
+    max_queries_per_run: Optional[int] = Field(None, le=200, ge=1, description="Maximum queries per run (defaults to DISCOVERY_MAX_QUERIES env var)")
+    max_sources_total: Optional[int] = Field(None, le=1000, ge=10, description="Maximum sources to process (defaults to DISCOVERY_MAX_SOURCES_TOTAL env var)")
     auto_approve_threshold: float = Field(default=0.95, ge=0.8, le=1.0, description="Auto-approval threshold")
     pillars_filter: Optional[List[str]] = Field(None, description="Filter by pillar IDs")
     dry_run: bool = Field(False, description="Run in dry-run mode without persisting")
@@ -547,10 +556,41 @@ async def get_cards(
     
     return [Card(**card) for card in response.data]
 
+
+# NOTE: This route MUST be before /cards/{card_id} to avoid route matching issues
+@app.get("/api/v1/cards/pending-review")
+async def get_pending_review_cards(
+    current_user: dict = Depends(get_current_user),
+    limit: int = 20,
+    offset: int = 0,
+    pillar_id: Optional[str] = None
+):
+    """
+    Get cards pending review.
+
+    Returns discovered cards that need human review, ordered by AI confidence
+    (descending) and discovery date.
+    """
+    query = supabase.table("cards").select("*").in_(
+        "review_status", ["discovered", "pending_review"]
+    )
+
+    if pillar_id:
+        query = query.eq("pillar_id", pillar_id)
+
+    response = query.order(
+        "ai_confidence", desc=True
+    ).order(
+        "discovered_at", desc=True
+    ).range(offset, offset + limit - 1).execute()
+
+    return response.data
+
+
 @app.get("/api/v1/cards/{card_id}", response_model=Card)
-async def get_card(card_id: str):
+async def get_card(card_id: uuid.UUID):
     """Get specific card"""
-    response = supabase.table("cards").select("*").eq("id", card_id).execute()
+    response = supabase.table("cards").select("*").eq("id", str(card_id)).execute()
     if response.data:
         return Card(**response.data[0])
     else:
@@ -708,44 +748,6 @@ async def get_pending_review_count(
     ).execute()
 
     return {"count": response.count or 0}
-
-
-@app.get("/api/v1/cards/pending-review")
-async def get_pending_review_cards(
-    current_user: dict = Depends(get_current_user),
-    limit: int = 20,
-    offset: int = 0,
-    pillar_id: Optional[str] = None
-):
-    """
-    Get cards pending review.
-
-    Returns discovered cards that need human review, ordered by AI confidence
-    (descending) and discovery date.
-
-    Args:
-        limit: Maximum number of cards to return (default: 20)
-        offset: Number of cards to skip for pagination (default: 0)
-        pillar_id: Optional filter by pillar ID
-
-    Returns:
-        List of cards with review_status in ('discovered', 'pending_review')
-    """
-    query = supabase.table("cards").select("*").in_(
-        "review_status", ["discovered", "pending_review"]
-    )
-
-    if pillar_id:
-        query = query.eq("pillar_id", pillar_id)
-
-    # Order by ai_confidence DESC, discovered_at DESC
-    response = query.order(
-        "ai_confidence", desc=True
-    ).order(
-        "discovered_at", desc=True
-    ).range(offset, offset + limit - 1).execute()
-
-    return response.data
 
 
 @app.post("/api/v1/cards/{card_id}/review")
@@ -1107,261 +1109,6 @@ async def get_similar_cards(
         logger.error(f"Similar cards search failed: {str(e)}")
         # Fallback to simple text-based similarity
         return []
-
-
-# ============================================================================
-# Discovery Run Management Endpoints
-# ============================================================================
-
-@app.post("/api/v1/discovery/run", response_model=DiscoveryRun)
-async def trigger_discovery_run(
-    config: DiscoveryConfigRequest,
-    current_user: dict = Depends(get_current_user)
-):
-    """
-    Trigger a manual discovery run.
-
-    Creates a new discovery run with the specified configuration and
-    executes it as a background task. Returns immediately with a run_id
-    for polling status.
-
-    Args:
-        config: Discovery run configuration
-
-    Returns:
-        Discovery run record with status 'queued'
-    """
-    now = datetime.now().isoformat()
-    run_id = str(uuid.uuid4())
-
-    # Create discovery run record
-    run_record = {
-        "id": run_id,
-        "status": "queued",
-        "config": config.dict(),
-        "created_by": current_user["id"],
-        "cards_discovered": 0,
-        "cards_auto_approved": 0,
-        "cards_pending_review": 0,
-        "sources_processed": 0,
-        "created_at": now
-    }
-
-    response = supabase.table("discovery_runs").insert(run_record).execute()
-
-    if not response.data:
-        raise HTTPException(status_code=500, detail="Failed to create discovery run")
-
-    # Start discovery in background
-    asyncio.create_task(
-        execute_discovery_run_background(run_id, config, current_user["id"])
-    )
-
-    logger.info(f"Discovery run {run_id} queued by user {current_user['id']}")
-
-    return DiscoveryRun(**response.data[0])
-
-
-async def execute_discovery_run_background(
-    run_id: str,
-    config: DiscoveryConfigRequest,
-    user_id: str
-):
-    """
-    Background task to execute a discovery run.
-
-    Phases:
-    1. Generate search queries based on taxonomy and existing cards
-    2. Execute searches across configured sources
-    3. Triage and filter results
-    4. Create discovered cards (pending review or auto-approved)
-    5. Update run status with results
-    """
-    try:
-        # Update status to processing
-        supabase.table("discovery_runs").update({
-            "status": "processing",
-            "started_at": datetime.now().isoformat()
-        }).eq("id", run_id).execute()
-
-        # Initialize counters
-        cards_discovered = 0
-        cards_auto_approved = 0
-        cards_pending_review = 0
-        sources_processed = 0
-
-        # Get blocked topics to exclude
-        blocked_response = supabase.table("discovery_blocks").select("topic_pattern").execute()
-        blocked_patterns = [b["topic_pattern"] for b in blocked_response.data]
-
-        # Get taxonomy for query generation
-        pillars_query = supabase.table("pillars").select("*")
-        if config.pillars_filter:
-            pillars_query = pillars_query.in_("id", config.pillars_filter)
-        pillars_response = pillars_query.execute()
-
-        # Simulate discovery process (replace with actual implementation)
-        # This would typically call ResearchService or a dedicated DiscoveryService
-        service = ResearchService(supabase, openai_client)
-
-        for pillar in pillars_response.data:
-            if config.dry_run:
-                # Dry run - just count what would be processed
-                sources_processed += 10
-                cards_discovered += 2
-                continue
-
-            # Get goals for this pillar
-            goals_response = supabase.table("goals").select("*").eq("pillar_id", pillar["id"]).execute()
-
-            for goal in goals_response.data:
-                try:
-                    # Generate discovery query
-                    query = f"{pillar['name']} {goal['name']} Austin strategic initiatives"
-
-                    # Skip blocked topics
-                    if any(bp in query.lower() for bp in blocked_patterns):
-                        continue
-
-                    # Execute research (limited by config)
-                    if sources_processed >= config.max_sources_total:
-                        break
-
-                    # Placeholder for actual discovery logic
-                    # This would use service.execute_discovery() or similar
-                    sources_processed += 5
-
-                    # Check confidence for auto-approval
-                    ai_confidence = 0.9  # Placeholder - would come from AI analysis
-
-                    if ai_confidence >= config.auto_approve_threshold:
-                        cards_auto_approved += 1
-                    else:
-                        cards_pending_review += 1
-
-                    cards_discovered += 1
-
-                except Exception as e:
-                    logger.error(f"Discovery error for goal {goal['id']}: {str(e)}")
-
-        # Update run as completed
-        supabase.table("discovery_runs").update({
-            "status": "completed",
-            "completed_at": datetime.now().isoformat(),
-            "cards_discovered": cards_discovered,
-            "cards_auto_approved": cards_auto_approved,
-            "cards_pending_review": cards_pending_review,
-            "sources_processed": sources_processed
-        }).eq("id", run_id).execute()
-
-        logger.info(f"Discovery run {run_id} completed: {cards_discovered} cards discovered")
-
-    except Exception as e:
-        logger.error(f"Discovery run {run_id} failed: {str(e)}")
-        supabase.table("discovery_runs").update({
-            "status": "failed",
-            "completed_at": datetime.now().isoformat(),
-            "error_message": str(e)
-        }).eq("id", run_id).execute()
-
-
-@app.get("/api/v1/discovery/runs", response_model=List[DiscoveryRun])
-async def list_discovery_runs(
-    current_user: dict = Depends(get_current_user),
-    limit: int = 20,
-    offset: int = 0
-):
-    """
-    List discovery runs.
-
-    Returns paginated list of discovery runs ordered by start time descending.
-
-    Args:
-        limit: Maximum number of runs to return (default: 20)
-        offset: Number of runs to skip for pagination
-
-    Returns:
-        List of discovery run records
-    """
-    response = supabase.table("discovery_runs").select("*").order(
-        "started_at", desc=True
-    ).range(offset, offset + limit - 1).execute()
-
-    return [DiscoveryRun(**run) for run in response.data]
-
-
-@app.get("/api/v1/discovery/runs/{run_id}", response_model=DiscoveryRun)
-async def get_discovery_run(
-    run_id: str,
-    current_user: dict = Depends(get_current_user)
-):
-    """
-    Get details of a specific discovery run.
-
-    Args:
-        run_id: UUID of the discovery run
-
-    Returns:
-        Discovery run record with full details
-
-    Raises:
-        HTTPException 404: Discovery run not found
-    """
-    response = supabase.table("discovery_runs").select("*").eq("id", run_id).execute()
-
-    if not response.data:
-        raise HTTPException(status_code=404, detail="Discovery run not found")
-
-    return DiscoveryRun(**response.data[0])
-
-
-@app.post("/api/v1/discovery/runs/{run_id}/cancel")
-async def cancel_discovery_run(
-    run_id: str,
-    current_user: dict = Depends(get_current_user)
-):
-    """
-    Cancel a discovery run.
-
-    Only runs with status 'queued' or 'processing' can be cancelled.
-
-    Args:
-        run_id: UUID of the discovery run to cancel
-
-    Returns:
-        Updated discovery run record
-
-    Raises:
-        HTTPException 404: Discovery run not found
-        HTTPException 400: Run cannot be cancelled (already completed/failed/cancelled)
-    """
-    # Get current run status
-    response = supabase.table("discovery_runs").select("*").eq("id", run_id).execute()
-
-    if not response.data:
-        raise HTTPException(status_code=404, detail="Discovery run not found")
-
-    run = response.data[0]
-
-    # Check if run can be cancelled
-    if run["status"] not in ["queued", "processing"]:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot cancel run with status '{run['status']}'. Only 'queued' or 'processing' runs can be cancelled."
-        )
-
-    # Update status to cancelled
-    update_response = supabase.table("discovery_runs").update({
-        "status": "cancelled",
-        "completed_at": datetime.now().isoformat(),
-        "error_message": f"Cancelled by user {current_user['id']}"
-    }).eq("id", run_id).execute()
-
-    if update_response.data:
-        logger.info(f"Discovery run {run_id} cancelled by user {current_user['id']}")
-        return DiscoveryRun(**update_response.data[0])
-    else:
-        raise HTTPException(status_code=500, detail="Failed to cancel discovery run")
 
 
 @app.get("/api/v1/discovery/blocked-topics", response_model=List[BlockedTopic])
@@ -1957,19 +1704,20 @@ async def run_weekly_discovery():
 
         run_record = {
             "id": run_id,
-            "status": "queued",
-            "config": config.dict(),
-            "created_by": user_id,
-            "cards_discovered": 0,
-            "cards_auto_approved": 0,
-            "cards_pending_review": 0,
-            "sources_processed": 0,
-            "created_at": datetime.now().isoformat()
+            "status": "running",
+            "triggered_by": "scheduled",
+            "triggered_by_user": user_id,
+            "cards_created": 0,
+            "cards_enriched": 0,
+            "cards_deduplicated": 0,
+            "sources_found": 0,
+            "started_at": datetime.now().isoformat(),
+            "summary_report": {"config": config.dict()}
         }
 
         supabase.table("discovery_runs").insert(run_record).execute()
 
-        # Execute discovery
+        # Execute discovery (pass existing run_id to avoid duplicate record)
         await execute_discovery_run_background(run_id, config, user_id)
 
         logger.info(f"Weekly discovery run {run_id} completed")
@@ -2401,6 +2149,23 @@ async def list_research_tasks(
 # Discovery endpoints
 # ============================================================================
 
+@app.get("/api/v1/discovery/config")
+async def get_discovery_config(current_user: dict = Depends(get_current_user)):
+    """
+    Get current discovery configuration defaults.
+
+    Returns environment-configured defaults for discovery runs.
+    Frontend can use this to display current limits.
+    """
+    return {
+        "max_queries_per_run": get_discovery_max_queries(),
+        "max_sources_total": get_discovery_max_sources(),
+        "max_sources_per_query": int(os.getenv("DISCOVERY_MAX_SOURCES_PER_QUERY", "10")),
+        "auto_approve_threshold": 0.95,
+        "similarity_threshold": 0.92
+    }
+
+
 @app.post("/api/v1/discovery/run", response_model=DiscoveryRun)
 async def trigger_discovery_run(
     config: DiscoveryConfigRequest = DiscoveryConfigRequest(),
@@ -2414,13 +2179,22 @@ async def trigger_discovery_run(
     Returns immediately with run ID. Poll GET /discovery/runs/{run_id} for status.
     """
     try:
-        # Create discovery run record
+        # Apply env defaults for any unset values
+        resolved_config = {
+            "max_queries_per_run": config.max_queries_per_run or get_discovery_max_queries(),
+            "max_sources_total": config.max_sources_total or get_discovery_max_sources(),
+            "auto_approve_threshold": config.auto_approve_threshold,
+            "pillars_filter": config.pillars_filter,
+            "dry_run": config.dry_run
+        }
+
+        # Create discovery run record with resolved config
         run_record = {
             "status": "running",
             "triggered_by": "manual",
             "triggered_by_user": current_user["id"],
             "summary_report": {
-                "config": config.dict()
+                "config": resolved_config
             },
             "cards_created": 0,
             "cards_enriched": 0,
@@ -2457,29 +2231,47 @@ async def execute_discovery_run_background(
     user_id: str
 ):
     """
-    Background task to execute discovery run.
+    Background task to execute discovery run using DiscoveryService.
 
     Updates run status through lifecycle: running -> completed/failed
     """
-    try:
-        # TODO: Implement actual discovery logic here
-        # For now, just mark as completed after a brief delay
-        await asyncio.sleep(1)
+    from .discovery_service import DiscoveryService, DiscoveryConfig
 
-        # Update as completed
+    try:
+        logger.info(f"Starting discovery run {run_id}")
+
+        # Convert API config to service config
+        discovery_config = DiscoveryConfig(
+            max_queries_per_run=config.max_queries_per_run,
+            max_sources_total=config.max_sources_total,
+            auto_approve_threshold=config.auto_approve_threshold,
+            pillars_filter=config.pillars_filter or [],
+            dry_run=config.dry_run
+        )
+
+        # Execute discovery using the service (pass existing run_id to avoid duplicate)
+        service = DiscoveryService(supabase, openai_client)
+        result = await service.execute_discovery_run(discovery_config, existing_run_id=run_id)
+
+        # Update the run record with results (service already updates its own record,
+        # but we update the one we created in the endpoint)
         supabase.table("discovery_runs").update({
-            "status": "completed",
+            "status": result.status.value,
             "completed_at": datetime.now().isoformat(),
-            "cards_created": 0,
-            "cards_enriched": 0,
-            "cards_deduplicated": 0,
-            "sources_found": 0
+            "queries_generated": result.queries_generated,
+            "sources_found": result.sources_discovered,
+            "sources_relevant": result.sources_triaged,
+            "cards_created": len(result.cards_created),
+            "cards_enriched": len(result.cards_enriched),
+            "cards_deduplicated": result.sources_duplicate,
+            "estimated_cost": result.estimated_cost,
+            "summary_report": {"markdown": result.summary_report, "errors": result.errors}
         }).eq("id", run_id).execute()
 
-        logger.info(f"Discovery run {run_id} completed")
+        logger.info(f"Discovery run {run_id} completed: {len(result.cards_created)} cards created, {len(result.cards_enriched)} enriched")
 
     except Exception as e:
-        logger.error(f"Discovery run {run_id} failed: {str(e)}")
+        logger.error(f"Discovery run {run_id} failed: {str(e)}", exc_info=True)
         # Update as failed
         supabase.table("discovery_runs").update({
             "status": "failed",
@@ -2524,6 +2316,45 @@ async def list_discovery_runs(
     ).limit(limit).execute()
 
     return [DiscoveryRun(**r) for r in result.data]
+
+
+@app.post("/api/v1/discovery/runs/{run_id}/cancel")
+async def cancel_discovery_run(
+    run_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Cancel a running discovery run.
+
+    Only runs with status 'running' can be cancelled.
+    """
+    # Get current run status
+    response = supabase.table("discovery_runs").select("*").eq("id", run_id).execute()
+
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Discovery run not found")
+
+    run = response.data[0]
+
+    # Check if run can be cancelled
+    if run["status"] != "running":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot cancel run with status '{run['status']}'. Only 'running' runs can be cancelled."
+        )
+
+    # Update status to cancelled
+    update_response = supabase.table("discovery_runs").update({
+        "status": "cancelled",
+        "completed_at": datetime.now().isoformat(),
+        "error_message": f"Cancelled by user {current_user['id']}"
+    }).eq("id", run_id).execute()
+
+    if update_response.data:
+        logger.info(f"Discovery run {run_id} cancelled by user {current_user['id']}")
+        return DiscoveryRun(**update_response.data[0])
+    else:
+        raise HTTPException(status_code=500, detail="Failed to cancel discovery run")
 
 
 # Add scheduler for nightly jobs

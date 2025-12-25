@@ -35,6 +35,7 @@ Usage:
 
 import asyncio
 import logging
+import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Optional, Dict, Any, Tuple
@@ -109,6 +110,19 @@ DEFAULT_SEARCH_TOPICS = [
 
 
 # ============================================================================
+# Environment-based defaults (can be overridden in .env)
+# ============================================================================
+
+def get_discovery_defaults():
+    """Get discovery defaults from environment variables."""
+    return {
+        "max_queries": int(os.getenv("DISCOVERY_MAX_QUERIES", "100")),
+        "max_sources_per_query": int(os.getenv("DISCOVERY_MAX_SOURCES_PER_QUERY", "10")),
+        "max_sources_total": int(os.getenv("DISCOVERY_MAX_SOURCES_TOTAL", "500")),
+    }
+
+
+# ============================================================================
 # Configuration Classes
 # ============================================================================
 
@@ -126,15 +140,29 @@ class SourceCategoryConfig:
 class DiscoveryConfig:
     """Configuration for a discovery run."""
 
-    # Query limits
-    max_queries_per_run: int = 100
-    max_sources_per_query: int = 10
-    max_sources_total: int = 500
+    # Query limits - defaults come from environment
+    max_queries_per_run: int = None
+    max_sources_per_query: int = None
+    max_sources_total: int = None
 
-    # Thresholds
+    def __post_init__(self):
+        """Apply environment defaults for any None values."""
+        defaults = get_discovery_defaults()
+        if self.max_queries_per_run is None:
+            self.max_queries_per_run = defaults["max_queries"]
+        if self.max_sources_per_query is None:
+            self.max_sources_per_query = defaults["max_sources_per_query"]
+        if self.max_sources_total is None:
+            self.max_sources_total = defaults["max_sources_total"]
+
+    # Thresholds - TUNED TO PREFER ENRICHMENT OVER CREATION
     auto_approve_threshold: float = 0.95  # Auto-approve confidence threshold
-    similarity_threshold: float = 0.92    # Strong match - add to existing card
-    weak_match_threshold: float = 0.82    # Weak match - check with LLM
+    similarity_threshold: float = 0.85    # Strong match - add to existing card (lowered from 0.92)
+    weak_match_threshold: float = 0.75    # Weak match - check with LLM (lowered from 0.82)
+    name_similarity_threshold: float = 0.80  # Name-based matching threshold
+
+    # Card creation limits - PREVENT RUNAWAY CARD CREATION
+    max_new_cards_per_run: int = 15  # Maximum new cards per discovery run
 
     # Filtering
     pillars_filter: List[str] = field(default_factory=list)  # Empty = all pillars
@@ -198,6 +226,148 @@ class CardAction(Enum):
     DUPLICATE = "duplicate"       # Duplicate of existing source
     BLOCKED = "blocked"           # Matched blocked topic
     FILTERED = "filtered"         # Filtered by triage
+
+
+# Stage number to ID mapping (matches stages table)
+STAGE_NUMBER_TO_ID = {
+    1: "1_concept",
+    2: "2_exploring",
+    3: "3_pilot",
+    4: "4_proof",
+    5: "5_implementing",
+    6: "6_scaling",
+    7: "7_mature",
+    8: "8_declining",
+}
+
+
+# Pillar code mapping: AI codes -> Database pillar IDs
+# AI uses: CH, EW, HG, HH, MC, PS
+# Database has: CH, MC, HS, EC, ES, CE
+PILLAR_CODE_MAP = {
+    "CH": "CH",  # Community Health -> Community Health
+    "MC": "MC",  # Mobility & Connectivity -> Mobility & Connectivity
+    "EW": "EC",  # Economic & Workforce -> Economic Development
+    "HG": "EC",  # High-Performing Government -> Economic Development (closest match)
+    "HH": "HS",  # Homelessness & Housing -> Housing & Economic Stability
+    "PS": "CH",  # Public Safety -> Community Health (closest match)
+    "ES": "ES",  # Environmental Sustainability -> Environmental Sustainability
+    "CE": "CE",  # Cultural & Entertainment -> Cultural & Entertainment
+}
+
+
+def convert_pillar_id(ai_pillar: str) -> Optional[str]:
+    """
+    Convert AI pillar code to database pillar ID.
+
+    AI may return codes that don't exist in the database.
+    This function maps them to the closest valid pillar.
+    """
+    if not ai_pillar:
+        return None
+
+    # Try direct mapping first
+    if ai_pillar in PILLAR_CODE_MAP:
+        return PILLAR_CODE_MAP[ai_pillar]
+
+    # If not in map, return as-is (may fail FK constraint)
+    logger.warning(f"Unknown pillar code: {ai_pillar}, using as-is")
+    return ai_pillar
+
+
+def convert_goal_id(ai_goal: str) -> str:
+    """
+    Convert AI goal format (e.g., "CH.1") to database format (e.g., "CH-01").
+
+    AI returns: "CH.1", "MC.3", "HG.2"
+    Database expects: "CH-01", "MC-03", "HG-02"
+    """
+    if not ai_goal or '.' not in ai_goal:
+        return ai_goal
+
+    parts = ai_goal.split('.')
+    if len(parts) != 2:
+        return ai_goal
+
+    pillar = parts[0]
+    try:
+        number = int(parts[1])
+        # Also convert the pillar code in the goal
+        mapped_pillar = PILLAR_CODE_MAP.get(pillar, pillar)
+        return f"{mapped_pillar}-{number:02d}"
+    except ValueError:
+        return ai_goal
+
+
+def calculate_name_similarity(name1: str, name2: str) -> float:
+    """
+    Calculate similarity between two card/concept names.
+    Uses normalized Levenshtein-like comparison for fuzzy matching.
+
+    Returns a score between 0.0 and 1.0.
+    """
+    if not name1 or not name2:
+        return 0.0
+
+    # Normalize: lowercase, remove punctuation, strip whitespace
+    import re
+    def normalize(s):
+        s = s.lower().strip()
+        s = re.sub(r'[^\w\s]', '', s)
+        return ' '.join(s.split())
+
+    n1 = normalize(name1)
+    n2 = normalize(name2)
+
+    if n1 == n2:
+        return 1.0
+
+    # Check if one contains the other (high similarity)
+    if n1 in n2 or n2 in n1:
+        shorter = min(len(n1), len(n2))
+        longer = max(len(n1), len(n2))
+        return shorter / longer if longer > 0 else 0.0
+
+    # Word overlap calculation
+    words1 = set(n1.split())
+    words2 = set(n2.split())
+
+    if not words1 or not words2:
+        return 0.0
+
+    intersection = words1 & words2
+    union = words1 | words2
+
+    # Jaccard similarity
+    return len(intersection) / len(union) if union else 0.0
+
+
+def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
+    """
+    Calculate cosine similarity between two vectors in Python.
+
+    This is a fallback when the database RPC function fails due to
+    vector extension schema issues.
+
+    Args:
+        vec1: First embedding vector
+        vec2: Second embedding vector
+
+    Returns:
+        Cosine similarity score between 0.0 and 1.0
+    """
+    if not vec1 or not vec2 or len(vec1) != len(vec2):
+        return 0.0
+
+    # Calculate dot product and magnitudes
+    dot_product = sum(a * b for a, b in zip(vec1, vec2))
+    magnitude1 = sum(a * a for a in vec1) ** 0.5
+    magnitude2 = sum(b * b for b in vec2) ** 0.5
+
+    if magnitude1 == 0 or magnitude2 == 0:
+        return 0.0
+
+    return dot_product / (magnitude1 * magnitude2)
 
 
 # ============================================================================
@@ -558,19 +728,28 @@ class DiscoveryService:
 
     async def execute_discovery_run(
         self,
-        config: DiscoveryConfig
+        config: DiscoveryConfig,
+        existing_run_id: Optional[str] = None
     ) -> DiscoveryResult:
         """
         Execute a complete discovery run.
 
         Args:
             config: Configuration for this run
+            existing_run_id: Optional existing run ID to use (skips creating new record)
 
         Returns:
             DiscoveryResult with complete statistics
         """
         start_time = datetime.now()
-        run_id = await self._create_run_record(config)
+
+        # Use existing run_id if provided, otherwise create new record
+        if existing_run_id:
+            run_id = existing_run_id
+            logger.info(f"Using existing discovery run {run_id}")
+        else:
+            run_id = await self._create_run_record(config)
+
         errors: List[str] = []
         sources_by_category: Dict[str, int] = {}
         categories_fetched: int = 0
@@ -584,6 +763,9 @@ class DiscoveryService:
 
         try:
             # Step 1: Generate queries
+            await self._update_progress_simple(
+                run_id, "queries", "Generating search queries from pillars and priorities...", []
+            )
             step_start = datetime.now()
             queries = await self._generate_queries(config)
             processing_time.query_generation_seconds = (datetime.now() - step_start).total_seconds()
@@ -683,6 +865,12 @@ class DiscoveryService:
                 )
 
             # Step 3: Triage sources
+            await self._update_progress_simple(
+                run_id, "triage",
+                f"Triaging {len(raw_sources)} sources for relevance...",
+                ["queries", "search"],
+                {"queries_generated": len(queries), "sources_found": len(raw_sources)}
+            )
             step_start = datetime.now()
             triaged_sources, triage_tokens = await self._triage_sources_with_metrics(raw_sources)
             processing_time.triage_seconds = (datetime.now() - step_start).total_seconds()
@@ -690,6 +878,12 @@ class DiscoveryService:
             logger.info(f"Triaged to {len(triaged_sources)} relevant sources in {processing_time.triage_seconds:.2f}s")
 
             # Step 4: Check blocked topics
+            await self._update_progress_simple(
+                run_id, "blocked",
+                f"Checking {len(triaged_sources)} sources against blocked topics...",
+                ["queries", "search", "triage"],
+                {"queries_generated": len(queries), "sources_found": len(raw_sources), "sources_relevant": len(triaged_sources)}
+            )
             step_start = datetime.now()
             if config.skip_blocked_topics:
                 filtered_sources, blocked_count = await self._check_blocked_topics(
@@ -702,6 +896,12 @@ class DiscoveryService:
             processing_time.blocked_topic_check_seconds = (datetime.now() - step_start).total_seconds()
 
             # Step 5: Deduplicate against existing cards
+            await self._update_progress_simple(
+                run_id, "dedupe",
+                f"Deduplicating {len(filtered_sources)} sources against existing cards...",
+                ["queries", "search", "triage", "blocked"],
+                {"queries_generated": len(queries), "sources_found": len(raw_sources), "sources_relevant": len(triaged_sources)}
+            )
             step_start = datetime.now()
             dedup_result, dedup_tokens = await self._deduplicate_sources_with_metrics(filtered_sources, config)
             processing_time.deduplication_seconds = (datetime.now() - step_start).total_seconds()
@@ -713,6 +913,19 @@ class DiscoveryService:
             )
 
             # Step 6: Create or enrich cards (skip if dry run)
+            await self._update_progress_simple(
+                run_id, "cards",
+                f"Creating/enriching cards from {len(dedup_result.new_concept_candidates)} new concepts...",
+                ["queries", "search", "triage", "blocked", "dedupe"],
+                {
+                    "queries_generated": len(queries),
+                    "sources_found": len(raw_sources),
+                    "sources_relevant": len(triaged_sources),
+                    "duplicates": dedup_result.duplicate_count,
+                    "enrichments": len(dedup_result.enrichment_candidates),
+                    "new_concepts": len(dedup_result.new_concept_candidates)
+                }
+            )
             step_start = datetime.now()
             if config.dry_run:
                 logger.info("Dry run - skipping card creation/enrichment")
@@ -789,6 +1002,336 @@ class DiscoveryService:
             )
 
     # ========================================================================
+    # Progress Tracking
+    # ========================================================================
+
+    async def _update_progress(
+        self,
+        run_id: str,
+        stage: str,
+        message: str,
+        stages_status: Dict[str, str],
+        stats: Optional[Dict[str, int]] = None
+    ) -> None:
+        """
+        Update progress in the discovery_runs record.
+
+        Args:
+            run_id: Discovery run ID
+            stage: Current stage name
+            message: Human-readable progress message
+            stages_status: Dict of stage_name -> status (pending/in_progress/completed)
+            stats: Optional dict of current statistics
+        """
+        try:
+            # Build progress object
+            progress = {
+                "current_stage": stage,
+                "message": message,
+                "stages": stages_status,
+                "updated_at": datetime.now().isoformat(),
+            }
+            if stats:
+                progress["stats"] = stats
+
+            # Read current summary_report
+            result = self.supabase.table("discovery_runs").select("summary_report").eq("id", run_id).single().execute()
+            current_report = result.data.get("summary_report", {}) if result.data else {}
+
+            # Merge progress into summary_report
+            updated_report = {**current_report, "progress": progress}
+
+            # Update the record
+            self.supabase.table("discovery_runs").update({
+                "summary_report": updated_report
+            }).eq("id", run_id).execute()
+
+            logger.debug(f"Progress update: {stage} - {message}")
+        except Exception as e:
+            # Don't fail on progress update errors
+            logger.warning(f"Could not update progress: {e}")
+
+    async def _update_progress_simple(
+        self,
+        run_id: str,
+        stage: str,
+        message: str,
+        completed_stages: List[str],
+        stats: Optional[Dict[str, int]] = None
+    ) -> None:
+        """
+        Simplified progress update that builds stages_status automatically.
+        """
+        all_stages = ["queries", "search", "triage", "blocked", "dedupe", "cards"]
+        stages_status = {}
+
+        for s in all_stages:
+            if s in completed_stages:
+                stages_status[s] = "completed"
+            elif s == stage:
+                stages_status[s] = "in_progress"
+            else:
+                stages_status[s] = "pending"
+
+        await self._update_progress(run_id, stage, message, stages_status, stats)
+
+    # ========================================================================
+    # Source Persistence (saves all discovery data)
+    # ========================================================================
+
+    async def _persist_discovered_source(
+        self,
+        run_id: str,
+        source: 'RawSource',
+        query: Optional['QueryConfig'] = None
+    ) -> Optional[str]:
+        """
+        Persist a discovered source immediately when found.
+        Returns the discovered_source ID for later updates.
+        """
+        try:
+            from urllib.parse import urlparse
+            domain = urlparse(source.url).netloc if source.url else None
+
+            record = {
+                "discovery_run_id": run_id,
+                "url": source.url,
+                "title": source.title,
+                "content_snippet": (source.content or "")[:2000],
+                "full_content": source.content,
+                "published_at": source.published_at,
+                "source_type": source.source_type,
+                "domain": domain,
+                "search_query": query.query_text if query else None,
+                "query_pillar": query.pillar_code if query else None,
+                "query_priority": query.priority_id if query else None,
+                "processing_status": "discovered",
+            }
+
+            result = self.supabase.table("discovered_sources").insert(record).execute()
+            if result.data:
+                return result.data[0]["id"]
+        except Exception as e:
+            logger.warning(f"Could not persist discovered source: {e}")
+        return None
+
+    async def _update_source_triage(
+        self,
+        source_id: str,
+        triage: 'TriageResult',
+        passed: bool
+    ) -> None:
+        """Update source with triage results."""
+        try:
+            self.supabase.table("discovered_sources").update({
+                "triage_is_relevant": triage.is_relevant,
+                "triage_confidence": triage.confidence,
+                "triage_primary_pillar": triage.primary_pillar,
+                "triage_reason": triage.reason,
+                "triaged_at": datetime.now().isoformat(),
+                "processing_status": "triaged" if passed else "filtered_triage",
+            }).eq("id", source_id).execute()
+        except Exception as e:
+            logger.warning(f"Could not update source triage: {e}")
+
+    async def _update_source_analysis(
+        self,
+        source_id: str,
+        analysis: 'AnalysisResult'
+    ) -> None:
+        """Update source with full analysis results."""
+        try:
+            entities_json = [
+                {"name": e.name, "type": e.entity_type, "context": e.context}
+                for e in (analysis.entities or [])
+            ]
+
+            self.supabase.table("discovered_sources").update({
+                "analysis_summary": analysis.summary,
+                "analysis_key_excerpts": analysis.key_excerpts,
+                "analysis_pillars": analysis.pillars,
+                "analysis_goals": analysis.goals,
+                "analysis_steep_categories": analysis.steep_categories,
+                "analysis_anchors": analysis.anchors,
+                "analysis_horizon": analysis.horizon,
+                "analysis_suggested_stage": analysis.suggested_stage,
+                "analysis_triage_score": analysis.triage_score,
+                "analysis_credibility": analysis.credibility,
+                "analysis_novelty": analysis.novelty,
+                "analysis_likelihood": analysis.likelihood,
+                "analysis_impact": analysis.impact,
+                "analysis_relevance": analysis.relevance,
+                "analysis_time_to_awareness_months": analysis.time_to_awareness_months,
+                "analysis_time_to_prepare_months": analysis.time_to_prepare_months,
+                "analysis_suggested_card_name": analysis.suggested_card_name,
+                "analysis_is_new_concept": analysis.is_new_concept,
+                "analysis_reasoning": analysis.reasoning,
+                "analysis_entities": entities_json,
+                "analyzed_at": datetime.now().isoformat(),
+                "processing_status": "analyzed",
+            }).eq("id", source_id).execute()
+        except Exception as e:
+            logger.warning(f"Could not update source analysis: {e}")
+
+    async def _update_source_dedup(
+        self,
+        source_id: str,
+        status: str,  # 'unique', 'duplicate', 'enrichment_candidate'
+        matched_card_id: Optional[str] = None,
+        similarity: Optional[float] = None
+    ) -> None:
+        """Update source with deduplication results."""
+        try:
+            processing_status = {
+                "unique": "deduplicated",
+                "duplicate": "filtered_duplicate",
+                "enrichment_candidate": "deduplicated",
+            }.get(status, "deduplicated")
+
+            self.supabase.table("discovered_sources").update({
+                "dedup_status": status,
+                "dedup_matched_card_id": matched_card_id,
+                "dedup_similarity_score": similarity,
+                "deduplicated_at": datetime.now().isoformat(),
+                "processing_status": processing_status,
+            }).eq("id", source_id).execute()
+        except Exception as e:
+            logger.warning(f"Could not update source dedup: {e}")
+
+    async def _update_source_outcome(
+        self,
+        source_id: str,
+        status: str,  # 'card_created', 'card_enriched', 'filtered_blocked', 'error'
+        card_id: Optional[str] = None,
+        source_record_id: Optional[str] = None,
+        error_message: Optional[str] = None,
+        error_stage: Optional[str] = None
+    ) -> None:
+        """Update source with final outcome."""
+        try:
+            update = {
+                "processing_status": status,
+                "resulting_card_id": card_id,
+                "resulting_source_id": source_record_id,
+            }
+            if error_message:
+                update["error_message"] = error_message
+                update["error_stage"] = error_stage
+
+            self.supabase.table("discovered_sources").update(update).eq("id", source_id).execute()
+        except Exception as e:
+            logger.warning(f"Could not update source outcome: {e}")
+
+    async def _python_vector_search(
+        self,
+        query_embedding: List[float],
+        config: DiscoveryConfig,
+        suggested_name: str,
+        source: ProcessedSource,
+        enrichment_candidates: List[Tuple[ProcessedSource, str, float]],
+        new_concept_candidates: List[ProcessedSource]
+    ) -> str:
+        """
+        Python-based fallback for vector similarity search when RPC fails.
+
+        This fetches cards with embeddings from the database and calculates
+        cosine similarity in Python. Less efficient than DB-side computation
+        but works around schema/extension issues.
+
+        Args:
+            query_embedding: The source embedding to compare
+            config: Discovery configuration with thresholds
+            suggested_name: Suggested card name for logging
+            source: The source being processed
+            enrichment_candidates: List to append enrichment candidates
+            new_concept_candidates: List to append new concepts
+
+        Returns:
+            "enriched" if matched to existing card, "new" if new concept
+        """
+        # Fetch cards with embeddings (non-rejected only)
+        cards_result = self.supabase.table("cards").select(
+            "id, name, summary, pillar_id, horizon, embedding"
+        ).neq("review_status", "rejected").not_.is_("embedding", "null").limit(100).execute()
+
+        if not cards_result.data:
+            logger.info(f"PYTHON FALLBACK: No cards with embeddings found - NEW CONCEPT")
+            new_concept_candidates.append(source)
+            if source.discovered_source_id:
+                await self._update_source_dedup(source.discovered_source_id, "unique")
+            return "new"
+
+        # Calculate similarities using Python
+        best_match = None
+        best_similarity = 0.0
+
+        for card in cards_result.data:
+            card_embedding = card.get("embedding")
+            if not card_embedding:
+                continue
+
+            similarity = cosine_similarity(query_embedding, card_embedding)
+
+            if similarity > best_similarity:
+                best_similarity = similarity
+                best_match = card
+
+        if best_match and best_similarity >= config.similarity_threshold:
+            # Strong match - enrich existing card
+            logger.info(
+                f"PYTHON FALLBACK MATCH (strong): '{suggested_name}' -> '{best_match.get('name', 'unknown')}' "
+                f"(similarity: {best_similarity:.3f}) - ENRICHING"
+            )
+            enrichment_candidates.append((source, best_match["id"], best_similarity))
+            if source.discovered_source_id:
+                await self._update_source_dedup(
+                    source.discovered_source_id, "enrichment_candidate",
+                    best_match["id"], best_similarity
+                )
+            return "enriched"
+
+        elif best_match and best_similarity >= config.weak_match_threshold:
+            # Weak match - use LLM to decide
+            decision = await self.ai_service.check_card_match(
+                source_summary=source.analysis.summary,
+                source_card_name=source.analysis.suggested_card_name,
+                existing_card_name=best_match["name"],
+                existing_card_summary=best_match.get("summary", "")
+            )
+
+            if decision.get("is_match") and decision.get("confidence", 0) >= 0.6:
+                logger.info(
+                    f"PYTHON FALLBACK + LLM MATCH: '{suggested_name}' -> '{best_match['name']}' "
+                    f"(similarity: {best_similarity:.3f}, llm_conf: {decision.get('confidence', 0):.2f}) - ENRICHING"
+                )
+                enrichment_candidates.append((source, best_match["id"], best_similarity))
+                if source.discovered_source_id:
+                    await self._update_source_dedup(
+                        source.discovered_source_id, "enrichment_candidate",
+                        best_match["id"], best_similarity
+                    )
+                return "enriched"
+            else:
+                logger.info(
+                    f"PYTHON FALLBACK + LLM NO MATCH: '{suggested_name}' vs '{best_match['name']}' "
+                    f"(reason: {decision.get('reasoning', 'unknown')[:80]}) - NEW CONCEPT"
+                )
+                new_concept_candidates.append(source)
+                if source.discovered_source_id:
+                    await self._update_source_dedup(source.discovered_source_id, "unique")
+                return "new"
+
+        else:
+            logger.info(
+                f"PYTHON FALLBACK NO MATCH: '{suggested_name}' - best similarity {best_similarity:.3f} "
+                f"below threshold {config.weak_match_threshold} - NEW CONCEPT"
+            )
+            new_concept_candidates.append(source)
+            if source.discovered_source_id:
+                await self._update_source_dedup(source.discovered_source_id, "unique")
+            return "new"
+
+    # ========================================================================
     # Step 1: Create Run Record
     # ========================================================================
 
@@ -808,17 +1351,20 @@ class DiscoveryService:
             self.supabase.table("discovery_runs").insert({
                 "id": run_id,
                 "status": DiscoveryStatus.RUNNING.value,
-                "config": {
-                    "max_queries_per_run": config.max_queries_per_run,
-                    "max_sources_per_query": config.max_sources_per_query,
-                    "max_sources_total": config.max_sources_total,
-                    "auto_approve_threshold": config.auto_approve_threshold,
-                    "similarity_threshold": config.similarity_threshold,
-                    "pillars_filter": config.pillars_filter,
-                    "horizons_filter": config.horizons_filter,
-                    "dry_run": config.dry_run,
-                },
+                "triggered_by": "manual",
+                "pillars_scanned": config.pillars_filter or [],
+                "priorities_scanned": config.horizons_filter or [],
                 "started_at": datetime.now().isoformat(),
+                "summary_report": {
+                    "config": {
+                        "max_queries_per_run": config.max_queries_per_run,
+                        "max_sources_per_query": config.max_sources_per_query,
+                        "max_sources_total": config.max_sources_total,
+                        "auto_approve_threshold": config.auto_approve_threshold,
+                        "similarity_threshold": config.similarity_threshold,
+                        "dry_run": config.dry_run,
+                    }
+                },
             }).execute()
         except Exception as e:
             # Log but don't fail - table might not exist yet
@@ -1265,6 +1811,10 @@ class DiscoveryService:
                     )
 
                 if triage.is_relevant and triage.confidence >= triage_threshold:
+                    # Update discovered_sources with triage passed
+                    if source.discovered_source_id:
+                        await self._update_source_triage(source.discovered_source_id, triage, True)
+
                     # Full analysis
                     analysis = await self.ai_service.analyze_source(
                         title=source.title,
@@ -1273,19 +1823,35 @@ class DiscoveryService:
                         published_at=datetime.now().isoformat()
                     )
 
+                    # Update discovered_sources with analysis
+                    if source.discovered_source_id:
+                        await self._update_source_analysis(source.discovered_source_id, analysis)
+
                     # Generate embedding
                     embed_text = f"{source.title} {analysis.summary}"
                     embedding = await self.ai_service.generate_embedding(embed_text)
 
-                    processed.append(ProcessedSource(
+                    processed_source = ProcessedSource(
                         raw=source,
                         triage=triage,
                         analysis=analysis,
-                        embedding=embedding
-                    ))
+                        embedding=embedding,
+                        discovered_source_id=source.discovered_source_id
+                    )
+                    processed.append(processed_source)
+                else:
+                    # Update discovered_sources with triage failed
+                    if source.discovered_source_id:
+                        await self._update_source_triage(source.discovered_source_id, triage, False)
 
             except Exception as e:
                 logger.warning(f"Triage/analysis failed for {source.url}: {e}")
+                # Mark error in discovered_sources
+                if source.discovered_source_id:
+                    await self._update_source_outcome(
+                        source.discovered_source_id, "error",
+                        error_message=str(e), error_stage="triage"
+                    )
                 continue
 
         return processed
@@ -1411,6 +1977,11 @@ class DiscoveryService:
                 if is_blocked:
                     blocked_count += 1
                     logger.debug(f"Blocked source: {source.raw.title[:50]}")
+                    # Update discovered_sources with blocked status
+                    if source.discovered_source_id:
+                        await self._update_source_outcome(
+                            source.discovered_source_id, "filtered_blocked"
+                        )
                 else:
                     filtered.append(source)
 
@@ -1430,7 +2001,13 @@ class DiscoveryService:
         config: DiscoveryConfig
     ) -> DeduplicationResult:
         """
-        Deduplicate sources against existing cards using vector similarity.
+        Deduplicate sources against existing cards using multi-tier matching:
+        1. Exact URL match
+        2. Name similarity match
+        3. Vector similarity match
+        4. LLM decision for weak matches
+
+        PHILOSOPHY: Prefer enrichment over creation. When in doubt, add to existing card.
 
         Args:
             sources: Processed sources to deduplicate
@@ -1444,25 +2021,67 @@ class DiscoveryService:
         enrichment_candidates = []
         new_concept_candidates = []
 
+        # Pre-fetch existing card names for name-based matching
+        try:
+            existing_cards = self.supabase.table("cards").select(
+                "id, name, summary"
+            ).neq("review_status", "rejected").execute()
+            card_name_map = {c["id"]: c for c in existing_cards.data} if existing_cards.data else {}
+            logger.info(f"Loaded {len(card_name_map)} existing cards for deduplication")
+        except Exception as e:
+            logger.warning(f"Could not load existing cards for name matching: {e}")
+            card_name_map = {}
+
         for source in sources:
             try:
-                # Check for existing URL first
+                suggested_name = source.analysis.suggested_card_name if source.analysis else ""
+                logger.debug(f"Deduplicating: '{suggested_name}' from {source.raw.url[:50]}...")
+
+                # STEP 1: Check for existing URL first
                 url_check = self.supabase.table("sources").select("id").eq(
                     "url", source.raw.url
                 ).execute()
 
                 if url_check.data:
                     duplicate_count += 1
+                    logger.info(f"URL duplicate found: {source.raw.url[:60]}")
+                    if source.discovered_source_id:
+                        await self._update_source_dedup(
+                            source.discovered_source_id, "duplicate"
+                        )
                     continue
 
-                # Vector similarity search against existing cards
+                # STEP 2: Name-based matching (fast, no AI call needed)
+                name_match_found = False
+                if suggested_name and card_name_map:
+                    for card_id, card_data in card_name_map.items():
+                        name_sim = calculate_name_similarity(suggested_name, card_data["name"])
+                        if name_sim >= config.name_similarity_threshold:
+                            logger.info(
+                                f"NAME MATCH: '{suggested_name}' -> '{card_data['name']}' "
+                                f"(similarity: {name_sim:.2f}) - ENRICHING"
+                            )
+                            enrichment_candidates.append((source, card_id, name_sim))
+                            if source.discovered_source_id:
+                                await self._update_source_dedup(
+                                    source.discovered_source_id, "enrichment_candidate",
+                                    card_id, name_sim
+                                )
+                            name_match_found = True
+                            break
+
+                if name_match_found:
+                    unique_sources.append(source)
+                    continue
+
+                # STEP 3: Vector similarity search against existing cards
                 try:
                     match_result = self.supabase.rpc(
                         "find_similar_cards",
                         {
                             "query_embedding": source.embedding,
                             "match_threshold": config.weak_match_threshold,
-                            "match_count": 3
+                            "match_count": 5  # Get more candidates for better matching
                         }
                     ).execute()
 
@@ -1471,12 +2090,21 @@ class DiscoveryService:
                         similarity = top_match.get("similarity", 0)
 
                         if similarity >= config.similarity_threshold:
-                            # Strong match - enrich existing card
+                            # Strong vector match - enrich existing card
+                            logger.info(
+                                f"VECTOR MATCH (strong): '{suggested_name}' -> '{top_match.get('name', 'unknown')}' "
+                                f"(similarity: {similarity:.3f}) - ENRICHING"
+                            )
                             enrichment_candidates.append(
                                 (source, top_match["id"], similarity)
                             )
+                            if source.discovered_source_id:
+                                await self._update_source_dedup(
+                                    source.discovered_source_id, "enrichment_candidate",
+                                    top_match["id"], similarity
+                                )
                         elif similarity >= config.weak_match_threshold:
-                            # Weak match - use LLM to decide
+                            # Weak match - use LLM to decide (biased toward enrichment)
                             card = self.supabase.table("cards").select(
                                 "name, summary"
                             ).eq("id", top_match["id"]).single().execute()
@@ -1489,29 +2117,79 @@ class DiscoveryService:
                                     existing_card_summary=card.data.get("summary", "")
                                 )
 
-                                if decision.get("is_match") and decision.get("confidence", 0) > 0.7:
+                                # Lower threshold from 0.7 to 0.6 - prefer enrichment
+                                if decision.get("is_match") and decision.get("confidence", 0) >= 0.6:
+                                    logger.info(
+                                        f"LLM MATCH: '{suggested_name}' -> '{card.data['name']}' "
+                                        f"(vector: {similarity:.3f}, llm_conf: {decision.get('confidence', 0):.2f}) - ENRICHING"
+                                    )
                                     enrichment_candidates.append(
                                         (source, top_match["id"], similarity)
                                     )
+                                    if source.discovered_source_id:
+                                        await self._update_source_dedup(
+                                            source.discovered_source_id, "enrichment_candidate",
+                                            top_match["id"], similarity
+                                        )
                                 else:
+                                    logger.info(
+                                        f"LLM NO MATCH: '{suggested_name}' vs '{card.data['name']}' "
+                                        f"(reason: {decision.get('reasoning', 'unknown')[:80]}) - NEW CONCEPT"
+                                    )
                                     new_concept_candidates.append(source)
+                                    if source.discovered_source_id:
+                                        await self._update_source_dedup(source.discovered_source_id, "unique")
                             else:
                                 new_concept_candidates.append(source)
+                                if source.discovered_source_id:
+                                    await self._update_source_dedup(source.discovered_source_id, "unique")
                         else:
+                            logger.info(
+                                f"NO MATCH: '{suggested_name}' - best vector similarity {similarity:.3f} "
+                                f"below threshold {config.weak_match_threshold} - NEW CONCEPT"
+                            )
                             new_concept_candidates.append(source)
+                            if source.discovered_source_id:
+                                await self._update_source_dedup(source.discovered_source_id, "unique")
                     else:
+                        logger.info(f"NO MATCHES FOUND: '{suggested_name}' - NEW CONCEPT")
                         new_concept_candidates.append(source)
+                        if source.discovered_source_id:
+                            await self._update_source_dedup(source.discovered_source_id, "unique")
 
                 except Exception as e:
-                    # Vector search failed - treat as new concept
-                    logger.warning(f"Vector search failed (treating as new): {e}")
-                    new_concept_candidates.append(source)
+                    # Vector search RPC failed - use Python fallback
+                    logger.warning(f"Vector search RPC failed for '{suggested_name}': {e}")
+                    logger.info(f"Falling back to Python-based similarity search...")
+
+                    # Python fallback: fetch cards with embeddings and calculate similarity locally
+                    try:
+                        fallback_result = await self._python_vector_search(
+                            source.embedding, config, suggested_name, source,
+                            enrichment_candidates, new_concept_candidates
+                        )
+                        if fallback_result == "enriched":
+                            pass  # Already added to enrichment_candidates
+                        elif fallback_result == "new":
+                            pass  # Already added to new_concept_candidates
+                    except Exception as fallback_error:
+                        logger.error(f"Python fallback also failed: {fallback_error}")
+                        new_concept_candidates.append(source)
+                        if source.discovered_source_id:
+                            await self._update_source_dedup(source.discovered_source_id, "unique")
 
                 unique_sources.append(source)
 
             except Exception as e:
                 logger.warning(f"Deduplication failed for {source.raw.url}: {e}")
                 continue
+
+        # Summary logging
+        logger.info(
+            f"Deduplication complete: {len(sources)} sources -> "
+            f"{duplicate_count} duplicates, {len(enrichment_candidates)} enrichments, "
+            f"{len(new_concept_candidates)} new concepts"
+        )
 
         return DeduplicationResult(
             unique_sources=unique_sources,
@@ -1632,6 +2310,11 @@ class DiscoveryService:
         """
         Create new cards or enrich existing ones based on deduplication results.
 
+        SAFEGUARDS:
+        - Limits new cards per run (max_new_cards_per_run)
+        - Clusters similar new concepts before creation
+        - Enrichment always processed first (unlimited)
+
         Args:
             dedup_result: Deduplication results
             config: Run configuration
@@ -1645,7 +2328,12 @@ class DiscoveryService:
         auto_approved = 0
         pending_review = 0
 
-        # Process enrichment candidates first
+        logger.info(
+            f"Processing card actions: {len(dedup_result.enrichment_candidates)} enrichments, "
+            f"{len(dedup_result.new_concept_candidates)} new concepts"
+        )
+
+        # STEP 1: Process enrichment candidates first (no limit - always enrich)
         for source, card_id, similarity in dedup_result.enrichment_candidates:
             try:
                 source_id = await self._store_source_to_card(source, card_id)
@@ -1653,29 +2341,102 @@ class DiscoveryService:
                     sources_added += 1
                     if card_id not in cards_enriched:
                         cards_enriched.append(card_id)
+                        logger.info(f"Enriched card {card_id} with source: {source.raw.title[:50]}")
+                    # Update discovered_sources with enrichment outcome
+                    if source.discovered_source_id:
+                        await self._update_source_outcome(
+                            source.discovered_source_id, "card_enriched",
+                            card_id=card_id, source_record_id=source_id
+                        )
             except Exception as e:
                 logger.warning(f"Failed to enrich card {card_id}: {e}")
+                if source.discovered_source_id:
+                    await self._update_source_outcome(
+                        source.discovered_source_id, "error",
+                        error_message=str(e), error_stage="enrichment"
+                    )
 
-        # Process new concept candidates
-        for source in dedup_result.new_concept_candidates:
-            if not source.analysis or not source.analysis.is_new_concept:
+        # STEP 2: Cluster similar new concepts before creation
+        # Group sources with similar names to avoid creating near-duplicate cards
+        new_concepts = dedup_result.new_concept_candidates
+        if len(new_concepts) > 1:
+            clustered = self._cluster_similar_concepts(new_concepts, config)
+            logger.info(
+                f"Clustered {len(new_concepts)} new concepts into {len(clustered)} groups"
+            )
+        else:
+            # Each source is its own cluster
+            clustered = [[s] for s in new_concepts]
+
+        # STEP 3: Create cards with limit enforcement
+        cards_created_count = 0
+        skipped_due_to_limit = 0
+
+        for cluster in clustered:
+            if cards_created_count >= config.max_new_cards_per_run:
+                skipped_due_to_limit += len(cluster)
+                for source in cluster:
+                    if source.discovered_source_id:
+                        await self._update_source_outcome(
+                            source.discovered_source_id, "error",
+                            error_message=f"Card limit reached ({config.max_new_cards_per_run})",
+                            error_stage="card_creation"
+                        )
+                continue
+
+            # Pick the best source from the cluster as the card template
+            primary_source = cluster[0]  # First source (could use confidence ranking)
+            if not primary_source.analysis:
+                logger.warning(f"Skipping cluster without analysis: {primary_source.raw.title}")
                 continue
 
             try:
                 # Calculate confidence score for auto-approval
-                confidence = self._calculate_discovery_confidence(source)
+                confidence = self._calculate_discovery_confidence(primary_source)
 
-                # Create new card
-                card_id = await self._create_card_from_source(source)
+                # Create new card from primary source
+                card_id = await self._create_card_from_source(primary_source)
                 if not card_id:
+                    if primary_source.discovered_source_id:
+                        await self._update_source_outcome(
+                            primary_source.discovered_source_id, "error",
+                            error_message="Card creation returned no ID", error_stage="card_creation"
+                        )
                     continue
 
                 cards_created.append(card_id)
+                cards_created_count += 1
+                logger.info(
+                    f"Created card {cards_created_count}/{config.max_new_cards_per_run}: "
+                    f"'{primary_source.analysis.suggested_card_name}'"
+                )
 
-                # Store source to new card
-                source_id = await self._store_source_to_card(source, card_id)
+                # Store primary source to new card
+                source_id = await self._store_source_to_card(primary_source, card_id)
                 if source_id:
                     sources_added += 1
+
+                # Update discovered_sources for primary
+                if primary_source.discovered_source_id:
+                    await self._update_source_outcome(
+                        primary_source.discovered_source_id, "card_created",
+                        card_id=card_id, source_record_id=source_id
+                    )
+
+                # Add remaining cluster sources to the same card (enrichment)
+                for additional_source in cluster[1:]:
+                    try:
+                        add_source_id = await self._store_source_to_card(additional_source, card_id)
+                        if add_source_id:
+                            sources_added += 1
+                            logger.debug(f"Added clustered source to card: {additional_source.raw.title[:40]}")
+                        if additional_source.discovered_source_id:
+                            await self._update_source_outcome(
+                                additional_source.discovered_source_id, "card_enriched",
+                                card_id=card_id, source_record_id=add_source_id
+                            )
+                    except Exception as e:
+                        logger.warning(f"Failed to add clustered source: {e}")
 
                 # Auto-approve if confidence exceeds threshold
                 if confidence >= config.auto_approve_threshold:
@@ -1685,7 +2446,18 @@ class DiscoveryService:
                     pending_review += 1
 
             except Exception as e:
-                logger.warning(f"Failed to create card for {source.raw.title}: {e}")
+                logger.warning(f"Failed to create card for {primary_source.raw.title}: {e}")
+                if primary_source.discovered_source_id:
+                    await self._update_source_outcome(
+                        primary_source.discovered_source_id, "error",
+                        error_message=str(e), error_stage="card_creation"
+                    )
+
+        if skipped_due_to_limit > 0:
+            logger.warning(
+                f"Card creation limit reached: {skipped_due_to_limit} sources skipped "
+                f"(limit: {config.max_new_cards_per_run})"
+            )
 
         return CardActionResult(
             cards_created=cards_created,
@@ -1694,6 +2466,75 @@ class DiscoveryService:
             auto_approved=auto_approved,
             pending_review=pending_review
         )
+
+    def _cluster_similar_concepts(
+        self,
+        sources: List[ProcessedSource],
+        config: DiscoveryConfig
+    ) -> List[List[ProcessedSource]]:
+        """
+        Cluster similar new concepts to avoid creating near-duplicate cards.
+
+        Uses name similarity to group sources that should belong to the same card.
+        This prevents the situation where 5 sources about "AI in healthcare" create
+        5 different cards instead of 1 card with 5 sources.
+
+        Args:
+            sources: List of new concept sources to cluster
+            config: Discovery configuration with thresholds
+
+        Returns:
+            List of clusters, where each cluster is a list of sources
+        """
+        if not sources:
+            return []
+
+        # Use a simple greedy clustering approach
+        clusters: List[List[ProcessedSource]] = []
+        used = set()
+
+        # Sort by confidence (highest first) to pick best source as cluster representative
+        sorted_sources = sorted(
+            sources,
+            key=lambda s: self._calculate_discovery_confidence(s),
+            reverse=True
+        )
+
+        for source in sorted_sources:
+            if id(source) in used:
+                continue
+
+            # Start a new cluster with this source
+            cluster = [source]
+            used.add(id(source))
+
+            source_name = source.analysis.suggested_card_name if source.analysis else ""
+            if not source_name:
+                clusters.append(cluster)
+                continue
+
+            # Find similar sources to add to this cluster
+            for other in sorted_sources:
+                if id(other) in used:
+                    continue
+
+                other_name = other.analysis.suggested_card_name if other.analysis else ""
+                if not other_name:
+                    continue
+
+                # Check name similarity
+                similarity = calculate_name_similarity(source_name, other_name)
+                if similarity >= 0.6:  # Lower threshold for clustering (tighter grouping)
+                    cluster.append(other)
+                    used.add(id(other))
+                    logger.debug(
+                        f"Clustered '{other_name}' with '{source_name}' "
+                        f"(similarity: {similarity:.2f})"
+                    )
+
+            clusters.append(cluster)
+
+        return clusters
 
     def _calculate_discovery_confidence(self, source: ProcessedSource) -> float:
         """
@@ -1759,6 +2600,14 @@ class DiscoveryService:
         if existing.data:
             slug = f"{slug}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
+        # Convert stage number to stage_id (foreign key)
+        stage_id = STAGE_NUMBER_TO_ID.get(analysis.suggested_stage, "4_proof")
+
+        # Convert goal format (CH.1 -> CH-01)
+        goal_id = None
+        if analysis.goals:
+            goal_id = convert_goal_id(analysis.goals[0])
+
         try:
             result = self.supabase.table("cards").insert({
                 "name": analysis.suggested_card_name,
@@ -1766,9 +2615,9 @@ class DiscoveryService:
                 "summary": analysis.summary,
 
                 "horizon": analysis.horizon,
-                "stage_id": analysis.suggested_stage,
-                "pillar_id": analysis.pillars[0] if analysis.pillars else None,
-                "goal_id": analysis.goals[0] if analysis.goals else None,
+                "stage_id": stage_id,  # Use mapped stage_id, not integer
+                "pillar_id": convert_pillar_id(analysis.pillars[0]) if analysis.pillars else None,
+                "goal_id": goal_id,  # Use converted goal_id
 
                 # Scoring (4-dimensional: Impact, Velocity, Novelty, Risk)
                 "maturity_score": int(analysis.credibility * 20),
@@ -1779,7 +2628,7 @@ class DiscoveryService:
                 "risk_score": int(analysis.risk * 10),  # 1-10 scale to 0-100
 
                 "status": "draft",  # New cards start as draft
-                "discovery_source": "automated",
+                # Note: removed discovery_source - column doesn't exist in schema
                 "created_at": datetime.now().isoformat(),
                 "updated_at": datetime.now().isoformat(),
             }).execute()
@@ -1912,20 +2761,25 @@ class DiscoveryService:
                 "status": result.status.value,
                 "completed_at": result.completed_at.isoformat() if result.completed_at else None,
                 "queries_generated": result.queries_generated,
-                "queries_executed": result.queries_executed,
-                "sources_discovered": result.sources_discovered,
-                "sources_triaged": result.sources_triaged,
-                "sources_blocked": result.sources_blocked,
-                "sources_duplicate": result.sources_duplicate,
-                "cards_created": result.cards_created,
-                "cards_enriched": result.cards_enriched,
-                "sources_added": result.sources_added,
-                "auto_approved": result.auto_approved,
-                "pending_review": result.pending_review,
+                "sources_found": result.sources_discovered,
+                "sources_relevant": result.sources_triaged,
+                "cards_created": len(result.cards_created) if isinstance(result.cards_created, list) else result.cards_created,
+                "cards_enriched": len(result.cards_enriched) if isinstance(result.cards_enriched, list) else result.cards_enriched,
+                "cards_deduplicated": result.sources_duplicate,
                 "estimated_cost": result.estimated_cost,
-                "execution_time_seconds": result.execution_time_seconds,
-                "summary_report": result.summary_report,
-                "errors": result.errors,
+                "error_message": result.errors[0] if result.errors else None,
+                "error_details": {"errors": result.errors} if result.errors else None,
+                "summary_report": {
+                    "markdown": result.summary_report,
+                    "queries_executed": result.queries_executed,
+                    "sources_blocked": result.sources_blocked,
+                    "sources_added": result.sources_added,
+                    "auto_approved": result.auto_approved,
+                    "pending_review": result.pending_review,
+                    "execution_time_seconds": result.execution_time_seconds,
+                    "cards_created_ids": result.cards_created,
+                    "cards_enriched_ids": result.cards_enriched,
+                },
             }).eq("id", run_id).execute()
         except Exception as e:
             logger.warning(f"Failed to update run record: {e}")
