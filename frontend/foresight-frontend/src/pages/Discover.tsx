@@ -13,6 +13,7 @@ import { SaveSearchModal } from '../components/SaveSearchModal';
 import { SearchSidebar } from '../components/SearchSidebar';
 import { advancedSearch, AdvancedSearchRequest, SavedSearchQueryConfig, getSearchHistory, SearchHistoryEntry, deleteSearchHistoryEntry, clearSearchHistory, recordSearchHistory, SearchHistoryCreate } from '../lib/discovery-api';
 import { highlightText } from '../lib/highlight-utils';
+import { parseStageNumber } from '../lib/stage-utils';
 
 interface Card {
   id: string;
@@ -50,15 +51,6 @@ interface Stage {
 }
 
 type SortOption = 'newest' | 'oldest' | 'recently_updated' | 'least_recently_updated';
-
-/**
- * Parse stage number from stage_id string
- * e.g., "1_concept" -> 1, "2_emerging" -> 2
- */
-const parseStageNumber = (stageId: string): number | null => {
-  const match = stageId.match(/^(\d+)/);
-  return match ? parseInt(match[1], 10) : null;
-};
 
 /**
  * Get color classes for score values
