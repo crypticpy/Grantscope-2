@@ -549,6 +549,11 @@ function getActionDescription(action: UndoAction): { verb: string; icon: React.R
  * UndoToast Component
  * Displays a toast notification with an undo button after actions
  * Auto-dismisses after UNDO_TIMEOUT_MS with a visual countdown
+ *
+ * Memoization:
+ * - Wrapped with React.memo to prevent unnecessary re-renders
+ * - onUndo and onDismiss callbacks should be memoized at call site (via useCallback)
+ * - timeRemaining will change frequently, but other props remain stable
  */
 interface UndoToastProps {
   action: UndoAction;
@@ -557,7 +562,7 @@ interface UndoToastProps {
   timeRemaining: number; // ms remaining until auto-dismiss
 }
 
-function UndoToast({ action, onUndo, onDismiss, timeRemaining }: UndoToastProps) {
+const UndoToast = React.memo(function UndoToast({ action, onUndo, onDismiss, timeRemaining }: UndoToastProps) {
   const { verb, icon } = getActionDescription(action);
   const progressPercent = Math.max(0, (timeRemaining / UNDO_TIMEOUT_MS) * 100);
 
@@ -620,7 +625,7 @@ function UndoToast({ action, onUndo, onDismiss, timeRemaining }: UndoToastProps)
       </div>
     </div>
   );
-}
+});
 
 const DiscoveryQueue: React.FC = () => {
   const { user } = useAuthContext();
