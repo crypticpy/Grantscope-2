@@ -1,16 +1,19 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { Search, Filter, Grid, List, Eye, Heart, Clock, Star, Inbox, History, Calendar, Sparkles, Bookmark, Trash2, ChevronDown, ChevronUp, Loader2, X, AlertTriangle, RefreshCw, ArrowLeftRight, Check } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
 import { useDebouncedValue } from '../hooks/useDebounce';
+import { useScrollRestoration } from '../hooks/useScrollRestoration';
 import { PillarBadge } from '../components/PillarBadge';
 import { HorizonBadge } from '../components/HorizonBadge';
 import { StageBadge } from '../components/StageBadge';
 import { Top25Badge } from '../components/Top25Badge';
 import { SaveSearchModal } from '../components/SaveSearchModal';
 import { SearchSidebar } from '../components/SearchSidebar';
+import { VirtualizedGrid } from '../components/VirtualizedGrid';
+import { VirtualizedList, VirtualizedListHandle } from '../components/VirtualizedList';
 import { advancedSearch, AdvancedSearchRequest, SavedSearchQueryConfig, getSearchHistory, SearchHistoryEntry, deleteSearchHistoryEntry, clearSearchHistory, recordSearchHistory, SearchHistoryCreate } from '../lib/discovery-api';
 import { highlightText } from '../lib/highlight-utils';
 
@@ -176,6 +179,18 @@ const Discover: React.FC = () => {
 
   // Quick filter from URL params (new, following)
   const quickFilter = searchParams.get('filter') || '';
+
+  // Virtualized list ref for list view
+  const virtualizedListRef = useRef<VirtualizedListHandle>(null);
+
+  // Scroll restoration for list view
+  useScrollRestoration({
+    storageKey: 'discover-list',
+    enabled: viewMode === 'list',
+    clearAfterRestore: false,
+    getScrollPosition: () => virtualizedListRef.current?.getScrollOffset() ?? 0,
+    setScrollPosition: (position) => virtualizedListRef.current?.setScrollOffset(position),
+  });
 
   // Build current search query config for saving
   const currentQueryConfig = useMemo<SavedSearchQueryConfig>(() => {
