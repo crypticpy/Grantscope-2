@@ -123,3 +123,97 @@ export function getBadgeBaseClasses(options: BadgeBaseClassesOptions = {}): stri
 
   return `inline-flex items-center ${rounding} font-medium border ${cursor}`;
 }
+
+// =============================================================================
+// Size Classes
+// =============================================================================
+
+/**
+ * Options for getSizeClasses function
+ */
+export interface GetSizeClassesOptions {
+  /**
+   * Include gap classes for icon spacing
+   * - sm: gap-1
+   * - md: gap-1.5
+   * - lg: gap-2
+   * @default false
+   */
+  includeGap?: boolean;
+
+  /**
+   * Use pill variant padding (slightly more horizontal padding)
+   * - sm: px-2 (instead of px-1.5)
+   * - md: px-2.5 (instead of px-2)
+   * - lg: px-3 (same)
+   * @default 'badge'
+   */
+  variant?: 'badge' | 'pill';
+}
+
+/**
+ * Get Tailwind CSS classes for badge sizing.
+ *
+ * Base patterns:
+ * - sm: px-1.5 py-0.5 text-xs
+ * - md: px-2 py-1 text-sm
+ * - lg: px-3 py-1.5 text-base
+ *
+ * @param size - The badge size variant
+ * @param options - Optional configuration for gap and variant
+ * @returns Tailwind CSS class string
+ *
+ * @example
+ * // Basic usage
+ * getSizeClasses('md'); // 'px-2 py-1 text-sm'
+ *
+ * @example
+ * // With gap classes for badges with icons
+ * getSizeClasses('md', { includeGap: true }); // 'px-2 py-1 text-sm gap-1.5'
+ *
+ * @example
+ * // Pill variant with more horizontal padding
+ * getSizeClasses('sm', { variant: 'pill' }); // 'px-2 py-0.5 text-xs'
+ *
+ * @example
+ * // Combined options
+ * getSizeClasses('lg', { includeGap: true, variant: 'pill' }); // 'px-3 py-1.5 text-base gap-2'
+ */
+export function getSizeClasses(
+  size: BadgeSize,
+  options: GetSizeClassesOptions = {}
+): string {
+  const { includeGap = false, variant = 'badge' } = options;
+
+  // Base size classes (padding and text)
+  const baseSizeMap: Record<BadgeSize, { padding: string; text: string }> = {
+    sm: { padding: 'px-1.5 py-0.5', text: 'text-xs' },
+    md: { padding: 'px-2 py-1', text: 'text-sm' },
+    lg: { padding: 'px-3 py-1.5', text: 'text-base' },
+  };
+
+  // Pill variant has slightly more horizontal padding for sm and md
+  const pillSizeMap: Record<BadgeSize, { padding: string; text: string }> = {
+    sm: { padding: 'px-2 py-0.5', text: 'text-xs' },
+    md: { padding: 'px-2.5 py-1', text: 'text-sm' },
+    lg: { padding: 'px-3 py-1.5', text: 'text-base' },
+  };
+
+  // Gap classes for icon spacing
+  const gapMap: Record<BadgeSize, string> = {
+    sm: 'gap-1',
+    md: 'gap-1.5',
+    lg: 'gap-2',
+  };
+
+  const sizeMap = variant === 'pill' ? pillSizeMap : baseSizeMap;
+  const { padding, text } = sizeMap[size];
+
+  const classes = [padding, text];
+
+  if (includeGap) {
+    classes.push(gapMap[size]);
+  }
+
+  return classes.join(' ');
+}
