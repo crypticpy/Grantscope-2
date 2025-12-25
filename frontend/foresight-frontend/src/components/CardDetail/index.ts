@@ -103,3 +103,24 @@ export {
   /** Format date string as relative time (e.g., "2h ago") */
   formatRelativeTime,
 } from './utils';
+
+// =============================================================================
+// Custom Hooks Exports
+// =============================================================================
+
+/**
+ * Custom hooks for CardDetail state management.
+ * Includes: useCardData (data loading), useResearch (research tasks),
+ *           useCardExport (export functionality)
+ */
+export {
+  useCardData,
+  useResearch,
+  useCardExport,
+  type UseCardDataReturn,
+  type UseResearchReturn,
+  type UseCardExportReturn,
+  type ResearchTaskType,
+  type ExportFormat,
+  type ExportOptions,
+} from './hooks';
