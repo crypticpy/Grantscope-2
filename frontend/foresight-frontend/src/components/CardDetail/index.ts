@@ -25,5 +25,11 @@
 // Types will be exported here once created
 // export * from './types';
 
-// Utilities will be exported here once created
-// export * from './utils';
+// Utilities
+export {
+  API_BASE_URL,
+  metricDefinitions,
+  parseStageNumber,
+  getScoreColorClasses,
+  formatRelativeTime,
+} from './utils';
