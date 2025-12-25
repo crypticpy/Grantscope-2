@@ -1562,6 +1562,186 @@ async def get_cards_pending_validation(
     return pending_cards
 
 
+@app.get("/api/v1/validation/accuracy", response_model=ClassificationMetrics)
+async def get_classification_accuracy(
+    current_user: dict = Depends(get_current_user),
+    days: Optional[int] = None
+):
+    """
+    Compute classification accuracy from validation data.
+
+    Returns detailed accuracy metrics based on submitted ground truth labels,
+    including overall accuracy, per-pillar breakdown, and target achievement status.
+
+    The target accuracy is 85% for production-quality classification.
+
+    Args:
+        days: Optional number of days to look back (default: all time)
+
+    Returns:
+        ClassificationMetrics with:
+        - total_validations: Total number of validations with correctness determined
+        - correct_count: Number of correct classifications
+        - accuracy_percentage: Accuracy as percentage (0-100)
+        - target_accuracy: Target accuracy threshold (85%)
+        - meets_target: Boolean indicating if target is met
+
+    Note:
+        Only validations where is_correct is not null are included in accuracy
+        computation. Cards without predicted pillars are excluded.
+    """
+    from datetime import timedelta
+
+    # Build query for validations with correctness determined
+    query = supabase.table("classification_validations").select(
+        "is_correct, ground_truth_pillar, predicted_pillar, created_at"
+    ).not_.is_("is_correct", "null")
+
+    # Apply date filter if specified
+    if days is not None and days > 0:
+        period_start = (datetime.now() - timedelta(days=days)).isoformat()
+        query = query.gte("created_at", period_start)
+
+    validations_response = query.execute()
+
+    if not validations_response.data:
+        # No validations yet - return empty metrics
+        return ClassificationMetrics(
+            total_validations=0,
+            correct_count=0,
+            accuracy_percentage=None,
+            target_accuracy=85.0,
+            meets_target=False
+        )
+
+    # Compute accuracy metrics
+    total_validations = len(validations_response.data)
+    correct_count = sum(1 for v in validations_response.data if v.get("is_correct"))
+    accuracy_percentage = (correct_count / total_validations * 100) if total_validations > 0 else None
+
+    logger.info(
+        f"Classification accuracy computed: {correct_count}/{total_validations} "
+        f"({accuracy_percentage:.2f}% accuracy)" if accuracy_percentage else
+        f"Classification accuracy: No validations available"
+    )
+
+    return ClassificationMetrics(
+        total_validations=total_validations,
+        correct_count=correct_count,
+        accuracy_percentage=round(accuracy_percentage, 2) if accuracy_percentage else None,
+        target_accuracy=85.0,
+        meets_target=accuracy_percentage >= 85.0 if accuracy_percentage else False
+    )
+
+
+@app.get("/api/v1/validation/accuracy/by-pillar")
+async def get_accuracy_by_pillar(
+    current_user: dict = Depends(get_current_user),
+    days: Optional[int] = None
+):
+    """
+    Get classification accuracy broken down by pillar.
+
+    Provides per-pillar accuracy metrics to identify which strategic pillars
+    have higher or lower classification accuracy, enabling targeted improvement.
+
+    Args:
+        days: Optional number of days to look back (default: all time)
+
+    Returns:
+        Dictionary with:
+        - overall: Overall ClassificationMetrics
+        - by_pillar: Dict mapping pillar codes to accuracy metrics
+        - confusion_summary: Summary of common misclassifications
+    """
+    from datetime import timedelta
+    from collections import defaultdict
+
+    # Build query for validations with correctness determined
+    query = supabase.table("classification_validations").select(
+        "is_correct, ground_truth_pillar, predicted_pillar, created_at"
+    ).not_.is_("is_correct", "null")
+
+    # Apply date filter if specified
+    if days is not None and days > 0:
+        period_start = (datetime.now() - timedelta(days=days)).isoformat()
+        query = query.gte("created_at", period_start)
+
+    validations_response = query.execute()
+
+    if not validations_response.data:
+        return {
+            "overall": {
+                "total_validations": 0,
+                "correct_count": 0,
+                "accuracy_percentage": None,
+                "target_accuracy": 85.0,
+                "meets_target": False
+            },
+            "by_pillar": {},
+            "confusion_summary": []
+        }
+
+    # Compute overall metrics
+    total_validations = len(validations_response.data)
+    correct_count = sum(1 for v in validations_response.data if v.get("is_correct"))
+    accuracy_percentage = (correct_count / total_validations * 100) if total_validations > 0 else None
+
+    # Compute per-pillar metrics
+    pillar_stats = defaultdict(lambda: {"total": 0, "correct": 0})
+    confusion_pairs = defaultdict(int)
+
+    for v in validations_response.data:
+        ground_truth = v.get("ground_truth_pillar")
+        predicted = v.get("predicted_pillar")
+        is_correct = v.get("is_correct")
+
+        if ground_truth:
+            pillar_stats[ground_truth]["total"] += 1
+            if is_correct:
+                pillar_stats[ground_truth]["correct"] += 1
+            elif predicted:
+                # Track confusion pairs
+                confusion_pairs[(predicted, ground_truth)] += 1
+
+    # Format per-pillar results
+    by_pillar = {}
+    for pillar, stats in pillar_stats.items():
+        pillar_accuracy = (stats["correct"] / stats["total"] * 100) if stats["total"] > 0 else None
+        by_pillar[pillar] = {
+            "total_validations": stats["total"],
+            "correct_count": stats["correct"],
+            "accuracy_percentage": round(pillar_accuracy, 2) if pillar_accuracy else None,
+            "meets_target": pillar_accuracy >= 85.0 if pillar_accuracy else False
+        }
+
+    # Format confusion summary (top misclassifications)
+    confusion_summary = [
+        {
+            "predicted": pred,
+            "actual": actual,
+            "count": count
+        }
+        for (pred, actual), count in sorted(
+            confusion_pairs.items(),
+            key=lambda x: x[1],
+            reverse=True
+        )[:10]  # Top 10 confusion pairs
+    ]
+
+    return {
+        "overall": {
+            "total_validations": total_validations,
+            "correct_count": correct_count,
+            "accuracy_percentage": round(accuracy_percentage, 2) if accuracy_percentage else None,
+            "target_accuracy": 85.0,
+            "meets_target": accuracy_percentage >= 85.0 if accuracy_percentage else False
+        },
+        "by_pillar": by_pillar,
+        "confusion_summary": confusion_summary
+    }
+
+
 # ============================================================================
 # Processing Metrics Endpoints
 # ============================================================================

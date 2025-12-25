@@ -1,0 +1,25 @@
+{
+  "active": true,
+  "spec": "002-enhanced-ai-content-processing-pipeline",
+  "state": "building",
+  "subtasks": {
+    "completed": 13,
+    "total": 20,
+    "in_progress": 1,
+    "failed": 0
+  },
+  "phase": {
+    "current": "Classification Accuracy Validation (>85% Target)",
+    "id": null,
+    "total": 3
+  },
+  "workers": {
+    "active": 0,
+    "max": 1
+  },
+  "session": {
+    "number": 14,
+    "started_at": "2025-12-24T19:35:12.706742"
+  },
+  "last_update": "2025-12-24T19:58:32.533471"
+}
