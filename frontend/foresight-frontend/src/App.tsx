@@ -1,21 +1,31 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, User } from '@supabase/supabase-js';
 import { TooltipProvider } from '@radix-ui/react-tooltip';
 import Header from './components/Header';
+import { AuthContextProvider } from './hooks/useAuthContext';
+
+// Synchronous imports for critical path components (login + landing page)
 import Dashboard from './pages/Dashboard';
-import Discover from './pages/Discover';
-import DiscoveryQueue from './pages/DiscoveryQueue';
-import DiscoveryHistory from './pages/DiscoveryHistory';
-import CardDetail from './pages/CardDetail';
-import Compare from './pages/Compare';
-import Workstreams from './pages/Workstreams';
-import WorkstreamFeed from './pages/WorkstreamFeed';
-import Settings from './pages/Settings';
-import Analytics from './pages/Analytics';
 import Login from './pages/Login';
-import { User } from '@supabase/supabase-js';
-import { AuthContextProvider, useAuthContext } from './hooks/useAuthContext';
+
+// Lazy-loaded page components for route-based code splitting
+// Discovery pages - share common discovery patterns
+const Discover = lazy(() => import('./pages/Discover'));
+const DiscoveryQueue = lazy(() => import('./pages/DiscoveryQueue'));
+const DiscoveryHistory = lazy(() => import('./pages/DiscoveryHistory'));
+
+// Card visualization pages - share React Flow and related viz libraries
+const CardDetail = lazy(() => import('./pages/CardDetail'));
+const Compare = lazy(() => import('./pages/Compare'));
+
+// Workstream pages - share workstream components
+const Workstreams = lazy(() => import('./pages/Workstreams'));
+const WorkstreamFeed = lazy(() => import('./pages/WorkstreamFeed'));
+
+// Standalone pages
+const Settings = lazy(() => import('./pages/Settings'));
+const Analytics = lazy(() => import('./pages/Analytics'));
 
 // Supabase configuration
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
