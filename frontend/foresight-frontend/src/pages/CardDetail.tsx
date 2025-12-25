@@ -14,6 +14,14 @@ import { StageBadge, StageProgress } from '../components/StageBadge';
 import { AnchorBadge } from '../components/AnchorBadge';
 import { Top25Badge, Top25List } from '../components/Top25Badge';
 
+// Visualization Components
+import { ScoreTimelineChart } from '../components/visualizations/ScoreTimelineChart';
+import { StageProgressionTimeline } from '../components/visualizations/StageProgressionTimeline';
+import { TrendVelocitySparkline, TrendVelocitySparklineSkeleton } from '../components/visualizations/TrendVelocitySparkline';
+
+// API Functions for trend data
+import { getScoreHistory, getStageHistory, type ScoreHistory, type StageHistory } from '../lib/discovery-api';
+
 // Taxonomy helpers
 import { getGoalByCode, type Goal } from '../data/taxonomy';
 
@@ -211,6 +219,14 @@ const CardDetail: React.FC = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
 
+  // Trend visualization state
+  const [scoreHistory, setScoreHistory] = useState<ScoreHistory[]>([]);
+  const [stageHistory, setStageHistory] = useState<StageHistory[]>([]);
+  const [scoreHistoryLoading, setScoreHistoryLoading] = useState(false);
+  const [stageHistoryLoading, setStageHistoryLoading] = useState(false);
+  const [scoreHistoryError, setScoreHistoryError] = useState<string | null>(null);
+  const [stageHistoryError, setStageHistoryError] = useState<string | null>(null);
+
   useEffect(() => {
     if (slug) {
       loadCardDetail();
@@ -223,6 +239,60 @@ const CardDetail: React.FC = () => {
       checkIfFollowing();
     }
   }, [card?.id, user]);
+
+  // Load trend visualization data when card is loaded
+  useEffect(() => {
+    if (card?.id) {
+      loadScoreHistory();
+      loadStageHistory();
+    }
+  }, [card?.id]);
+
+  // Fetch score history for timeline chart and sparkline
+  const loadScoreHistory = async () => {
+    if (!card?.id) return;
+
+    setScoreHistoryLoading(true);
+    setScoreHistoryError(null);
+
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        setScoreHistoryError('Not authenticated');
+        return;
+      }
+
+      const response = await getScoreHistory(token, card.id);
+      setScoreHistory(response.history);
+    } catch (error: any) {
+      setScoreHistoryError(error.message || 'Failed to load score history');
+    } finally {
+      setScoreHistoryLoading(false);
+    }
+  };
+
+  // Fetch stage history for stage progression timeline
+  const loadStageHistory = async () => {
+    if (!card?.id) return;
+
+    setStageHistoryLoading(true);
+    setStageHistoryError(null);
+
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        setStageHistoryError('Not authenticated');
+        return;
+      }
+
+      const response = await getStageHistory(token, card.id);
+      setStageHistory(response.history);
+    } catch (error: any) {
+      setStageHistoryError(error.message || 'Failed to load stage history');
+    } finally {
+      setStageHistoryLoading(false);
+    }
+  };
 
   const loadCardDetail = async () => {
     try {
@@ -975,6 +1045,21 @@ const CardDetail: React.FC = () => {
                         <div className="max-w-xs">
                           <StageProgress stage={stageNumber} showLabels />
                         </div>
+                        {/* Stage Progression Timeline */}
+                        {(stageHistory.length > 0 || stageHistoryLoading) && (
+                          <div className="mt-4 w-full max-w-md">
+                            <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Stage History</h4>
+                            {stageHistoryLoading ? (
+                              <div className="animate-pulse bg-gray-100 dark:bg-gray-800 rounded-lg h-24"></div>
+                            ) : (
+                              <StageProgressionTimeline
+                                stageHistory={stageHistory}
+                                currentStage={stageNumber}
+                                compact
+                              />
+                            )}
+                          </div>
+                        )}
                       </>
                     ) : (
                       <span className="text-sm text-gray-400 italic">Not assigned</span>
@@ -1010,6 +1095,16 @@ const CardDetail: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* Score Timeline Chart */}
+            <ScoreTimelineChart
+              data={scoreHistory}
+              title="Score History"
+              height={350}
+              loading={scoreHistoryLoading}
+              error={scoreHistoryError}
+              onRetry={loadScoreHistory}
+            />
 
             {/* Research History */}
             {researchHistory.length > 0 && (
@@ -1247,6 +1342,36 @@ const CardDetail: React.FC = () => {
                 <div className="flex justify-between">
                   <span className="text-gray-500 dark:text-gray-400">Notes</span>
                   <span className="font-medium text-gray-900 dark:text-white">{notes.length}</span>
+                </div>
+
+                {/* Velocity Trend Sparkline */}
+                <div className="pt-3 mt-3 border-t border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center justify-between">
+                    <Tooltip
+                      content={
+                        <div className="max-w-[200px]">
+                          <p className="font-medium">Velocity Trend</p>
+                          <p className="text-xs text-gray-500">
+                            Shows how quickly this trend is developing over the last 30 days
+                          </p>
+                        </div>
+                      }
+                      side="left"
+                    >
+                      <span className="text-gray-500 dark:text-gray-400 cursor-help border-b border-dotted border-gray-400 dark:border-gray-500">
+                        Velocity Trend
+                      </span>
+                    </Tooltip>
+                    {scoreHistoryLoading ? (
+                      <TrendVelocitySparklineSkeleton />
+                    ) : (
+                      <TrendVelocitySparkline
+                        data={scoreHistory}
+                        width={80}
+                        height={24}
+                      />
+                    )}
+                  </div>
                 </div>
 
                 {/* Timestamps Section */}
