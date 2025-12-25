@@ -68,6 +68,19 @@ from app.models.analytics import (
     InsightsResponse,
 )
 
+# History models import for trend visualization
+from app.models.history import (
+    ScoreHistory,
+    ScoreHistoryResponse,
+    StageHistory,
+    StageHistoryList,
+    RelatedCard,
+    RelatedCardsList,
+    CardData,
+    CardComparisonItem,
+    CardComparisonResponse,
+)
+
 # Initialize FastAPI app
 app = FastAPI(
     title="Foresight API",
@@ -881,6 +894,149 @@ def _extract_highlights(item: Dict[str, Any], query: str) -> Optional[List[str]]
 
     return highlights if highlights else None
 
+
+# ============================================================================
+# SCORE HISTORY TRACKING HELPER
+# ============================================================================
+
+# Define all score fields for tracking
+SCORE_FIELDS = [
+    "novelty_score",
+    "maturity_score",
+    "impact_score",
+    "relevance_score",
+    "velocity_score",
+    "risk_score",
+    "opportunity_score",
+]
+
+
+def _record_score_history(
+    old_card_data: Dict[str, Any],
+    new_card_data: Dict[str, Any],
+    card_id: str
+) -> bool:
+    """
+    Record score history to card_score_history table if any scores have changed.
+
+    Compares old and new card data and inserts a new history record if at least
+    one score value has changed. This enables temporal trend tracking.
+
+    Args:
+        old_card_data: Card data before the update
+        new_card_data: Card data after the update
+        card_id: UUID of the card being tracked
+
+    Returns:
+        True if a history record was inserted, False otherwise
+    """
+    # Check if any score has changed
+    scores_changed = False
+    for field in SCORE_FIELDS:
+        old_value = old_card_data.get(field)
+        new_value = new_card_data.get(field)
+        if old_value != new_value:
+            scores_changed = True
+            break
+
+    if not scores_changed:
+        logger.debug(f"No score changes detected for card {card_id}, skipping history record")
+        return False
+
+    try:
+        # Prepare the history record with new scores
+        now = datetime.now().isoformat()
+        history_record = {
+            "id": str(uuid.uuid4()),
+            "card_id": card_id,
+            "recorded_at": now,
+            "novelty_score": new_card_data.get("novelty_score"),
+            "maturity_score": new_card_data.get("maturity_score"),
+            "impact_score": new_card_data.get("impact_score"),
+            "relevance_score": new_card_data.get("relevance_score"),
+            "velocity_score": new_card_data.get("velocity_score"),
+            "risk_score": new_card_data.get("risk_score"),
+            "opportunity_score": new_card_data.get("opportunity_score"),
+        }
+
+        # Insert the history record
+        supabase.table("card_score_history").insert(history_record).execute()
+        logger.info(f"Recorded score history for card {card_id}")
+        return True
+
+    except Exception as e:
+        # Log error but don't fail the main operation
+        logger.error(f"Failed to record score history for card {card_id}: {e}")
+        return False
+
+
+def _record_stage_history(
+    old_card_data: Dict[str, Any],
+    new_card_data: Dict[str, Any],
+    card_id: str,
+    user_id: Optional[str] = None,
+    trigger: str = "manual",
+    reason: Optional[str] = None
+) -> bool:
+    """
+    Record stage transition to card_timeline table if stage or horizon has changed.
+
+    Creates a timeline entry with event_type='stage_changed' and includes both
+    old and new stage/horizon values for tracking maturity progression.
+
+    Args:
+        old_card_data: Card data before the update
+        new_card_data: Card data after the update
+        card_id: UUID of the card being tracked
+        user_id: Optional user ID who triggered the change
+        trigger: What triggered the change (manual, api, auto-calculated)
+        reason: Optional explanation for the stage change
+
+    Returns:
+        True if a history record was inserted, False otherwise
+    """
+    old_stage = old_card_data.get("stage_id")
+    new_stage = new_card_data.get("stage_id")
+    old_horizon = old_card_data.get("horizon")
+    new_horizon = new_card_data.get("horizon")
+
+    # Check if stage or horizon changed
+    if old_stage == new_stage and old_horizon == new_horizon:
+        logger.debug(f"No stage/horizon changes detected for card {card_id}")
+        return False
+
+    try:
+        now = datetime.now().isoformat()
+        timeline_entry = {
+            "card_id": card_id,
+            "event_type": "stage_changed",
+            "description": f"Stage changed from {old_stage or 'none'} to {new_stage or 'none'}",
+            "user_id": user_id,
+            "old_stage_id": int(old_stage) if old_stage else None,
+            "new_stage_id": int(new_stage) if new_stage else None,
+            "old_horizon": old_horizon,
+            "new_horizon": new_horizon,
+            "trigger": trigger,
+            "reason": reason,
+            "metadata": {
+                "old_stage_id": old_stage,
+                "new_stage_id": new_stage,
+                "old_horizon": old_horizon,
+                "new_horizon": new_horizon,
+            },
+            "created_at": now
+        }
+
+        supabase.table("card_timeline").insert(timeline_entry).execute()
+        logger.info(f"Recorded stage transition for card {card_id}: {old_stage} -> {new_stage}")
+        return True
+
+    except Exception as e:
+        # Log error but don't fail the main operation
+        logger.error(f"Failed to record stage history for card {card_id}: {e}")
+        return False
+
+
 # Card relationships
 @app.get("/api/v1/cards/{card_id}/sources")
 async def get_card_sources(card_id: str):
@@ -893,6 +1049,333 @@ async def get_card_timeline(card_id: str):
     """Get timeline for a card"""
     response = supabase.table("card_timeline").select("*").eq("card_id", card_id).order("created_at", desc=True).execute()
     return response.data
+
+
+@app.get("/api/v1/cards/{card_id}/score-history", response_model=ScoreHistoryResponse)
+async def get_card_score_history(
+    card_id: str,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get historical score data for a card to enable trend visualization.
+
+    Returns a list of score snapshots ordered by recorded_at (most recent first),
+    containing all 7 score dimensions (maturity, velocity, novelty, impact,
+    relevance, risk, opportunity) for each timestamp.
+
+    Args:
+        card_id: UUID of the card to get score history for
+        start_date: Optional filter to get records from this date onwards
+        end_date: Optional filter to get records up to this date
+
+    Returns:
+        ScoreHistoryResponse with list of ScoreHistory records and metadata
+    """
+    # First verify the card exists
+    card_response = supabase.table("cards").select("id").eq("id", card_id).execute()
+    if not card_response.data:
+        raise HTTPException(status_code=404, detail="Card not found")
+
+    # Build query for score history
+    query = supabase.table("card_score_history").select("*").eq("card_id", card_id)
+
+    # Apply date filters if provided
+    if start_date:
+        query = query.gte("recorded_at", start_date.isoformat())
+    if end_date:
+        query = query.lte("recorded_at", end_date.isoformat())
+
+    # Execute query ordered by recorded_at descending
+    response = query.order("recorded_at", desc=True).execute()
+
+    # Convert to ScoreHistory models
+    history_records = [ScoreHistory(**record) for record in response.data] if response.data else []
+
+    return ScoreHistoryResponse(
+        history=history_records,
+        card_id=card_id,
+        total_count=len(history_records),
+        start_date=start_date,
+        end_date=end_date
+    )
+
+
+@app.get("/api/v1/cards/{card_id}/stage-history", response_model=StageHistoryList)
+async def get_card_stage_history(
+    card_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get maturity stage transition history for a card.
+
+    Returns a list of stage transitions ordered by changed_at (most recent first),
+    tracking maturity stage progression through stages 1-8 and horizon shifts
+    (H3 → H2 → H1).
+
+    The data is sourced from the card_timeline table, filtered to only include
+    'stage_changed' event types.
+
+    Args:
+        card_id: UUID of the card to get stage history for
+
+    Returns:
+        StageHistoryList with stage transition records and metadata
+    """
+    # First verify the card exists
+    card_response = supabase.table("cards").select("id").eq("id", card_id).execute()
+    if not card_response.data:
+        raise HTTPException(status_code=404, detail="Card not found")
+
+    # Query card_timeline for stage change events
+    # Filter by event_type='stage_changed' to get only stage transitions
+    response = supabase.table("card_timeline").select(
+        "id, card_id, created_at, old_stage_id, new_stage_id, old_horizon, new_horizon, trigger, reason"
+    ).eq("card_id", card_id).eq("event_type", "stage_changed").order("created_at", desc=True).execute()
+
+    # Convert to StageHistory models, mapping created_at to changed_at
+    history_records = []
+    if response.data:
+        for record in response.data:
+            # Skip records that don't have stage change data
+            if record.get("new_stage_id") is None:
+                continue
+
+            history_records.append(StageHistory(
+                id=record["id"],
+                card_id=record["card_id"],
+                changed_at=record["created_at"],  # Map created_at to changed_at
+                old_stage_id=record.get("old_stage_id"),
+                new_stage_id=record["new_stage_id"],
+                old_horizon=record.get("old_horizon"),
+                new_horizon=record.get("new_horizon", "H3"),  # Default to H3 if not set
+                trigger=record.get("trigger"),
+                reason=record.get("reason")
+            ))
+
+    return StageHistoryList(
+        history=history_records,
+        total_count=len(history_records),
+        card_id=card_id
+    )
+
+
+@app.get("/api/v1/cards/{card_id}/related", response_model=RelatedCardsList)
+async def get_related_cards(
+    card_id: str,
+    limit: int = 20,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get cards related to the specified card for concept network visualization.
+
+    Returns cards connected to the source card through the card_relationships table,
+    including relationship metadata (type and strength) for edge visualization.
+    Relationships are bidirectional - cards appear whether they are source or target.
+
+    Args:
+        card_id: UUID of the source card to get relationships for
+        limit: Maximum number of related cards to return (default: 20)
+
+    Returns:
+        RelatedCardsList with related card details and relationship metadata
+    """
+    # First verify the card exists
+    card_response = supabase.table("cards").select("id").eq("id", card_id).execute()
+    if not card_response.data:
+        raise HTTPException(status_code=404, detail="Card not found")
+
+    # Query relationships where this card is either source or target
+    # Get relationships where card is the source
+    source_response = supabase.table("card_relationships").select(
+        "id, source_card_id, target_card_id, relationship_type, strength, created_at"
+    ).eq("source_card_id", card_id).limit(limit).execute()
+
+    # Get relationships where card is the target
+    target_response = supabase.table("card_relationships").select(
+        "id, source_card_id, target_card_id, relationship_type, strength, created_at"
+    ).eq("target_card_id", card_id).limit(limit).execute()
+
+    # Combine and deduplicate relationships
+    all_relationships = []
+    seen_relationship_ids = set()
+
+    for rel in (source_response.data or []) + (target_response.data or []):
+        if rel["id"] not in seen_relationship_ids:
+            seen_relationship_ids.add(rel["id"])
+            all_relationships.append(rel)
+
+    # If no relationships found, return empty list
+    if not all_relationships:
+        return RelatedCardsList(
+            related_cards=[],
+            total_count=0,
+            source_card_id=card_id
+        )
+
+    # Get the related card IDs (the "other" card in each relationship)
+    related_card_ids = set()
+    for rel in all_relationships:
+        if rel["source_card_id"] == card_id:
+            related_card_ids.add(rel["target_card_id"])
+        else:
+            related_card_ids.add(rel["source_card_id"])
+
+    # Fetch full card details for all related cards
+    cards_response = supabase.table("cards").select(
+        "id, name, slug, summary, pillar_id, stage_id, horizon"
+    ).in_("id", list(related_card_ids)).execute()
+
+    # Create a lookup map for cards
+    cards_map = {card["id"]: card for card in (cards_response.data or [])}
+
+    # Build the related cards list with relationship context
+    related_cards = []
+    for rel in all_relationships:
+        # Determine which card is the "related" one (not the source card_id)
+        if rel["source_card_id"] == card_id:
+            related_id = rel["target_card_id"]
+        else:
+            related_id = rel["source_card_id"]
+
+        # Get the card details
+        card_data = cards_map.get(related_id)
+        if not card_data:
+            # Skip if card doesn't exist (orphaned relationship)
+            continue
+
+        related_cards.append(RelatedCard(
+            id=card_data["id"],
+            name=card_data["name"],
+            slug=card_data["slug"],
+            summary=card_data.get("summary"),
+            pillar_id=card_data.get("pillar_id"),
+            stage_id=card_data.get("stage_id"),
+            horizon=card_data.get("horizon"),
+            relationship_type=rel["relationship_type"],
+            relationship_strength=rel.get("strength"),
+            relationship_id=rel["id"]
+        ))
+
+    # Limit the results to the specified limit
+    related_cards = related_cards[:limit]
+
+    return RelatedCardsList(
+        related_cards=related_cards,
+        total_count=len(related_cards),
+        source_card_id=card_id
+    )
+
+
+@app.get("/api/v1/cards/compare", response_model=CardComparisonResponse)
+async def compare_cards(
+    card_ids: str,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Compare two cards side-by-side with their historical data.
+
+    Returns parallel data for both cards including metadata, score history,
+    and stage history to enable synchronized timeline charts and comparative
+    metrics visualization.
+
+    Args:
+        card_ids: Comma-separated list of exactly 2 card UUIDs (e.g., "id1,id2")
+        start_date: Optional filter for score history start date
+        end_date: Optional filter for score history end date
+
+    Returns:
+        CardComparisonResponse with parallel data for both cards
+
+    Raises:
+        400: If card_ids doesn't contain exactly 2 IDs
+        404: If either card is not found
+    """
+    # Parse and validate card_ids
+    ids = [id.strip() for id in card_ids.split(",") if id.strip()]
+    if len(ids) != 2:
+        raise HTTPException(
+            status_code=400,
+            detail="Exactly 2 card IDs must be provided (comma-separated)"
+        )
+
+    card_id_1, card_id_2 = ids
+
+    # Helper function to fetch all data for a single card (synchronous)
+    def fetch_card_comparison_data(card_id: str) -> CardComparisonItem:
+        # Fetch card data
+        card_response = supabase.table("cards").select(
+            "id, name, slug, summary, pillar_id, goal_id, stage_id, horizon, "
+            "maturity_score, velocity_score, novelty_score, impact_score, "
+            "relevance_score, risk_score, opportunity_score, created_at, updated_at"
+        ).eq("id", card_id).execute()
+
+        if not card_response.data:
+            raise HTTPException(status_code=404, detail=f"Card not found: {card_id}")
+
+        card_data = CardData(**card_response.data[0])
+
+        # Fetch score history
+        score_query = supabase.table("card_score_history").select("*").eq("card_id", card_id)
+        if start_date:
+            score_query = score_query.gte("recorded_at", start_date.isoformat())
+        if end_date:
+            score_query = score_query.lte("recorded_at", end_date.isoformat())
+        score_response = score_query.order("recorded_at", desc=True).execute()
+
+        score_history = [ScoreHistory(**record) for record in score_response.data] if score_response.data else []
+
+        # Fetch stage history from card_timeline
+        stage_response = supabase.table("card_timeline").select(
+            "id, card_id, created_at, old_stage_id, new_stage_id, old_horizon, new_horizon, trigger, reason"
+        ).eq("card_id", card_id).eq("event_type", "stage_changed").order("created_at", desc=True).execute()
+
+        stage_history = []
+        if stage_response.data:
+            for record in stage_response.data:
+                if record.get("new_stage_id") is None:
+                    continue
+                stage_history.append(StageHistory(
+                    id=record["id"],
+                    card_id=record["card_id"],
+                    changed_at=record["created_at"],
+                    old_stage_id=record.get("old_stage_id"),
+                    new_stage_id=record["new_stage_id"],
+                    old_horizon=record.get("old_horizon"),
+                    new_horizon=record.get("new_horizon", "H3"),
+                    trigger=record.get("trigger"),
+                    reason=record.get("reason")
+                ))
+
+        return CardComparisonItem(
+            card=card_data,
+            score_history=score_history,
+            stage_history=stage_history
+        )
+
+    # Fetch data for both cards in parallel using asyncio.gather with to_thread
+    # This allows concurrent execution of the synchronous Supabase operations
+    try:
+        card1_data, card2_data = await asyncio.gather(
+            asyncio.to_thread(fetch_card_comparison_data, card_id_1),
+            asyncio.to_thread(fetch_card_comparison_data, card_id_2)
+        )
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching comparison data: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch comparison data")
+
+    return CardComparisonResponse(
+        card1=card1_data,
+        card2=card2_data,
+        comparison_generated_at=datetime.now()
+    )
+
 
 @app.post("/api/v1/cards/{card_id}/follow")
 async def follow_card(
@@ -1366,6 +1849,8 @@ async def review_card(
     response = supabase.table("cards").update(update_data).eq("id", card_id).execute()
 
     if response.data:
+        updated_card = response.data[0]
+
         # Log the review action to card timeline
         timeline_entry = {
             "card_id": card_id,
@@ -1381,7 +1866,26 @@ async def review_card(
         }
         supabase.table("card_timeline").insert(timeline_entry).execute()
 
-        return response.data[0]
+        # Track score and stage history for edit_approve actions
+        if review_data.action == "edit_approve":
+            # Record score history if any score fields changed
+            _record_score_history(
+                old_card_data=card,
+                new_card_data=updated_card,
+                card_id=card_id
+            )
+
+            # Record stage history if stage or horizon changed
+            _record_stage_history(
+                old_card_data=card,
+                new_card_data=updated_card,
+                card_id=card_id,
+                user_id=current_user.get("id"),
+                trigger="review",
+                reason=review_data.reason
+            )
+
+        return updated_card
     else:
         raise HTTPException(status_code=400, detail="Failed to update card")
 

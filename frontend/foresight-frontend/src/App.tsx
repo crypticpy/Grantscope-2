@@ -8,6 +8,7 @@ import Discover from './pages/Discover';
 import DiscoveryQueue from './pages/DiscoveryQueue';
 import DiscoveryHistory from './pages/DiscoveryHistory';
 import CardDetail from './pages/CardDetail';
+import Compare from './pages/Compare';
 import Workstreams from './pages/Workstreams';
 import WorkstreamFeed from './pages/WorkstreamFeed';
 import Settings from './pages/Settings';
@@ -142,6 +143,16 @@ function App() {
                 element={
                   user ? (
                     <CardDetail />
+                  ) : (
+                    <Navigate to="/login" replace />
+                  )
+                }
+              />
+              <Route
+                path="/compare"
+                element={
+                  user ? (
+                    <Compare />
                   ) : (
                     <Navigate to="/login" replace />
                   )

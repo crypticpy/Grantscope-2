@@ -49,6 +49,13 @@ from .export import (
     get_export_filename,
 )
 
+from .history import (
+    # Score history models
+    ScoreHistory,
+    ScoreHistoryCreate,
+    ScoreHistoryResponse,
+)
+
 __all__ = [
     # Validation models
     "ClassificationValidation",
@@ -83,4 +90,8 @@ __all__ = [
     "WorkstreamExportResponse",
     "EXPORT_CONTENT_TYPES",
     "get_export_filename",
+    # Score history models
+    "ScoreHistory",
+    "ScoreHistoryCreate",
+    "ScoreHistoryResponse",
 ]

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Heart, Calendar, ExternalLink, FileText, TrendingUp, Eye, Info, RefreshCw, Search, Loader2, ChevronDown, ChevronUp, Copy, Check, Download, FileSpreadsheet, Presentation } from 'lucide-react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Heart, Calendar, ExternalLink, FileText, TrendingUp, Eye, Info, RefreshCw, Search, Loader2, ChevronDown, ChevronUp, Copy, Check, Download, FileSpreadsheet, Presentation, GitBranch, ArrowLeftRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
@@ -13,6 +13,15 @@ import { HorizonBadge } from '../components/HorizonBadge';
 import { StageBadge, StageProgress } from '../components/StageBadge';
 import { AnchorBadge } from '../components/AnchorBadge';
 import { Top25Badge, Top25List } from '../components/Top25Badge';
+
+// Visualization Components
+import { ScoreTimelineChart } from '../components/visualizations/ScoreTimelineChart';
+import { StageProgressionTimeline } from '../components/visualizations/StageProgressionTimeline';
+import { TrendVelocitySparkline, TrendVelocitySparklineSkeleton } from '../components/visualizations/TrendVelocitySparkline';
+import { ConceptNetworkDiagram } from '../components/visualizations/ConceptNetworkDiagram';
+
+// API Functions for trend data
+import { getScoreHistory, getStageHistory, getRelatedCards, type ScoreHistory, type StageHistory, type RelatedCard } from '../lib/discovery-api';
 
 // Taxonomy helpers
 import { getGoalByCode, type Goal } from '../data/taxonomy';
@@ -183,13 +192,14 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const CardDetail: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const { user } = useAuthContext();
+  const navigate = useNavigate();
   const [card, setCard] = useState<Card | null>(null);
   const [sources, setSources] = useState<Source[]>([]);
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [isFollowing, setIsFollowing] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'sources' | 'timeline' | 'notes'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'sources' | 'timeline' | 'notes' | 'related'>('overview');
   const [newNote, setNewNote] = useState('');
 
   // Research state
@@ -211,6 +221,19 @@ const CardDetail: React.FC = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
 
+  // Trend visualization state
+  const [scoreHistory, setScoreHistory] = useState<ScoreHistory[]>([]);
+  const [stageHistory, setStageHistory] = useState<StageHistory[]>([]);
+  const [scoreHistoryLoading, setScoreHistoryLoading] = useState(false);
+  const [stageHistoryLoading, setStageHistoryLoading] = useState(false);
+  const [scoreHistoryError, setScoreHistoryError] = useState<string | null>(null);
+  const [stageHistoryError, setStageHistoryError] = useState<string | null>(null);
+
+  // Related cards state (concept network)
+  const [relatedCards, setRelatedCards] = useState<RelatedCard[]>([]);
+  const [relatedCardsLoading, setRelatedCardsLoading] = useState(false);
+  const [relatedCardsError, setRelatedCardsError] = useState<string | null>(null);
+
   useEffect(() => {
     if (slug) {
       loadCardDetail();
@@ -223,6 +246,91 @@ const CardDetail: React.FC = () => {
       checkIfFollowing();
     }
   }, [card?.id, user]);
+
+  // Load trend visualization data when card is loaded
+  useEffect(() => {
+    if (card?.id) {
+      loadScoreHistory();
+      loadStageHistory();
+      loadRelatedCards();
+    }
+  }, [card?.id]);
+
+  // Fetch score history for timeline chart and sparkline
+  const loadScoreHistory = async () => {
+    if (!card?.id) return;
+
+    setScoreHistoryLoading(true);
+    setScoreHistoryError(null);
+
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        setScoreHistoryError('Not authenticated');
+        return;
+      }
+
+      const response = await getScoreHistory(token, card.id);
+      setScoreHistory(response.history);
+    } catch (error: any) {
+      setScoreHistoryError(error.message || 'Failed to load score history');
+    } finally {
+      setScoreHistoryLoading(false);
+    }
+  };
+
+  // Fetch stage history for stage progression timeline
+  const loadStageHistory = async () => {
+    if (!card?.id) return;
+
+    setStageHistoryLoading(true);
+    setStageHistoryError(null);
+
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        setStageHistoryError('Not authenticated');
+        return;
+      }
+
+      const response = await getStageHistory(token, card.id);
+      setStageHistory(response.history);
+    } catch (error: any) {
+      setStageHistoryError(error.message || 'Failed to load stage history');
+    } finally {
+      setStageHistoryLoading(false);
+    }
+  };
+
+  // Fetch related cards for concept network diagram
+  const loadRelatedCards = async () => {
+    if (!card?.id) return;
+
+    setRelatedCardsLoading(true);
+    setRelatedCardsError(null);
+
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        setRelatedCardsError('Not authenticated');
+        return;
+      }
+
+      const response = await getRelatedCards(token, card.id);
+      setRelatedCards(response.related_cards);
+    } catch (error: any) {
+      setRelatedCardsError(error.message || 'Failed to load related cards');
+    } finally {
+      setRelatedCardsLoading(false);
+    }
+  };
+
+  // Handle navigation to related card from concept network diagram
+  const handleRelatedCardClick = useCallback((cardId: string, cardSlug: string) => {
+    if (cardSlug) {
+      navigate(`/cards/${cardSlug}`);
+    }
+  }, [navigate]);
 
   const loadCardDetail = async () => {
     try {
@@ -595,6 +703,29 @@ const CardDetail: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3 ml-4">
+            {/* Compare button */}
+            <Tooltip
+              content={
+                <div className="max-w-[200px]">
+                  <p className="font-medium">Compare Trends</p>
+                  <p className="text-xs text-gray-500">Select another card to compare trends side-by-side</p>
+                </div>
+              }
+              side="bottom"
+            >
+              <button
+                onClick={() => {
+                  // Store this card for comparison and navigate to Discover
+                  sessionStorage.setItem('compareCard', JSON.stringify({ id: card.id, name: card.name }));
+                  navigate('/discover?compare=true');
+                }}
+                className="inline-flex items-center px-3 py-2 border border-extended-purple/30 rounded-md shadow-sm text-sm font-medium text-extended-purple bg-extended-purple/10 hover:bg-extended-purple hover:text-white transition-colors"
+              >
+                <ArrowLeftRight className="h-4 w-4 mr-2" />
+                Compare
+              </button>
+            </Tooltip>
+
             {/* Research buttons */}
             <Tooltip
               content={
@@ -880,6 +1011,7 @@ const CardDetail: React.FC = () => {
             { id: 'sources', name: 'Sources', icon: FileText },
             { id: 'timeline', name: 'Timeline', icon: Calendar },
             { id: 'notes', name: 'Notes', icon: TrendingUp },
+            { id: 'related', name: 'Related', icon: GitBranch },
           ].map((tab) => {
             const Icon = tab.icon;
             return (
@@ -975,6 +1107,21 @@ const CardDetail: React.FC = () => {
                         <div className="max-w-xs">
                           <StageProgress stage={stageNumber} showLabels />
                         </div>
+                        {/* Stage Progression Timeline */}
+                        {(stageHistory.length > 0 || stageHistoryLoading) && (
+                          <div className="mt-4 w-full max-w-md">
+                            <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Stage History</h4>
+                            {stageHistoryLoading ? (
+                              <div className="animate-pulse bg-gray-100 dark:bg-gray-800 rounded-lg h-24"></div>
+                            ) : (
+                              <StageProgressionTimeline
+                                stageHistory={stageHistory}
+                                currentStage={stageNumber}
+                                compact
+                              />
+                            )}
+                          </div>
+                        )}
                       </>
                     ) : (
                       <span className="text-sm text-gray-400 italic">Not assigned</span>
@@ -1010,6 +1157,16 @@ const CardDetail: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* Score Timeline Chart */}
+            <ScoreTimelineChart
+              data={scoreHistory}
+              title="Score History"
+              height={350}
+              loading={scoreHistoryLoading}
+              error={scoreHistoryError}
+              onRetry={loadScoreHistory}
+            />
 
             {/* Research History */}
             {researchHistory.length > 0 && (
@@ -1247,6 +1404,36 @@ const CardDetail: React.FC = () => {
                 <div className="flex justify-between">
                   <span className="text-gray-500 dark:text-gray-400">Notes</span>
                   <span className="font-medium text-gray-900 dark:text-white">{notes.length}</span>
+                </div>
+
+                {/* Velocity Trend Sparkline */}
+                <div className="pt-3 mt-3 border-t border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center justify-between">
+                    <Tooltip
+                      content={
+                        <div className="max-w-[200px]">
+                          <p className="font-medium">Velocity Trend</p>
+                          <p className="text-xs text-gray-500">
+                            Shows how quickly this trend is developing over the last 30 days
+                          </p>
+                        </div>
+                      }
+                      side="left"
+                    >
+                      <span className="text-gray-500 dark:text-gray-400 cursor-help border-b border-dotted border-gray-400 dark:border-gray-500">
+                        Velocity Trend
+                      </span>
+                    </Tooltip>
+                    {scoreHistoryLoading ? (
+                      <TrendVelocitySparklineSkeleton />
+                    ) : (
+                      <TrendVelocitySparkline
+                        data={scoreHistory}
+                        width={80}
+                        height={24}
+                      />
+                    )}
+                  </div>
                 </div>
 
                 {/* Timestamps Section */}
@@ -1603,6 +1790,26 @@ const CardDetail: React.FC = () => {
               ))
             )}
           </div>
+        </div>
+      )}
+
+      {activeTab === 'related' && (
+        <div className="space-y-6">
+          <ConceptNetworkDiagram
+            sourceCardId={card.id}
+            sourceCardName={card.name}
+            sourceCardSummary={card.summary}
+            sourceCardHorizon={card.horizon}
+            relatedCards={relatedCards}
+            height={600}
+            loading={relatedCardsLoading}
+            error={relatedCardsError}
+            onRetry={loadRelatedCards}
+            onCardClick={handleRelatedCardClick}
+            showMinimap={true}
+            showBackground={true}
+            title="Related Trends Network"
+          />
         </div>
       )}
 
