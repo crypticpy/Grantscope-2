@@ -24,6 +24,7 @@ import { StageBadge } from './StageBadge';
 import { Top25Badge } from './Top25Badge';
 import { Tooltip } from './ui/Tooltip';
 import { cn } from '../lib/utils';
+import { parseStageNumber } from '../lib/stage-utils';
 import {
   fetchPersonalizedDiscoveryQueue,
   dismissCard,
@@ -39,15 +40,6 @@ export interface PersonalizedQueueProps {
   /** Whether to show the header section */
   showHeader?: boolean;
 }
-
-/**
- * Parse stage number from stage_id string
- * e.g., "1_concept" -> 1, "2_emerging" -> 2
- */
-const parseStageNumber = (stageId: string): number | null => {
-  const match = stageId.match(/^(\d+)/);
-  return match ? parseInt(match[1], 10) : null;
-};
 
 /**
  * Get color and label for discovery score level
