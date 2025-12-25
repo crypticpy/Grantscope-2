@@ -3,9 +3,9 @@
   "spec": "006-advanced-search-and-filtering",
   "state": "building",
   "subtasks": {
-    "completed": 6,
+    "completed": 12,
     "total": 19,
-    "in_progress": 1,
+    "in_progress": 0,
     "failed": 0
   },
   "phase": {
@@ -21,5 +21,5 @@
     "number": 7,
     "started_at": "2025-12-24T21:14:16.097275"
   },
-  "last_update": "2025-12-24T21:28:50.136015"
+  "last_update": "2025-12-24T21:38:36.939109"
 }

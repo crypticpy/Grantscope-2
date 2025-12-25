@@ -89,8 +89,55 @@ const Discover: React.FC = () => {
   // Semantic search toggle - uses vector search API when enabled
   const [useSemanticSearch, setUseSemanticSearch] = useState<boolean>(false);
 
+  // Save search modal state
+  const [showSaveSearchModal, setShowSaveSearchModal] = useState(false);
+
   // Quick filter from URL params (new, following)
   const quickFilter = searchParams.get('filter') || '';
+
+  // Build current search query config for saving
+  const currentQueryConfig = useMemo<SavedSearchQueryConfig>(() => {
+    const config: SavedSearchQueryConfig = {
+      use_vector_search: useSemanticSearch,
+    };
+
+    if (searchTerm.trim()) {
+      config.query = searchTerm.trim();
+    }
+
+    // Build filters object
+    const filters: SavedSearchQueryConfig['filters'] = {};
+
+    if (selectedPillar) {
+      filters.pillar_ids = [selectedPillar];
+    }
+    if (selectedStage) {
+      filters.stage_ids = [selectedStage];
+    }
+    if (selectedHorizon && selectedHorizon !== '') {
+      filters.horizon = selectedHorizon as 'H1' | 'H2' | 'H3';
+    }
+    if (dateFrom || dateTo) {
+      filters.date_range = {
+        ...(dateFrom && { start: dateFrom }),
+        ...(dateTo && { end: dateTo }),
+      };
+    }
+    if (impactMin > 0 || relevanceMin > 0 || noveltyMin > 0) {
+      filters.score_thresholds = {
+        ...(impactMin > 0 && { impact_score: { min: impactMin } }),
+        ...(relevanceMin > 0 && { relevance_score: { min: relevanceMin } }),
+        ...(noveltyMin > 0 && { novelty_score: { min: noveltyMin } }),
+      };
+    }
+
+    // Only add filters if there's at least one filter set
+    if (Object.keys(filters).length > 0) {
+      config.filters = filters;
+    }
+
+    return config;
+  }, [searchTerm, selectedPillar, selectedStage, selectedHorizon, dateFrom, dateTo, impactMin, relevanceMin, noveltyMin, useSemanticSearch]);
 
   useEffect(() => {
     loadDiscoverData();
@@ -637,36 +684,47 @@ const Discover: React.FC = () => {
           </div>
         </div>
 
-        {/* View Controls */}
+        {/* View Controls and Save Search */}
         <div className="mt-4 flex items-center justify-between">
           <p className="text-sm text-gray-600 dark:text-gray-400">
             Showing {cards.length} cards
           </p>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-3">
+            {/* Save Search Button */}
             <button
-              onClick={() => setViewMode('grid')}
-              className={`p-2 rounded-md transition-colors ${
-                viewMode === 'grid'
-                  ? 'bg-brand-light-blue text-brand-blue dark:bg-brand-blue/20 dark:text-brand-blue'
-                  : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
-              }`}
-              aria-label="Grid view"
-              aria-pressed={viewMode === 'grid'}
+              onClick={() => setShowSaveSearchModal(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-brand-blue bg-brand-light-blue dark:bg-brand-blue/20 border border-brand-blue/30 rounded-md hover:bg-brand-blue hover:text-white dark:hover:bg-brand-blue transition-colors"
+              title="Save current search filters"
             >
-              <Grid className="h-4 w-4" />
+              <Bookmark className="h-4 w-4" />
+              Save Search
             </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={`p-2 rounded-md transition-colors ${
-                viewMode === 'list'
-                  ? 'bg-brand-light-blue text-brand-blue dark:bg-brand-blue/20 dark:text-brand-blue'
-                  : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
-              }`}
-              aria-label="List view"
-              aria-pressed={viewMode === 'list'}
-            >
-              <List className="h-4 w-4" />
-            </button>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`p-2 rounded-md transition-colors ${
+                  viewMode === 'grid'
+                    ? 'bg-brand-light-blue text-brand-blue dark:bg-brand-blue/20 dark:text-brand-blue'
+                    : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                }`}
+                aria-label="Grid view"
+                aria-pressed={viewMode === 'grid'}
+              >
+                <Grid className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`p-2 rounded-md transition-colors ${
+                  viewMode === 'list'
+                    ? 'bg-brand-light-blue text-brand-blue dark:bg-brand-blue/20 dark:text-brand-blue'
+                    : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                }`}
+                aria-label="List view"
+                aria-pressed={viewMode === 'list'}
+              >
+                <List className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -788,6 +846,14 @@ const Discover: React.FC = () => {
           })}
         </div>
       )}
+
+      {/* Save Search Modal */}
+      <SaveSearchModal
+        isOpen={showSaveSearchModal}
+        onClose={() => setShowSaveSearchModal(false)}
+        onSuccess={() => setShowSaveSearchModal(false)}
+        queryConfig={currentQueryConfig}
+      />
     </div>
   );
 };
