@@ -1,25 +1,25 @@
 {
-  "active": false,
-  "spec": "all-branches-merged",
-  "state": "complete",
+  "active": true,
+  "spec": "022-add-virtualization-for-card-lists-in-discover-and-",
+  "state": "building",
   "subtasks": {
-    "completed": 0,
-    "total": 0,
-    "in_progress": 0,
+    "completed": 12,
+    "total": 14,
+    "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "All features merged to main",
+    "current": "Discover Page Virtualization",
     "id": null,
-    "total": 0
+    "total": 4
   },
   "workers": {
     "active": 0,
     "max": 1
   },
   "session": {
-    "number": 0,
-    "started_at": null
+    "number": 14,
+    "started_at": "2025-12-25T10:45:25.887982"
   },
-  "last_update": "2025-12-25T05:00:00.000000"
+  "last_update": "2025-12-25T11:27:37.028869"
 }

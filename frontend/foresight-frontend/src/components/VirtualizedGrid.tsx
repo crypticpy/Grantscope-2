@@ -9,7 +9,7 @@
  * Column count is responsive based on container width.
  */
 
-import React, { useRef, useCallback, useState, useEffect, useMemo } from 'react';
+import React, { useRef, useCallback, useState, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { cn } from '../lib/utils';
 
@@ -54,6 +54,20 @@ export interface VirtualizedGridProps<T> {
   onScroll?: (scrollOffset: number) => void;
   /** Initial scroll offset to restore */
   initialScrollOffset?: number;
+}
+
+/**
+ * Ref handle for imperative actions on the grid
+ */
+export interface VirtualizedGridHandle {
+  /** Get the current scroll offset */
+  getScrollOffset: () => number;
+  /** Set the scroll offset */
+  setScrollOffset: (offset: number) => void;
+  /** Scroll to a specific row index */
+  scrollToIndex: (index: number, options?: { align?: 'start' | 'center' | 'end' | 'auto' }) => void;
+  /** Scroll to a specific item index (calculates row automatically) */
+  scrollToItemIndex: (itemIndex: number, options?: { align?: 'start' | 'center' | 'end' | 'auto' }) => void;
 }
 
 // ============================================================================
@@ -126,21 +140,24 @@ function useColumnCount(
 // Main Component
 // ============================================================================
 
-export function VirtualizedGrid<T>({
-  items,
-  renderItem,
-  getItemKey,
-  estimatedRowHeight = 280,
-  gap = 24,
-  columns = { sm: 1, md: 2, lg: 3 },
-  className,
-  emptyState,
-  loadingState,
-  isLoading = false,
-  overscan = 3,
-  onScroll,
-  initialScrollOffset,
-}: VirtualizedGridProps<T>): React.ReactElement {
+function VirtualizedGridInner<T>(
+  {
+    items,
+    renderItem,
+    getItemKey,
+    estimatedRowHeight = 280,
+    gap = 24,
+    columns = { sm: 1, md: 2, lg: 3 },
+    className,
+    emptyState,
+    loadingState,
+    isLoading = false,
+    overscan = 3,
+    onScroll,
+    initialScrollOffset,
+  }: VirtualizedGridProps<T>,
+  ref: React.ForwardedRef<VirtualizedGridHandle>
+): React.ReactElement {
   const containerRef = useRef<HTMLDivElement>(null);
   const containerWidth = useContainerWidth(containerRef);
 
@@ -176,6 +193,23 @@ export function VirtualizedGrid<T>({
     estimateSize: () => estimatedRowHeight + gap,
     overscan,
   });
+
+  // Expose imperative handle for scroll control
+  useImperativeHandle(ref, () => ({
+    getScrollOffset: () => containerRef.current?.scrollTop ?? 0,
+    setScrollOffset: (offset: number) => {
+      if (containerRef.current) {
+        containerRef.current.scrollTop = offset;
+      }
+    },
+    scrollToIndex: (index: number, options?: { align?: 'start' | 'center' | 'end' | 'auto' }) => {
+      virtualizer.scrollToIndex(index, options);
+    },
+    scrollToItemIndex: (itemIndex: number, options?: { align?: 'start' | 'center' | 'end' | 'auto' }) => {
+      const rowIndex = Math.floor(itemIndex / columnCount);
+      virtualizer.scrollToIndex(rowIndex, options);
+    },
+  }), [virtualizer, columnCount]);
 
   // Track if initial scroll has been applied
   const hasAppliedInitialScroll = useRef(false);
@@ -291,6 +325,18 @@ export function VirtualizedGrid<T>({
     </div>
   );
 }
+
+// ============================================================================
+// ForwardRef wrapper
+// ============================================================================
+
+/**
+ * VirtualizedGrid with ref forwarding for imperative scroll control.
+ * Uses a cast to maintain generic type parameter with forwardRef.
+ */
+export const VirtualizedGrid = forwardRef(VirtualizedGridInner) as <T>(
+  props: VirtualizedGridProps<T> & { ref?: React.ForwardedRef<VirtualizedGridHandle> }
+) => React.ReactElement;
 
 // ============================================================================
 // Utility Functions

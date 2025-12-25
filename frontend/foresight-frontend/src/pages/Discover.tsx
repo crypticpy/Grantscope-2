@@ -12,7 +12,7 @@ import { StageBadge } from '../components/StageBadge';
 import { Top25Badge } from '../components/Top25Badge';
 import { SaveSearchModal } from '../components/SaveSearchModal';
 import { SearchSidebar } from '../components/SearchSidebar';
-import { VirtualizedGrid } from '../components/VirtualizedGrid';
+import { VirtualizedGrid, VirtualizedGridHandle } from '../components/VirtualizedGrid';
 import { VirtualizedList, VirtualizedListHandle } from '../components/VirtualizedList';
 import { advancedSearch, AdvancedSearchRequest, SavedSearchQueryConfig, getSearchHistory, SearchHistoryEntry, deleteSearchHistoryEntry, clearSearchHistory, recordSearchHistory, SearchHistoryCreate } from '../lib/discovery-api';
 import { highlightText } from '../lib/highlight-utils';
@@ -183,13 +183,25 @@ const Discover: React.FC = () => {
   // Virtualized list ref for list view
   const virtualizedListRef = useRef<VirtualizedListHandle>(null);
 
-  // Scroll restoration for list view
+  // Virtualized grid ref for grid view
+  const virtualizedGridRef = useRef<VirtualizedGridHandle>(null);
+
+  // Scroll restoration for list view - saves position when navigating to card detail
   useScrollRestoration({
     storageKey: 'discover-list',
     enabled: viewMode === 'list',
     clearAfterRestore: false,
     getScrollPosition: () => virtualizedListRef.current?.getScrollOffset() ?? 0,
     setScrollPosition: (position) => virtualizedListRef.current?.setScrollOffset(position),
+  });
+
+  // Scroll restoration for grid view - saves position when navigating to card detail
+  useScrollRestoration({
+    storageKey: 'discover-grid',
+    enabled: viewMode === 'grid',
+    clearAfterRestore: false,
+    getScrollPosition: () => virtualizedGridRef.current?.getScrollOffset() ?? 0,
+    setScrollPosition: (position) => virtualizedGridRef.current?.setScrollOffset(position),
   });
 
   // Build current search query config for saving
@@ -1653,6 +1665,7 @@ const Discover: React.FC = () => {
           // Virtualized grid view for better performance with many cards
           <div className="h-[calc(100vh-400px)] min-h-[500px]">
             <VirtualizedGrid
+              ref={virtualizedGridRef}
               items={cards}
               getItemKey={(card) => card.id}
               estimatedRowHeight={280}
