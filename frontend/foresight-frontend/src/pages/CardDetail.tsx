@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Heart, Calendar, ExternalLink, FileText, TrendingUp, Eye, Info, RefreshCw, Search, Loader2, ChevronDown, ChevronUp, Copy, Check } from 'lucide-react';
+import { ArrowLeft, Heart, Calendar, ExternalLink, FileText, TrendingUp, Eye, Info, RefreshCw, Search, Loader2, ChevronDown, ChevronUp, Copy, Check, Download, FileSpreadsheet, Presentation } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
@@ -205,6 +205,11 @@ const CardDetail: React.FC = () => {
 
   // Timeline expanded reports
   const [expandedTimelineId, setExpandedTimelineId] = useState<string | null>(null);
+
+  // Export state
+  const [showExportDropdown, setShowExportDropdown] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   useEffect(() => {
     if (slug) {
@@ -452,6 +457,51 @@ const CardDetail: React.FC = () => {
     return date.toLocaleDateString();
   };
 
+  // Handle export to different formats
+  const handleExport = async (format: 'pdf' | 'pptx' | 'csv') => {
+    if (!card || isExporting) return;
+
+    setIsExporting(true);
+    setExportError(null);
+    setShowExportDropdown(false);
+
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        throw new Error('Not authenticated');
+      }
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/cards/${card.id}/export/${format}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Export failed: ${response.statusText}`);
+      }
+
+      // Create blob from response and trigger download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${card.slug}-export.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error: any) {
+      setExportError(error.message || 'Failed to export card');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -595,6 +645,60 @@ const CardDetail: React.FC = () => {
               </button>
             </Tooltip>
 
+            {/* Export Dropdown */}
+            <div className="relative">
+              <Tooltip
+                content={
+                  <div className="max-w-[200px]">
+                    <p className="font-medium">Export Card</p>
+                    <p className="text-xs text-gray-500">Download this card in various formats for sharing and analysis</p>
+                  </div>
+                }
+                side="bottom"
+              >
+                <button
+                  onClick={() => setShowExportDropdown(!showExportDropdown)}
+                  disabled={isExporting}
+                  className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isExporting ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4 mr-2" />
+                  )}
+                  Export
+                  <ChevronDown className="h-4 w-4 ml-1" />
+                </button>
+              </Tooltip>
+
+              {/* Dropdown Menu */}
+              {showExportDropdown && (
+                <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-[#3d4176] rounded-md shadow-lg border border-gray-200 dark:border-gray-600 py-1 z-20">
+                  <button
+                    onClick={() => handleExport('pdf')}
+                    className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    <FileText className="h-4 w-4 mr-3 text-red-500" />
+                    Export as PDF
+                  </button>
+                  <button
+                    onClick={() => handleExport('pptx')}
+                    className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    <Presentation className="h-4 w-4 mr-3 text-orange-500" />
+                    Export as PowerPoint
+                  </button>
+                  <button
+                    onClick={() => handleExport('csv')}
+                    className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    <FileSpreadsheet className="h-4 w-4 mr-3 text-green-500" />
+                    Export as CSV
+                  </button>
+                </div>
+              )}
+            </div>
+
             <button
               onClick={toggleFollow}
               className={`inline-flex items-center px-4 py-2 border rounded-md shadow-sm text-sm font-medium transition-colors ${
@@ -609,6 +713,25 @@ const CardDetail: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Export Error Banner */}
+      {exportError && (
+        <div className="mb-6 rounded-lg border bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800 p-4">
+          <div className="flex items-center gap-3">
+            <div className="h-5 w-5 rounded-full bg-red-500 text-white flex items-center justify-center text-xs font-bold">!</div>
+            <div>
+              <p className="font-medium text-red-800 dark:text-red-200">Export failed</p>
+              <p className="text-sm text-red-600 dark:text-red-300">{exportError}</p>
+            </div>
+            <button
+              onClick={() => setExportError(null)}
+              className="ml-auto text-red-600 hover:text-red-800 text-sm"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Research Status Banner */}
       {(isResearching || researchError || researchTask?.status === 'completed') && (
@@ -1481,6 +1604,14 @@ const CardDetail: React.FC = () => {
             )}
           </div>
         </div>
+      )}
+
+      {/* Close export dropdown when clicking outside */}
+      {showExportDropdown && (
+        <div
+          className="fixed inset-0 z-10"
+          onClick={() => setShowExportDropdown(false)}
+        />
       )}
     </div>
   );
