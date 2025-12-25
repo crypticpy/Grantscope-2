@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Search, Filter, Grid, List, Eye, Heart, Clock, Star, Inbox, History, Calendar, Sparkles, Bookmark, Trash2, ChevronDown, ChevronUp, Loader2, X } from 'lucide-react';
+import { Search, Filter, Grid, List, Eye, Heart, Clock, Star, Inbox, History, Calendar, Sparkles, Bookmark, Trash2, ChevronDown, ChevronUp, Loader2, X, AlertTriangle, RefreshCw } from 'lucide-react';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
+import { useDebouncedValue } from '../hooks/useDebounce';
 import { PillarBadge } from '../components/PillarBadge';
 import { HorizonBadge } from '../components/HorizonBadge';
 import { StageBadge } from '../components/StageBadge';
@@ -71,6 +72,7 @@ const Discover: React.FC = () => {
   const [pillars, setPillars] = useState<Pillar[]>([]);
   const [stages, setStages] = useState<Stage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPillar, setSelectedPillar] = useState('');
   const [selectedStage, setSelectedStage] = useState('');
@@ -89,6 +91,17 @@ const Discover: React.FC = () => {
 
   // Semantic search toggle - uses vector search API when enabled
   const [useSemanticSearch, setUseSemanticSearch] = useState<boolean>(false);
+
+  // Debounce filter values that change rapidly (300ms delay)
+  // This reduces API calls when users type in search or drag sliders
+  const filterState = useMemo(() => ({
+    searchTerm,
+    impactMin,
+    relevanceMin,
+    noveltyMin,
+  }), [searchTerm, impactMin, relevanceMin, noveltyMin]);
+
+  const { debouncedValue: debouncedFilters, isPending: isFilterPending } = useDebouncedValue(filterState, 300);
 
   // Save search modal state
   const [showSaveSearchModal, setShowSaveSearchModal] = useState(false);
@@ -155,9 +168,10 @@ const Discover: React.FC = () => {
     loadFollowedCards();
   }, [user?.id]);
 
+  // Use debounced values for frequently-changing filters to reduce API calls
   useEffect(() => {
     loadCards();
-  }, [searchTerm, selectedPillar, selectedStage, selectedHorizon, quickFilter, followedCardIds, impactMin, relevanceMin, noveltyMin, dateFrom, dateTo, useSemanticSearch]);
+  }, [debouncedFilters, selectedPillar, selectedStage, selectedHorizon, quickFilter, followedCardIds, dateFrom, dateTo, useSemanticSearch]);
 
   const loadDiscoverData = async () => {
     try {
@@ -198,6 +212,7 @@ const Discover: React.FC = () => {
 
   const loadCards = async () => {
     setLoading(true);
+    setError(null);
     try {
       // Handle "following" filter - need to filter client-side since we have the IDs
       if (quickFilter === 'following') {
@@ -213,8 +228,8 @@ const Discover: React.FC = () => {
           .eq('status', 'active')
           .in('id', Array.from(followedCardIds));
 
-        if (searchTerm) {
-          query = query.or(`name.ilike.%${searchTerm}%,summary.ilike.%${searchTerm}%`);
+        if (debouncedFilters.searchTerm) {
+          query = query.or(`name.ilike.%${debouncedFilters.searchTerm}%,summary.ilike.%${debouncedFilters.searchTerm}%`);
         }
 
         const { data } = await query.order('created_at', { ascending: false });
@@ -224,14 +239,14 @@ const Discover: React.FC = () => {
       }
 
       // Use advanced search API when semantic search is enabled and there's a search term
-      if (useSemanticSearch && searchTerm.trim()) {
+      if (useSemanticSearch && debouncedFilters.searchTerm.trim()) {
         const { data: sessionData } = await supabase.auth.getSession();
         const token = sessionData?.session?.access_token;
 
         if (token) {
-          // Build advanced search request with all current filters
+          // Build advanced search request with all current filters (using debounced values)
           const searchRequest: AdvancedSearchRequest = {
-            query: searchTerm,
+            query: debouncedFilters.searchTerm,
             use_vector_search: true,
             filters: {
               ...(selectedPillar && { pillar_ids: [selectedPillar] }),
@@ -243,11 +258,11 @@ const Discover: React.FC = () => {
                   ...(dateTo && { end: dateTo }),
                 },
               }),
-              ...((impactMin > 0 || relevanceMin > 0 || noveltyMin > 0) && {
+              ...((debouncedFilters.impactMin > 0 || debouncedFilters.relevanceMin > 0 || debouncedFilters.noveltyMin > 0) && {
                 score_thresholds: {
-                  ...(impactMin > 0 && { impact_score: { min: impactMin } }),
-                  ...(relevanceMin > 0 && { relevance_score: { min: relevanceMin } }),
-                  ...(noveltyMin > 0 && { novelty_score: { min: noveltyMin } }),
+                  ...(debouncedFilters.impactMin > 0 && { impact_score: { min: debouncedFilters.impactMin } }),
+                  ...(debouncedFilters.relevanceMin > 0 && { relevance_score: { min: debouncedFilters.relevanceMin } }),
+                  ...(debouncedFilters.noveltyMin > 0 && { novelty_score: { min: debouncedFilters.noveltyMin } }),
                 },
               }),
             },
@@ -311,19 +326,19 @@ const Discover: React.FC = () => {
         query = query.eq('horizon', selectedHorizon);
       }
 
-      if (searchTerm) {
-        query = query.or(`name.ilike.%${searchTerm}%,summary.ilike.%${searchTerm}%`);
+      if (debouncedFilters.searchTerm) {
+        query = query.or(`name.ilike.%${debouncedFilters.searchTerm}%,summary.ilike.%${debouncedFilters.searchTerm}%`);
       }
 
-      // Apply score threshold filters
-      if (impactMin > 0) {
-        query = query.gte('impact_score', impactMin);
+      // Apply score threshold filters (using debounced values)
+      if (debouncedFilters.impactMin > 0) {
+        query = query.gte('impact_score', debouncedFilters.impactMin);
       }
-      if (relevanceMin > 0) {
-        query = query.gte('relevance_score', relevanceMin);
+      if (debouncedFilters.relevanceMin > 0) {
+        query = query.gte('relevance_score', debouncedFilters.relevanceMin);
       }
-      if (noveltyMin > 0) {
-        query = query.gte('novelty_score', noveltyMin);
+      if (debouncedFilters.noveltyMin > 0) {
+        query = query.gte('novelty_score', debouncedFilters.noveltyMin);
       }
 
       // Apply date range filters
@@ -342,8 +357,21 @@ const Discover: React.FC = () => {
       if (!quickFilter) {
         recordSearchToHistory(currentQueryConfig, (data || []).length);
       }
-    } catch (error) {
-      console.error('Error loading cards:', error);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
+
+      // Check for network-specific errors
+      if (err instanceof TypeError && err.message.includes('fetch')) {
+        setError('Network error: Unable to connect to the server. Please check your connection and try again.');
+      } else if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+        setError('Authentication error: Please sign in to use advanced search features.');
+      } else if (errorMessage.includes('500') || errorMessage.includes('Internal Server Error')) {
+        setError('Server error: The search service is temporarily unavailable. Please try again in a few moments.');
+      } else if (errorMessage.includes('timeout') || errorMessage.includes('Timeout')) {
+        setError('Request timeout: The search took too long. Try narrowing your filters or search term.');
+      } else {
+        setError(`Failed to load cards: ${errorMessage}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -1022,9 +1050,17 @@ const Discover: React.FC = () => {
 
         {/* View Controls and Save Search */}
         <div className="mt-4 flex items-center justify-between">
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Showing {cards.length} cards
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Showing {cards.length} cards
+            </p>
+            {isFilterPending && (
+              <span className="inline-flex items-center gap-1 text-xs text-brand-blue">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Updating...
+              </span>
+            )}
+          </div>
           <div className="flex items-center space-x-3">
             {/* Save Search Button */}
             <button
@@ -1066,9 +1102,14 @@ const Discover: React.FC = () => {
       </div>
 
       {/* Cards Grid/List */}
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
+      {loading || isFilterPending ? (
+        <div className="flex flex-col items-center justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue"></div>
+          {isFilterPending && !loading && (
+            <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
+              Updating search...
+            </p>
+          )}
         </div>
       ) : cards.length === 0 ? (
         <div className="text-center py-12">
