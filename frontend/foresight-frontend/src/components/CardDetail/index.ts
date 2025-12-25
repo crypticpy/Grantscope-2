@@ -45,3 +45,6 @@ export {
   getScoreColorClasses,
   formatRelativeTime,
 } from './utils';
+
+// Tab components
+export * from './tabs';
