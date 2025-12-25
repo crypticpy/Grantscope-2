@@ -128,6 +128,21 @@ class Card(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+
+class ScoreBreakdown(BaseModel):
+    """Breakdown of individual scoring factors for discovery queue transparency"""
+    novelty_score: float = Field(..., ge=0.0, le=1.0, description="Score based on card recency and newness")
+    workstream_relevance_score: float = Field(..., ge=0.0, le=1.0, description="Score based on workstream filter matches")
+    pillar_alignment_score: float = Field(..., ge=0.0, le=1.0, description="Score based on user's active workstream pillars")
+    followed_context_score: float = Field(..., ge=0.0, le=1.0, description="Score based on similarity to followed cards")
+
+
+class PersonalizedCard(Card):
+    """Card model extended with personalized discovery scoring for the discovery queue"""
+    discovery_score: float = Field(..., ge=0.0, description="Combined multi-factor personalization score")
+    score_breakdown: Optional[ScoreBreakdown] = Field(None, description="Optional breakdown of scoring factors")
+
+
 class CardCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=200, description="Card name")
     summary: Optional[str] = Field(None, max_length=2000, description="Card summary")
