@@ -62,6 +62,8 @@ from app.models.export import (
 from app.models.history import (
     ScoreHistory,
     ScoreHistoryResponse,
+    StageHistory,
+    StageHistoryList,
 )
 
 # Initialize FastAPI app
@@ -939,6 +941,65 @@ async def get_card_score_history(
         total_count=len(history_records),
         start_date=start_date,
         end_date=end_date
+    )
+
+
+@app.get("/api/v1/cards/{card_id}/stage-history", response_model=StageHistoryList)
+async def get_card_stage_history(
+    card_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get maturity stage transition history for a card.
+
+    Returns a list of stage transitions ordered by changed_at (most recent first),
+    tracking maturity stage progression through stages 1-8 and horizon shifts
+    (H3 → H2 → H1).
+
+    The data is sourced from the card_timeline table, filtered to only include
+    'stage_changed' event types.
+
+    Args:
+        card_id: UUID of the card to get stage history for
+
+    Returns:
+        StageHistoryList with stage transition records and metadata
+    """
+    # First verify the card exists
+    card_response = supabase.table("cards").select("id").eq("id", card_id).execute()
+    if not card_response.data:
+        raise HTTPException(status_code=404, detail="Card not found")
+
+    # Query card_timeline for stage change events
+    # Filter by event_type='stage_changed' to get only stage transitions
+    response = supabase.table("card_timeline").select(
+        "id, card_id, created_at, old_stage_id, new_stage_id, old_horizon, new_horizon, trigger, reason"
+    ).eq("card_id", card_id).eq("event_type", "stage_changed").order("created_at", desc=True).execute()
+
+    # Convert to StageHistory models, mapping created_at to changed_at
+    history_records = []
+    if response.data:
+        for record in response.data:
+            # Skip records that don't have stage change data
+            if record.get("new_stage_id") is None:
+                continue
+
+            history_records.append(StageHistory(
+                id=record["id"],
+                card_id=record["card_id"],
+                changed_at=record["created_at"],  # Map created_at to changed_at
+                old_stage_id=record.get("old_stage_id"),
+                new_stage_id=record["new_stage_id"],
+                old_horizon=record.get("old_horizon"),
+                new_horizon=record.get("new_horizon", "H3"),  # Default to H3 if not set
+                trigger=record.get("trigger"),
+                reason=record.get("reason")
+            ))
+
+    return StageHistoryList(
+        history=history_records,
+        total_count=len(history_records),
+        card_id=card_id
     )
 
 
