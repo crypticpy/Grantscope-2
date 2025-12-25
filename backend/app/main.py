@@ -975,6 +975,130 @@ async def get_following_cards(current_user: dict = Depends(get_current_user)):
     """).eq("user_id", current_user["id"]).execute()
     return response.data
 
+
+# ============================================================================
+# Personalized Discovery Queue Endpoints
+# ============================================================================
+
+@app.get("/api/v1/me/discovery/queue", response_model=List[PersonalizedCard])
+async def get_personalized_discovery_queue(
+    current_user: dict = Depends(get_current_user),
+    limit: int = 20,
+    offset: int = 0,
+    include_breakdown: bool = False
+):
+    """
+    Get personalized discovery queue for the authenticated user.
+
+    Returns cards ranked by multi-factor scoring algorithm:
+    - Novelty: Prioritize recently created/updated cards
+    - Workstream Relevance: Match against user's workstream filters (pillars, goals, keywords, horizon)
+    - Strategic Pillar Alignment: Boost cards in user's active workstream pillars
+    - Followed Card Context: Similar cards to those user follows
+
+    Cards the user has dismissed are excluded from results.
+    Users with no workstreams receive global trending cards sorted by novelty.
+
+    Args:
+        current_user: Authenticated user (injected)
+        limit: Maximum number of cards to return (default: 20, max: 100)
+        offset: Number of cards to skip for pagination (default: 0)
+        include_breakdown: Include detailed score breakdown for each card (default: False)
+
+    Returns:
+        List of PersonalizedCard objects sorted by discovery_score DESC
+    """
+    # Clamp limit to reasonable bounds
+    limit = max(1, min(limit, 100))
+    offset = max(0, offset)
+
+    user_id = current_user["id"]
+
+    # 1. Get user's workstreams
+    workstreams_response = supabase.table("workstreams").select("*").eq(
+        "user_id", user_id
+    ).eq("is_active", True).execute()
+    workstreams = workstreams_response.data or []
+
+    # 2. Get user's followed cards (for context scoring)
+    follows_response = supabase.table("card_follows").select("""
+        *,
+        cards!inner(*)
+    """).eq("user_id", user_id).execute()
+    followed_cards = [f.get("cards", {}) for f in (follows_response.data or []) if f.get("cards")]
+
+    # 3. Get user's dismissed card IDs
+    dismissals_response = supabase.table("user_card_dismissals").select("card_id").eq(
+        "user_id", user_id
+    ).execute()
+    dismissed_card_ids = {d["card_id"] for d in (dismissals_response.data or [])}
+
+    # 4. Query active cards (status='active' AND review_status='active')
+    # We fetch more cards than limit to ensure we have enough after filtering dismissed ones
+    # and to properly sort by calculated discovery_score
+    fetch_limit = min((limit + offset) * 3 + len(dismissed_card_ids), 500)
+
+    cards_response = supabase.table("cards").select("*").eq(
+        "status", "active"
+    ).eq(
+        "review_status", "active"
+    ).order("created_at", desc=True).limit(fetch_limit).execute()
+
+    all_cards = cards_response.data or []
+
+    # 5. Filter out dismissed cards
+    eligible_cards = [c for c in all_cards if c.get("id") not in dismissed_card_ids]
+
+    # 6. Score each card
+    scored_cards = []
+    for card in eligible_cards:
+        score_result = calculate_discovery_score(
+            card=card,
+            workstreams=workstreams,
+            followed_cards=followed_cards,
+            user_dismissed_card_ids=dismissed_card_ids
+        )
+
+        # Build PersonalizedCard response
+        personalized_card = {
+            **card,
+            "discovery_score": score_result["discovery_score"]
+        }
+
+        # Optionally include score breakdown
+        if include_breakdown:
+            breakdown = score_result.get("score_breakdown", {})
+            personalized_card["score_breakdown"] = ScoreBreakdown(
+                novelty_score=breakdown.get("novelty", 0.0),
+                workstream_relevance_score=breakdown.get("workstream_relevance", 0.0),
+                pillar_alignment_score=breakdown.get("pillar_alignment", 0.0),
+                followed_context_score=breakdown.get("followed_context", 0.0)
+            )
+
+        scored_cards.append(personalized_card)
+
+    # 7. Sort by discovery_score DESC, then by created_at DESC for tie-breaking
+    scored_cards.sort(
+        key=lambda c: (c["discovery_score"], c.get("created_at", "")),
+        reverse=True
+    )
+
+    # 8. Apply pagination
+    paginated_cards = scored_cards[offset:offset + limit]
+
+    # 9. Convert to PersonalizedCard models
+    result = []
+    for card_data in paginated_cards:
+        try:
+            result.append(PersonalizedCard(**card_data))
+        except Exception as e:
+            # Log validation errors but continue with valid cards
+            logger.warning(f"Failed to validate card {card_data.get('id')}: {e}")
+            continue
+
+    return result
+
+
 # Notes endpoints
 @app.get("/api/v1/cards/{card_id}/notes")
 async def get_card_notes(card_id: str, current_user: dict = Depends(get_current_user)):
