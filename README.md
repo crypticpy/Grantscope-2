@@ -1,147 +1,218 @@
-# Foresight System - Austin Strategic Research & Intelligence
+# Foresight
 
-🎯 **Foresight** is an AI-powered strategic horizon scanning system designed for the City of Austin. It automates the discovery, analysis, and tracking of emerging trends, technologies, and issues that could impact municipal operations.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue.svg)](https://www.typescriptlang.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.104-009688.svg)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/React-18.3-61DAFB.svg)](https://reactjs.org/)
 
-## 🚀 Quick Start
+> **AI-powered strategic horizon scanning system for the City of Austin**
+
+Foresight automates the discovery, analysis, and tracking of emerging trends, technologies, and issues that could impact municipal operations. It aligns with Austin's strategic framework and the CMO's Top 25 Priorities.
+
+---
+
+## Table of Contents
+
+- [Features](#-features)
+- [Quick Start](#-quick-start)
+- [Architecture](#-architecture)
+- [API Reference](#-api-reference)
+- [AI Pipeline](#-ai-pipeline)
+- [Strategic Alignment](#-strategic-alignment)
+- [Documentation](#-documentation)
+- [Development](#-development)
+- [License](#-license)
+
+---
+
+## Features
+
+- **Card-Based Intelligence** - Atomic units of strategic information with rich metadata
+- **Multi-Source Discovery** - Automated content fetching from 5 source categories:
+  - RSS/Atom feeds from curated sources
+  - Major news outlets (Reuters, AP, GCN)
+  - Academic publications (arXiv)
+  - Government sources (.gov domains)
+  - Tech blogs (TechCrunch, Ars Technica)
+- **AI-Powered Classification** - Automatic categorization against Austin's strategic pillars
+- **Vector Search** - Semantic search across all content using embeddings
+- **Multi-Factor Scoring** - Impact, relevance, velocity, novelty, opportunity, and risk
+- **Workstream Management** - Custom research streams for focused analysis
+- **Personalized Discovery Queue** - Cards ranked by user preferences and context
+- **Advanced Search & Filtering** - Save searches, filter by scores, date ranges
+
+---
+
+## Quick Start
 
 ### Prerequisites
+
+- Python 3.11+
+- Node.js 18+ (pnpm recommended)
 - Supabase account
 - OpenAI API key
-- Node.js 18+ (for frontend)
-- Python 3.11+ (for backend)
 
 ### 1. Database Setup
 
-1. **Create Supabase Project**
-   - Go to [supabase.com](https://supabase.com)
-   - Create new project
-   - Note your project URL and API keys
-
-2. **Run Database Migrations**
-   ```bash
-   # Apply the database schema
-   # (Run the SQL migrations provided in the supabase folder)
-   ```
-
-3. **Configure Authentication**
-   - Enable email/password authentication
-   - Optionally enable Google OAuth
+```bash
+# Create a Supabase project at https://supabase.com
+# Run migrations from the supabase/migrations folder
+```
 
 ### 2. Backend Setup
 
-1. **Install Dependencies**
-   ```bash
-   cd backend
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
 
-2. **Configure Environment**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your Supabase and OpenAI credentials
-   ```
+# Configure environment
+cp .env.example .env
+# Edit .env with your Supabase and OpenAI credentials
 
-3. **Run Locally**
-   ```bash
-   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-   ```
+# Run the server
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
 
 ### 3. Frontend Setup
 
-1. **Install Dependencies**
-   ```bash
-   cd frontend/foresight-frontend
-   pnpm install
-   ```
+```bash
+cd frontend/foresight-frontend
+pnpm install
 
-2. **Configure Environment**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your Supabase URL and API key
-   ```
+# Configure environment
+cp .env.example .env
+# Edit .env with your Supabase URL and anon key
 
-3. **Run Locally**
-   ```bash
-   pnpm dev
-   ```
+# Run development server
+pnpm dev
+```
 
-## 🏗️ Architecture
+---
 
-### Technology Stack
-- **Frontend**: React + TypeScript + Vite + TailwindCSS
-- **Backend**: FastAPI + Python
-- **Database**: Supabase (PostgreSQL + pgvector)
-- **AI**: OpenAI GPT-4 + Embeddings
-- **Authentication**: Supabase Auth
-- **Deployment**: HuggingFace Spaces
+## Architecture
 
-### Key Features
-- **Card-Based Intelligence**: Atomic units of strategic information
-- **Vector Search**: Semantic search across all content
-- **Strategic Classification**: AI-powered categorization against Austin's pillars
-- **Workstream Management**: Custom research streams
-- **Real-time Updates**: Live collaboration and updates
-- **Timeline Tracking**: Evolution of topics over time
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   React + TS    │────▶│    FastAPI      │────▶│    Supabase     │
+│   (Frontend)    │     │    (Backend)    │     │  (PostgreSQL)   │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+                              │                        │
+                              ▼                        ▼
+                        ┌─────────────────┐     ┌─────────────────┐
+                        │   OpenAI API    │     │    pgvector     │
+                        │  (GPT-4, Embed) │     │ (Vector Search) │
+                        └─────────────────┘     └─────────────────┘
+```
 
-## 📊 Database Schema
+### Tech Stack
 
-### Core Tables
-- `cards`: Main intelligence cards
-- `sources`: Articles and references
-- `users`: User profiles and preferences
-- `workstreams`: Custom research streams
-- `card_follows`: User tracking of cards
-- `card_notes`: User annotations
+| Layer | Technology |
+|-------|------------|
+| Frontend | React 18, TypeScript, Vite, TailwindCSS, Radix UI |
+| Backend | FastAPI, Python 3.11+, Pydantic |
+| Database | Supabase (PostgreSQL + pgvector) |
+| AI/ML | OpenAI GPT-4, Embeddings, gpt-researcher |
+| Auth | Supabase Auth (JWT) |
 
-### Reference Tables
-- `pillars`: Austin strategic pillars
-- `goals`: Goals under each pillar
-- `anchors`: Strategic anchors
-- `stages`: Maturity stages
-- `priorities`: CMO top 25 priorities
+---
 
-## 🔧 API Endpoints
+## API Reference
 
 ### Authentication
-- `GET /api/v1/me` - Get current user profile
-- `PATCH /api/v1/me` - Update user profile
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/me` | GET | Get current user profile |
+| `/api/v1/me` | PATCH | Update user profile |
 
 ### Cards
-- `GET /api/v1/cards` - List cards with filtering
-- `GET /api/v1/cards/{id}` - Get card details
-- `POST /api/v1/cards` - Create new card
-- `POST /api/v1/cards/search` - Search cards
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/cards` | GET | List cards with filtering |
+| `/api/v1/cards/{id}` | GET | Get card details |
+| `/api/v1/cards` | POST | Create new card |
+| `/api/v1/cards/search` | POST | Advanced search |
 
-### User Interactions
-- `GET /api/v1/me/following` - Get followed cards
-- `POST /api/v1/cards/{id}/follow` - Follow card
-- `DELETE /api/v1/cards/{id}/follow` - Unfollow card
+### Discovery
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/discovery/trigger` | POST | Trigger discovery run |
+| `/api/v1/discovery/runs` | GET | List discovery runs |
+| `/api/v1/me/discovery/queue` | GET | Get personalized queue |
 
 ### Workstreams
-- `GET /api/v1/me/workstreams` - List user workstreams
-- `POST /api/v1/me/workstreams` - Create workstream
-- `GET /api/v1/me/workstreams/{id}/feed` - Get workstream feed
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/me/workstreams` | GET | List user workstreams |
+| `/api/v1/me/workstreams` | POST | Create workstream |
+| `/api/v1/me/workstreams/{id}/feed` | GET | Get workstream feed |
 
-## 🚢 Deployment
+---
 
-### Backend (HuggingFace Spaces)
-1. Create new Space at [huggingface.co/spaces](https://huggingface.co/spaces)
-2. Choose Docker runtime
-3. Upload backend code
-4. Set environment variables in Space settings
-5. Deploy automatically
+## AI Pipeline
 
-### Frontend (Vercel/Netlify)
-1. Build the frontend: `pnpm build`
-2. Deploy to Vercel/Netlify
-3. Set environment variables
-4. Configure domain and SSL
+### Nightly Processing (6 PM Austin Time)
 
-## 🧪 Testing
+1. **Content Discovery** - Fetch from NewsAPI, RSS feeds, academic sources
+2. **Triage** - Filter for municipal relevance using AI
+3. **Analysis** - Classification and multi-factor scoring
+4. **Matching** - Vector similarity to existing cards (0.92 threshold)
+5. **Storage** - Create new cards or enrich existing ones
 
-### Local Testing
+### Scoring Metrics
+
+| Metric | Description | Range |
+|--------|-------------|-------|
+| Impact | Potential municipal impact | 0-100 |
+| Relevance | Austin-specific relevance | 0-100 |
+| Velocity | Trending speed | 0-100 |
+| Novelty | Innovation level | 0-100 |
+| Opportunity | Positive potential | 0-100 |
+| Risk | Potential challenges | 0-100 |
+
+---
+
+## Strategic Alignment
+
+### Strategic Pillars
+
+| Code | Pillar |
+|------|--------|
+| CH | Community Health |
+| MC | Mobility & Connectivity |
+| HS | Housing & Economic Stability |
+| EC | Economic Development |
+| ES | Environmental Sustainability |
+| CE | Cultural & Entertainment |
+
+### Maturity Stages
+
+1. Concept → 2. Exploring → 3. Pilot → 4. Proof of Concept → 5. Implementing → 6. Scaling → 7. Mature → 8. Declining
+
+---
+
+## Documentation
+
+Detailed documentation is available in the `/docs` folder:
+
+- [Project Overview](docs/01_PROJECT_OVERVIEW.md)
+- [Architecture](docs/02_ARCHITECTURE.md)
+- [Tech Stack](docs/03_TECH_STACK.md)
+- [Data Model](docs/04_DATA_MODEL.md)
+- [API Specification](docs/05_API_SPEC.md)
+- [Frontend Specification](docs/06_FRONTEND_SPEC.md)
+- [AI Pipeline](docs/07_AI_PIPELINE.md)
+- [MVP Scope](docs/08_MVP_SCOPE.md)
+- [Taxonomy](docs/09_TAXONOMY.md)
+
+---
+
+## Development
+
+### Running Tests
+
 ```bash
 # Backend
 cd backend
@@ -152,68 +223,33 @@ cd frontend/foresight-frontend
 pnpm test
 ```
 
-### API Testing
+### Code Quality
+
 ```bash
-# Test health endpoint
-curl http://localhost:8000/api/v1/health
+# Backend linting
+cd backend
+ruff check .
 
-# Test authentication
-curl -X POST http://localhost:8000/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email": "test@example.com", "password": "password"}'
+# Frontend linting
+cd frontend/foresight-frontend
+pnpm lint
 ```
-
-## 📈 AI Pipeline
-
-### Nightly Processing (6 PM Austin Time)
-1. **Content Discovery**: Fetch from NewsAPI, RSS feeds, academic sources
-2. **Triage**: Filter for municipal relevance
-3. **Analysis**: AI-powered classification and scoring
-4. **Matching**: Vector similarity to existing cards
-5. **Storage**: Update database with new intelligence
-
-### Scoring Metrics
-- **Impact**: Potential municipal impact (0-100)
-- **Relevance**: Austin-specific relevance (0-100)
-- **Velocity**: Trending/popularity speed (0-100)
-- **Novelty**: Uniqueness/innovation level (0-100)
-- **Opportunity**: Positive potential (0-100)
-- **Risk**: Potential challenges/risks (0-100)
-
-## 🎯 Strategic Alignment
-
-Foresight aligns with Austin's strategic framework:
-
-### Strategic Pillars
-- **CH**: Community Health
-- **MC**: Mobility & Connectivity  
-- **HS**: Housing & Economic Stability
-- **EC**: Economic Development
-- **ES**: Environmental Sustainability
-- **CE**: Cultural & Entertainment
-
-### Maturity Stages
-1. Concept → 2. Exploring → 3. Pilot → 4. Proof of Concept
-5. Implementing → 6. Scaling → 7. Mature → 8. Declining
-
-## 🔒 Security
-
-- Row Level Security (RLS) on all database tables
-- JWT-based authentication
-- Environment variable protection
-- CORS configuration for production
-
-## 📞 Support
-
-For technical support or questions:
-- Email: contact-foresight@austintexas.gov
-- Documentation: [Project Wiki]
-- Issues: [GitHub Issues]
-
-## 📝 License
-
-This project is licensed under the MIT License.
 
 ---
 
-**Built with ❤️ for the City of Austin**
+## Security
+
+- Row Level Security (RLS) on all database tables
+- JWT-based authentication via Supabase
+- Environment variable protection for secrets
+- CORS configuration for production domains
+
+---
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+**Built with care for the City of Austin**
