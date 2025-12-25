@@ -11,6 +11,11 @@ import React from 'react';
 import { Brain, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
 import { Tooltip } from './ui/Tooltip';
 import { cn } from '../lib/utils';
+import {
+  getSizeClasses as getSharedSizeClasses,
+  getIconSize,
+  BadgeSize,
+} from '../lib/badge-utils';
 
 export interface ConfidenceBadgeProps {
   /** Confidence score between 0 and 1 */
@@ -84,32 +89,34 @@ function getConfidenceIcon(level: 'high' | 'medium' | 'low') {
 }
 
 /**
- * Get size classes for the badge
+ * Get size classes for the badge.
+ * Uses shared getSizeClasses utility for badge/pill variants.
+ * Minimal variant only needs text size classes.
  */
-function getSizeClasses(size: 'sm' | 'md' | 'lg', variant: 'badge' | 'pill' | 'minimal'): string {
+function getSizeClasses(size: BadgeSize, variant: 'badge' | 'pill' | 'minimal'): string {
   if (variant === 'minimal') {
-    const sizeMap = {
+    // Minimal variant: text size only (no padding)
+    const textSizeMap: Record<BadgeSize, string> = {
       sm: 'text-xs',
       md: 'text-sm',
       lg: 'text-base',
     };
-    return sizeMap[size];
+    return textSizeMap[size];
   }
 
-  const sizeMap = {
-    sm: 'px-1.5 py-0.5 text-xs gap-1',
-    md: 'px-2 py-1 text-sm gap-1.5',
-    lg: 'px-3 py-1.5 text-base gap-2',
-  };
-  return sizeMap[size];
+  // Badge/pill variants: use shared utility with gap included
+  return getSharedSizeClasses(size, {
+    includeGap: true,
+    variant: variant === 'pill' ? 'pill' : 'badge',
+  });
 }
 
 /**
- * Get icon size
+ * Get icon size - uses shared utility with 'small' scale
+ * for ConfidenceBadge (10/12/14 pixels for sm/md/lg)
  */
-function getIconSize(size: 'sm' | 'md' | 'lg'): number {
-  const sizeMap = { sm: 10, md: 12, lg: 14 };
-  return sizeMap[size];
+function getConfidenceIconSize(size: BadgeSize): number {
+  return getIconSize(size, 'small');
 }
 
 /**
@@ -227,7 +234,7 @@ export function ConfidenceBadge({
   const level = getConfidenceLevel(clampedConfidence);
   const colors = getConfidenceColorClasses(level);
   const Icon = showIcon ? getConfidenceIcon(level) : Brain;
-  const iconSize = getIconSize(size);
+  const iconSize = getConfidenceIconSize(size);
 
   // Minimal variant - just colored text
   if (variant === 'minimal') {
