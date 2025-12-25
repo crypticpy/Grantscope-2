@@ -8,6 +8,7 @@ import { HorizonBadge } from '../components/HorizonBadge';
 import { StageBadge } from '../components/StageBadge';
 import { Top25Badge } from '../components/Top25Badge';
 import { advancedSearch, AdvancedSearchRequest } from '../lib/discovery-api';
+import { highlightText } from '../lib/highlight-utils';
 
 interface Card {
   id: string;
@@ -27,6 +28,8 @@ interface Card {
   created_at: string;
   anchor_id?: string;
   top25_relevance?: string[];
+  // Search-specific fields (populated when semantic search is used)
+  search_relevance?: number; // Vector similarity score (0-1)
 }
 
 interface Pillar {
@@ -212,6 +215,8 @@ const Discover: React.FC = () => {
             opportunity_score: result.opportunity_score || 0,
             created_at: result.created_at || '',
             anchor_id: result.anchor_id,
+            // Include search relevance score from vector search (0-1 similarity)
+            search_relevance: result.search_relevance,
           }));
 
           setCards(mappedCards);
@@ -699,6 +704,16 @@ const Discover: React.FC = () => {
                       </Link>
                     </h3>
                     <div className="flex items-center gap-2 flex-wrap mb-3">
+                      {/* Search Relevance Badge - shown when semantic search is used */}
+                      {card.search_relevance !== undefined && (
+                        <span
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-extended-purple/10 text-extended-purple border border-extended-purple/30"
+                          title={`Search match: ${Math.round(card.search_relevance * 100)}% similarity to your query`}
+                        >
+                          <Sparkles className="h-3 w-3" />
+                          {Math.round(card.search_relevance * 100)}% match
+                        </span>
+                      )}
                       <PillarBadge pillarId={card.pillar_id} showIcon size="sm" />
                       <HorizonBadge horizon={card.horizon} size="sm" />
                       {stageNumber !== null && (
@@ -726,7 +741,9 @@ const Discover: React.FC = () => {
                   </button>
                 </div>
 
-                <p className="text-gray-600 dark:text-gray-400 mb-4 line-clamp-3">{card.summary}</p>
+                <p className="text-gray-600 dark:text-gray-400 mb-4 line-clamp-3">
+                  {searchTerm ? highlightText(card.summary, searchTerm) : card.summary}
+                </p>
 
                 {/* Scores */}
                 <div className="grid grid-cols-2 gap-2 text-xs">
