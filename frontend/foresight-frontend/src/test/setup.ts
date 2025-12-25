@@ -10,7 +10,9 @@
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
 
-// Mock ResizeObserver (required for Recharts and React Flow)
+// Mock ResizeObserver (required for Recharts, React Flow, and virtualization)
+// Note: This is a minimal mock. For virtualization tests that need actual
+// ResizeObserver callbacks, individual test files should provide their own mock.
 class MockResizeObserver {
   observe = vi.fn();
   unobserve = vi.fn();
