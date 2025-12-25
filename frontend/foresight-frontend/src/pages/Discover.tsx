@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Search, Filter, Grid, List, Eye, Heart, Clock, Star, Inbox, History } from 'lucide-react';
+import { Search, Filter, Grid, List, Eye, Heart, Clock, Star, Inbox, History, Calendar, Sparkles } from 'lucide-react';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
 import { PillarBadge } from '../components/PillarBadge';
 import { HorizonBadge } from '../components/HorizonBadge';
 import { StageBadge } from '../components/StageBadge';
 import { Top25Badge } from '../components/Top25Badge';
+import { advancedSearch, AdvancedSearchRequest } from '../lib/discovery-api';
 
 interface Card {
   id: string;
@@ -72,6 +73,18 @@ const Discover: React.FC = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [followedCardIds, setFollowedCardIds] = useState<Set<string>>(new Set());
 
+  // Score threshold filters (minimum values, 0-100)
+  const [impactMin, setImpactMin] = useState<number>(0);
+  const [relevanceMin, setRelevanceMin] = useState<number>(0);
+  const [noveltyMin, setNoveltyMin] = useState<number>(0);
+
+  // Date range filters (YYYY-MM-DD format)
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
+
+  // Semantic search toggle - uses vector search API when enabled
+  const [useSemanticSearch, setUseSemanticSearch] = useState<boolean>(false);
+
   // Quick filter from URL params (new, following)
   const quickFilter = searchParams.get('filter') || '';
 
@@ -82,7 +95,7 @@ const Discover: React.FC = () => {
 
   useEffect(() => {
     loadCards();
-  }, [searchTerm, selectedPillar, selectedStage, selectedHorizon, quickFilter, followedCardIds]);
+  }, [searchTerm, selectedPillar, selectedStage, selectedHorizon, quickFilter, followedCardIds, impactMin, relevanceMin, noveltyMin, dateFrom, dateTo, useSemanticSearch]);
 
   const loadDiscoverData = async () => {
     try {
@@ -172,6 +185,17 @@ const Discover: React.FC = () => {
 
       if (searchTerm) {
         query = query.or(`name.ilike.%${searchTerm}%,summary.ilike.%${searchTerm}%`);
+      }
+
+      // Apply score threshold filters
+      if (impactMin > 0) {
+        query = query.gte('impact_score', impactMin);
+      }
+      if (relevanceMin > 0) {
+        query = query.gte('relevance_score', relevanceMin);
+      }
+      if (noveltyMin > 0) {
+        query = query.gte('novelty_score', noveltyMin);
       }
 
       const { data } = await query.order('created_at', { ascending: false });
@@ -378,6 +402,38 @@ const Discover: React.FC = () => {
               <option value="H2">H2 (2-5 years)</option>
               <option value="H3">H3 (5+ years)</option>
             </select>
+          </div>
+        </div>
+
+        {/* Date Range Filters */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+          <div className="lg:col-span-2 flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-gray-400 flex-shrink-0" />
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Date Range:</span>
+          </div>
+          <div>
+            <label htmlFor="dateFrom" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Created After
+            </label>
+            <input
+              type="date"
+              id="dateFrom"
+              className="block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+            />
+          </div>
+          <div>
+            <label htmlFor="dateTo" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Created Before
+            </label>
+            <input
+              type="date"
+              id="dateTo"
+              className="block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+            />
           </div>
         </div>
 
