@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Heart, Calendar, ExternalLink, FileText, TrendingUp, Eye, Info, RefreshCw, Search, Loader2, ChevronDown, ChevronUp, Copy, Check, Download, FileSpreadsheet, Presentation } from 'lucide-react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Heart, Calendar, ExternalLink, FileText, TrendingUp, Eye, Info, RefreshCw, Search, Loader2, ChevronDown, ChevronUp, Copy, Check, Download, FileSpreadsheet, Presentation, GitBranch } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
@@ -18,9 +18,10 @@ import { Top25Badge, Top25List } from '../components/Top25Badge';
 import { ScoreTimelineChart } from '../components/visualizations/ScoreTimelineChart';
 import { StageProgressionTimeline } from '../components/visualizations/StageProgressionTimeline';
 import { TrendVelocitySparkline, TrendVelocitySparklineSkeleton } from '../components/visualizations/TrendVelocitySparkline';
+import { ConceptNetworkDiagram } from '../components/visualizations/ConceptNetworkDiagram';
 
 // API Functions for trend data
-import { getScoreHistory, getStageHistory, type ScoreHistory, type StageHistory } from '../lib/discovery-api';
+import { getScoreHistory, getStageHistory, getRelatedCards, type ScoreHistory, type StageHistory, type RelatedCard } from '../lib/discovery-api';
 
 // Taxonomy helpers
 import { getGoalByCode, type Goal } from '../data/taxonomy';
@@ -191,13 +192,14 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const CardDetail: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const { user } = useAuthContext();
+  const navigate = useNavigate();
   const [card, setCard] = useState<Card | null>(null);
   const [sources, setSources] = useState<Source[]>([]);
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [isFollowing, setIsFollowing] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'sources' | 'timeline' | 'notes'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'sources' | 'timeline' | 'notes' | 'related'>('overview');
   const [newNote, setNewNote] = useState('');
 
   // Research state
@@ -227,6 +229,11 @@ const CardDetail: React.FC = () => {
   const [scoreHistoryError, setScoreHistoryError] = useState<string | null>(null);
   const [stageHistoryError, setStageHistoryError] = useState<string | null>(null);
 
+  // Related cards state (concept network)
+  const [relatedCards, setRelatedCards] = useState<RelatedCard[]>([]);
+  const [relatedCardsLoading, setRelatedCardsLoading] = useState(false);
+  const [relatedCardsError, setRelatedCardsError] = useState<string | null>(null);
+
   useEffect(() => {
     if (slug) {
       loadCardDetail();
@@ -245,6 +252,7 @@ const CardDetail: React.FC = () => {
     if (card?.id) {
       loadScoreHistory();
       loadStageHistory();
+      loadRelatedCards();
     }
   }, [card?.id]);
 
@@ -293,6 +301,36 @@ const CardDetail: React.FC = () => {
       setStageHistoryLoading(false);
     }
   };
+
+  // Fetch related cards for concept network diagram
+  const loadRelatedCards = async () => {
+    if (!card?.id) return;
+
+    setRelatedCardsLoading(true);
+    setRelatedCardsError(null);
+
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        setRelatedCardsError('Not authenticated');
+        return;
+      }
+
+      const response = await getRelatedCards(token, card.id);
+      setRelatedCards(response.related_cards);
+    } catch (error: any) {
+      setRelatedCardsError(error.message || 'Failed to load related cards');
+    } finally {
+      setRelatedCardsLoading(false);
+    }
+  };
+
+  // Handle navigation to related card from concept network diagram
+  const handleRelatedCardClick = useCallback((cardId: string, cardSlug: string) => {
+    if (cardSlug) {
+      navigate(`/cards/${cardSlug}`);
+    }
+  }, [navigate]);
 
   const loadCardDetail = async () => {
     try {
@@ -950,6 +988,7 @@ const CardDetail: React.FC = () => {
             { id: 'sources', name: 'Sources', icon: FileText },
             { id: 'timeline', name: 'Timeline', icon: Calendar },
             { id: 'notes', name: 'Notes', icon: TrendingUp },
+            { id: 'related', name: 'Related', icon: GitBranch },
           ].map((tab) => {
             const Icon = tab.icon;
             return (
@@ -1728,6 +1767,26 @@ const CardDetail: React.FC = () => {
               ))
             )}
           </div>
+        </div>
+      )}
+
+      {activeTab === 'related' && (
+        <div className="space-y-6">
+          <ConceptNetworkDiagram
+            sourceCardId={card.id}
+            sourceCardName={card.name}
+            sourceCardSummary={card.summary}
+            sourceCardHorizon={card.horizon}
+            relatedCards={relatedCards}
+            height={600}
+            loading={relatedCardsLoading}
+            error={relatedCardsError}
+            onRetry={loadRelatedCards}
+            onCardClick={handleRelatedCardClick}
+            showMinimap={true}
+            showBackground={true}
+            title="Related Trends Network"
+          />
         </div>
       )}
 
