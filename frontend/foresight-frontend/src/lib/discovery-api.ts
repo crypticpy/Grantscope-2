@@ -477,3 +477,139 @@ export async function fetchPendingCount(token: string): Promise<number> {
   const result = await apiRequest<{ count: number }>('/api/v1/discovery/pending/count', token);
   return result.count;
 }
+
+// ============================================================================
+// Advanced Search API Functions
+// ============================================================================
+
+/**
+ * Execute an advanced search with filters and optional vector search
+ */
+export async function advancedSearch(
+  token: string,
+  request: AdvancedSearchRequest
+): Promise<AdvancedSearchResponse> {
+  return apiRequest<AdvancedSearchResponse>('/api/v1/cards/search', token, {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
+}
+
+// ============================================================================
+// Saved Searches API Functions
+// ============================================================================
+
+/**
+ * List all saved searches for the current user
+ */
+export async function listSavedSearches(
+  token: string,
+  limit?: number
+): Promise<SavedSearchList> {
+  const params = new URLSearchParams();
+  if (limit !== undefined) params.append('limit', String(limit));
+  const queryString = params.toString();
+  const endpoint = `/api/v1/saved-searches${queryString ? `?${queryString}` : ''}`;
+  return apiRequest<SavedSearchList>(endpoint, token);
+}
+
+/**
+ * Create a new saved search
+ */
+export async function createSavedSearch(
+  token: string,
+  savedSearch: SavedSearchCreate
+): Promise<SavedSearch> {
+  return apiRequest<SavedSearch>('/api/v1/saved-searches', token, {
+    method: 'POST',
+    body: JSON.stringify(savedSearch),
+  });
+}
+
+/**
+ * Get a specific saved search by ID (also updates last_used_at)
+ */
+export async function getSavedSearch(
+  token: string,
+  searchId: string
+): Promise<SavedSearch> {
+  return apiRequest<SavedSearch>(`/api/v1/saved-searches/${searchId}`, token);
+}
+
+/**
+ * Update a saved search
+ */
+export async function updateSavedSearch(
+  token: string,
+  searchId: string,
+  updates: SavedSearchUpdate
+): Promise<SavedSearch> {
+  return apiRequest<SavedSearch>(`/api/v1/saved-searches/${searchId}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  });
+}
+
+/**
+ * Delete a saved search
+ */
+export async function deleteSavedSearch(
+  token: string,
+  searchId: string
+): Promise<void> {
+  return apiRequest<void>(`/api/v1/saved-searches/${searchId}`, token, {
+    method: 'DELETE',
+  });
+}
+
+// ============================================================================
+// Search History API Functions
+// ============================================================================
+
+/**
+ * Get the current user's search history
+ */
+export async function getSearchHistory(
+  token: string,
+  limit?: number
+): Promise<SearchHistoryList> {
+  const params = new URLSearchParams();
+  if (limit !== undefined) params.append('limit', String(limit));
+  const queryString = params.toString();
+  const endpoint = `/api/v1/search-history${queryString ? `?${queryString}` : ''}`;
+  return apiRequest<SearchHistoryList>(endpoint, token);
+}
+
+/**
+ * Record a search in the user's history
+ */
+export async function recordSearchHistory(
+  token: string,
+  entry: SearchHistoryCreate
+): Promise<SearchHistoryEntry> {
+  return apiRequest<SearchHistoryEntry>('/api/v1/search-history', token, {
+    method: 'POST',
+    body: JSON.stringify(entry),
+  });
+}
+
+/**
+ * Delete a specific search history entry
+ */
+export async function deleteSearchHistoryEntry(
+  token: string,
+  entryId: string
+): Promise<void> {
+  return apiRequest<void>(`/api/v1/search-history/${entryId}`, token, {
+    method: 'DELETE',
+  });
+}
+
+/**
+ * Clear all search history for the current user
+ */
+export async function clearSearchHistory(token: string): Promise<void> {
+  return apiRequest<void>('/api/v1/search-history', token, {
+    method: 'DELETE',
+  });
+}
