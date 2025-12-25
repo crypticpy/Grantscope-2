@@ -272,6 +272,11 @@ const SWIPE_CONFIG = {
  * - Angle detection distinguishes swipes from vertical scrolling
  * - Enhanced visual feedback with direction icons
  * - Threshold indicators show when swipe will trigger
+ *
+ * Memoization:
+ * - Wrapped with React.memo to prevent unnecessary re-renders
+ * - Custom comparison function compares primitive props by value
+ * - Callback refs compared by reference (should be stable via useCallback at call site)
  */
 interface SwipeableCardProps {
   cardId: string;
@@ -288,7 +293,42 @@ interface SwipeableCardProps {
   isMobile?: boolean;
 }
 
-function SwipeableCard({
+/**
+ * Custom comparison function for SwipeableCard memoization
+ * Compares props to determine if re-render is needed
+ */
+function areSwipeableCardPropsEqual(
+  prevProps: SwipeableCardProps,
+  nextProps: SwipeableCardProps
+): boolean {
+  // Compare primitive props by value
+  if (prevProps.cardId !== nextProps.cardId) return false;
+  if (prevProps.disabled !== nextProps.disabled) return false;
+  if (prevProps.className !== nextProps.className) return false;
+  if (prevProps.tabIndex !== nextProps.tabIndex) return false;
+  if (prevProps.isMobile !== nextProps.isMobile) return false;
+
+  // Compare callbacks by reference
+  // These should be stable if wrapped with useCallback at the call site
+  if (prevProps.onSwipeLeft !== nextProps.onSwipeLeft) return false;
+  if (prevProps.onSwipeRight !== nextProps.onSwipeRight) return false;
+  if (prevProps.onClick !== nextProps.onClick) return false;
+  if (prevProps.cardRef !== nextProps.cardRef) return false;
+
+  // Compare style object by reference (shallow)
+  // If style objects are recreated, they'll cause re-renders
+  // Consider using useMemo for style objects at call site
+  if (prevProps.style !== nextProps.style) return false;
+
+  // Compare children by reference
+  // React children are typically new references on each render
+  // but this is expected behavior - parent changes cause child re-renders
+  if (prevProps.children !== nextProps.children) return false;
+
+  return true;
+}
+
+const SwipeableCard = React.memo(function SwipeableCard({
   cardId,
   onSwipeLeft,
   onSwipeRight,
@@ -487,7 +527,7 @@ function SwipeableCard({
       {children}
     </div>
   );
-}
+}, areSwipeableCardPropsEqual);
 
 /**
  * Get human-readable action description for toast
