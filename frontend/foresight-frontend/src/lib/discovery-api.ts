@@ -652,3 +652,12 @@ export async function fetchPersonalizedDiscoveryQueue(
 
   return apiRequest<PersonalizedCard[]>(endpoint, token);
 }
+
+/**
+ * Clear all search history for the current user
+ */
+export async function clearSearchHistory(token: string): Promise<void> {
+  return apiRequest<void>('/api/v1/search-history', token, {
+    method: 'DELETE',
+  });
+}
