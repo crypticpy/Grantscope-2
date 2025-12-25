@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Search, Filter, Grid, List, Eye, Heart, Clock, Star, Inbox, History, Calendar, Sparkles, Bookmark } from 'lucide-react';
+import { Search, Filter, Grid, List, Eye, Heart, Clock, Star, Inbox, History, Calendar, Sparkles, Bookmark, Trash2, ChevronDown, ChevronUp, Loader2, X } from 'lucide-react';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
 import { PillarBadge } from '../components/PillarBadge';
@@ -9,7 +9,7 @@ import { StageBadge } from '../components/StageBadge';
 import { Top25Badge } from '../components/Top25Badge';
 import { SaveSearchModal } from '../components/SaveSearchModal';
 import { SearchSidebar } from '../components/SearchSidebar';
-import { advancedSearch, AdvancedSearchRequest, SavedSearchQueryConfig } from '../lib/discovery-api';
+import { advancedSearch, AdvancedSearchRequest, SavedSearchQueryConfig, getSearchHistory, SearchHistoryEntry, deleteSearchHistoryEntry, clearSearchHistory } from '../lib/discovery-api';
 import { highlightText } from '../lib/highlight-utils';
 
 interface Card {
@@ -96,6 +96,12 @@ const Discover: React.FC = () => {
   // Saved searches sidebar state
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
+
+  // Search history state
+  const [searchHistory, setSearchHistory] = useState<SearchHistoryEntry[]>([]);
+  const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [deletingHistoryId, setDeletingHistoryId] = useState<string | null>(null);
 
   // Quick filter from URL params (new, following)
   const quickFilter = searchParams.get('filter') || '';
@@ -429,6 +435,123 @@ const Discover: React.FC = () => {
     setSidebarRefreshKey((prev) => prev + 1);
   }, []);
 
+  // Load search history
+  const loadSearchHistory = useCallback(async () => {
+    if (!user?.id) return;
+
+    setHistoryLoading(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
+      if (token) {
+        const response = await getSearchHistory(token, 20);
+        setSearchHistory(response.history);
+      }
+    } catch (error) {
+      // Silently fail - history is not critical
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [user?.id]);
+
+  // Load search history on mount and when user changes
+  useEffect(() => {
+    loadSearchHistory();
+  }, [loadSearchHistory]);
+
+  // Handle clicking a history item to re-run the search
+  const handleHistoryClick = useCallback((entry: SearchHistoryEntry) => {
+    handleSelectSavedSearch(entry.query_config);
+  }, [handleSelectSavedSearch]);
+
+  // Delete a single history entry
+  const handleDeleteHistoryEntry = useCallback(async (entryId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    setDeletingHistoryId(entryId);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
+      if (token) {
+        await deleteSearchHistoryEntry(token, entryId);
+        setSearchHistory((prev) => prev.filter((h) => h.id !== entryId));
+      }
+    } catch (error) {
+      // Silently fail
+    } finally {
+      setDeletingHistoryId(null);
+    }
+  }, []);
+
+  // Clear all history
+  const handleClearHistory = useCallback(async () => {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
+      if (token) {
+        await clearSearchHistory(token);
+        setSearchHistory([]);
+      }
+    } catch (error) {
+      // Silently fail
+    }
+  }, []);
+
+  // Format relative time for history entries
+  const formatHistoryTime = useCallback((dateString: string): string => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    return date.toLocaleDateString();
+  }, []);
+
+  // Build a short description of a query config
+  const getHistoryDescription = useCallback((config: SavedSearchQueryConfig): string => {
+    const parts: string[] = [];
+
+    if (config.query) {
+      parts.push(`"${config.query}"`);
+    }
+
+    if (config.filters) {
+      const { pillar_ids, stage_ids, horizon, date_range, score_thresholds } = config.filters;
+
+      if (pillar_ids && pillar_ids.length > 0) {
+        parts.push(`${pillar_ids.length} pillar(s)`);
+      }
+      if (stage_ids && stage_ids.length > 0) {
+        parts.push(`${stage_ids.length} stage(s)`);
+      }
+      if (horizon && horizon !== 'ALL') {
+        parts.push(`${horizon}`);
+      }
+      if (date_range && (date_range.start || date_range.end)) {
+        parts.push('date filter');
+      }
+      if (score_thresholds && Object.keys(score_thresholds).length > 0) {
+        parts.push('score filters');
+      }
+    }
+
+    if (parts.length === 0 && !config.use_vector_search) {
+      return 'All cards';
+    }
+
+    return parts.join(' • ') || (config.use_vector_search ? 'Semantic search' : 'All cards');
+  }, []);
+
   return (
     <>
       {/* Saved Searches Sidebar */}
@@ -756,6 +879,105 @@ const Discover: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Recent Search History */}
+        {user?.id && searchHistory.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+            <button
+              onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
+              className="w-full flex items-center justify-between text-left"
+            >
+              <div className="flex items-center gap-2">
+                <History className="h-4 w-4 text-gray-400" />
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Recent Searches ({searchHistory.length})
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {historyLoading && (
+                  <Loader2 className="h-4 w-4 text-gray-400 animate-spin" />
+                )}
+                {isHistoryExpanded ? (
+                  <ChevronUp className="h-4 w-4 text-gray-400" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-gray-400" />
+                )}
+              </div>
+            </button>
+
+            {isHistoryExpanded && (
+              <div className="mt-3 space-y-2 max-h-64 overflow-y-auto">
+                {/* Clear All Button */}
+                <div className="flex justify-end mb-2">
+                  <button
+                    onClick={handleClearHistory}
+                    className="text-xs text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                    title="Clear all search history"
+                  >
+                    Clear all
+                  </button>
+                </div>
+
+                {searchHistory.map((entry) => (
+                  <div
+                    key={entry.id}
+                    onClick={() => handleHistoryClick(entry)}
+                    className="group flex items-start justify-between gap-2 p-2 rounded-md border border-gray-200 dark:border-gray-600 hover:border-brand-blue hover:bg-brand-light-blue/50 dark:hover:bg-brand-blue/10 cursor-pointer transition-all"
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleHistoryClick(entry);
+                      }
+                    }}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {/* Semantic search badge */}
+                        {entry.query_config.use_vector_search && (
+                          <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[10px] font-medium bg-extended-purple/10 text-extended-purple">
+                            <Sparkles className="h-2.5 w-2.5" />
+                            AI
+                          </span>
+                        )}
+                        {/* Query/description */}
+                        <span className="text-sm text-gray-900 dark:text-white truncate">
+                          {getHistoryDescription(entry.query_config)}
+                        </span>
+                      </div>
+                      {/* Metadata row */}
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs text-gray-400">
+                          {formatHistoryTime(entry.executed_at)}
+                        </span>
+                        <span className="text-xs text-gray-400">•</span>
+                        <span className="text-xs text-gray-400">
+                          {entry.result_count} result{entry.result_count !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Delete button */}
+                    <button
+                      onClick={(e) => handleDeleteHistoryEntry(entry.id, e)}
+                      disabled={deletingHistoryId === entry.id}
+                      className="p-1 text-gray-400 hover:text-red-500 rounded opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50 shrink-0"
+                      title="Remove from history"
+                      aria-label="Remove from history"
+                    >
+                      {deletingHistoryId === entry.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <X className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* View Controls and Save Search */}
         <div className="mt-4 flex items-center justify-between">

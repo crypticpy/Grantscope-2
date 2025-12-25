@@ -3,13 +3,13 @@
   "spec": "006-advanced-search-and-filtering",
   "state": "building",
   "subtasks": {
-    "completed": 12,
+    "completed": 14,
     "total": 19,
-    "in_progress": 0,
+    "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "Frontend Search API Client",
+    "current": "Frontend Search History",
     "id": null,
     "total": 2
   },
@@ -18,8 +18,8 @@
     "max": 1
   },
   "session": {
-    "number": 7,
+    "number": 15,
     "started_at": "2025-12-24T21:14:16.097275"
   },
-  "last_update": "2025-12-24T21:38:36.939109"
+  "last_update": "2025-12-24T21:43:32.753575"
 }
