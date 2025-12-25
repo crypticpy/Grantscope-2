@@ -14,6 +14,12 @@ Key Features:
 - Creates new cards or enriches existing ones
 - Auto-approves high-confidence discoveries (>0.95)
 - Configurable scope caps to control costs
+- Multi-source content ingestion from 5 categories:
+  1. RSS/Atom feeds - Curated feeds from various sources
+  2. News outlets - Major news sites (Reuters, AP News, GCN)
+  3. Academic publications - arXiv research papers
+  4. Government sources - .gov domains, policy documents
+  5. Tech blogs - TechCrunch, Ars Technica, company blogs
 
 Usage:
     from app.discovery_service import DiscoveryService, DiscoveryConfig
@@ -42,12 +48,79 @@ from .query_generator import QueryGenerator, QueryConfig
 from .ai_service import AIService, AnalysisResult, TriageResult
 from .research_service import RawSource, ProcessedSource
 
+# Import multi-source content fetchers (5 categories)
+from .source_fetchers import (
+    # RSS/Atom feeds
+    fetch_rss_sources,
+    FetchedArticle,
+    # News outlets
+    fetch_news_articles,
+    NewsArticle,
+    # Academic publications
+    fetch_academic_papers,
+    AcademicPaper,
+    convert_to_raw_source as convert_academic_to_raw,
+    # Government sources
+    fetch_government_sources,
+    GovernmentDocument,
+    convert_government_to_raw_source,
+    # Tech blogs
+    fetch_tech_blog_articles,
+    TechBlogArticle,
+)
+
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# Source Category Tracking (5 Categories)
+# ============================================================================
+
+class SourceCategory(Enum):
+    """
+    Content source categories for multi-source ingestion.
+
+    The pipeline fetches from 5 diverse source categories to ensure
+    comprehensive coverage of emerging trends and technologies.
+    """
+    RSS = "rss"                     # RSS/Atom feeds from curated sources
+    NEWS = "news"                   # Major news outlets (Reuters, AP, GCN)
+    ACADEMIC = "academic"           # Academic publications (arXiv)
+    GOVERNMENT = "government"       # Government sources (.gov domains)
+    TECH_BLOG = "tech_blog"         # Tech blogs (TechCrunch, Ars Technica)
+
+
+# Default RSS feeds for curated content
+DEFAULT_RSS_FEEDS = [
+    "https://news.ycombinator.com/rss",
+    "https://feeds.arstechnica.com/arstechnica/technology-lab",
+    "https://www.govtech.com/rss/",
+    "https://statescoop.com/feed/",
+]
+
+# Default search topics for multi-source content fetching
+DEFAULT_SEARCH_TOPICS = [
+    "smart city technology",
+    "municipal innovation",
+    "government AI",
+    "public sector digital transformation",
+    "civic technology",
+]
 
 
 # ============================================================================
 # Configuration Classes
 # ============================================================================
+
+@dataclass
+class SourceCategoryConfig:
+    """Configuration for a specific source category."""
+    enabled: bool = True
+    max_sources: int = 50
+    topics: List[str] = field(default_factory=list)
+    # Category-specific settings
+    rss_feeds: List[str] = field(default_factory=list)  # For RSS category
+
 
 @dataclass
 class DiscoveryConfig:
@@ -71,6 +144,40 @@ class DiscoveryConfig:
     include_priorities: bool = True
     dry_run: bool = False  # If True, don't persist anything
     skip_blocked_topics: bool = True
+
+    # Multi-source category configuration
+    source_categories: Dict[str, SourceCategoryConfig] = field(default_factory=dict)
+    enable_multi_source: bool = True  # Enable fetching from all 5 source categories
+    search_topics: List[str] = field(default_factory=list)  # Topics for source searches
+
+    def __post_init__(self):
+        """Initialize default source category configurations."""
+        if not self.source_categories:
+            self.source_categories = {
+                SourceCategory.RSS.value: SourceCategoryConfig(
+                    enabled=True,
+                    max_sources=50,
+                    rss_feeds=DEFAULT_RSS_FEEDS.copy()
+                ),
+                SourceCategory.NEWS.value: SourceCategoryConfig(
+                    enabled=True,
+                    max_sources=30
+                ),
+                SourceCategory.ACADEMIC.value: SourceCategoryConfig(
+                    enabled=True,
+                    max_sources=30
+                ),
+                SourceCategory.GOVERNMENT.value: SourceCategoryConfig(
+                    enabled=True,
+                    max_sources=30
+                ),
+                SourceCategory.TECH_BLOG.value: SourceCategoryConfig(
+                    enabled=True,
+                    max_sources=30
+                ),
+            }
+        if not self.search_topics:
+            self.search_topics = DEFAULT_SEARCH_TOPICS.copy()
 
 
 class DiscoveryStatus(Enum):
@@ -117,6 +224,25 @@ class CardActionResult:
 
 
 @dataclass
+class MultiSourceFetchResult:
+    """Result of multi-source content fetching across all 5 categories."""
+    sources: List[RawSource]
+    sources_by_category: Dict[str, int]  # Count per category
+    total_sources: int
+    categories_fetched: int  # Number of categories that contributed sources
+    fetch_time_seconds: float
+    errors_by_category: Dict[str, List[str]]
+
+    @property
+    def category_diversity(self) -> float:
+        """Calculate diversity score (0-1) based on category distribution."""
+        if self.total_sources == 0:
+            return 0.0
+        active_categories = sum(1 for count in self.sources_by_category.values() if count > 0)
+        return active_categories / 5.0  # 5 categories total
+
+
+@dataclass
 class DiscoveryResult:
     """Complete result of a discovery run."""
     run_id: str
@@ -134,16 +260,20 @@ class DiscoveryResult:
     sources_blocked: int
     sources_duplicate: int
 
+    # Multi-source category tracking
+    sources_by_category: Dict[str, int] = field(default_factory=dict)
+    categories_fetched: int = 0
+
     # Card stats
-    cards_created: List[str]
-    cards_enriched: List[str]
-    sources_added: int
-    auto_approved: int
-    pending_review: int
+    cards_created: List[str] = field(default_factory=list)
+    cards_enriched: List[str] = field(default_factory=list)
+    sources_added: int = 0
+    auto_approved: int = 0
+    pending_review: int = 0
 
     # Cost and performance
-    estimated_cost: float
-    execution_time_seconds: float
+    estimated_cost: float = 0.0
+    execution_time_seconds: float = 0.0
 
     # Summary
     summary_report: Optional[str] = None
@@ -210,6 +340,8 @@ class DiscoveryService:
         start_time = datetime.now()
         run_id = await self._create_run_record(config)
         errors: List[str] = []
+        sources_by_category: Dict[str, int] = {}
+        categories_fetched: int = 0
 
         logger.info(f"Starting discovery run {run_id} with config: {config}")
 
@@ -218,8 +350,50 @@ class DiscoveryService:
             queries = await self._generate_queries(config)
             logger.info(f"Generated {len(queries)} queries")
 
-            if not queries:
-                logger.warning("No queries generated - aborting run")
+            # Step 2a: Multi-source content fetching (5 categories)
+            raw_sources: List[RawSource] = []
+            search_cost = 0.0
+
+            if config.enable_multi_source:
+                logger.info("Fetching from all 5 source categories...")
+                multi_source_result = await self._fetch_from_all_source_categories(config)
+                raw_sources.extend(multi_source_result.sources)
+                sources_by_category = multi_source_result.sources_by_category.copy()
+                categories_fetched = multi_source_result.categories_fetched
+
+                # Add any multi-source errors to error list
+                for category, cat_errors in multi_source_result.errors_by_category.items():
+                    for error in cat_errors:
+                        errors.append(f"[{category}] {error}")
+
+                logger.info(
+                    f"Multi-source fetch: {len(raw_sources)} sources from "
+                    f"{categories_fetched}/5 categories"
+                )
+
+            # Step 2b: Execute query-based searches (traditional GPT Researcher + Exa)
+            if queries:
+                query_sources, query_cost = await self._execute_searches(
+                    queries[:config.max_queries_per_run],
+                    config
+                )
+                search_cost += query_cost
+
+                # Deduplicate query sources against multi-source results
+                seen_urls = {s.url for s in raw_sources if s.url}
+                for source in query_sources:
+                    if source.url and source.url not in seen_urls:
+                        seen_urls.add(source.url)
+                        raw_sources.append(source)
+                        # Track as "query" category
+                        sources_by_category["query"] = sources_by_category.get("query", 0) + 1
+
+                logger.info(f"Query-based search: {len(query_sources)} additional sources")
+
+            logger.info(f"Total raw sources discovered: {len(raw_sources)}")
+
+            if not raw_sources and not queries:
+                logger.warning("No queries generated and no multi-source results - completing run")
                 return await self._finalize_run(
                     run_id=run_id,
                     start_time=start_time,
@@ -229,18 +403,13 @@ class DiscoveryService:
                     sources_triaged=0,
                     sources_blocked=0,
                     sources_duplicate=0,
+                    sources_by_category=sources_by_category,
+                    categories_fetched=categories_fetched,
                     card_result=CardActionResult([], [], 0, 0, 0),
                     cost=0.0,
-                    errors=["No queries generated"],
+                    errors=["No queries generated and no multi-source results"],
                     status=DiscoveryStatus.COMPLETED
                 )
-
-            # Step 2: Execute searches
-            raw_sources, search_cost = await self._execute_searches(
-                queries[:config.max_queries_per_run],
-                config
-            )
-            logger.info(f"Discovered {len(raw_sources)} raw sources")
 
             if not raw_sources:
                 logger.warning("No sources discovered - completing run")
@@ -253,6 +422,8 @@ class DiscoveryService:
                     sources_triaged=0,
                     sources_blocked=0,
                     sources_duplicate=0,
+                    sources_by_category=sources_by_category,
+                    categories_fetched=categories_fetched,
                     card_result=CardActionResult([], [], 0, 0, 0),
                     cost=search_cost,
                     errors=[],
@@ -306,6 +477,8 @@ class DiscoveryService:
                 sources_triaged=len(triaged_sources),
                 sources_blocked=blocked_count,
                 sources_duplicate=dedup_result.duplicate_count,
+                sources_by_category=sources_by_category,
+                categories_fetched=categories_fetched,
                 card_result=card_result,
                 cost=search_cost,
                 errors=errors,
@@ -325,6 +498,8 @@ class DiscoveryService:
                 sources_triaged=0,
                 sources_blocked=0,
                 sources_duplicate=0,
+                sources_by_category=sources_by_category,
+                categories_fetched=categories_fetched,
                 card_result=CardActionResult([], [], 0, 0, 0),
                 cost=0.0,
                 errors=errors,
@@ -491,6 +666,279 @@ class DiscoveryService:
         except Exception as e:
             logger.warning(f"Search failed for query '{query.query_text[:50]}...': {e}")
             return [], 0.0
+
+    # ========================================================================
+    # Step 3b: Multi-Source Content Fetching (5 Categories)
+    # ========================================================================
+
+    async def _fetch_from_all_source_categories(
+        self,
+        config: DiscoveryConfig
+    ) -> MultiSourceFetchResult:
+        """
+        Fetch content from all 5 source categories concurrently.
+
+        Categories:
+        1. RSS/Atom feeds - Curated feeds from various sources
+        2. News outlets - Major news sites (Reuters, AP News, GCN)
+        3. Academic publications - arXiv research papers
+        4. Government sources - .gov domains, policy documents
+        5. Tech blogs - TechCrunch, Ars Technica, company blogs
+
+        Args:
+            config: Discovery configuration with source category settings
+
+        Returns:
+            MultiSourceFetchResult with sources from all categories
+        """
+        start_time = datetime.now()
+        all_sources: List[RawSource] = []
+        sources_by_category: Dict[str, int] = {cat.value: 0 for cat in SourceCategory}
+        errors_by_category: Dict[str, List[str]] = {cat.value: [] for cat in SourceCategory}
+        seen_urls: set = set()
+
+        topics = config.search_topics or DEFAULT_SEARCH_TOPICS
+
+        logger.info(f"Starting multi-source fetch from 5 categories with topics: {topics[:3]}...")
+
+        # Create tasks for each source category
+        tasks = []
+
+        # 1. RSS/Atom feeds
+        rss_config = config.source_categories.get(SourceCategory.RSS.value, SourceCategoryConfig())
+        if rss_config.enabled:
+            feeds = rss_config.rss_feeds or DEFAULT_RSS_FEEDS
+            tasks.append(self._fetch_rss_sources(feeds, rss_config.max_sources))
+
+        # 2. News outlets
+        news_config = config.source_categories.get(SourceCategory.NEWS.value, SourceCategoryConfig())
+        if news_config.enabled:
+            tasks.append(self._fetch_news_sources(topics, news_config.max_sources))
+
+        # 3. Academic publications
+        academic_config = config.source_categories.get(SourceCategory.ACADEMIC.value, SourceCategoryConfig())
+        if academic_config.enabled:
+            tasks.append(self._fetch_academic_sources(topics, academic_config.max_sources))
+
+        # 4. Government sources
+        gov_config = config.source_categories.get(SourceCategory.GOVERNMENT.value, SourceCategoryConfig())
+        if gov_config.enabled:
+            tasks.append(self._fetch_government_sources(topics, gov_config.max_sources))
+
+        # 5. Tech blogs
+        tech_config = config.source_categories.get(SourceCategory.TECH_BLOG.value, SourceCategoryConfig())
+        if tech_config.enabled:
+            tasks.append(self._fetch_tech_blog_sources(topics, tech_config.max_sources))
+
+        # Execute all fetches concurrently
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Process results
+        category_order = [
+            SourceCategory.RSS.value,
+            SourceCategory.NEWS.value,
+            SourceCategory.ACADEMIC.value,
+            SourceCategory.GOVERNMENT.value,
+            SourceCategory.TECH_BLOG.value,
+        ]
+
+        result_idx = 0
+        for category in category_order:
+            cat_config = config.source_categories.get(category, SourceCategoryConfig())
+            if not cat_config.enabled:
+                continue
+
+            if result_idx >= len(results):
+                break
+
+            result = results[result_idx]
+            result_idx += 1
+
+            if isinstance(result, Exception):
+                error_msg = f"Category {category} fetch failed: {str(result)}"
+                logger.warning(error_msg)
+                errors_by_category[category].append(error_msg)
+                continue
+
+            sources, category_name = result
+            for source in sources:
+                if source.url and source.url not in seen_urls:
+                    seen_urls.add(source.url)
+                    # Tag source with category
+                    source.source_category = category  # type: ignore
+                    all_sources.append(source)
+                    sources_by_category[category] += 1
+
+        # Calculate metrics
+        fetch_time = (datetime.now() - start_time).total_seconds()
+        categories_fetched = sum(1 for count in sources_by_category.values() if count > 0)
+
+        logger.info(
+            f"Multi-source fetch complete: {len(all_sources)} sources from "
+            f"{categories_fetched}/5 categories in {fetch_time:.1f}s"
+        )
+        for cat, count in sources_by_category.items():
+            if count > 0:
+                logger.info(f"  - {cat}: {count} sources")
+
+        return MultiSourceFetchResult(
+            sources=all_sources,
+            sources_by_category=sources_by_category,
+            total_sources=len(all_sources),
+            categories_fetched=categories_fetched,
+            fetch_time_seconds=fetch_time,
+            errors_by_category=errors_by_category
+        )
+
+    async def _fetch_rss_sources(
+        self,
+        feed_urls: List[str],
+        max_sources: int
+    ) -> Tuple[List[RawSource], str]:
+        """Fetch sources from RSS/Atom feeds."""
+        try:
+            articles = await fetch_rss_sources(
+                feed_urls=feed_urls,
+                max_articles_per_feed=max_sources // len(feed_urls) if feed_urls else 10
+            )
+
+            sources = []
+            for article in articles[:max_sources]:
+                source = RawSource(
+                    url=article.url,
+                    title=article.title,
+                    content=article.content,
+                    source_name=article.source_name,
+                    relevance=article.relevance
+                )
+                sources.append(source)
+
+            return sources, SourceCategory.RSS.value
+
+        except Exception as e:
+            logger.warning(f"RSS fetch failed: {e}")
+            return [], SourceCategory.RSS.value
+
+    async def _fetch_news_sources(
+        self,
+        topics: List[str],
+        max_sources: int
+    ) -> Tuple[List[RawSource], str]:
+        """Fetch sources from news outlets."""
+        try:
+            articles = await fetch_news_articles(
+                topics=topics[:3],  # Limit topics to avoid rate limiting
+                max_articles=max_sources
+            )
+
+            sources = []
+            for article in articles[:max_sources]:
+                source = RawSource(
+                    url=article.url,
+                    title=article.title,
+                    content=article.content,
+                    source_name=article.source_name,
+                    relevance=article.relevance
+                )
+                sources.append(source)
+
+            return sources, SourceCategory.NEWS.value
+
+        except Exception as e:
+            logger.warning(f"News fetch failed: {e}")
+            return [], SourceCategory.NEWS.value
+
+    async def _fetch_academic_sources(
+        self,
+        topics: List[str],
+        max_sources: int
+    ) -> Tuple[List[RawSource], str]:
+        """Fetch sources from academic publications (arXiv)."""
+        try:
+            # Combine topics into search query
+            query = " OR ".join([f'"{topic}"' for topic in topics[:3]])
+
+            result = await fetch_academic_papers(
+                query=query,
+                max_results=max_sources
+            )
+
+            sources = []
+            for paper in result.papers[:max_sources]:
+                raw_source_dict = convert_academic_to_raw(paper)
+                source = RawSource(
+                    url=raw_source_dict["url"],
+                    title=raw_source_dict["title"],
+                    content=raw_source_dict["content"],
+                    source_name=raw_source_dict["source_name"],
+                    relevance=raw_source_dict.get("relevance", 0.8)
+                )
+                sources.append(source)
+
+            return sources, SourceCategory.ACADEMIC.value
+
+        except Exception as e:
+            logger.warning(f"Academic fetch failed: {e}")
+            return [], SourceCategory.ACADEMIC.value
+
+    async def _fetch_government_sources(
+        self,
+        topics: List[str],
+        max_sources: int
+    ) -> Tuple[List[RawSource], str]:
+        """Fetch sources from government websites (.gov domains)."""
+        try:
+            documents = await fetch_government_sources(
+                topics=topics[:3],  # Limit topics
+                max_results=max_sources
+            )
+
+            sources = []
+            for doc in documents[:max_sources]:
+                raw_source_dict = convert_government_to_raw_source(doc)
+                source = RawSource(
+                    url=raw_source_dict["url"],
+                    title=raw_source_dict["title"],
+                    content=raw_source_dict["content"],
+                    source_name=raw_source_dict["source_name"],
+                    relevance=raw_source_dict.get("relevance", 0.75)
+                )
+                sources.append(source)
+
+            return sources, SourceCategory.GOVERNMENT.value
+
+        except Exception as e:
+            logger.warning(f"Government fetch failed: {e}")
+            return [], SourceCategory.GOVERNMENT.value
+
+    async def _fetch_tech_blog_sources(
+        self,
+        topics: List[str],
+        max_sources: int
+    ) -> Tuple[List[RawSource], str]:
+        """Fetch sources from tech blogs."""
+        try:
+            articles = await fetch_tech_blog_articles(
+                topics=topics[:3],  # Limit topics
+                max_articles=max_sources
+            )
+
+            sources = []
+            for article in articles[:max_sources]:
+                source = RawSource(
+                    url=article.url,
+                    title=article.title,
+                    content=article.content,
+                    source_name=article.source_name,
+                    relevance=article.relevance
+                )
+                sources.append(source)
+
+            return sources, SourceCategory.TECH_BLOG.value
+
+        except Exception as e:
+            logger.warning(f"Tech blog fetch failed: {e}")
+            return [], SourceCategory.TECH_BLOG.value
 
     # ========================================================================
     # Step 4: Triage Sources
@@ -1042,7 +1490,9 @@ class DiscoveryService:
         card_result: CardActionResult,
         cost: float,
         errors: List[str],
-        status: DiscoveryStatus
+        status: DiscoveryStatus,
+        sources_by_category: Optional[Dict[str, int]] = None,
+        categories_fetched: int = 0
     ) -> DiscoveryResult:
         """
         Finalize the discovery run and generate summary report.
@@ -1052,12 +1502,18 @@ class DiscoveryService:
             start_time: When run started
             ... (various statistics)
             status: Final status
+            sources_by_category: Count of sources per category (5 categories)
+            categories_fetched: Number of source categories that contributed
 
         Returns:
             Complete DiscoveryResult
         """
         end_time = datetime.now()
         execution_time = (end_time - start_time).total_seconds()
+
+        # Default sources_by_category if not provided
+        if sources_by_category is None:
+            sources_by_category = {}
 
         # Generate summary report
         summary = self._generate_summary_report(
@@ -1067,6 +1523,8 @@ class DiscoveryService:
             sources_triaged=sources_triaged,
             sources_blocked=sources_blocked,
             sources_duplicate=sources_duplicate,
+            sources_by_category=sources_by_category,
+            categories_fetched=categories_fetched,
             card_result=card_result,
             cost=cost,
             execution_time=execution_time,
@@ -1084,6 +1542,8 @@ class DiscoveryService:
             sources_triaged=sources_triaged,
             sources_blocked=sources_blocked,
             sources_duplicate=sources_duplicate,
+            sources_by_category=sources_by_category,
+            categories_fetched=categories_fetched,
             cards_created=card_result.cards_created,
             cards_enriched=card_result.cards_enriched,
             sources_added=card_result.sources_added,
@@ -1113,7 +1573,9 @@ class DiscoveryService:
         card_result: CardActionResult,
         cost: float,
         execution_time: float,
-        errors: List[str]
+        errors: List[str],
+        sources_by_category: Optional[Dict[str, int]] = None,
+        categories_fetched: int = 0
     ) -> str:
         """Generate a human-readable summary report."""
         report = f"""# Discovery Run Summary
@@ -1129,7 +1591,18 @@ class DiscoveryService:
 - **Passed Triage**: {sources_triaged}
 - **Blocked**: {sources_blocked}
 - **Duplicates**: {sources_duplicate}
+"""
 
+        # Add source category breakdown if available
+        if sources_by_category:
+            report += f"""
+## Source Categories ({categories_fetched}/5 categories)
+"""
+            for category, count in sources_by_category.items():
+                if count > 0:
+                    report += f"- **{category}**: {count} sources\n"
+
+        report += f"""
 ## Cards
 - **Created**: {len(card_result.cards_created)}
 - **Enriched**: {len(card_result.cards_enriched)}
