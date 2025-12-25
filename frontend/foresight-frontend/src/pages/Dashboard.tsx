@@ -77,43 +77,55 @@ const Dashboard: React.FC = () => {
 
   const loadDashboardData = async () => {
     try {
-      // Load recent cards
-      const { data: recentData } = await supabase
-        .from('cards')
-        .select('*')
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(6);
+      // Parallelize all dashboard queries using Promise.all
+      // This reduces 5 sequential network calls to 3 parallel calls
+      const [recentCardsResult, followingCardsResult, statsResult] = await Promise.all([
+        // Query 1: Load recent cards
+        supabase
+          .from('cards')
+          .select('*')
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(6),
 
-      // Load following cards
-      const { data: followingData } = await supabase
-        .from('card_follows')
-        .select(`
-          id,
-          priority,
-          cards (*)
-        `)
-        .eq('user_id', user?.id);
+        // Query 2: Load following cards
+        supabase
+          .from('card_follows')
+          .select(`
+            id,
+            priority,
+            cards (*)
+          `)
+          .eq('user_id', user?.id),
 
-      // Load stats - use count properly from Supabase response
-      const { count: totalCardsCount } = await supabase
-        .from('cards')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'active');
+        // Query 3: Load dashboard stats via RPC (replaces 4 separate count queries)
+        supabase.rpc('get_dashboard_stats', { p_user_id: user?.id })
+      ]);
 
-      const { count: workstreamCountNum } = await supabase
-        .from('workstreams')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user?.id);
+      // Extract data from results, handling potential errors for each query
+      const recentData = recentCardsResult.error
+        ? []
+        : recentCardsResult.data;
 
-      const oneWeekAgo = new Date();
-      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+      const followingData = followingCardsResult.error
+        ? []
+        : followingCardsResult.data;
 
-      const { count: newThisWeekCount } = await supabase
-        .from('cards')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'active')
-        .gte('created_at', oneWeekAgo.toISOString());
+      // Type the stats response and handle potential errors
+      const statsData: DashboardStatsResponse | null = statsResult.error
+        ? null
+        : statsResult.data;
+
+      // Log any errors for debugging (non-blocking)
+      if (recentCardsResult.error) {
+        console.error('Error loading recent cards:', recentCardsResult.error);
+      }
+      if (followingCardsResult.error) {
+        console.error('Error loading following cards:', followingCardsResult.error);
+      }
+      if (statsResult.error) {
+        console.error('Error loading dashboard stats:', statsResult.error);
+      }
 
       setRecentCards(recentData || []);
       // Transform Supabase nested response to match our interface
@@ -123,11 +135,13 @@ const Dashboard: React.FC = () => {
         cards: item.cards as Card
       }));
       setFollowingCards(transformedFollowing);
+
+      // Set stats from RPC response or use fallback values
       setStats({
-        totalCards: totalCardsCount || 0,
-        newThisWeek: newThisWeekCount || 0,
-        following: followingData?.length || 0,
-        workstreams: workstreamCountNum || 0
+        totalCards: statsData?.total_cards ?? 0,
+        newThisWeek: statsData?.new_this_week ?? 0,
+        following: statsData?.following ?? 0,
+        workstreams: statsData?.workstreams ?? 0
       });
     } catch (error) {
       console.error('Error loading dashboard data:', error);
