@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useHotkeys } from 'react-hotkeys-hook';
+import { useDrag } from '@use-gesture/react';
 import {
   Search,
   Filter,
@@ -206,6 +207,114 @@ function ImpactScoreBadge({
         <span>{score}</span>
       </span>
     </Tooltip>
+  );
+}
+
+/**
+ * SwipeableCard wrapper component for touch gesture support
+ * Handles swipe left (dismiss) and swipe right (follow) gestures
+ */
+interface SwipeableCardProps {
+  cardId: string;
+  onSwipeLeft: () => void;
+  onSwipeRight: () => void;
+  disabled?: boolean;
+  children: React.ReactNode;
+  className?: string;
+  style?: React.CSSProperties;
+  tabIndex?: number;
+  onClick?: () => void;
+  cardRef?: (el: HTMLDivElement | null) => void;
+}
+
+function SwipeableCard({
+  cardId,
+  onSwipeLeft,
+  onSwipeRight,
+  disabled = false,
+  children,
+  className,
+  style,
+  tabIndex,
+  onClick,
+  cardRef,
+}: SwipeableCardProps) {
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const [isSwiping, setIsSwiping] = useState(false);
+
+  const bind = useDrag(
+    ({ swipe: [swipeX], movement: [mx], dragging, tap }) => {
+      // Ignore taps - let regular click handlers work
+      if (tap) return;
+
+      // Don't process gestures when disabled (e.g., during loading)
+      if (disabled) return;
+
+      // Update visual feedback during drag
+      if (dragging) {
+        setIsSwiping(true);
+        setSwipeOffset(mx);
+        return;
+      }
+
+      // Reset visual state when drag ends
+      setIsSwiping(false);
+      setSwipeOffset(0);
+
+      // Process swipe action based on direction
+      if (swipeX === -1) {
+        onSwipeLeft();
+      } else if (swipeX === 1) {
+        onSwipeRight();
+      }
+    },
+    {
+      swipe: {
+        distance: 50, // Minimum 50px swipe distance prevents accidents
+        velocity: 0.3, // Minimum velocity for swipe detection
+      },
+      filterTaps: true, // Distinguish clicks from drags
+      axis: 'x', // Only track horizontal movement
+    }
+  );
+
+  // Calculate swipe visual feedback colors
+  const getSwipeIndicator = () => {
+    if (!isSwiping || Math.abs(swipeOffset) < 20) return {};
+
+    if (swipeOffset < -20) {
+      // Swiping left - dismiss (red indicator)
+      const intensity = Math.min(Math.abs(swipeOffset) / 100, 0.3);
+      return {
+        boxShadow: `inset -4px 0 0 0 rgba(239, 68, 68, ${intensity})`,
+      };
+    } else if (swipeOffset > 20) {
+      // Swiping right - follow (green indicator)
+      const intensity = Math.min(swipeOffset / 100, 0.3);
+      return {
+        boxShadow: `inset 4px 0 0 0 rgba(34, 197, 94, ${intensity})`,
+      };
+    }
+    return {};
+  };
+
+  return (
+    <div
+      {...bind()}
+      ref={cardRef}
+      tabIndex={tabIndex}
+      onClick={onClick}
+      className={className}
+      style={{
+        ...style,
+        touchAction: 'pan-y', // Allow vertical scroll, but capture horizontal
+        transform: isSwiping ? `translateX(${swipeOffset * 0.3}px)` : undefined,
+        transition: isSwiping ? 'none' : 'transform 0.2s ease-out',
+        ...getSwipeIndicator(),
+      }}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -720,15 +829,19 @@ const DiscoveryQueue: React.FC = () => {
             const isFocused = focusedCardId === card.id;
 
             return (
-              <div
+              <SwipeableCard
                 key={card.id}
-                ref={(el) => {
+                cardId={card.id}
+                cardRef={(el) => {
                   if (el) {
                     cardRefs.current.set(card.id, el);
                   } else {
                     cardRefs.current.delete(card.id);
                   }
                 }}
+                onSwipeRight={() => handleReviewAction(card.id, 'approve')}
+                onSwipeLeft={() => handleDismiss(card.id, 'irrelevant')}
+                disabled={isLoading}
                 tabIndex={isFocused ? 0 : -1}
                 onClick={() => setFocusedCardIndex(index)}
                 className={`bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 border-l-4 transition-all duration-200 ${
@@ -862,7 +975,7 @@ const DiscoveryQueue: React.FC = () => {
                     </div>
                   </div>
                 </div>
-              </div>
+              </SwipeableCard>
             );
           })}
         </div>
