@@ -20,8 +20,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Eye, FileText, Calendar, TrendingUp, GitBranch, Loader2 } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
+import { Eye, FileText, Calendar, TrendingUp, GitBranch } from 'lucide-react';
 import { supabase } from '../../App';
 import { useAuthContext } from '../../hooks/useAuthContext';
 import { cn } from '../../lib/utils';
@@ -29,6 +28,7 @@ import { cn } from '../../lib/utils';
 // CardDetail sub-components
 import { CardDetailHeader } from './CardDetailHeader';
 import { CardActionButtons } from './CardActionButtons';
+import { ResearchStatusBanner } from './ResearchStatusBanner';
 import {
   CardDescription,
   CardClassification,
@@ -437,115 +437,6 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = '' }) => {
           showBackground
           title="Related Trends Network"
         />
-      )}
-    </div>
-  );
-};
-
-// ============================================================================
-// ResearchStatusBanner - Inline component for research status display
-// TODO: Extract to ResearchStatusBanner.tsx in subtask 2.4
-// ============================================================================
-
-interface ResearchStatusBannerProps {
-  isResearching: boolean;
-  researchError: string | null;
-  researchTask: ResearchTask | null;
-  showReport: boolean;
-  reportCopied: boolean;
-  onToggleReport: () => void;
-  onCopyReport: () => void;
-  onDismissError: () => void;
-  onDismissTask: () => void;
-}
-
-const ResearchStatusBanner: React.FC<ResearchStatusBannerProps> = ({
-  isResearching,
-  researchError,
-  researchTask,
-  showReport,
-  reportCopied,
-  onToggleReport,
-  onCopyReport,
-  onDismissError,
-  onDismissTask,
-}) => {
-  const { Check, Copy, ChevronDown, ChevronUp, FileText: FileTextIcon } = require('lucide-react');
-
-  return (
-    <div className={cn(
-      'mb-6 rounded-lg border overflow-hidden',
-      isResearching && 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800',
-      researchError && 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800',
-      researchTask?.status === 'completed' && !isResearching && 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800'
-    )}>
-      <div className="p-4">
-        <div className="flex items-center gap-3">
-          {isResearching && (
-            <>
-              <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
-              <div>
-                <p className="font-medium text-blue-800 dark:text-blue-200">
-                  {researchTask?.task_type === 'deep_research' ? 'Deep research in progress...' : 'Updating sources...'}
-                </p>
-                <p className="text-sm text-blue-600 dark:text-blue-300">This may take a minute. You can continue browsing.</p>
-              </div>
-            </>
-          )}
-          {researchError && (
-            <>
-              <div className="h-5 w-5 rounded-full bg-red-500 text-white flex items-center justify-center text-xs font-bold">!</div>
-              <div>
-                <p className="font-medium text-red-800 dark:text-red-200">Research failed</p>
-                <p className="text-sm text-red-600 dark:text-red-300">{researchError}</p>
-              </div>
-              <button onClick={onDismissError} className="ml-auto text-red-600 hover:text-red-800 text-sm">Dismiss</button>
-            </>
-          )}
-          {researchTask?.status === 'completed' && !isResearching && !researchError && (
-            <>
-              <div className="h-5 w-5 rounded-full bg-green-500 text-white flex items-center justify-center text-xs">&#10003;</div>
-              <div className="flex-1">
-                <p className="font-medium text-green-800 dark:text-green-200">Research completed!</p>
-                <p className="text-sm text-green-600 dark:text-green-300">
-                  Discovered {researchTask.result_summary?.sources_found || 0} sources
-                  {researchTask.result_summary?.sources_relevant && ` → ${researchTask.result_summary.sources_relevant} relevant`}
-                  {' → '}added {researchTask.result_summary?.sources_added || 0} new
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                {researchTask.result_summary?.report_preview && (
-                  <button onClick={onToggleReport} className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-green-700 bg-green-100 hover:bg-green-200 rounded-md transition-colors">
-                    <FileTextIcon className="h-4 w-4 mr-1.5" />
-                    {showReport ? 'Hide' : 'View'} Report
-                    {showReport ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" />}
-                  </button>
-                )}
-                <button onClick={onDismissTask} className="text-green-600 hover:text-green-800 text-sm">Dismiss</button>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Collapsible Research Report */}
-      {researchTask?.status === 'completed' && showReport && researchTask.result_summary?.report_preview && (
-        <div className="border-t border-green-200 dark:border-green-800 bg-white dark:bg-gray-900">
-          <div className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                <FileTextIcon className="h-4 w-4" />
-                Research Report
-              </h4>
-              <button onClick={onCopyReport} className="inline-flex items-center px-2 py-1 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 dark:text-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 rounded transition-colors">
-                {reportCopied ? <><Check className="h-3 w-3 mr-1 text-green-600" />Copied!</> : <><Copy className="h-3 w-3 mr-1" />Copy Report</>}
-              </button>
-            </div>
-            <div className="prose prose-sm dark:prose-invert max-w-none max-h-[70vh] sm:max-h-[500px] overflow-y-auto p-3 sm:p-4 bg-gray-50 dark:bg-gray-800 rounded-lg break-words">
-              <ReactMarkdown>{researchTask.result_summary.report_preview}</ReactMarkdown>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );

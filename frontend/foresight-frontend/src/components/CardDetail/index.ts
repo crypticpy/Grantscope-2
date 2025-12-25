@@ -63,6 +63,12 @@ export type { CardActionButtonsProps } from './CardActionButtons';
 export { ExportDropdown } from './ExportDropdown';
 export type { ExportDropdownProps, ExportFormat } from './ExportDropdown';
 
+/**
+ * Research status banner for showing in-progress, completed, or error states
+ */
+export { ResearchStatusBanner } from './ResearchStatusBanner';
+export type { ResearchStatusBannerProps } from './ResearchStatusBanner';
+
 // =============================================================================
 // Tab Component Exports
 // =============================================================================
