@@ -36,6 +36,26 @@ from .news_fetcher import (
     NewsArticle,
 )
 
+from .government_fetcher import (
+    fetch_government_sources,
+    fetch_documents_from_urls,
+    fetch_municipal_government_content,
+    fetch_and_convert_documents,
+    convert_to_raw_source as convert_government_to_raw_source,
+    GovernmentFetcher,
+    GovernmentDocument,
+    GovernmentFetchResult,
+)
+
+from .tech_blog_fetcher import (
+    fetch_tech_blog_articles,
+    fetch_tech_blog_rss_feeds,
+    fetch_articles_from_urls as fetch_tech_blog_urls,
+    TechBlogFetcher,
+    TechBlogArticle,
+    TechBlogFetchResult,
+)
+
 __all__ = [
     # RSS Fetcher
     "fetch_rss_sources",
@@ -55,4 +75,20 @@ __all__ = [
     "fetch_articles_from_urls",
     "NewsFetcher",
     "NewsArticle",
+    # Government Fetcher
+    "fetch_government_sources",
+    "fetch_documents_from_urls",
+    "fetch_municipal_government_content",
+    "fetch_and_convert_documents",
+    "convert_government_to_raw_source",
+    "GovernmentFetcher",
+    "GovernmentDocument",
+    "GovernmentFetchResult",
+    # Tech Blog Fetcher
+    "fetch_tech_blog_articles",
+    "fetch_tech_blog_rss_feeds",
+    "fetch_tech_blog_urls",
+    "TechBlogFetcher",
+    "TechBlogArticle",
+    "TechBlogFetchResult",
 ]
