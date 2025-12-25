@@ -32,3 +32,9 @@ export {
   ConceptNetworkDiagram,
   type ConceptNetworkDiagramProps,
 } from './ConceptNetworkDiagram';
+
+// Trend Comparison View - Side-by-side comparison of two cards
+export {
+  TrendComparisonView,
+  type TrendComparisonViewProps,
+} from './TrendComparisonView';
