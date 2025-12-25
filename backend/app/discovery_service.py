@@ -369,6 +369,107 @@ class MultiSourceFetchResult:
 
 
 @dataclass
+class ProcessingTimeMetrics:
+    """
+    Granular timing metrics for each pipeline phase.
+
+    Provides observability into processing time distribution across
+    the discovery pipeline for performance optimization and debugging.
+    """
+    query_generation_seconds: float = 0.0
+    multi_source_fetch_seconds: float = 0.0
+    query_search_seconds: float = 0.0
+    triage_seconds: float = 0.0
+    blocked_topic_check_seconds: float = 0.0
+    deduplication_seconds: float = 0.0
+    card_creation_seconds: float = 0.0
+    total_seconds: float = 0.0
+
+    def log_metrics(self, logger_instance: logging.Logger) -> None:
+        """Log processing time metrics for observability."""
+        logger_instance.info(
+            f"Processing Time Breakdown: "
+            f"query_gen={self.query_generation_seconds:.2f}s, "
+            f"multi_source={self.multi_source_fetch_seconds:.2f}s, "
+            f"query_search={self.query_search_seconds:.2f}s, "
+            f"triage={self.triage_seconds:.2f}s, "
+            f"block_check={self.blocked_topic_check_seconds:.2f}s, "
+            f"dedup={self.deduplication_seconds:.2f}s, "
+            f"card_create={self.card_creation_seconds:.2f}s, "
+            f"total={self.total_seconds:.2f}s"
+        )
+
+    def to_dict(self) -> Dict[str, float]:
+        """Convert metrics to dictionary for storage/API response."""
+        return {
+            "query_generation_seconds": self.query_generation_seconds,
+            "multi_source_fetch_seconds": self.multi_source_fetch_seconds,
+            "query_search_seconds": self.query_search_seconds,
+            "triage_seconds": self.triage_seconds,
+            "blocked_topic_check_seconds": self.blocked_topic_check_seconds,
+            "deduplication_seconds": self.deduplication_seconds,
+            "card_creation_seconds": self.card_creation_seconds,
+            "total_seconds": self.total_seconds,
+        }
+
+
+@dataclass
+class APITokenUsage:
+    """
+    Token usage metrics for API cost tracking.
+
+    Tracks token consumption across different AI operations
+    for cost monitoring and budget management.
+    """
+    triage_tokens: int = 0
+    analysis_tokens: int = 0
+    embedding_tokens: int = 0
+    card_match_tokens: int = 0
+    total_tokens: int = 0
+
+    # Token costs (approximate, based on GPT-4 pricing)
+    # These are rough estimates for monitoring purposes
+    estimated_cost_usd: float = 0.0
+
+    def add_tokens(self, operation: str, tokens: int) -> None:
+        """Add tokens for a specific operation."""
+        if operation == "triage":
+            self.triage_tokens += tokens
+        elif operation == "analysis":
+            self.analysis_tokens += tokens
+        elif operation == "embedding":
+            self.embedding_tokens += tokens
+        elif operation == "card_match":
+            self.card_match_tokens += tokens
+        self.total_tokens += tokens
+        # Rough cost estimate: $0.03 per 1K tokens (GPT-4 average)
+        self.estimated_cost_usd = self.total_tokens * 0.00003
+
+    def log_metrics(self, logger_instance: logging.Logger) -> None:
+        """Log API token usage metrics for observability."""
+        logger_instance.info(
+            f"API Token Usage: "
+            f"triage={self.triage_tokens:,}, "
+            f"analysis={self.analysis_tokens:,}, "
+            f"embedding={self.embedding_tokens:,}, "
+            f"card_match={self.card_match_tokens:,}, "
+            f"total={self.total_tokens:,}, "
+            f"est_cost=${self.estimated_cost_usd:.4f}"
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert metrics to dictionary for storage/API response."""
+        return {
+            "triage_tokens": self.triage_tokens,
+            "analysis_tokens": self.analysis_tokens,
+            "embedding_tokens": self.embedding_tokens,
+            "card_match_tokens": self.card_match_tokens,
+            "total_tokens": self.total_tokens,
+            "estimated_cost_usd": self.estimated_cost_usd,
+        }
+
+
+@dataclass
 class DiscoveryResult:
     """Complete result of a discovery run."""
     run_id: str
@@ -401,6 +502,10 @@ class DiscoveryResult:
     # Cost and performance
     estimated_cost: float = 0.0
     execution_time_seconds: float = 0.0
+
+    # Enhanced metrics (Phase 4)
+    processing_time: Optional[Dict[str, float]] = None  # ProcessingTimeMetrics as dict
+    api_token_usage: Optional[Dict[str, Any]] = None  # APITokenUsage as dict
 
     # Summary
     summary_report: Optional[str] = None
@@ -471,24 +576,32 @@ class DiscoveryService:
         categories_fetched: int = 0
         diversity_metrics: Optional[SourceDiversityMetrics] = None
 
+        # Initialize enhanced metrics tracking
+        processing_time = ProcessingTimeMetrics()
+        api_token_usage = APITokenUsage()
+
         logger.info(f"Starting discovery run {run_id} with config: {config}")
 
         try:
             # Step 1: Generate queries
+            step_start = datetime.now()
             queries = await self._generate_queries(config)
-            logger.info(f"Generated {len(queries)} queries")
+            processing_time.query_generation_seconds = (datetime.now() - step_start).total_seconds()
+            logger.info(f"Generated {len(queries)} queries in {processing_time.query_generation_seconds:.2f}s")
 
             # Step 2a: Multi-source content fetching (5 categories)
             raw_sources: List[RawSource] = []
             search_cost = 0.0
 
             if config.enable_multi_source:
+                step_start = datetime.now()
                 logger.info("Fetching from all 5 source categories...")
                 multi_source_result = await self._fetch_from_all_source_categories(config)
                 raw_sources.extend(multi_source_result.sources)
                 sources_by_category = multi_source_result.sources_by_category.copy()
                 categories_fetched = multi_source_result.categories_fetched
                 diversity_metrics = multi_source_result.diversity_metrics
+                processing_time.multi_source_fetch_seconds = (datetime.now() - step_start).total_seconds()
 
                 # Add any multi-source errors to error list
                 for category, cat_errors in multi_source_result.errors_by_category.items():
@@ -497,16 +610,18 @@ class DiscoveryService:
 
                 logger.info(
                     f"Multi-source fetch: {len(raw_sources)} sources from "
-                    f"{categories_fetched}/5 categories"
+                    f"{categories_fetched}/5 categories in {processing_time.multi_source_fetch_seconds:.2f}s"
                 )
 
             # Step 2b: Execute query-based searches (traditional GPT Researcher + Exa)
             if queries:
+                step_start = datetime.now()
                 query_sources, query_cost = await self._execute_searches(
                     queries[:config.max_queries_per_run],
                     config
                 )
                 search_cost += query_cost
+                processing_time.query_search_seconds = (datetime.now() - step_start).total_seconds()
 
                 # Deduplicate query sources against multi-source results
                 seen_urls = {s.url for s in raw_sources if s.url}
@@ -517,12 +632,13 @@ class DiscoveryService:
                         # Track as "query" category
                         sources_by_category["query"] = sources_by_category.get("query", 0) + 1
 
-                logger.info(f"Query-based search: {len(query_sources)} additional sources")
+                logger.info(f"Query-based search: {len(query_sources)} additional sources in {processing_time.query_search_seconds:.2f}s")
 
             logger.info(f"Total raw sources discovered: {len(raw_sources)}")
 
             if not raw_sources and not queries:
                 logger.warning("No queries generated and no multi-source results - completing run")
+                processing_time.total_seconds = (datetime.now() - start_time).total_seconds()
                 return await self._finalize_run(
                     run_id=run_id,
                     start_time=start_time,
@@ -538,11 +654,14 @@ class DiscoveryService:
                     card_result=CardActionResult([], [], 0, 0, 0),
                     cost=0.0,
                     errors=["No queries generated and no multi-source results"],
-                    status=DiscoveryStatus.COMPLETED
+                    status=DiscoveryStatus.COMPLETED,
+                    processing_time_metrics=processing_time,
+                    api_token_usage_metrics=api_token_usage
                 )
 
             if not raw_sources:
                 logger.warning("No sources discovered - completing run")
+                processing_time.total_seconds = (datetime.now() - start_time).total_seconds()
                 return await self._finalize_run(
                     run_id=run_id,
                     start_time=start_time,
@@ -558,14 +677,20 @@ class DiscoveryService:
                     card_result=CardActionResult([], [], 0, 0, 0),
                     cost=search_cost,
                     errors=[],
-                    status=DiscoveryStatus.COMPLETED
+                    status=DiscoveryStatus.COMPLETED,
+                    processing_time_metrics=processing_time,
+                    api_token_usage_metrics=api_token_usage
                 )
 
             # Step 3: Triage sources
-            triaged_sources = await self._triage_sources(raw_sources)
-            logger.info(f"Triaged to {len(triaged_sources)} relevant sources")
+            step_start = datetime.now()
+            triaged_sources, triage_tokens = await self._triage_sources_with_metrics(raw_sources)
+            processing_time.triage_seconds = (datetime.now() - step_start).total_seconds()
+            api_token_usage.add_tokens("triage", triage_tokens)
+            logger.info(f"Triaged to {len(triaged_sources)} relevant sources in {processing_time.triage_seconds:.2f}s")
 
             # Step 4: Check blocked topics
+            step_start = datetime.now()
             if config.skip_blocked_topics:
                 filtered_sources, blocked_count = await self._check_blocked_topics(
                     triaged_sources
@@ -574,16 +699,21 @@ class DiscoveryService:
             else:
                 filtered_sources = triaged_sources
                 blocked_count = 0
+            processing_time.blocked_topic_check_seconds = (datetime.now() - step_start).total_seconds()
 
             # Step 5: Deduplicate against existing cards
-            dedup_result = await self._deduplicate_sources(filtered_sources, config)
+            step_start = datetime.now()
+            dedup_result, dedup_tokens = await self._deduplicate_sources_with_metrics(filtered_sources, config)
+            processing_time.deduplication_seconds = (datetime.now() - step_start).total_seconds()
+            api_token_usage.add_tokens("card_match", dedup_tokens)
             logger.info(
                 f"Deduplication: {dedup_result.duplicate_count} duplicates, "
                 f"{len(dedup_result.enrichment_candidates)} enrichments, "
-                f"{len(dedup_result.new_concept_candidates)} new concepts"
+                f"{len(dedup_result.new_concept_candidates)} new concepts in {processing_time.deduplication_seconds:.2f}s"
             )
 
             # Step 6: Create or enrich cards (skip if dry run)
+            step_start = datetime.now()
             if config.dry_run:
                 logger.info("Dry run - skipping card creation/enrichment")
                 card_result = CardActionResult([], [], 0, 0, 0)
@@ -597,11 +727,21 @@ class DiscoveryService:
                     f"{len(card_result.cards_enriched)} enriched, "
                     f"{card_result.auto_approved} auto-approved"
                 )
+            processing_time.card_creation_seconds = (datetime.now() - step_start).total_seconds()
 
             # Step 7: Finalize run
             # Recompute diversity metrics to include query sources
             if sources_by_category:
                 diversity_metrics = SourceDiversityMetrics.compute(sources_by_category)
+
+            # Calculate total processing time
+            processing_time.total_seconds = (datetime.now() - start_time).total_seconds()
+
+            # Log comprehensive metrics summary
+            logger.info(f"Discovery run {run_id} metrics summary:")
+            logger.info(f"  Sources by category: {sources_by_category}")
+            processing_time.log_metrics(logger)
+            api_token_usage.log_metrics(logger)
 
             return await self._finalize_run(
                 run_id=run_id,
@@ -618,12 +758,15 @@ class DiscoveryService:
                 card_result=card_result,
                 cost=search_cost,
                 errors=errors,
-                status=DiscoveryStatus.COMPLETED
+                status=DiscoveryStatus.COMPLETED,
+                processing_time_metrics=processing_time,
+                api_token_usage_metrics=api_token_usage
             )
 
         except Exception as e:
             logger.error(f"Discovery run failed: {e}", exc_info=True)
             errors.append(str(e))
+            processing_time.total_seconds = (datetime.now() - start_time).total_seconds()
 
             return await self._finalize_run(
                 run_id=run_id,
@@ -640,7 +783,9 @@ class DiscoveryService:
                 card_result=CardActionResult([], [], 0, 0, 0),
                 cost=0.0,
                 errors=errors,
-                status=DiscoveryStatus.FAILED
+                status=DiscoveryStatus.FAILED,
+                processing_time_metrics=processing_time,
+                api_token_usage_metrics=api_token_usage
             )
 
     # ========================================================================
@@ -1145,6 +1290,76 @@ class DiscoveryService:
 
         return processed
 
+    async def _triage_sources_with_metrics(
+        self,
+        sources: List[RawSource]
+    ) -> Tuple[List[ProcessedSource], int]:
+        """
+        Triage sources for municipal relevance with token usage tracking.
+
+        Args:
+            sources: Raw sources from search
+
+        Returns:
+            Tuple of (processed sources, estimated token count)
+        """
+        processed = []
+        triage_threshold = 0.6
+        total_tokens = 0
+
+        for source in sources:
+            try:
+                # Skip sources without content for full triage
+                if not source.content:
+                    # Auto-pass URL-only sources with lower confidence
+                    triage = TriageResult(
+                        is_relevant=True,
+                        confidence=0.65,
+                        primary_pillar=getattr(source, 'pillar_code', None),
+                        reason="Auto-passed (no content)"
+                    )
+                else:
+                    triage = await self.ai_service.triage_source(
+                        title=source.title,
+                        content=source.content
+                    )
+                    # Estimate tokens: ~4 chars per token for input, fixed output
+                    input_tokens = len(source.title or "") // 4 + len(source.content or "") // 4
+                    output_tokens = 100  # Estimated output tokens for triage
+                    total_tokens += input_tokens + output_tokens
+
+                if triage.is_relevant and triage.confidence >= triage_threshold:
+                    # Full analysis
+                    analysis = await self.ai_service.analyze_source(
+                        title=source.title,
+                        content=source.content or "",
+                        source_name=source.source_name,
+                        published_at=datetime.now().isoformat()
+                    )
+                    # Estimate tokens for analysis
+                    input_tokens = len(source.title or "") // 4 + len(source.content or "") // 4
+                    output_tokens = 500  # Estimated output tokens for analysis
+                    total_tokens += input_tokens + output_tokens
+
+                    # Generate embedding
+                    embed_text = f"{source.title} {analysis.summary}"
+                    embedding = await self.ai_service.generate_embedding(embed_text)
+                    # Estimate tokens for embedding
+                    total_tokens += len(embed_text) // 4
+
+                    processed.append(ProcessedSource(
+                        raw=source,
+                        triage=triage,
+                        analysis=analysis,
+                        embedding=embedding
+                    ))
+
+            except Exception as e:
+                logger.warning(f"Triage/analysis failed for {source.url}: {e}")
+                continue
+
+        return processed, total_tokens
+
     # ========================================================================
     # Step 5: Check Blocked Topics
     # ========================================================================
@@ -1304,6 +1519,106 @@ class DiscoveryService:
             enrichment_candidates=enrichment_candidates,
             new_concept_candidates=new_concept_candidates
         )
+
+    async def _deduplicate_sources_with_metrics(
+        self,
+        sources: List[ProcessedSource],
+        config: DiscoveryConfig
+    ) -> Tuple[DeduplicationResult, int]:
+        """
+        Deduplicate sources against existing cards with token usage tracking.
+
+        Args:
+            sources: Processed sources to deduplicate
+            config: Run configuration
+
+        Returns:
+            Tuple of (DeduplicationResult, estimated token count)
+        """
+        unique_sources = []
+        duplicate_count = 0
+        enrichment_candidates = []
+        new_concept_candidates = []
+        total_tokens = 0
+
+        for source in sources:
+            try:
+                # Check for existing URL first
+                url_check = self.supabase.table("sources").select("id").eq(
+                    "url", source.raw.url
+                ).execute()
+
+                if url_check.data:
+                    duplicate_count += 1
+                    continue
+
+                # Vector similarity search against existing cards
+                try:
+                    match_result = self.supabase.rpc(
+                        "find_similar_cards",
+                        {
+                            "query_embedding": source.embedding,
+                            "match_threshold": config.weak_match_threshold,
+                            "match_count": 3
+                        }
+                    ).execute()
+
+                    if match_result.data:
+                        top_match = match_result.data[0]
+                        similarity = top_match.get("similarity", 0)
+
+                        if similarity >= config.similarity_threshold:
+                            # Strong match - enrich existing card
+                            enrichment_candidates.append(
+                                (source, top_match["id"], similarity)
+                            )
+                        elif similarity >= config.weak_match_threshold:
+                            # Weak match - use LLM to decide
+                            card = self.supabase.table("cards").select(
+                                "name, summary"
+                            ).eq("id", top_match["id"]).single().execute()
+
+                            if card.data:
+                                decision = await self.ai_service.check_card_match(
+                                    source_summary=source.analysis.summary,
+                                    source_card_name=source.analysis.suggested_card_name,
+                                    existing_card_name=card.data["name"],
+                                    existing_card_summary=card.data.get("summary", "")
+                                )
+                                # Estimate tokens for card match check
+                                input_text = f"{source.analysis.summary} {source.analysis.suggested_card_name} {card.data['name']} {card.data.get('summary', '')}"
+                                total_tokens += len(input_text) // 4 + 100  # input + output estimate
+
+                                if decision.get("is_match") and decision.get("confidence", 0) > 0.7:
+                                    enrichment_candidates.append(
+                                        (source, top_match["id"], similarity)
+                                    )
+                                else:
+                                    new_concept_candidates.append(source)
+                            else:
+                                new_concept_candidates.append(source)
+                        else:
+                            new_concept_candidates.append(source)
+                    else:
+                        new_concept_candidates.append(source)
+
+                except Exception as e:
+                    # Vector search failed - treat as new concept
+                    logger.warning(f"Vector search failed (treating as new): {e}")
+                    new_concept_candidates.append(source)
+
+                unique_sources.append(source)
+
+            except Exception as e:
+                logger.warning(f"Deduplication failed for {source.raw.url}: {e}")
+                continue
+
+        return DeduplicationResult(
+            unique_sources=unique_sources,
+            duplicate_count=duplicate_count,
+            enrichment_candidates=enrichment_candidates,
+            new_concept_candidates=new_concept_candidates
+        ), total_tokens
 
     # ========================================================================
     # Step 7: Create or Enrich Cards
@@ -1635,7 +1950,9 @@ class DiscoveryService:
         status: DiscoveryStatus,
         sources_by_category: Optional[Dict[str, int]] = None,
         categories_fetched: int = 0,
-        diversity_metrics: Optional[SourceDiversityMetrics] = None
+        diversity_metrics: Optional[SourceDiversityMetrics] = None,
+        processing_time_metrics: Optional[ProcessingTimeMetrics] = None,
+        api_token_usage_metrics: Optional[APITokenUsage] = None
     ) -> DiscoveryResult:
         """
         Finalize the discovery run and generate summary report.
@@ -1648,6 +1965,8 @@ class DiscoveryService:
             sources_by_category: Count of sources per category (5 categories)
             categories_fetched: Number of source categories that contributed
             diversity_metrics: Computed source diversity metrics
+            processing_time_metrics: Granular timing metrics for each phase
+            api_token_usage_metrics: Token usage metrics for API cost tracking
 
         Returns:
             Complete DiscoveryResult
@@ -1677,7 +1996,9 @@ class DiscoveryService:
             cost=cost,
             execution_time=execution_time,
             errors=errors,
-            diversity_metrics=diversity_metrics
+            diversity_metrics=diversity_metrics,
+            processing_time_metrics=processing_time_metrics,
+            api_token_usage_metrics=api_token_usage_metrics
         )
 
         result = DiscoveryResult(
@@ -1701,6 +2022,8 @@ class DiscoveryService:
             pending_review=card_result.pending_review,
             estimated_cost=cost,
             execution_time_seconds=execution_time,
+            processing_time=processing_time_metrics.to_dict() if processing_time_metrics else None,
+            api_token_usage=api_token_usage_metrics.to_dict() if api_token_usage_metrics else None,
             summary_report=summary,
             errors=errors
         )
@@ -1726,7 +2049,9 @@ class DiscoveryService:
         errors: List[str],
         sources_by_category: Optional[Dict[str, int]] = None,
         categories_fetched: int = 0,
-        diversity_metrics: Optional[SourceDiversityMetrics] = None
+        diversity_metrics: Optional[SourceDiversityMetrics] = None,
+        processing_time_metrics: Optional[ProcessingTimeMetrics] = None,
+        api_token_usage_metrics: Optional[APITokenUsage] = None
     ) -> str:
         """Generate a human-readable summary report."""
         report = f"""# Discovery Run Summary
@@ -1765,6 +2090,32 @@ class DiscoveryService:
                 report += f"- **Dominant Category**: {diversity_metrics.dominant_category}\n"
             if diversity_metrics.underrepresented_categories:
                 report += f"- **Underrepresented**: {', '.join(diversity_metrics.underrepresented_categories)}\n"
+
+        # Add processing time breakdown if available
+        if processing_time_metrics:
+            report += f"""
+## Processing Time Breakdown
+- **Query Generation**: {processing_time_metrics.query_generation_seconds:.2f}s
+- **Multi-Source Fetch**: {processing_time_metrics.multi_source_fetch_seconds:.2f}s
+- **Query Search**: {processing_time_metrics.query_search_seconds:.2f}s
+- **Triage**: {processing_time_metrics.triage_seconds:.2f}s
+- **Block Check**: {processing_time_metrics.blocked_topic_check_seconds:.2f}s
+- **Deduplication**: {processing_time_metrics.deduplication_seconds:.2f}s
+- **Card Creation**: {processing_time_metrics.card_creation_seconds:.2f}s
+- **Total**: {processing_time_metrics.total_seconds:.2f}s
+"""
+
+        # Add API token usage if available
+        if api_token_usage_metrics:
+            report += f"""
+## API Token Usage
+- **Triage Tokens**: {api_token_usage_metrics.triage_tokens:,}
+- **Analysis Tokens**: {api_token_usage_metrics.analysis_tokens:,}
+- **Embedding Tokens**: {api_token_usage_metrics.embedding_tokens:,}
+- **Card Match Tokens**: {api_token_usage_metrics.card_match_tokens:,}
+- **Total Tokens**: {api_token_usage_metrics.total_tokens:,}
+- **Estimated Cost**: ${api_token_usage_metrics.estimated_cost_usd:.4f}
+"""
 
         report += f"""
 ## Cards
