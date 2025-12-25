@@ -69,6 +69,12 @@ interface UndoAction {
 const UNDO_TIMEOUT_MS = 5000;
 
 /**
+ * Minimum interval (in ms) between keyboard actions to prevent double-execution
+ * from rapid key presses
+ */
+const ACTION_DEBOUNCE_MS = 300;
+
+/**
  * Parse stage number from stage_id string
  */
 const parseStageNumber = (stageId: string): number | null => {
@@ -468,6 +474,9 @@ const DiscoveryQueue: React.FC = () => {
   const [focusedCardIndex, setFocusedCardIndex] = useState<number>(-1);
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
+  // Debounce ref to prevent rapid keyboard input from double-executing actions
+  const lastActionTimeRef = useRef<number>(0);
+
   const loadData = useCallback(async () => {
     if (!user) return;
 
@@ -854,6 +863,20 @@ const DiscoveryQueue: React.FC = () => {
     : null;
 
   /**
+   * Check if enough time has passed since the last action to allow a new one.
+   * This prevents rapid keyboard input from causing double-execution.
+   * Returns true if action should proceed, false if it should be debounced.
+   */
+  const canExecuteAction = useCallback((): boolean => {
+    const now = Date.now();
+    if (now - lastActionTimeRef.current < ACTION_DEBOUNCE_MS) {
+      return false;
+    }
+    lastActionTimeRef.current = now;
+    return true;
+  }, []);
+
+  /**
    * Navigate to next card (j key)
    */
   const navigateNext = useCallback(() => {
@@ -889,53 +912,71 @@ const DiscoveryQueue: React.FC = () => {
     });
   }, [filteredCards]);
 
-  // Keyboard shortcuts for navigation
-  useHotkeys('j', navigateNext, { preventDefault: true }, [navigateNext]);
-  useHotkeys('k', navigatePrevious, { preventDefault: true }, [navigatePrevious]);
+  // Keyboard shortcuts for navigation (disabled in form fields)
+  useHotkeys('j', navigateNext, {
+    preventDefault: true,
+    enableOnFormTags: false,
+  }, [navigateNext]);
+  useHotkeys('k', navigatePrevious, {
+    preventDefault: true,
+    enableOnFormTags: false,
+  }, [navigatePrevious]);
 
   /**
    * Follow/approve the focused card (f key)
    * Only works when a card is focused and not in a form field
+   * Debounced to prevent rapid double-execution
    */
   useHotkeys(
     'f',
     () => {
-      if (focusedCardId && !actionLoading) {
+      if (focusedCardId && !actionLoading && canExecuteAction()) {
         handleReviewAction(focusedCardId, 'approve');
       }
     },
-    { preventDefault: true },
-    [focusedCardId, actionLoading, handleReviewAction]
+    {
+      preventDefault: true,
+      enableOnFormTags: false,
+    },
+    [focusedCardId, actionLoading, handleReviewAction, canExecuteAction]
   );
 
   /**
    * Dismiss the focused card (d key)
    * Only works when a card is focused and not in a form field
+   * Debounced to prevent rapid double-execution
    */
   useHotkeys(
     'd',
     () => {
-      if (focusedCardId && !actionLoading) {
+      if (focusedCardId && !actionLoading && canExecuteAction()) {
         handleDismiss(focusedCardId, 'irrelevant');
       }
     },
-    { preventDefault: true },
-    [focusedCardId, actionLoading, handleDismiss]
+    {
+      preventDefault: true,
+      enableOnFormTags: false,
+    },
+    [focusedCardId, actionLoading, handleDismiss, canExecuteAction]
   );
 
   /**
    * Undo last action (z key)
    * Only works when there's an undoable action
+   * Debounced to prevent accidental double-undo
    */
   useHotkeys(
     'z',
     () => {
-      if (toastVisible && canUndo()) {
+      if (toastVisible && canUndo() && canExecuteAction()) {
         handleUndoFromToast();
       }
     },
-    { preventDefault: true },
-    [toastVisible, canUndo, handleUndoFromToast]
+    {
+      preventDefault: true,
+      enableOnFormTags: false,
+    },
+    [toastVisible, canUndo, handleUndoFromToast, canExecuteAction]
   );
 
   // Reset focus when filtered cards change
@@ -1113,6 +1154,31 @@ const DiscoveryQueue: React.FC = () => {
         </div>
       </div>
 
+      {/* Keyboard Shortcuts Hint - shown when cards exist and not in bulk mode */}
+      {!showBulkActions && filteredCards.length > 0 && (
+        <div className="mb-4 px-4 py-2 bg-gray-50 dark:bg-[#2d3166]/50 rounded-lg border border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-center gap-6 text-xs text-gray-500 dark:text-gray-400">
+            <span className="flex items-center gap-1.5">
+              <kbd className="px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 font-mono text-gray-700 dark:text-gray-300">j</kbd>
+              <kbd className="px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 font-mono text-gray-700 dark:text-gray-300">k</kbd>
+              <span>Navigate</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <kbd className="px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 font-mono text-gray-700 dark:text-gray-300">f</kbd>
+              <span>Follow</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <kbd className="px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 font-mono text-gray-700 dark:text-gray-300">d</kbd>
+              <span>Dismiss</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <kbd className="px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 font-mono text-gray-700 dark:text-gray-300">z</kbd>
+              <span>Undo</span>
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Bulk Actions Bar */}
       {showBulkActions && (
         <div className="mb-6 p-4 bg-brand-light-blue dark:bg-brand-blue/20 border border-brand-blue/20 rounded-lg flex items-center justify-between">
@@ -1153,22 +1219,47 @@ const DiscoveryQueue: React.FC = () => {
         </div>
       ) : filteredCards.length === 0 ? (
         <div className="text-center py-12 bg-white dark:bg-[#2d3166] rounded-lg shadow">
-          <Inbox className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
-            {cards.length === 0 ? 'Discovery Queue Empty' : 'No Matching Cards'}
-          </h3>
-          <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
-            {cards.length === 0
-              ? 'All pending discoveries have been reviewed. Check back later for new AI-discovered cards.'
-              : 'Try adjusting your filters to see more cards.'}
-          </p>
-          {cards.length === 0 && (
-            <Link
-              to="/discover"
-              className="mt-6 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-brand-dark-blue transition-colors"
-            >
-              Browse Intelligence Library
-            </Link>
+          {cards.length === 0 ? (
+            <>
+              {/* Empty queue - all cards reviewed */}
+              <div className="mx-auto h-16 w-16 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                <CheckCircle className="h-10 w-10 text-green-500 dark:text-green-400" />
+              </div>
+              <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
+                All Caught Up!
+              </h3>
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
+                Great work! You&apos;ve reviewed all pending discoveries. Check back later for new AI-discovered cards.
+              </p>
+              <Link
+                to="/discover"
+                className="mt-6 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-brand-dark-blue transition-colors"
+              >
+                Browse Intelligence Library
+              </Link>
+            </>
+          ) : (
+            <>
+              {/* No cards match current filters */}
+              <Inbox className="mx-auto h-12 w-12 text-gray-400" />
+              <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
+                No Matching Cards
+              </h3>
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
+                No cards match your current filters. Try adjusting your search or filter settings.
+              </p>
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  setSelectedPillar('');
+                  setConfidenceFilter('all');
+                }}
+                className="mt-4 inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] transition-colors"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Clear All Filters
+              </button>
+            </>
           )}
         </div>
       ) : (
