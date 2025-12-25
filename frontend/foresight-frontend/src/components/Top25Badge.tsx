@@ -11,6 +11,7 @@ import { Star, Flag, Award, Target } from 'lucide-react';
 import { Tooltip } from './ui/Tooltip';
 import { cn } from '../lib/utils';
 import { getTop25ByTitle, getPillarByCode, type Top25Priority } from '../data/taxonomy';
+import { getIconSize, type BadgeSize } from '../lib/badge-utils';
 
 export interface Top25BadgeProps {
   /** Array of Top 25 priority titles that this card is relevant to */
@@ -35,17 +36,20 @@ const iconMap = {
 };
 
 /**
- * Get size classes
+ * Get Top25Badge-specific size classes for container and text.
+ * Uses shared getIconSize for consistent icon sizing.
+ *
+ * Note: Top25Badge uses uniform padding (p-) and smaller text sizes
+ * than standard badges, so container/text remain local.
  */
-function getSizeClasses(size: 'sm' | 'md' | 'lg'): {
+function getTop25SizeClasses(size: BadgeSize): {
   container: string;
-  icon: number;
   text: string;
 } {
-  const sizeMap = {
-    sm: { container: 'p-0.5', icon: 12, text: 'text-[10px]' },
-    md: { container: 'p-1', icon: 14, text: 'text-xs' },
-    lg: { container: 'p-1.5', icon: 16, text: 'text-sm' },
+  const sizeMap: Record<BadgeSize, { container: string; text: string }> = {
+    sm: { container: 'p-0.5', text: 'text-[10px]' },
+    md: { container: 'p-1', text: 'text-xs' },
+    lg: { container: 'p-1.5', text: 'text-sm' },
   };
   return sizeMap[size];
 }
@@ -186,7 +190,8 @@ export function Top25Badge({
   }
 
   const Icon = iconMap[icon];
-  const sizeClasses = getSizeClasses(size);
+  const sizeClasses = getTop25SizeClasses(size);
+  const iconSize = getIconSize(size); // Uses default scale: sm=12, md=14, lg=16
 
   const badge = (
     <span
@@ -202,7 +207,7 @@ export function Top25Badge({
     >
       <Icon
         className="fill-amber-400"
-        size={sizeClasses.icon}
+        size={iconSize}
       />
       {showCount && priorities.length > 1 && (
         <span className={cn('font-medium', sizeClasses.text)}>
