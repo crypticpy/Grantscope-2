@@ -22,8 +22,12 @@
 // export { CardDetail } from './CardDetail';
 // export type { CardDetailProps } from './CardDetail';
 
-// Types will be exported here once created
-// export * from './types';
+// Header component
+export { CardDetailHeader } from './CardDetailHeader';
+export type { CardDetailHeaderProps } from './CardDetailHeader';
+
+// Types
+export * from './types';
 
 // Utilities
 export {
