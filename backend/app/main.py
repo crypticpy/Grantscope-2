@@ -3632,21 +3632,6 @@ async def clear_search_history(
         )
 
 
-# ============================================================================
-# Analytics Endpoints
-# ============================================================================
-
-# Pillar definitions for analytics (matching taxonomy.ts)
-PILLAR_DEFINITIONS = {
-    "CH": "Community Health & Sustainability",
-    "EW": "Economic & Workforce Development",
-    "HG": "High-Performing Government",
-    "HH": "Homelessness & Housing",
-    "MC": "Mobility & Critical Infrastructure",
-    "PS": "Public Safety",
-}
-
-
 @app.get("/api/v1/analytics/velocity", response_model=VelocityResponse)
 async def get_trend_velocity(
     pillar_id: Optional[str] = None,
@@ -3703,10 +3688,10 @@ async def get_trend_velocity(
 
         # Apply filters
         if pillar_id:
-            if pillar_id not in PILLAR_DEFINITIONS:
+            if pillar_id not in ANALYTICS_PILLAR_DEFINITIONS:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Invalid pillar_id. Must be one of: {', '.join(PILLAR_DEFINITIONS.keys())}"
+                    detail=f"Invalid pillar_id. Must be one of: {', '.join(ANALYTICS_PILLAR_DEFINITIONS.keys())}"
                 )
             query = query.eq("pillar_id", pillar_id)
 
