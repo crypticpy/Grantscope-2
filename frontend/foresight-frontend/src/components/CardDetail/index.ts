@@ -31,6 +31,17 @@
  */
 
 // =============================================================================
+// Main Component Export
+// =============================================================================
+
+/**
+ * Main CardDetail component that orchestrates all sub-components.
+ * This is the primary component for displaying card/trend details.
+ */
+export { CardDetail } from './CardDetail';
+export type { CardDetailProps } from './CardDetail';
+
+// =============================================================================
 // Component Exports
 // =============================================================================
 
