@@ -17,6 +17,8 @@ import {
   Sparkles,
   MoreHorizontal,
   Zap,
+  Undo2,
+  X,
 } from 'lucide-react';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
@@ -341,6 +343,96 @@ function SwipeableCard({
   );
 }
 
+/**
+ * Get human-readable action description for toast
+ */
+function getActionDescription(action: UndoAction): { verb: string; icon: React.ReactNode } {
+  switch (action.type) {
+    case 'approve':
+      return { verb: 'approved', icon: <CheckCircle className="h-4 w-4 text-green-500" /> };
+    case 'reject':
+      return { verb: 'rejected', icon: <XCircle className="h-4 w-4 text-red-500" /> };
+    case 'dismiss':
+      return { verb: 'dismissed', icon: <XCircle className="h-4 w-4 text-gray-500" /> };
+    case 'defer':
+      return { verb: 'deferred', icon: <Clock className="h-4 w-4 text-amber-500" /> };
+  }
+}
+
+/**
+ * UndoToast Component
+ * Displays a toast notification with an undo button after actions
+ * Auto-dismisses after UNDO_TIMEOUT_MS with a visual countdown
+ */
+interface UndoToastProps {
+  action: UndoAction;
+  onUndo: () => void;
+  onDismiss: () => void;
+  timeRemaining: number; // ms remaining until auto-dismiss
+}
+
+function UndoToast({ action, onUndo, onDismiss, timeRemaining }: UndoToastProps) {
+  const { verb, icon } = getActionDescription(action);
+  const progressPercent = Math.max(0, (timeRemaining / UNDO_TIMEOUT_MS) * 100);
+
+  // Truncate card name if too long
+  const cardName = action.card.name.length > 40
+    ? `${action.card.name.substring(0, 37)}...`
+    : action.card.name;
+
+  return (
+    <div
+      role="alert"
+      aria-live="polite"
+      className={cn(
+        'fixed bottom-6 left-1/2 -translate-x-1/2 z-50',
+        'flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg',
+        'bg-white dark:bg-[#3d4176] border border-gray-200 dark:border-gray-600',
+        'animate-in slide-in-from-bottom-4 fade-in duration-200'
+      )}
+    >
+      {/* Icon */}
+      {icon}
+
+      {/* Message */}
+      <span className="text-sm text-gray-700 dark:text-gray-200">
+        Card <span className="font-medium">&quot;{cardName}&quot;</span> {verb}
+      </span>
+
+      {/* Undo Button */}
+      <button
+        onClick={onUndo}
+        className={cn(
+          'inline-flex items-center gap-1.5 px-3 py-1.5 ml-2',
+          'text-sm font-medium rounded-md transition-colors',
+          'bg-brand-blue/10 text-brand-blue hover:bg-brand-blue/20',
+          'dark:bg-brand-blue/20 dark:hover:bg-brand-blue/30'
+        )}
+      >
+        <Undo2 className="h-3.5 w-3.5" />
+        Undo
+      </button>
+
+      {/* Close Button */}
+      <button
+        onClick={onDismiss}
+        className="p-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+        aria-label="Dismiss notification"
+      >
+        <X className="h-4 w-4" />
+      </button>
+
+      {/* Progress bar showing time remaining */}
+      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200 dark:bg-gray-600 rounded-b-lg overflow-hidden">
+        <div
+          className="h-full bg-brand-blue transition-all duration-100 ease-linear"
+          style={{ width: `${progressPercent}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 const DiscoveryQueue: React.FC = () => {
   const { user } = useAuthContext();
   const [cards, setCards] = useState<PendingCard[]>([]);
@@ -354,6 +446,11 @@ const DiscoveryQueue: React.FC = () => {
 
   // Undo stack - tracks recent actions for undo functionality (LIFO order)
   const [undoStack, setUndoStack] = useState<UndoAction[]>([]);
+
+  // Toast state - tracks visibility and countdown timer
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastTimeRemaining, setToastTimeRemaining] = useState(UNDO_TIMEOUT_MS);
+  const toastTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -501,6 +598,64 @@ const DiscoveryQueue: React.FC = () => {
   }, [undoStack]);
 
   /**
+   * Show toast with countdown timer
+   */
+  const showToast = useCallback(() => {
+    // Clear any existing timer
+    if (toastTimerRef.current) {
+      clearInterval(toastTimerRef.current);
+    }
+
+    // Show toast and reset timer
+    setToastVisible(true);
+    setToastTimeRemaining(UNDO_TIMEOUT_MS);
+
+    // Start countdown timer (update every 100ms for smooth animation)
+    const startTime = Date.now();
+    toastTimerRef.current = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const remaining = Math.max(0, UNDO_TIMEOUT_MS - elapsed);
+      setToastTimeRemaining(remaining);
+
+      if (remaining <= 0) {
+        setToastVisible(false);
+        if (toastTimerRef.current) {
+          clearInterval(toastTimerRef.current);
+          toastTimerRef.current = null;
+        }
+      }
+    }, 100);
+  }, []);
+
+  /**
+   * Dismiss toast manually
+   */
+  const dismissToast = useCallback(() => {
+    setToastVisible(false);
+    if (toastTimerRef.current) {
+      clearInterval(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+  }, []);
+
+  /**
+   * Handle undo action from toast
+   */
+  const handleUndoFromToast = useCallback(() => {
+    undoLastAction();
+    dismissToast();
+  }, [undoLastAction, dismissToast]);
+
+  // Cleanup toast timer on unmount
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        clearInterval(toastTimerRef.current);
+      }
+    };
+  }, []);
+
+  /**
    * Handle card review action
    */
   const handleReviewAction = async (cardId: string, action: ReviewAction) => {
@@ -536,6 +691,9 @@ const DiscoveryQueue: React.FC = () => {
         next.delete(cardId);
         return next;
       });
+
+      // Show undo toast
+      showToast();
     } catch (err) {
       console.error('Error reviewing card:', err);
       setError(err instanceof Error ? err.message : 'Failed to review card');
@@ -580,6 +738,9 @@ const DiscoveryQueue: React.FC = () => {
         next.delete(cardId);
         return next;
       });
+
+      // Show undo toast
+      showToast();
     } catch (err) {
       console.error('Error dismissing card:', err);
       setError(err instanceof Error ? err.message : 'Failed to dismiss card');
@@ -760,6 +921,21 @@ const DiscoveryQueue: React.FC = () => {
     },
     { preventDefault: true },
     [focusedCardId, actionLoading, handleDismiss]
+  );
+
+  /**
+   * Undo last action (z key)
+   * Only works when there's an undoable action
+   */
+  useHotkeys(
+    'z',
+    () => {
+      if (toastVisible && canUndo()) {
+        handleUndoFromToast();
+      }
+    },
+    { preventDefault: true },
+    [toastVisible, canUndo, handleUndoFromToast]
   );
 
   // Reset focus when filtered cards change
@@ -1162,6 +1338,16 @@ const DiscoveryQueue: React.FC = () => {
         <div
           className="fixed inset-0 z-0"
           onClick={() => setOpenDropdown(null)}
+        />
+      )}
+
+      {/* Undo Toast Notification */}
+      {toastVisible && getLastUndoableAction() && (
+        <UndoToast
+          action={getLastUndoableAction()!}
+          onUndo={handleUndoFromToast}
+          onDismiss={dismissToast}
+          timeRemaining={toastTimeRemaining}
         />
       )}
     </div>
