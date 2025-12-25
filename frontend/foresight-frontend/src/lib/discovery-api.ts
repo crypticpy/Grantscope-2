@@ -26,6 +26,7 @@ export interface Card {
   risk_score: number;
   opportunity_score: number;
   created_at: string;
+  updated_at?: string;
   anchor_id?: string;
   top25_relevance?: string[];
   status: string;

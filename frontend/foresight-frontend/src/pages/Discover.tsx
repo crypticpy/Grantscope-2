@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Search, Filter, Grid, List, Eye, Heart, Clock, Star, Inbox, History, Calendar, Sparkles, Bookmark, Trash2, ChevronDown, ChevronUp, Loader2, X, AlertTriangle, RefreshCw } from 'lucide-react';
+import { format, formatDistanceToNow } from 'date-fns';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
 import { useDebouncedValue } from '../hooks/useDebounce';
@@ -29,6 +30,7 @@ interface Card {
   risk_score: number;
   opportunity_score: number;
   created_at: string;
+  updated_at?: string;
   anchor_id?: string;
   top25_relevance?: string[];
   // Search-specific fields (populated when semantic search is used)
@@ -46,6 +48,8 @@ interface Stage {
   name: string;
   sort_order: number;
 }
+
+type SortOption = 'newest' | 'oldest' | 'recently_updated' | 'least_recently_updated';
 
 /**
  * Parse stage number from stage_id string
@@ -65,6 +69,54 @@ const getScoreColorClasses = (score: number): string => {
   return 'text-red-600 dark:text-red-400';
 };
 
+/**
+ * Get sort configuration based on selected sort option
+ */
+const getSortConfig = (option: SortOption): { column: string; ascending: boolean } => {
+  switch (option) {
+    case 'oldest':
+      return { column: 'created_at', ascending: true };
+    case 'recently_updated':
+      return { column: 'updated_at', ascending: false };
+    case 'least_recently_updated':
+      return { column: 'updated_at', ascending: true };
+    case 'newest':
+    default:
+      return { column: 'created_at', ascending: false };
+  }
+};
+
+/**
+ * Format card date for display
+ * Shows relative time for recent updates, absolute date for creation
+ */
+const formatCardDate = (createdAt: string, updatedAt?: string): { label: string; text: string } => {
+  try {
+    const created = new Date(createdAt);
+    const updated = updatedAt ? new Date(updatedAt) : null;
+
+    // If updated_at exists and is different from created_at (more than 1 minute difference)
+    if (updated && Math.abs(updated.getTime() - created.getTime()) > 60000) {
+      return {
+        label: 'Updated',
+        text: formatDistanceToNow(updated, { addSuffix: true })
+      };
+    }
+
+    // Fall back to created_at with absolute date format
+    return {
+      label: 'Created',
+      text: format(created, 'MMM d, yyyy')
+    };
+  } catch {
+    // Handle invalid dates gracefully
+    return {
+      label: 'Created',
+      text: 'Unknown'
+    };
+  }
+};
+
 const Discover: React.FC = () => {
   const { user } = useAuthContext();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -77,6 +129,7 @@ const Discover: React.FC = () => {
   const [selectedPillar, setSelectedPillar] = useState('');
   const [selectedStage, setSelectedStage] = useState('');
   const [selectedHorizon, setSelectedHorizon] = useState('');
+  const [sortOption, setSortOption] = useState<SortOption>('newest');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [followedCardIds, setFollowedCardIds] = useState<Set<string>>(new Set());
 
@@ -171,7 +224,7 @@ const Discover: React.FC = () => {
   // Use debounced values for frequently-changing filters to reduce API calls
   useEffect(() => {
     loadCards();
-  }, [debouncedFilters, selectedPillar, selectedStage, selectedHorizon, quickFilter, followedCardIds, dateFrom, dateTo, useSemanticSearch]);
+  }, [debouncedFilters, selectedPillar, selectedStage, selectedHorizon, quickFilter, followedCardIds, dateFrom, dateTo, useSemanticSearch, sortOption]);
 
   const loadDiscoverData = async () => {
     try {
@@ -232,7 +285,8 @@ const Discover: React.FC = () => {
           query = query.or(`name.ilike.%${debouncedFilters.searchTerm}%,summary.ilike.%${debouncedFilters.searchTerm}%`);
         }
 
-        const { data } = await query.order('created_at', { ascending: false });
+        const sortConfig = getSortConfig(sortOption);
+        const { data } = await query.order(sortConfig.column, { ascending: sortConfig.ascending });
         setCards(data || []);
         setLoading(false);
         return;
@@ -349,7 +403,8 @@ const Discover: React.FC = () => {
         query = query.lte('created_at', dateTo);
       }
 
-      const { data } = await query.order('created_at', { ascending: false });
+      const sortConfig = getSortConfig(sortOption);
+      const { data } = await query.order(sortConfig.column, { ascending: sortConfig.ascending });
 
       setCards(data || []);
 
@@ -713,7 +768,7 @@ const Discover: React.FC = () => {
 
       {/* Filters */}
       <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
           {/* Search */}
           <div className="lg:col-span-2">
             <label htmlFor="search" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -821,6 +876,24 @@ const Discover: React.FC = () => {
               <option value="H1">H1 (0-2 years)</option>
               <option value="H2">H2 (2-5 years)</option>
               <option value="H3">H3 (5+ years)</option>
+            </select>
+          </div>
+
+          {/* Sort */}
+          <div>
+            <label htmlFor="sort" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Sort By
+            </label>
+            <select
+              id="sort"
+              className="block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+              value={sortOption}
+              onChange={(e) => setSortOption(e.target.value as SortOption)}
+            >
+              <option value="newest">Newest First</option>
+              <option value="oldest">Oldest First</option>
+              <option value="recently_updated">Recently Updated</option>
+              <option value="least_recently_updated">Least Recently Updated</option>
             </select>
           </div>
         </div>
@@ -1331,7 +1404,7 @@ const Discover: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600 flex items-center justify-between">
                   <Link
                     to={`/cards/${card.slug}`}
                     className="inline-flex items-center text-sm text-brand-blue hover:text-brand-dark-blue dark:text-brand-blue dark:hover:text-brand-light-blue transition-colors"
@@ -1339,6 +1412,14 @@ const Discover: React.FC = () => {
                     <Eye className="h-4 w-4 mr-1" />
                     View Details
                   </Link>
+                  {/* Date display */}
+                  <span className="inline-flex items-center text-xs text-gray-500 dark:text-gray-400">
+                    <Calendar className="h-3 w-3 mr-1" />
+                    {(() => {
+                      const dateInfo = formatCardDate(card.created_at, card.updated_at);
+                      return `${dateInfo.label} ${dateInfo.text}`;
+                    })()}
+                  </span>
                 </div>
               </div>
             );
