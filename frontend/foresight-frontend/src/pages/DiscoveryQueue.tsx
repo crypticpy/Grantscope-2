@@ -243,8 +243,35 @@ function ImpactScoreBadge({
 }
 
 /**
+ * Mobile-optimized swipe configuration constants
+ * Higher thresholds on mobile prevent accidental triggers during vertical scrolling
+ */
+const SWIPE_CONFIG = {
+  /** Minimum swipe distance for mobile (higher to prevent accidental triggers) */
+  mobileDistance: 80,
+  /** Minimum swipe distance for desktop */
+  desktopDistance: 50,
+  /** Minimum velocity threshold for swipe detection */
+  velocity: 0.3,
+  /** Maximum angle from horizontal (in degrees) to count as a swipe */
+  maxAngle: 30,
+  /** Offset threshold to show visual feedback */
+  feedbackThreshold: 25,
+  /** Offset threshold to show "will trigger" state */
+  triggerThreshold: 60,
+  /** Damping factor for card movement (0-1, lower = more resistance) */
+  damping: 0.4,
+} as const;
+
+/**
  * SwipeableCard wrapper component for touch gesture support
  * Handles swipe left (dismiss) and swipe right (follow) gestures
+ *
+ * Mobile Optimizations:
+ * - Higher swipe distance threshold prevents accidental triggers
+ * - Angle detection distinguishes swipes from vertical scrolling
+ * - Enhanced visual feedback with direction icons
+ * - Threshold indicators show when swipe will trigger
  */
 interface SwipeableCardProps {
   cardId: string;
@@ -257,6 +284,8 @@ interface SwipeableCardProps {
   tabIndex?: number;
   onClick?: () => void;
   cardRef?: (el: HTMLDivElement | null) => void;
+  /** Whether we're on a mobile device (affects swipe thresholds) */
+  isMobile?: boolean;
 }
 
 function SwipeableCard({
@@ -270,64 +299,173 @@ function SwipeableCard({
   tabIndex,
   onClick,
   cardRef,
+  isMobile = false,
 }: SwipeableCardProps) {
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
+  const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);
+  const [willTrigger, setWillTrigger] = useState(false);
+
+  // Use mobile or desktop distance threshold
+  const swipeDistance = isMobile ? SWIPE_CONFIG.mobileDistance : SWIPE_CONFIG.desktopDistance;
 
   const bind = useDrag(
-    ({ swipe: [swipeX], movement: [mx], dragging, tap }) => {
+    ({ movement: [mx, my], dragging, tap, velocity: [vx], direction: [dx] }) => {
       // Ignore taps - let regular click handlers work
       if (tap) return;
 
       // Don't process gestures when disabled (e.g., during loading)
       if (disabled) return;
 
+      // Calculate swipe angle to filter out vertical scrolling attempts
+      // Only process if the gesture is mostly horizontal
+      const absX = Math.abs(mx);
+      const absY = Math.abs(my);
+      const angle = Math.atan2(absY, absX) * (180 / Math.PI);
+
+      // If angle is too steep (vertical gesture), don't track as swipe
+      if (angle > SWIPE_CONFIG.maxAngle && absX < SWIPE_CONFIG.feedbackThreshold) {
+        if (isSwiping) {
+          setIsSwiping(false);
+          setSwipeOffset(0);
+          setSwipeDirection(null);
+          setWillTrigger(false);
+        }
+        return;
+      }
+
       // Update visual feedback during drag
       if (dragging) {
         setIsSwiping(true);
         setSwipeOffset(mx);
+
+        // Determine direction
+        if (mx < -SWIPE_CONFIG.feedbackThreshold) {
+          setSwipeDirection('left');
+          setWillTrigger(Math.abs(mx) >= swipeDistance);
+        } else if (mx > SWIPE_CONFIG.feedbackThreshold) {
+          setSwipeDirection('right');
+          setWillTrigger(mx >= swipeDistance);
+        } else {
+          setSwipeDirection(null);
+          setWillTrigger(false);
+        }
         return;
       }
 
       // Reset visual state when drag ends
       setIsSwiping(false);
       setSwipeOffset(0);
+      setSwipeDirection(null);
+      setWillTrigger(false);
 
-      // Process swipe action based on direction
-      if (swipeX === -1) {
-        onSwipeLeft();
-      } else if (swipeX === 1) {
-        onSwipeRight();
+      // Check if swipe meets distance and velocity thresholds
+      const meetsDistanceThreshold = Math.abs(mx) >= swipeDistance;
+      const meetsVelocityThreshold = Math.abs(vx) >= SWIPE_CONFIG.velocity;
+
+      // Trigger action if either threshold is met
+      if (meetsDistanceThreshold || meetsVelocityThreshold) {
+        if (dx < 0 && mx < 0) {
+          onSwipeLeft();
+        } else if (dx > 0 && mx > 0) {
+          onSwipeRight();
+        }
       }
     },
     {
-      swipe: {
-        distance: 50, // Minimum 50px swipe distance prevents accidents
-        velocity: 0.3, // Minimum velocity for swipe detection
-      },
       filterTaps: true, // Distinguish clicks from drags
-      axis: 'x', // Only track horizontal movement
+      axis: 'lock', // Lock to first detected axis, helps with scroll vs swipe
+      pointer: { touch: true }, // Optimize for touch
+      threshold: 10, // Minimum movement before tracking starts
     }
   );
 
-  // Calculate swipe visual feedback colors
-  const getSwipeIndicator = () => {
-    if (!isSwiping || Math.abs(swipeOffset) < 20) return {};
+  // Calculate swipe visual feedback styles
+  const getSwipeStyles = (): React.CSSProperties => {
+    if (!isSwiping || Math.abs(swipeOffset) < SWIPE_CONFIG.feedbackThreshold) {
+      return {};
+    }
 
-    if (swipeOffset < -20) {
+    // Calculate normalized intensity (0-1) based on progress toward trigger threshold
+    const progress = Math.min(Math.abs(swipeOffset) / swipeDistance, 1);
+    const intensity = progress * 0.4; // Max 40% opacity
+
+    if (swipeOffset < -SWIPE_CONFIG.feedbackThreshold) {
       // Swiping left - dismiss (red indicator)
-      const intensity = Math.min(Math.abs(swipeOffset) / 100, 0.3);
       return {
-        boxShadow: `inset -4px 0 0 0 rgba(239, 68, 68, ${intensity})`,
+        boxShadow: willTrigger
+          ? `inset -6px 0 0 0 rgba(239, 68, 68, 0.5), 0 0 20px rgba(239, 68, 68, 0.2)`
+          : `inset -4px 0 0 0 rgba(239, 68, 68, ${intensity})`,
+        backgroundColor: willTrigger ? 'rgba(239, 68, 68, 0.05)' : undefined,
       };
-    } else if (swipeOffset > 20) {
+    } else if (swipeOffset > SWIPE_CONFIG.feedbackThreshold) {
       // Swiping right - follow (green indicator)
-      const intensity = Math.min(swipeOffset / 100, 0.3);
       return {
-        boxShadow: `inset 4px 0 0 0 rgba(34, 197, 94, ${intensity})`,
+        boxShadow: willTrigger
+          ? `inset 6px 0 0 0 rgba(34, 197, 94, 0.5), 0 0 20px rgba(34, 197, 94, 0.2)`
+          : `inset 4px 0 0 0 rgba(34, 197, 94, ${intensity})`,
+        backgroundColor: willTrigger ? 'rgba(34, 197, 94, 0.05)' : undefined,
       };
     }
     return {};
+  };
+
+  // Render swipe direction indicator overlays
+  const renderSwipeIndicators = () => {
+    if (!isSwiping || !swipeDirection) return null;
+
+    const progress = Math.min(Math.abs(swipeOffset) / swipeDistance, 1);
+    const opacity = 0.3 + (progress * 0.5); // 30% to 80% opacity
+
+    return (
+      <>
+        {/* Left swipe indicator (dismiss) */}
+        {swipeDirection === 'left' && (
+          <div
+            className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none z-10"
+            style={{ opacity }}
+          >
+            <span className={cn(
+              'text-xs font-medium transition-all',
+              willTrigger ? 'text-red-600 dark:text-red-400' : 'text-red-400 dark:text-red-500'
+            )}>
+              {willTrigger ? 'Release to dismiss' : 'Dismiss'}
+            </span>
+            <div className={cn(
+              'p-1.5 rounded-full transition-all',
+              willTrigger
+                ? 'bg-red-500 text-white scale-110'
+                : 'bg-red-100 dark:bg-red-900/30 text-red-500 dark:text-red-400'
+            )}>
+              <XCircle className="h-4 w-4" />
+            </div>
+          </div>
+        )}
+
+        {/* Right swipe indicator (follow/approve) */}
+        {swipeDirection === 'right' && (
+          <div
+            className="absolute left-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none z-10"
+            style={{ opacity }}
+          >
+            <div className={cn(
+              'p-1.5 rounded-full transition-all',
+              willTrigger
+                ? 'bg-green-500 text-white scale-110'
+                : 'bg-green-100 dark:bg-green-900/30 text-green-500 dark:text-green-400'
+            )}>
+              <CheckCircle className="h-4 w-4" />
+            </div>
+            <span className={cn(
+              'text-xs font-medium transition-all',
+              willTrigger ? 'text-green-600 dark:text-green-400' : 'text-green-400 dark:text-green-500'
+            )}>
+              {willTrigger ? 'Release to approve' : 'Approve'}
+            </span>
+          </div>
+        )}
+      </>
+    );
   };
 
   return (
@@ -336,15 +474,16 @@ function SwipeableCard({
       ref={cardRef}
       tabIndex={tabIndex}
       onClick={onClick}
-      className={className}
+      className={cn(className, 'relative')}
       style={{
         ...style,
-        touchAction: 'pan-y', // Allow vertical scroll, but capture horizontal
-        transform: isSwiping ? `translateX(${swipeOffset * 0.3}px)` : undefined,
-        transition: isSwiping ? 'none' : 'transform 0.2s ease-out',
-        ...getSwipeIndicator(),
+        touchAction: 'pan-y pinch-zoom', // Allow vertical scroll and pinch zoom
+        transform: isSwiping ? `translateX(${swipeOffset * SWIPE_CONFIG.damping}px)` : undefined,
+        transition: isSwiping ? 'none' : 'transform 0.2s ease-out, box-shadow 0.2s ease-out',
+        ...getSwipeStyles(),
       }}
     >
+      {renderSwipeIndicators()}
       {children}
     </div>
   );
@@ -1291,6 +1430,7 @@ const DiscoveryQueue: React.FC = () => {
               <SwipeableCard
                 key={card.id}
                 cardId={card.id}
+                isMobile={isMobile}
                 cardRef={(el) => {
                   if (el) {
                     cardRefs.current.set(card.id, el);
