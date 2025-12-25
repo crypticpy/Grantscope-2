@@ -1439,3 +1439,623 @@ class ExportService:
 
         df = pd.DataFrame(columns=csv_columns)
         return df.to_csv(index=False)
+
+    # ========================================================================
+    # PowerPoint Export Methods
+    # ========================================================================
+
+    def _hex_to_rgb(self, hex_color: str) -> RGBColor:
+        """
+        Convert hex color string to RGBColor for PowerPoint.
+
+        Args:
+            hex_color: Hex color string (e.g., '#1E3A5F')
+
+        Returns:
+            RGBColor object for use with python-pptx
+        """
+        hex_color = hex_color.lstrip('#')
+        r = int(hex_color[0:2], 16)
+        g = int(hex_color[2:4], 16)
+        b = int(hex_color[4:6], 16)
+        return RGBColor(r, g, b)
+
+    def _add_title_slide(
+        self,
+        prs: Presentation,
+        title: str,
+        subtitle: Optional[str] = None
+    ) -> None:
+        """
+        Add a title slide to the presentation.
+
+        Args:
+            prs: Presentation object
+            title: Main title text
+            subtitle: Optional subtitle text
+        """
+        # Use blank layout for custom styling
+        slide_layout = prs.slide_layouts[6]
+        slide = prs.slides.add_slide(slide_layout)
+
+        # Add background color shape
+        background = slide.shapes.add_shape(
+            MSO_SHAPE.RECTANGLE,
+            Inches(0), Inches(0),
+            PPTX_SLIDE_WIDTH, PPTX_SLIDE_HEIGHT
+        )
+        background.fill.solid()
+        background.fill.fore_color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
+        background.line.fill.background()
+
+        # Add title text box
+        title_box = slide.shapes.add_textbox(
+            PPTX_MARGIN, Inches(2.5),
+            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(1.5)
+        )
+        title_frame = title_box.text_frame
+        title_frame.word_wrap = True
+        title_para = title_frame.paragraphs[0]
+        title_para.text = title[:80]  # Truncate long titles
+        title_para.font.size = PPTX_TITLE_FONT_SIZE
+        title_para.font.bold = True
+        title_para.font.color.rgb = RGBColor(255, 255, 255)
+        title_para.alignment = PP_ALIGN.CENTER
+
+        # Add subtitle if provided
+        if subtitle:
+            subtitle_box = slide.shapes.add_textbox(
+                PPTX_MARGIN, Inches(4.2),
+                PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(1)
+            )
+            subtitle_frame = subtitle_box.text_frame
+            subtitle_frame.word_wrap = True
+            subtitle_para = subtitle_frame.paragraphs[0]
+            subtitle_para.text = subtitle[:150]
+            subtitle_para.font.size = PPTX_SUBTITLE_FONT_SIZE
+            subtitle_para.font.color.rgb = RGBColor(200, 200, 200)
+            subtitle_para.alignment = PP_ALIGN.CENTER
+
+        # Add Foresight branding footer
+        footer_box = slide.shapes.add_textbox(
+            PPTX_MARGIN, PPTX_SLIDE_HEIGHT - Inches(0.8),
+            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.4)
+        )
+        footer_frame = footer_box.text_frame
+        footer_para = footer_frame.paragraphs[0]
+        footer_para.text = f"Foresight Intelligence Platform • {datetime.now().strftime('%B %d, %Y')}"
+        footer_para.font.size = PPTX_SMALL_FONT_SIZE
+        footer_para.font.color.rgb = RGBColor(180, 180, 180)
+        footer_para.alignment = PP_ALIGN.CENTER
+
+    def _add_content_slide(
+        self,
+        prs: Presentation,
+        title: str,
+        content_items: List[Tuple[str, str]],
+        chart_path: Optional[str] = None
+    ) -> None:
+        """
+        Add a content slide with text and optional chart.
+
+        Args:
+            prs: Presentation object
+            title: Slide title
+            content_items: List of (label, value) tuples
+            chart_path: Optional path to chart image to include
+        """
+        slide_layout = prs.slide_layouts[6]  # Blank layout
+        slide = prs.slides.add_slide(slide_layout)
+
+        # Add title bar
+        title_bar = slide.shapes.add_shape(
+            MSO_SHAPE.RECTANGLE,
+            Inches(0), Inches(0),
+            PPTX_SLIDE_WIDTH, Inches(1.2)
+        )
+        title_bar.fill.solid()
+        title_bar.fill.fore_color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
+        title_bar.line.fill.background()
+
+        # Add title text
+        title_box = slide.shapes.add_textbox(
+            PPTX_MARGIN, Inches(0.3),
+            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.8)
+        )
+        title_frame = title_box.text_frame
+        title_para = title_frame.paragraphs[0]
+        title_para.text = title[:60]
+        title_para.font.size = Pt(32)
+        title_para.font.bold = True
+        title_para.font.color.rgb = RGBColor(255, 255, 255)
+
+        # Determine layout based on whether chart is included
+        if chart_path:
+            content_width = Inches(6.5)
+            chart_left = Inches(7.5)
+        else:
+            content_width = PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN)
+            chart_left = None
+
+        # Add content items
+        content_top = Inches(1.6)
+        content_box = slide.shapes.add_textbox(
+            PPTX_MARGIN, content_top,
+            content_width, Inches(5.5)
+        )
+        content_frame = content_box.text_frame
+        content_frame.word_wrap = True
+
+        for i, (label, value) in enumerate(content_items):
+            if i == 0:
+                para = content_frame.paragraphs[0]
+            else:
+                para = content_frame.add_paragraph()
+
+            para.space_before = Pt(8)
+            para.space_after = Pt(4)
+
+            # Add label in bold
+            run_label = para.add_run()
+            run_label.text = f"{label}: "
+            run_label.font.size = PPTX_BODY_FONT_SIZE
+            run_label.font.bold = True
+            run_label.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
+
+            # Add value
+            run_value = para.add_run()
+            run_value.text = str(value) if value else "N/A"
+            run_value.font.size = PPTX_BODY_FONT_SIZE
+            run_value.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
+
+        # Add chart if provided
+        if chart_path and Path(chart_path).exists():
+            try:
+                slide.shapes.add_picture(
+                    chart_path,
+                    chart_left, Inches(1.8),
+                    width=PPTX_CHART_WIDTH, height=PPTX_CHART_HEIGHT
+                )
+            except Exception as e:
+                logger.warning(f"Failed to add chart to slide: {e}")
+
+    def _add_scores_slide(
+        self,
+        prs: Presentation,
+        card_data: CardExportData,
+        chart_path: Optional[str] = None
+    ) -> None:
+        """
+        Add a slide showing all scores with optional chart.
+
+        Args:
+            prs: Presentation object
+            card_data: Card data with scores
+            chart_path: Optional path to score chart image
+        """
+        slide_layout = prs.slide_layouts[6]  # Blank layout
+        slide = prs.slides.add_slide(slide_layout)
+
+        # Add title bar
+        title_bar = slide.shapes.add_shape(
+            MSO_SHAPE.RECTANGLE,
+            Inches(0), Inches(0),
+            PPTX_SLIDE_WIDTH, Inches(1.2)
+        )
+        title_bar.fill.solid()
+        title_bar.fill.fore_color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["secondary"])
+        title_bar.line.fill.background()
+
+        # Add title
+        title_box = slide.shapes.add_textbox(
+            PPTX_MARGIN, Inches(0.3),
+            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.8)
+        )
+        title_frame = title_box.text_frame
+        title_para = title_frame.paragraphs[0]
+        title_para.text = "Score Analysis"
+        title_para.font.size = Pt(32)
+        title_para.font.bold = True
+        title_para.font.color.rgb = RGBColor(255, 255, 255)
+
+        # Add chart if available
+        if chart_path and Path(chart_path).exists():
+            try:
+                slide.shapes.add_picture(
+                    chart_path,
+                    Inches(0.5), Inches(1.5),
+                    width=Inches(6), height=Inches(5)
+                )
+            except Exception as e:
+                logger.warning(f"Failed to add score chart: {e}")
+
+        # Add score details on the right side
+        scores = card_data.get_all_scores()
+        scores_box = slide.shapes.add_textbox(
+            Inches(7), Inches(1.8),
+            Inches(5.5), Inches(5)
+        )
+        scores_frame = scores_box.text_frame
+        scores_frame.word_wrap = True
+
+        for i, (score_name, score_value) in enumerate(scores.items()):
+            if i == 0:
+                para = scores_frame.paragraphs[0]
+            else:
+                para = scores_frame.add_paragraph()
+
+            para.space_before = Pt(12)
+            para.space_after = Pt(4)
+
+            # Score name
+            run_name = para.add_run()
+            run_name.text = f"{score_name}: "
+            run_name.font.size = Pt(20)
+            run_name.font.bold = True
+            run_name.font.color.rgb = self._hex_to_rgb(
+                SCORE_COLORS.get(score_name, FORESIGHT_COLORS["dark"])
+            )
+
+            # Score value
+            run_value = para.add_run()
+            run_value.text = str(score_value) if score_value is not None else "N/A"
+            run_value.font.size = Pt(20)
+            run_value.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
+
+    def _add_description_slide(
+        self,
+        prs: Presentation,
+        title: str,
+        description: Optional[str]
+    ) -> None:
+        """
+        Add a slide for long-form description text.
+
+        Args:
+            prs: Presentation object
+            title: Slide title
+            description: Description text (will be truncated if too long)
+        """
+        if not description:
+            return
+
+        slide_layout = prs.slide_layouts[6]  # Blank layout
+        slide = prs.slides.add_slide(slide_layout)
+
+        # Add title bar
+        title_bar = slide.shapes.add_shape(
+            MSO_SHAPE.RECTANGLE,
+            Inches(0), Inches(0),
+            PPTX_SLIDE_WIDTH, Inches(1.2)
+        )
+        title_bar.fill.solid()
+        title_bar.fill.fore_color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
+        title_bar.line.fill.background()
+
+        # Add title
+        title_box = slide.shapes.add_textbox(
+            PPTX_MARGIN, Inches(0.3),
+            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.8)
+        )
+        title_frame = title_box.text_frame
+        title_para = title_frame.paragraphs[0]
+        title_para.text = title
+        title_para.font.size = Pt(32)
+        title_para.font.bold = True
+        title_para.font.color.rgb = RGBColor(255, 255, 255)
+
+        # Add description text - truncate if too long for slide
+        max_chars = 2000  # Reasonable limit for one slide
+        display_text = description[:max_chars]
+        if len(description) > max_chars:
+            display_text += "..."
+
+        desc_box = slide.shapes.add_textbox(
+            PPTX_MARGIN, Inches(1.6),
+            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(5.5)
+        )
+        desc_frame = desc_box.text_frame
+        desc_frame.word_wrap = True
+        desc_para = desc_frame.paragraphs[0]
+        desc_para.text = display_text
+        desc_para.font.size = PPTX_BODY_FONT_SIZE
+        desc_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
+        desc_para.line_spacing = 1.3
+
+    async def generate_pptx(
+        self,
+        card_data: CardExportData,
+        include_charts: bool = True,
+        include_description: bool = True
+    ) -> str:
+        """
+        Generate a PowerPoint presentation for an individual card.
+
+        Creates a multi-slide presentation with:
+        - Title slide with card name and summary
+        - Overview slide with key metadata
+        - Scores slide with visualization
+        - Description slide (if enabled)
+
+        Args:
+            card_data: Card data to export
+            include_charts: Whether to include score charts
+            include_description: Whether to include description slide
+
+        Returns:
+            Path to the generated PowerPoint file
+
+        Raises:
+            Exception: If PowerPoint generation fails
+        """
+        temp_files_to_cleanup = []
+
+        try:
+            logger.info(f"Generating PowerPoint for card: {card_data.name}")
+
+            # Create presentation
+            prs = Presentation()
+            prs.slide_width = PPTX_SLIDE_WIDTH
+            prs.slide_height = PPTX_SLIDE_HEIGHT
+
+            # 1. Title slide
+            self._add_title_slide(
+                prs,
+                title=card_data.name,
+                subtitle=card_data.summary
+            )
+
+            # 2. Overview slide with metadata
+            overview_items = [
+                ("Pillar", card_data.pillar_name or card_data.pillar_id),
+                ("Goal", card_data.goal_name or card_data.goal_id),
+                ("Anchor", card_data.anchor_name or card_data.anchor_id),
+                ("Stage", card_data.stage_name or card_data.stage_id),
+                ("Horizon", card_data.horizon),
+                ("Status", card_data.status),
+            ]
+            # Filter out items with no value
+            overview_items = [(k, v) for k, v in overview_items if v]
+
+            self._add_content_slide(
+                prs,
+                title="Card Overview",
+                content_items=overview_items
+            )
+
+            # 3. Scores slide with chart
+            chart_path = None
+            if include_charts:
+                chart_path = self.generate_score_chart(card_data, chart_type="radar")
+                if chart_path:
+                    temp_files_to_cleanup.append(chart_path)
+
+            self._add_scores_slide(prs, card_data, chart_path)
+
+            # 4. Description slide (optional)
+            if include_description and card_data.description:
+                self._add_description_slide(
+                    prs,
+                    title="Full Description",
+                    description=card_data.description
+                )
+
+            # Save presentation to temp file
+            temp_file = tempfile.NamedTemporaryFile(
+                suffix='.pptx',
+                delete=False,
+                prefix='foresight_card_'
+            )
+            prs.save(temp_file.name)
+
+            logger.info(f"PowerPoint generated successfully: {temp_file.name}")
+            return temp_file.name
+
+        except Exception as e:
+            logger.error(f"Error generating PowerPoint: {e}")
+            raise
+
+        finally:
+            # Clean up chart temp files
+            self.cleanup_temp_files(temp_files_to_cleanup)
+
+    async def generate_workstream_pptx(
+        self,
+        workstream: Dict[str, Any],
+        cards: List[CardExportData],
+        include_charts: bool = True,
+        include_card_details: bool = True
+    ) -> str:
+        """
+        Generate a PowerPoint presentation for a workstream report.
+
+        Creates a comprehensive presentation with:
+        - Title slide with workstream name
+        - Summary slide with statistics
+        - Distribution charts (pillar, horizon)
+        - Individual card slides (if enabled)
+
+        Args:
+            workstream: Workstream metadata dict
+            cards: List of cards in the workstream
+            include_charts: Whether to include distribution charts
+            include_card_details: Whether to include individual card slides
+
+        Returns:
+            Path to the generated PowerPoint file
+
+        Raises:
+            Exception: If PowerPoint generation fails
+        """
+        temp_files_to_cleanup = []
+
+        try:
+            workstream_name = workstream.get('name', 'Workstream Report')
+            logger.info(f"Generating workstream PowerPoint: {workstream_name}")
+
+            # Create presentation
+            prs = Presentation()
+            prs.slide_width = PPTX_SLIDE_WIDTH
+            prs.slide_height = PPTX_SLIDE_HEIGHT
+
+            # 1. Title slide
+            self._add_title_slide(
+                prs,
+                title=workstream_name,
+                subtitle=f"Intelligence Report • {len(cards)} Cards"
+            )
+
+            # 2. Summary slide
+            summary_items = [
+                ("Total Cards", str(len(cards))),
+                ("Description", workstream.get('description', 'N/A')),
+            ]
+
+            # Calculate pillar distribution
+            pillar_counts: Dict[str, int] = {}
+            horizon_counts: Dict[str, int] = {}
+            for card in cards:
+                pillar = card.pillar_name or card.pillar_id or "Unknown"
+                pillar_counts[pillar] = pillar_counts.get(pillar, 0) + 1
+
+                horizon = card.horizon or "Unknown"
+                horizon_counts[horizon] = horizon_counts.get(horizon, 0) + 1
+
+            if pillar_counts:
+                pillar_summary = ", ".join(f"{k}: {v}" for k, v in pillar_counts.items())
+                summary_items.append(("Pillars", pillar_summary))
+
+            if horizon_counts:
+                horizon_summary = ", ".join(f"{k}: {v}" for k, v in horizon_counts.items())
+                summary_items.append(("Horizons", horizon_summary))
+
+            self._add_content_slide(
+                prs,
+                title="Workstream Summary",
+                content_items=summary_items
+            )
+
+            # 3. Distribution charts slide
+            if include_charts and cards:
+                # Generate pillar distribution chart
+                pillar_chart_path = None
+                if pillar_counts:
+                    pillar_chart_path = self.generate_pillar_distribution_chart(pillar_counts)
+                    if pillar_chart_path:
+                        temp_files_to_cleanup.append(pillar_chart_path)
+
+                # Generate horizon distribution chart
+                horizon_chart_path = None
+                if horizon_counts:
+                    horizon_chart_path = self.generate_horizon_distribution_chart(horizon_counts)
+                    if horizon_chart_path:
+                        temp_files_to_cleanup.append(horizon_chart_path)
+
+                # Add distribution slide with both charts
+                if pillar_chart_path or horizon_chart_path:
+                    slide_layout = prs.slide_layouts[6]
+                    slide = prs.slides.add_slide(slide_layout)
+
+                    # Title bar
+                    title_bar = slide.shapes.add_shape(
+                        MSO_SHAPE.RECTANGLE,
+                        Inches(0), Inches(0),
+                        PPTX_SLIDE_WIDTH, Inches(1.2)
+                    )
+                    title_bar.fill.solid()
+                    title_bar.fill.fore_color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["accent"])
+                    title_bar.line.fill.background()
+
+                    title_box = slide.shapes.add_textbox(
+                        PPTX_MARGIN, Inches(0.3),
+                        PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.8)
+                    )
+                    title_frame = title_box.text_frame
+                    title_para = title_frame.paragraphs[0]
+                    title_para.text = "Distribution Analysis"
+                    title_para.font.size = Pt(32)
+                    title_para.font.bold = True
+                    title_para.font.color.rgb = RGBColor(255, 255, 255)
+
+                    # Add pillar chart on left
+                    if pillar_chart_path and Path(pillar_chart_path).exists():
+                        try:
+                            slide.shapes.add_picture(
+                                pillar_chart_path,
+                                Inches(0.3), Inches(1.5),
+                                width=Inches(6), height=Inches(5)
+                            )
+                        except Exception as e:
+                            logger.warning(f"Failed to add pillar chart: {e}")
+
+                    # Add horizon chart on right
+                    if horizon_chart_path and Path(horizon_chart_path).exists():
+                        try:
+                            slide.shapes.add_picture(
+                                horizon_chart_path,
+                                Inches(7), Inches(1.5),
+                                width=Inches(5.5), height=Inches(4.5)
+                            )
+                        except Exception as e:
+                            logger.warning(f"Failed to add horizon chart: {e}")
+
+            # 4. Individual card slides
+            if include_card_details:
+                # Handle empty workstream case
+                if not cards:
+                    slide_layout = prs.slide_layouts[6]
+                    slide = prs.slides.add_slide(slide_layout)
+
+                    msg_box = slide.shapes.add_textbox(
+                        Inches(2), Inches(3),
+                        Inches(9), Inches(2)
+                    )
+                    msg_frame = msg_box.text_frame
+                    msg_para = msg_frame.paragraphs[0]
+                    msg_para.text = "No cards currently match this workstream criteria"
+                    msg_para.font.size = PPTX_SUBTITLE_FONT_SIZE
+                    msg_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
+                    msg_para.alignment = PP_ALIGN.CENTER
+                else:
+                    # Add a slide for each card (up to 50)
+                    for card in cards[:50]:
+                        card_items = [
+                            ("Summary", card.summary),
+                            ("Pillar", card.pillar_name or card.pillar_id),
+                            ("Horizon", card.horizon),
+                            ("Stage", card.stage_name or card.stage_id),
+                        ]
+                        # Add scores
+                        scores = card.get_all_scores()
+                        valid_scores = {k: v for k, v in scores.items() if v is not None}
+                        if valid_scores:
+                            scores_text = ", ".join(f"{k}: {v}" for k, v in valid_scores.items())
+                            card_items.append(("Scores", scores_text))
+
+                        # Filter out empty items
+                        card_items = [(k, v) for k, v in card_items if v]
+
+                        self._add_content_slide(
+                            prs,
+                            title=card.name[:50],
+                            content_items=card_items
+                        )
+
+            # Save presentation to temp file
+            temp_file = tempfile.NamedTemporaryFile(
+                suffix='.pptx',
+                delete=False,
+                prefix='foresight_workstream_'
+            )
+            prs.save(temp_file.name)
+
+            logger.info(f"Workstream PowerPoint generated: {temp_file.name}")
+            return temp_file.name
+
+        except Exception as e:
+            logger.error(f"Error generating workstream PowerPoint: {e}")
+            raise
+
+        finally:
+            # Clean up chart temp files
+            self.cleanup_temp_files(temp_files_to_cleanup)
