@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { useHotkeys } from 'react-hotkeys-hook';
 import {
   Search,
   Filter,
@@ -94,6 +95,10 @@ const DiscoveryQueue: React.FC = () => {
 
   // Dropdown states
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+
+  // Keyboard navigation state
+  const [focusedCardIndex, setFocusedCardIndex] = useState<number>(-1);
+  const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -292,6 +297,88 @@ const DiscoveryQueue: React.FC = () => {
     const low = cards.filter((c) => c.ai_confidence < 0.7).length;
     return { total: cards.length, high, medium, low };
   }, [cards]);
+
+  // Get the currently focused card (if any)
+  const focusedCardId = focusedCardIndex >= 0 && focusedCardIndex < filteredCards.length
+    ? filteredCards[focusedCardIndex].id
+    : null;
+
+  /**
+   * Navigate to next card (j key)
+   */
+  const navigateNext = useCallback(() => {
+    if (filteredCards.length === 0) return;
+
+    setFocusedCardIndex((prev) => {
+      const nextIndex = prev < filteredCards.length - 1 ? prev + 1 : 0;
+      // Scroll the card into view
+      const card = filteredCards[nextIndex];
+      if (card) {
+        const element = cardRefs.current.get(card.id);
+        element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return nextIndex;
+    });
+  }, [filteredCards]);
+
+  /**
+   * Navigate to previous card (k key)
+   */
+  const navigatePrevious = useCallback(() => {
+    if (filteredCards.length === 0) return;
+
+    setFocusedCardIndex((prev) => {
+      const nextIndex = prev > 0 ? prev - 1 : filteredCards.length - 1;
+      // Scroll the card into view
+      const card = filteredCards[nextIndex];
+      if (card) {
+        const element = cardRefs.current.get(card.id);
+        element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return nextIndex;
+    });
+  }, [filteredCards]);
+
+  // Keyboard shortcuts for navigation
+  useHotkeys('j', navigateNext, { preventDefault: true }, [navigateNext]);
+  useHotkeys('k', navigatePrevious, { preventDefault: true }, [navigatePrevious]);
+
+  /**
+   * Follow/approve the focused card (f key)
+   * Only works when a card is focused and not in a form field
+   */
+  useHotkeys(
+    'f',
+    () => {
+      if (focusedCardId && !actionLoading) {
+        handleReviewAction(focusedCardId, 'approve');
+      }
+    },
+    { preventDefault: true },
+    [focusedCardId, actionLoading, handleReviewAction]
+  );
+
+  /**
+   * Dismiss the focused card (d key)
+   * Only works when a card is focused and not in a form field
+   */
+  useHotkeys(
+    'd',
+    () => {
+      if (focusedCardId && !actionLoading) {
+        handleDismiss(focusedCardId, 'irrelevant');
+      }
+    },
+    { preventDefault: true },
+    [focusedCardId, actionLoading, handleDismiss]
+  );
+
+  // Reset focus when filtered cards change
+  useEffect(() => {
+    if (focusedCardIndex >= filteredCards.length) {
+      setFocusedCardIndex(filteredCards.length > 0 ? 0 : -1);
+    }
+  }, [filteredCards.length, focusedCardIndex]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -492,19 +579,31 @@ const DiscoveryQueue: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-4">
-          {filteredCards.map((card) => {
+          {filteredCards.map((card, index) => {
             const stageNumber = parseStageNumber(card.stage_id);
             const isSelected = selectedCards.has(card.id);
             const isLoading = actionLoading === card.id;
             const isDropdownOpen = openDropdown === card.id;
+            const isFocused = focusedCardId === card.id;
 
             return (
               <div
                 key={card.id}
+                ref={(el) => {
+                  if (el) {
+                    cardRefs.current.set(card.id, el);
+                  } else {
+                    cardRefs.current.delete(card.id);
+                  }
+                }}
+                tabIndex={isFocused ? 0 : -1}
+                onClick={() => setFocusedCardIndex(index)}
                 className={`bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 border-l-4 transition-all duration-200 ${
-                  isSelected
-                    ? 'border-l-brand-blue ring-2 ring-brand-blue/20'
-                    : 'border-transparent hover:border-l-brand-blue'
+                  isFocused
+                    ? 'border-l-brand-blue ring-2 ring-brand-blue/50 shadow-lg'
+                    : isSelected
+                      ? 'border-l-brand-blue ring-2 ring-brand-blue/20'
+                      : 'border-transparent hover:border-l-brand-blue'
                 } ${isLoading ? 'opacity-60' : ''}`}
               >
                 <div className="flex items-start gap-4">
