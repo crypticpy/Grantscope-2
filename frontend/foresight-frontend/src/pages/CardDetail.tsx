@@ -26,168 +26,15 @@ import { getScoreHistory, getStageHistory, getRelatedCards, type ScoreHistory, t
 // Taxonomy helpers
 import { getGoalByCode, type Goal } from '../data/taxonomy';
 
-interface Card {
-  id: string;
-  name: string;
-  slug: string;
-  summary: string;
-  description: string;
-  pillar_id: string;
-  goal_id: string;
-  anchor_id?: string;
-  stage_id: string;
-  horizon: 'H1' | 'H2' | 'H3';
-  novelty_score: number;
-  maturity_score: number;
-  impact_score: number;
-  relevance_score: number;
-  velocity_score: number;
-  risk_score: number;
-  opportunity_score: number;
-  top25_relevance?: string[];
-  created_at: string;
-  updated_at: string;
-  deep_research_at?: string;
-  deep_research_count_today?: number;
-}
-
-interface ResearchTask {
-  id: string;
-  task_type: 'update' | 'deep_research';
-  status: 'queued' | 'processing' | 'completed' | 'failed';
-  result_summary?: {
-    sources_found?: number;
-    sources_relevant?: number;
-    sources_added?: number;
-    cards_matched?: string[];
-    cards_created?: string[];
-    entities_extracted?: number;
-    cost_estimate?: number;
-    report_preview?: string;  // Full research report text
-  };
-  error_message?: string;
-  created_at: string;
-  completed_at?: string;
-}
-
-interface Source {
-  id: string;
-  title: string;
-  url: string;
-  // Database fields
-  ai_summary?: string;
-  key_excerpts?: string[];
-  publication?: string;
-  full_text?: string;
-  relevance_to_card?: number;
-  api_source?: string;
-  ingested_at?: string;
-  // Legacy fields (may be null)
-  summary?: string;
-  source_type?: string;
-  author?: string;
-  publisher?: string;
-  published_date?: string;
-  relevance_score?: number;
-}
-
-interface TimelineEvent {
-  id: string;
-  event_type: string;
-  title: string;
-  description: string;
-  created_at: string;
-  metadata?: {
-    sources_found?: number;
-    sources_relevant?: number;
-    sources_added?: number;
-    entities_extracted?: number;
-    cost?: number;
-    detailed_report?: string;
-  };
-}
-
-interface Note {
-  id: string;
-  content: string;
-  is_private: boolean;
-  created_at: string;
-}
-
-/**
- * Parse stage number from stage_id string
- * Handles formats like "1_concept", "3_prototype", etc.
- */
-const parseStageNumber = (stageId: string): number | null => {
-  if (!stageId) return null;
-  const match = stageId.match(/^(\d+)/);
-  return match ? parseInt(match[1], 10) : null;
-};
-
-/**
- * Get score color classes based on score value
- * WCAG 2.1 AA compliant - minimum 4.5:1 contrast ratio for text
- */
-const getScoreColorClasses = (score: number): { bg: string; text: string; border: string } => {
-  if (score >= 80) {
-    return {
-      bg: 'bg-green-100 dark:bg-green-900/40',
-      text: 'text-green-800 dark:text-green-200',
-      border: 'border-green-400 dark:border-green-600'
-    };
-  }
-  if (score >= 60) {
-    return {
-      bg: 'bg-amber-100 dark:bg-amber-900/40',
-      text: 'text-amber-800 dark:text-amber-200',
-      border: 'border-amber-400 dark:border-amber-600'
-    };
-  }
-  if (score >= 40) {
-    return {
-      bg: 'bg-orange-100 dark:bg-orange-900/40',
-      text: 'text-orange-800 dark:text-orange-200',
-      border: 'border-orange-400 dark:border-orange-600'
-    };
-  }
-  return {
-    bg: 'bg-red-100 dark:bg-red-900/40',
-    text: 'text-red-800 dark:text-red-200',
-    border: 'border-red-400 dark:border-red-600'
-  };
-};
-
-/**
- * Metric definitions with descriptions for tooltips
- */
-const metricDefinitions: Record<string, { label: string; description: string }> = {
-  impact: {
-    label: 'Impact',
-    description: 'Potential magnitude of effect on City operations, services, or residents',
-  },
-  relevance: {
-    label: 'Relevance',
-    description: 'How closely this aligns with current City priorities and strategic goals',
-  },
-  velocity: {
-    label: 'Velocity',
-    description: 'Speed of development and adoption in the broader ecosystem',
-  },
-  novelty: {
-    label: 'Novelty',
-    description: 'How new or unprecedented this signal is compared to existing knowledge',
-  },
-  opportunity: {
-    label: 'Opportunity',
-    description: 'Potential benefits and positive outcomes if adopted or leveraged',
-  },
-  risk: {
-    label: 'Risk',
-    description: 'Potential negative consequences or challenges to consider',
-  },
-};
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// CardDetail shared types and utilities (from refactored components)
+import type { Card, ResearchTask, Source, TimelineEvent, Note } from '../components/CardDetail/types';
+import {
+  API_BASE_URL,
+  metricDefinitions,
+  parseStageNumber,
+  getScoreColorClasses,
+  formatRelativeTime,
+} from '../components/CardDetail/utils';
 
 const CardDetail: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -547,23 +394,6 @@ const CardDetail: React.FC = () => {
 
   // Check if deep research is available (rate limit)
   const canDeepResearch = card && (card.deep_research_count_today ?? 0) < 2;
-
-  // Format relative time for smart timestamp display
-  const formatRelativeTime = (dateStr: string | undefined): string => {
-    if (!dateStr) return 'Never';
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffMinutes = Math.floor(diffMs / (1000 * 60));
-
-    if (diffMinutes < 1) return 'Just now';
-    if (diffMinutes < 60) return `${diffMinutes}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString();
-  };
 
   // Handle export to different formats
   const handleExport = async (format: 'pdf' | 'pptx' | 'csv') => {
