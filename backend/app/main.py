@@ -58,6 +58,12 @@ from app.models.export import (
     get_export_filename,
 )
 
+# History models import for trend visualization
+from app.models.history import (
+    ScoreHistory,
+    ScoreHistoryResponse,
+)
+
 # Initialize FastAPI app
 app = FastAPI(
     title="Foresight API",
@@ -883,6 +889,58 @@ async def get_card_timeline(card_id: str):
     """Get timeline for a card"""
     response = supabase.table("card_timeline").select("*").eq("card_id", card_id).order("created_at", desc=True).execute()
     return response.data
+
+
+@app.get("/api/v1/cards/{card_id}/score-history", response_model=ScoreHistoryResponse)
+async def get_card_score_history(
+    card_id: str,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get historical score data for a card to enable trend visualization.
+
+    Returns a list of score snapshots ordered by recorded_at (most recent first),
+    containing all 7 score dimensions (maturity, velocity, novelty, impact,
+    relevance, risk, opportunity) for each timestamp.
+
+    Args:
+        card_id: UUID of the card to get score history for
+        start_date: Optional filter to get records from this date onwards
+        end_date: Optional filter to get records up to this date
+
+    Returns:
+        ScoreHistoryResponse with list of ScoreHistory records and metadata
+    """
+    # First verify the card exists
+    card_response = supabase.table("cards").select("id").eq("id", card_id).execute()
+    if not card_response.data:
+        raise HTTPException(status_code=404, detail="Card not found")
+
+    # Build query for score history
+    query = supabase.table("card_score_history").select("*").eq("card_id", card_id)
+
+    # Apply date filters if provided
+    if start_date:
+        query = query.gte("recorded_at", start_date.isoformat())
+    if end_date:
+        query = query.lte("recorded_at", end_date.isoformat())
+
+    # Execute query ordered by recorded_at descending
+    response = query.order("recorded_at", desc=True).execute()
+
+    # Convert to ScoreHistory models
+    history_records = [ScoreHistory(**record) for record in response.data] if response.data else []
+
+    return ScoreHistoryResponse(
+        history=history_records,
+        card_id=card_id,
+        total_count=len(history_records),
+        start_date=start_date,
+        end_date=end_date
+    )
+
 
 @app.post("/api/v1/cards/{card_id}/follow")
 async def follow_card(
