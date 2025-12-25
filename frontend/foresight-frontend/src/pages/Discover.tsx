@@ -9,7 +9,7 @@ import { StageBadge } from '../components/StageBadge';
 import { Top25Badge } from '../components/Top25Badge';
 import { SaveSearchModal } from '../components/SaveSearchModal';
 import { SearchSidebar } from '../components/SearchSidebar';
-import { advancedSearch, AdvancedSearchRequest, SavedSearchQueryConfig, getSearchHistory, SearchHistoryEntry, deleteSearchHistoryEntry, clearSearchHistory } from '../lib/discovery-api';
+import { advancedSearch, AdvancedSearchRequest, SavedSearchQueryConfig, getSearchHistory, SearchHistoryEntry, deleteSearchHistoryEntry, clearSearchHistory, recordSearchHistory, SearchHistoryCreate } from '../lib/discovery-api';
 import { highlightText } from '../lib/highlight-utils';
 
 interface Card {
@@ -279,6 +279,10 @@ const Discover: React.FC = () => {
           }));
 
           setCards(mappedCards);
+
+          // Record search to history (async, non-blocking)
+          recordSearchToHistory(currentQueryConfig, mappedCards.length);
+
           setLoading(false);
           return;
         }
@@ -333,6 +337,11 @@ const Discover: React.FC = () => {
       const { data } = await query.order('created_at', { ascending: false });
 
       setCards(data || []);
+
+      // Record search to history (skip quick filters since they're preset, not user searches)
+      if (!quickFilter) {
+        recordSearchToHistory(currentQueryConfig, (data || []).length);
+      }
     } catch (error) {
       console.error('Error loading cards:', error);
     } finally {
@@ -434,6 +443,38 @@ const Discover: React.FC = () => {
     setShowSaveSearchModal(false);
     setSidebarRefreshKey((prev) => prev + 1);
   }, []);
+
+  // Record search to history after execution
+  const recordSearchToHistory = useCallback(async (queryConfig: SavedSearchQueryConfig, resultCount: number) => {
+    if (!user?.id) return;
+
+    // Skip recording if no search criteria are set (default empty state)
+    const hasQuery = queryConfig.query && queryConfig.query.trim().length > 0;
+    const hasFilters = queryConfig.filters && Object.keys(queryConfig.filters).length > 0;
+    if (!hasQuery && !hasFilters) return;
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
+      if (token) {
+        const entry: SearchHistoryCreate = {
+          query_config: queryConfig,
+          result_count: resultCount,
+        };
+
+        const newEntry = await recordSearchHistory(token, entry);
+
+        // Update local history state - prepend new entry and limit to 50
+        setSearchHistory((prev) => {
+          const updated = [newEntry, ...prev.filter((h) => h.id !== newEntry.id)];
+          return updated.slice(0, 50);
+        });
+      }
+    } catch (error) {
+      // Silently fail - history recording is not critical
+    }
+  }, [user?.id]);
 
   // Load search history
   const loadSearchHistory = useCallback(async () => {
