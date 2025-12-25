@@ -2373,7 +2373,7 @@ async def get_analytics_insights(
             return InsightsResponse(
                 insights=[],
                 generated_at=datetime.now(),
-                error=None
+                ai_available=True
             )
 
         # Filter cards with valid scores and calculate combined score
@@ -2398,7 +2398,7 @@ async def get_analytics_insights(
             return InsightsResponse(
                 insights=[],
                 generated_at=datetime.now(),
-                error=None
+                ai_available=True
             )
 
         # Format trends data for the prompt
@@ -2429,18 +2429,19 @@ async def get_analytics_insights(
             for i, insight_data in enumerate(result.get("insights", [])):
                 if i < len(top_cards):
                     card = top_cards[i]
-                    insights.append(StrategicInsight(
+                    insights.append(InsightItem(
                         trend_name=insight_data.get("trend_name", card["name"]),
                         score=card["combined_score"],
                         insight=insight_data.get("insight", ""),
                         pillar_id=card.get("pillar_id"),
-                        horizon=card.get("horizon")
+                        card_id=card.get("id"),
+                        velocity_score=card.get("velocity_score")
                     ))
 
             return InsightsResponse(
                 insights=insights,
                 generated_at=datetime.now(),
-                error=None
+                ai_available=True
             )
 
         except Exception as ai_error:
@@ -2449,12 +2450,13 @@ async def get_analytics_insights(
 
             # Return basic insights without AI generation
             fallback_insights = [
-                StrategicInsight(
+                InsightItem(
                     trend_name=card["name"],
                     score=card["combined_score"],
                     insight=card.get("summary", "No summary available")[:300] if card.get("summary") else "Strategic analysis pending.",
                     pillar_id=card.get("pillar_id"),
-                    horizon=card.get("horizon")
+                    card_id=card.get("id"),
+                    velocity_score=card.get("velocity_score")
                 )
                 for card in top_cards
             ]
@@ -2462,7 +2464,8 @@ async def get_analytics_insights(
             return InsightsResponse(
                 insights=fallback_insights,
                 generated_at=datetime.now(),
-                error="Insights temporarily unavailable. Showing trend summaries instead."
+                ai_available=False,
+                fallback_message="Insights temporarily unavailable. Showing trend summaries instead."
             )
 
     except Exception as e:
@@ -3627,6 +3630,164 @@ async def clear_search_history(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to clear search history: {str(e)}"
         )
+
+
+# ============================================================================
+# Analytics Endpoints
+# ============================================================================
+
+# Pillar definitions for analytics (matching taxonomy.ts)
+PILLAR_DEFINITIONS = {
+    "CH": "Community Health & Sustainability",
+    "EW": "Economic & Workforce Development",
+    "HG": "High-Performing Government",
+    "HH": "Homelessness & Housing",
+    "MC": "Mobility & Critical Infrastructure",
+    "PS": "Public Safety",
+}
+
+
+@app.get("/api/v1/analytics/velocity", response_model=VelocityResponse)
+async def get_trend_velocity(
+    pillar_id: Optional[str] = None,
+    stage_id: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get trend velocity analytics over time.
+
+    Returns time-series data showing trend momentum, including:
+    - Daily/weekly velocity aggregations
+    - Week-over-week comparison
+    - Card counts per time period
+
+    Query parameters:
+    - pillar_id: Filter by strategic pillar code (CH, EW, HG, HH, MC, PS)
+    - stage_id: Filter by maturity stage ID
+    - start_date: Start date in ISO format (YYYY-MM-DD)
+    - end_date: End date in ISO format (YYYY-MM-DD)
+
+    Returns:
+        VelocityResponse with time-series velocity data
+    """
+    from datetime import timedelta
+    from collections import defaultdict
+
+    try:
+        # Default to last 30 days if no date range specified
+        if not end_date:
+            end_dt = datetime.now()
+            end_date = end_dt.strftime("%Y-%m-%d")
+        else:
+            end_dt = datetime.fromisoformat(end_date)
+
+        if not start_date:
+            start_dt = end_dt - timedelta(days=30)
+            start_date = start_dt.strftime("%Y-%m-%d")
+        else:
+            start_dt = datetime.fromisoformat(start_date)
+
+        # Validate date range
+        if start_dt > end_dt:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="start_date must be before or equal to end_date"
+            )
+
+        # Build query for cards
+        query = supabase.table("cards").select(
+            "id, velocity_score, created_at, updated_at, pillar_id, stage_id"
+        ).eq("status", "active")
+
+        # Apply filters
+        if pillar_id:
+            if pillar_id not in PILLAR_DEFINITIONS:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid pillar_id. Must be one of: {', '.join(PILLAR_DEFINITIONS.keys())}"
+                )
+            query = query.eq("pillar_id", pillar_id)
+
+        if stage_id:
+            query = query.eq("stage_id", stage_id)
+
+        # Filter by date range on created_at
+        query = query.gte("created_at", f"{start_date}T00:00:00")
+        query = query.lte("created_at", f"{end_date}T23:59:59")
+
+        response = query.order("created_at", desc=False).execute()
+
+        cards = response.data or []
+        total_cards = len(cards)
+
+        # Aggregate velocity data by date
+        daily_data = defaultdict(lambda: {"velocity_sum": 0, "count": 0, "scores": []})
+
+        for card in cards:
+            # Extract date from created_at
+            created_at = card.get("created_at", "")
+            if created_at:
+                date_str = created_at[:10]  # YYYY-MM-DD
+                velocity = card.get("velocity_score")
+                if velocity is not None:
+                    daily_data[date_str]["velocity_sum"] += velocity
+                    daily_data[date_str]["scores"].append(velocity)
+                daily_data[date_str]["count"] += 1
+
+        # Convert to VelocityDataPoint list
+        velocity_data = []
+        for date_str in sorted(daily_data.keys()):
+            day_info = daily_data[date_str]
+            avg_velocity = None
+            if day_info["scores"]:
+                avg_velocity = round(sum(day_info["scores"]) / len(day_info["scores"]), 2)
+
+            velocity_data.append(VelocityDataPoint(
+                date=date_str,
+                velocity=day_info["velocity_sum"],
+                count=day_info["count"],
+                avg_velocity_score=avg_velocity
+            ))
+
+        # Calculate week-over-week change
+        week_over_week_change = None
+        if len(velocity_data) >= 14:
+            # Get last 7 days and previous 7 days
+            last_week_data = velocity_data[-7:]
+            prev_week_data = velocity_data[-14:-7]
+
+            last_week_total = sum(d.velocity for d in last_week_data)
+            prev_week_total = sum(d.velocity for d in prev_week_data)
+
+            if prev_week_total > 0:
+                week_over_week_change = round(
+                    ((last_week_total - prev_week_total) / prev_week_total) * 100,
+                    2
+                )
+            elif last_week_total > 0:
+                week_over_week_change = 100.0  # Infinite increase represented as 100%
+
+        return VelocityResponse(
+            data=velocity_data,
+            count=len(velocity_data),
+            period_start=start_date,
+            period_end=end_date,
+            week_over_week_change=week_over_week_change,
+            total_cards_analyzed=total_cards
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to fetch velocity analytics: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch velocity analytics: {str(e)}"
+        )
+
+
 
 
 # Lifecycle management
