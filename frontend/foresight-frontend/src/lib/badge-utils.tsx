@@ -14,31 +14,81 @@ import { Tooltip } from '../components/ui/Tooltip';
 // =============================================================================
 
 /**
- * Badge size variants
+ * Badge size variants used across all badge components.
+ *
+ * Size mappings:
+ * - `'sm'` - Small: Compact badges for dense UIs (text-xs, px-1.5 py-0.5)
+ * - `'md'` - Medium: Default size for most use cases (text-sm, px-2 py-1)
+ * - `'lg'` - Large: Prominent badges for emphasis (text-base, px-3 py-1.5)
+ *
+ * @example
+ * // Component prop definition
+ * interface BadgeProps {
+ *   size?: BadgeSize;
+ * }
  */
 export type BadgeSize = 'sm' | 'md' | 'lg';
 
 /**
- * Base color classes for badge styling
+ * Base color classes for badge styling.
+ *
+ * Provides the essential Tailwind CSS classes for badge appearance.
+ * Used by all badge components to maintain consistent color theming.
+ *
+ * @example
+ * const colors: ColorClasses = {
+ *   bg: 'bg-blue-100 dark:bg-blue-900',
+ *   text: 'text-blue-700 dark:text-blue-300',
+ *   border: 'border-blue-200 dark:border-blue-800',
+ * };
  */
 export interface ColorClasses {
+  /** Background color classes (e.g., 'bg-blue-100 dark:bg-blue-900') */
   bg: string;
+  /** Text color classes (e.g., 'text-blue-700 dark:text-blue-300') */
   text: string;
+  /** Border color classes (e.g., 'border-blue-200 dark:border-blue-800') */
   border: string;
 }
 
 /**
- * Extended color classes with optional icon background and progress colors
+ * Extended color classes with optional icon background and progress colors.
+ *
+ * Extends {@link ColorClasses} with additional optional properties for
+ * badges that have icon backgrounds or progress indicators.
+ *
+ * @example
+ * // Stage badge with progress colors
+ * const stageColors: ExtendedColorClasses = {
+ *   bg: 'bg-emerald-100 dark:bg-emerald-900',
+ *   text: 'text-emerald-700 dark:text-emerald-300',
+ *   border: 'border-emerald-200 dark:border-emerald-800',
+ *   iconBg: 'bg-emerald-500',
+ *   progress: 'bg-emerald-400',
+ * };
  */
 export interface ExtendedColorClasses extends ColorClasses {
+  /** Background color for icon containers (e.g., 'bg-emerald-500') */
   iconBg?: string;
+  /** Color for progress indicators (e.g., 'bg-emerald-400') */
   progress?: string;
 }
 
 /**
- * Icon size scale variants
- * - 'default': sm=12, md=14, lg=16 (used by PillarBadge, AnchorBadge)
- * - 'small': sm=10, md=12, lg=14 (used by HorizonBadge, ConfidenceBadge)
+ * Icon size scale variants for badge icons.
+ *
+ * Different badge components use different icon scales based on their design:
+ * - `'default'` - Standard scale: sm=12px, md=14px, lg=16px
+ *   Used by: PillarBadge, AnchorBadge, Top25Badge
+ * - `'small'` - Compact scale: sm=10px, md=12px, lg=14px
+ *   Used by: HorizonBadge, ConfidenceBadge
+ *
+ * @see {@link getIconSize} for the function that uses this type
+ *
+ * @example
+ * // Get icon size for different badges
+ * const pillarIconSize = getIconSize('md', 'default');  // 14
+ * const horizonIconSize = getIconSize('md', 'small');   // 12
  */
 export type IconScale = 'default' | 'small';
 
