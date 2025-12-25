@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useDrag } from '@use-gesture/react';
@@ -1428,8 +1428,18 @@ const DiscoveryQueue: React.FC = () => {
           )}
         </div>
       ) : (
-        <div className="space-y-3 sm:space-y-4">
-          {filteredCards.map((card, index) => {
+        <VirtualizedList<PendingCard>
+          ref={virtualizedListRef}
+          items={filteredCards}
+          estimatedSize={200}
+          gap={isMobile ? 12 : 16}
+          overscan={3}
+          getItemKey={(card) => card.id}
+          focusedIndex={focusedCardIndex}
+          onFocusedIndexChange={setFocusedCardIndex}
+          ariaLabel="Discovery queue cards"
+          scrollContainerClassName="h-[calc(100vh-280px)] sm:h-[calc(100vh-300px)]"
+          renderItem={(card, index) => {
             const stageNumber = parseStageNumber(card.stage_id);
             const isSelected = selectedCards.has(card.id);
             const isLoading = actionLoading === card.id;
@@ -1438,7 +1448,6 @@ const DiscoveryQueue: React.FC = () => {
 
             return (
               <SwipeableCard
-                key={card.id}
                 cardId={card.id}
                 isMobile={isMobile}
                 cardRef={(el) => {
@@ -1452,7 +1461,6 @@ const DiscoveryQueue: React.FC = () => {
                 onSwipeLeft={() => handleDismiss(card.id, 'irrelevant')}
                 disabled={isLoading}
                 tabIndex={isFocused ? 0 : -1}
-                onClick={() => setFocusedCardIndex(index)}
                 className={cn(
                   'bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6 border-l-4 transition-all duration-200',
                   isFocused
@@ -1468,6 +1476,7 @@ const DiscoveryQueue: React.FC = () => {
                   <label
                     className="flex-shrink-0 flex items-center justify-center min-h-[44px] min-w-[44px] -m-2 cursor-pointer"
                     aria-label={`Select ${card.name}`}
+                    onClick={(e) => e.stopPropagation()}
                   >
                     <input
                       type="checkbox"
@@ -1521,7 +1530,10 @@ const DiscoveryQueue: React.FC = () => {
                     {/* Action Buttons - min 44px touch targets on mobile */}
                     <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                       <button
-                        onClick={() => handleReviewAction(card.id, 'approve')}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleReviewAction(card.id, 'approve');
+                        }}
                         disabled={isLoading}
                         className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 px-3 sm:px-3 py-2 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50 disabled:opacity-50 transition-colors active:scale-95"
                         title="Approve this card"
@@ -1532,6 +1544,7 @@ const DiscoveryQueue: React.FC = () => {
 
                       <Link
                         to={`/cards/${card.slug}?mode=edit`}
+                        onClick={(e) => e.stopPropagation()}
                         className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 px-3 sm:px-3 py-2 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors active:scale-95"
                         title="Edit and approve"
                       >
@@ -1540,7 +1553,10 @@ const DiscoveryQueue: React.FC = () => {
                       </Link>
 
                       <button
-                        onClick={() => handleDismiss(card.id, 'irrelevant')}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDismiss(card.id, 'irrelevant');
+                        }}
                         disabled={isLoading}
                         className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 px-3 sm:px-3 py-2 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50 disabled:opacity-50 transition-colors active:scale-95"
                         title="Reject this card"
@@ -1552,7 +1568,10 @@ const DiscoveryQueue: React.FC = () => {
                       {/* More Options Dropdown - 44px touch target */}
                       <div className="relative ml-auto sm:ml-0">
                         <button
-                          onClick={() => setOpenDropdown(isDropdownOpen ? null : card.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenDropdown(isDropdownOpen ? null : card.id);
+                          }}
                           className="flex items-center justify-center min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:p-1.5 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors active:scale-95"
                           title="More options"
                           aria-label="More options"
@@ -1563,25 +1582,37 @@ const DiscoveryQueue: React.FC = () => {
                         {isDropdownOpen && (
                           <div className="absolute right-0 mt-1 w-48 sm:w-48 bg-white dark:bg-[#3d4176] rounded-md shadow-lg border border-gray-200 dark:border-gray-600 py-1 z-10">
                             <button
-                              onClick={() => handleDismiss(card.id, 'duplicate')}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDismiss(card.id, 'duplicate');
+                              }}
                               className="w-full min-h-[44px] sm:min-h-0 px-4 py-3 sm:py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500"
                             >
                               Mark as Duplicate
                             </button>
                             <button
-                              onClick={() => handleDismiss(card.id, 'out_of_scope')}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDismiss(card.id, 'out_of_scope');
+                              }}
                               className="w-full min-h-[44px] sm:min-h-0 px-4 py-3 sm:py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500"
                             >
                               Out of Scope
                             </button>
                             <button
-                              onClick={() => handleDismiss(card.id, 'low_quality')}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDismiss(card.id, 'low_quality');
+                              }}
                               className="w-full min-h-[44px] sm:min-h-0 px-4 py-3 sm:py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500"
                             >
                               Low Quality
                             </button>
                             <button
-                              onClick={() => handleReviewAction(card.id, 'defer')}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleReviewAction(card.id, 'defer');
+                              }}
                               className="w-full min-h-[44px] sm:min-h-0 px-4 py-3 sm:py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500"
                             >
                               Defer for Later
@@ -1594,8 +1625,8 @@ const DiscoveryQueue: React.FC = () => {
                 </div>
               </SwipeableCard>
             );
-          })}
-        </div>
+          }}
+        />
       )}
 
       {/* Close dropdowns when clicking outside */}
