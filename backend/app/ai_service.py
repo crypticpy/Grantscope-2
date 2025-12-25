@@ -169,6 +169,14 @@ ANALYSIS_PROMPT = """You are a strategic foresight analyst for the City of Austi
 
 Analyze this article for horizon scanning purposes.
 
+SUMMARY STRUCTURE REQUIREMENTS:
+Your summary MUST follow this strategic structure:
+1. Problem Statement: What core challenge, trend, or opportunity does this article address?
+2. Implications: What are the direct and indirect effects for municipal government?
+3. Strategic Considerations: What decisions, preparations, or actions should city leaders consider?
+
+The summary should be 3-5 sentences that flow naturally while covering all three elements.
+
 TAXONOMY REFERENCE:
 Pillars:
 - CH (Community Health & Sustainability): Public health, parks, climate, preparedness
@@ -230,7 +238,7 @@ Content: {content}
 
 Respond with JSON:
 {{
-  "summary": "2-3 sentence summary focused on municipal relevance",
+  "summary": "3-5 sentence strategic summary following the structure: problem statement (the core challenge/trend), implications (effects for municipal government), and strategic considerations (actions/decisions for city leaders)",
   "key_excerpts": ["relevant quote 1", "relevant quote 2"],
 
   "pillars": ["XX", "XX"],
