@@ -161,6 +161,66 @@ const Discover: React.FC = () => {
         return;
       }
 
+      // Use advanced search API when semantic search is enabled and there's a search term
+      if (useSemanticSearch && searchTerm.trim()) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData?.session?.access_token;
+
+        if (token) {
+          // Build advanced search request with all current filters
+          const searchRequest: AdvancedSearchRequest = {
+            query: searchTerm,
+            use_vector_search: true,
+            filters: {
+              ...(selectedPillar && { pillar_ids: [selectedPillar] }),
+              ...(selectedStage && { stage_ids: [selectedStage] }),
+              ...(selectedHorizon && selectedHorizon !== '' && { horizon: selectedHorizon as 'H1' | 'H2' | 'H3' }),
+              ...((dateFrom || dateTo) && {
+                date_range: {
+                  ...(dateFrom && { start: dateFrom }),
+                  ...(dateTo && { end: dateTo }),
+                },
+              }),
+              ...((impactMin > 0 || relevanceMin > 0 || noveltyMin > 0) && {
+                score_thresholds: {
+                  ...(impactMin > 0 && { impact_score: { min: impactMin } }),
+                  ...(relevanceMin > 0 && { relevance_score: { min: relevanceMin } }),
+                  ...(noveltyMin > 0 && { novelty_score: { min: noveltyMin } }),
+                },
+              }),
+            },
+            limit: 100,
+          };
+
+          const response = await advancedSearch(token, searchRequest);
+
+          // Map search results to Card interface
+          const mappedCards: Card[] = response.results.map((result) => ({
+            id: result.id,
+            name: result.name,
+            slug: result.slug,
+            summary: result.summary || result.description || '',
+            pillar_id: result.pillar_id || '',
+            stage_id: result.stage_id || '',
+            horizon: (result.horizon as 'H1' | 'H2' | 'H3') || 'H1',
+            novelty_score: result.novelty_score || 0,
+            maturity_score: result.maturity_score || 0,
+            impact_score: result.impact_score || 0,
+            relevance_score: result.relevance_score || 0,
+            velocity_score: result.velocity_score || 0,
+            risk_score: result.risk_score || 0,
+            opportunity_score: result.opportunity_score || 0,
+            created_at: result.created_at || '',
+            anchor_id: result.anchor_id,
+          }));
+
+          setCards(mappedCards);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Standard Supabase query for text search
       let query = supabase
         .from('cards')
         .select('*')
@@ -196,6 +256,14 @@ const Discover: React.FC = () => {
       }
       if (noveltyMin > 0) {
         query = query.gte('novelty_score', noveltyMin);
+      }
+
+      // Apply date range filters
+      if (dateFrom) {
+        query = query.gte('created_at', dateFrom);
+      }
+      if (dateTo) {
+        query = query.lte('created_at', dateTo);
       }
 
       const { data } = await query.order('created_at', { ascending: false });
@@ -339,10 +407,44 @@ const Discover: React.FC = () => {
                 type="text"
                 id="search"
                 className="pl-10 block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
-                placeholder="Search cards..."
+                placeholder={useSemanticSearch ? "Semantic search (finds related concepts)..." : "Search cards..."}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
+            </div>
+            {/* Semantic Search Toggle */}
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={useSemanticSearch}
+                onClick={() => setUseSemanticSearch(!useSemanticSearch)}
+                className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 ${
+                  useSemanticSearch ? 'bg-extended-purple' : 'bg-gray-200 dark:bg-gray-600'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    useSemanticSearch ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+              <label
+                className={`flex items-center gap-1.5 text-sm cursor-pointer ${
+                  useSemanticSearch
+                    ? 'text-extended-purple font-medium'
+                    : 'text-gray-600 dark:text-gray-400'
+                }`}
+                onClick={() => setUseSemanticSearch(!useSemanticSearch)}
+              >
+                <Sparkles className={`h-4 w-4 ${useSemanticSearch ? 'text-extended-purple' : 'text-gray-400'}`} />
+                Semantic Search
+              </label>
+              {useSemanticSearch && (
+                <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
+                  (finds conceptually related cards)
+                </span>
+              )}
             </div>
           </div>
 
@@ -434,6 +536,98 @@ const Discover: React.FC = () => {
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
             />
+          </div>
+        </div>
+
+        {/* Score Threshold Sliders */}
+        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+          <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+            Minimum Score Thresholds
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Impact Score Slider */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="impactMin" className="text-sm text-gray-600 dark:text-gray-400">
+                  Impact
+                </label>
+                <span className={`text-sm font-medium ${impactMin > 0 ? getScoreColorClasses(impactMin) : 'text-gray-500 dark:text-gray-400'}`}>
+                  {impactMin > 0 ? `≥ ${impactMin}` : 'Any'}
+                </span>
+              </div>
+              <input
+                type="range"
+                id="impactMin"
+                min="0"
+                max="100"
+                step="5"
+                value={impactMin}
+                onChange={(e) => setImpactMin(Number(e.target.value))}
+                className="w-full h-2 bg-gray-200 dark:bg-gray-600 rounded-lg appearance-none cursor-pointer accent-brand-blue"
+                title={`Minimum impact score: ${impactMin}`}
+              />
+              <div className="flex justify-between text-xs text-gray-400 mt-1">
+                <span>0</span>
+                <span>50</span>
+                <span>100</span>
+              </div>
+            </div>
+
+            {/* Relevance Score Slider */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="relevanceMin" className="text-sm text-gray-600 dark:text-gray-400">
+                  Relevance
+                </label>
+                <span className={`text-sm font-medium ${relevanceMin > 0 ? getScoreColorClasses(relevanceMin) : 'text-gray-500 dark:text-gray-400'}`}>
+                  {relevanceMin > 0 ? `≥ ${relevanceMin}` : 'Any'}
+                </span>
+              </div>
+              <input
+                type="range"
+                id="relevanceMin"
+                min="0"
+                max="100"
+                step="5"
+                value={relevanceMin}
+                onChange={(e) => setRelevanceMin(Number(e.target.value))}
+                className="w-full h-2 bg-gray-200 dark:bg-gray-600 rounded-lg appearance-none cursor-pointer accent-brand-blue"
+                title={`Minimum relevance score: ${relevanceMin}`}
+              />
+              <div className="flex justify-between text-xs text-gray-400 mt-1">
+                <span>0</span>
+                <span>50</span>
+                <span>100</span>
+              </div>
+            </div>
+
+            {/* Novelty Score Slider */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="noveltyMin" className="text-sm text-gray-600 dark:text-gray-400">
+                  Novelty
+                </label>
+                <span className={`text-sm font-medium ${noveltyMin > 0 ? getScoreColorClasses(noveltyMin) : 'text-gray-500 dark:text-gray-400'}`}>
+                  {noveltyMin > 0 ? `≥ ${noveltyMin}` : 'Any'}
+                </span>
+              </div>
+              <input
+                type="range"
+                id="noveltyMin"
+                min="0"
+                max="100"
+                step="5"
+                value={noveltyMin}
+                onChange={(e) => setNoveltyMin(Number(e.target.value))}
+                className="w-full h-2 bg-gray-200 dark:bg-gray-600 rounded-lg appearance-none cursor-pointer accent-brand-blue"
+                title={`Minimum novelty score: ${noveltyMin}`}
+              />
+              <div className="flex justify-between text-xs text-gray-400 mt-1">
+                <span>0</span>
+                <span>50</span>
+                <span>100</span>
+              </div>
+            </div>
           </div>
         </div>
 
