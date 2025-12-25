@@ -56,8 +56,15 @@ export interface DiscoveryRun {
   // Error handling
   error_message: string | null;
   error_details: Record<string, unknown> | null;
+  errors?: string[];
   // Timestamps
   created_at: string | null;
+  // Optional configuration
+  config?: {
+    source_types?: string[];
+    pillar_focus?: string[];
+    max_cards?: number;
+  };
 }
 
 /**
@@ -92,6 +99,185 @@ export type DismissReason =
   | 'out_of_scope'
   | 'already_exists'
   | 'other';
+
+// ============================================================================
+// Advanced Search Types
+// ============================================================================
+
+/**
+ * Date range filter for created_at/updated_at filtering
+ */
+export interface DateRange {
+  start?: string; // ISO date string YYYY-MM-DD
+  end?: string;   // ISO date string YYYY-MM-DD
+}
+
+/**
+ * Min/max threshold for a single score field
+ */
+export interface ScoreThreshold {
+  min?: number; // 0-100
+  max?: number; // 0-100
+}
+
+/**
+ * Collection of score threshold filters
+ */
+export interface ScoreThresholds {
+  impact_score?: ScoreThreshold;
+  relevance_score?: ScoreThreshold;
+  novelty_score?: ScoreThreshold;
+  maturity_score?: ScoreThreshold;
+  velocity_score?: ScoreThreshold;
+  risk_score?: ScoreThreshold;
+  opportunity_score?: ScoreThreshold;
+}
+
+/**
+ * Advanced search filters for intelligence cards.
+ * All filters are optional and combined with AND logic.
+ */
+export interface SearchFilters {
+  pillar_ids?: string[];
+  goal_ids?: string[];
+  stage_ids?: string[];
+  horizon?: 'H1' | 'H2' | 'H3' | 'ALL';
+  date_range?: DateRange;
+  score_thresholds?: ScoreThresholds;
+  status?: string;
+}
+
+/**
+ * Request model for advanced card search
+ */
+export interface AdvancedSearchRequest {
+  query?: string;
+  filters?: SearchFilters;
+  use_vector_search?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * Individual search result with relevance score
+ */
+export interface SearchResultItem {
+  id: string;
+  name: string;
+  slug: string;
+  summary?: string;
+  description?: string;
+  pillar_id?: string;
+  goal_id?: string;
+  anchor_id?: string;
+  stage_id?: string;
+  horizon?: string;
+  novelty_score?: number;
+  maturity_score?: number;
+  impact_score?: number;
+  relevance_score?: number;
+  velocity_score?: number;
+  risk_score?: number;
+  opportunity_score?: number;
+  status?: string;
+  created_at?: string;
+  updated_at?: string;
+  // Search-specific fields
+  search_relevance?: number; // Vector similarity score (0-1)
+  match_highlights?: string[];
+}
+
+/**
+ * Response model for advanced search results
+ */
+export interface AdvancedSearchResponse {
+  results: SearchResultItem[];
+  total_count: number;
+  query?: string;
+  filters_applied?: SearchFilters;
+  search_type: 'vector' | 'text';
+}
+
+// ============================================================================
+// Saved Search Types
+// ============================================================================
+
+/**
+ * Query configuration stored in saved searches
+ */
+export interface SavedSearchQueryConfig {
+  query?: string;
+  filters?: SearchFilters;
+  use_vector_search?: boolean;
+}
+
+/**
+ * Request model for creating a saved search
+ */
+export interface SavedSearchCreate {
+  name: string;
+  query_config: SavedSearchQueryConfig;
+}
+
+/**
+ * Request model for updating a saved search
+ */
+export interface SavedSearchUpdate {
+  name?: string;
+  query_config?: SavedSearchQueryConfig;
+}
+
+/**
+ * Response model for a saved search record
+ */
+export interface SavedSearch {
+  id: string;
+  user_id: string;
+  name: string;
+  query_config: SavedSearchQueryConfig;
+  created_at: string;
+  last_used_at: string;
+  updated_at?: string;
+}
+
+/**
+ * Response model for listing saved searches
+ */
+export interface SavedSearchList {
+  saved_searches: SavedSearch[];
+  total_count: number;
+}
+
+// ============================================================================
+// Search History Types
+// ============================================================================
+
+/**
+ * Response model for a search history record
+ */
+export interface SearchHistoryEntry {
+  id: string;
+  user_id: string;
+  query_config: SavedSearchQueryConfig;
+  executed_at: string;
+  result_count: number;
+}
+
+/**
+ * Request model for recording a search in history
+ */
+export interface SearchHistoryCreate {
+  query_config: SavedSearchQueryConfig;
+  result_count: number;
+}
+
+/**
+ * Response model for listing search history
+ */
+export interface SearchHistoryList {
+  history: SearchHistoryEntry[];
+  total_count: number;
+}
 
 /**
  * Helper function for API requests
