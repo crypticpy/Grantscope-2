@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useDrag } from '@use-gesture/react';
@@ -23,12 +23,14 @@ import {
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
 import { useIsMobile } from '../hooks/use-mobile';
+import { useScrollRestoration } from '../hooks/useScrollRestoration';
 import { PillarBadge } from '../components/PillarBadge';
 import { HorizonBadge } from '../components/HorizonBadge';
 import { StageBadge } from '../components/StageBadge';
 import { ConfidenceBadge } from '../components/ConfidenceBadge';
 import { Tooltip } from '../components/ui/Tooltip';
 import { cn } from '../lib/utils';
+import { VirtualizedList, VirtualizedListHandle } from '../components/VirtualizedList';
 import {
   fetchPendingReviewCards,
   reviewCard,
@@ -585,6 +587,17 @@ function UndoToast({ action, onUndo, onDismiss, timeRemaining }: UndoToastProps)
 const DiscoveryQueue: React.FC = () => {
   const { user } = useAuthContext();
   const isMobile = useIsMobile();
+
+  // Enable scroll position restoration for navigation
+  useScrollRestoration({
+    storageKey: 'discovery-queue',
+    // Don't clear after restore - allows restoring on browser back/forward
+    clearAfterRestore: false,
+    // Debounce scroll position saves for performance
+    debounce: true,
+    debounceDelay: 100,
+  });
+
   const [cards, setCards] = useState<PendingCard[]>([]);
   const [pillars, setPillars] = useState<Pillar[]>([]);
   const [loading, setLoading] = useState(true);
@@ -617,6 +630,9 @@ const DiscoveryQueue: React.FC = () => {
   // Keyboard navigation state
   const [focusedCardIndex, setFocusedCardIndex] = useState<number>(-1);
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  // Virtualized list ref for scroll control
+  const virtualizedListRef = useRef<VirtualizedListHandle>(null);
 
   // Debounce ref to prevent rapid keyboard input from double-executing actions
   const lastActionTimeRef = useRef<number>(0);
@@ -1028,15 +1044,11 @@ const DiscoveryQueue: React.FC = () => {
 
     setFocusedCardIndex((prev) => {
       const nextIndex = prev < filteredCards.length - 1 ? prev + 1 : 0;
-      // Scroll the card into view
-      const card = filteredCards[nextIndex];
-      if (card) {
-        const element = cardRefs.current.get(card.id);
-        element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
+      // Scroll the card into view using virtualized list
+      virtualizedListRef.current?.scrollToIndex(nextIndex, { align: 'center' });
       return nextIndex;
     });
-  }, [filteredCards]);
+  }, [filteredCards.length]);
 
   /**
    * Navigate to previous card (k key)
@@ -1046,15 +1058,11 @@ const DiscoveryQueue: React.FC = () => {
 
     setFocusedCardIndex((prev) => {
       const nextIndex = prev > 0 ? prev - 1 : filteredCards.length - 1;
-      // Scroll the card into view
-      const card = filteredCards[nextIndex];
-      if (card) {
-        const element = cardRefs.current.get(card.id);
-        element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
+      // Scroll the card into view using virtualized list
+      virtualizedListRef.current?.scrollToIndex(nextIndex, { align: 'center' });
       return nextIndex;
     });
-  }, [filteredCards]);
+  }, [filteredCards.length]);
 
   // Keyboard shortcuts for navigation (disabled in form fields)
   useHotkeys('j', navigateNext, {
