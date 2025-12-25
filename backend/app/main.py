@@ -11,6 +11,7 @@ from typing import List, Optional, Dict, Any
 
 from fastapi import FastAPI, Depends, HTTPException, status, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 import io
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -84,6 +85,10 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
+
+# GZip compression middleware for mobile optimization
+# Compresses responses larger than 500 bytes to reduce bandwidth usage
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 
 # Global exception handler to ensure CORS headers on error responses
