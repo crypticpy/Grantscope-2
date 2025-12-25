@@ -10,8 +10,17 @@
 // Overview tab components
 export * from './OverviewTab';
 
+// Notes tab
+export { NotesTab } from './NotesTab';
+export type { NotesTabProps } from './NotesTab';
+
+// Sources tab
+export { SourcesTab } from './SourcesTab';
+export type { SourcesTabProps } from './SourcesTab';
+
+// Timeline tab
+export { TimelineTab } from './TimelineTab';
+export type { TimelineTabProps } from './TimelineTab';
+
 // Future tab exports (as components are created):
-// export { SourcesTab } from './SourcesTab';
-// export { TimelineTab } from './TimelineTab';
-// export { NotesTab } from './NotesTab';
 // export { RelatedTab } from './RelatedTab';
