@@ -546,27 +546,29 @@ function UndoToast({ action, onUndo, onDismiss, timeRemaining }: UndoToastProps)
         <span className="font-medium">&quot;{cardName}&quot;</span> {verb}
       </span>
 
-      {/* Undo Button */}
+      {/* Undo Button - min 44px touch target */}
       <button
         onClick={onUndo}
         className={cn(
-          'inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5',
+          'inline-flex items-center justify-center gap-1 sm:gap-1.5 px-3 sm:px-3 py-2.5 sm:py-1.5',
+          'min-h-[44px] min-w-[44px]',
           'text-xs sm:text-sm font-medium rounded-md transition-colors flex-shrink-0',
           'bg-brand-blue/10 text-brand-blue hover:bg-brand-blue/20',
-          'dark:bg-brand-blue/20 dark:hover:bg-brand-blue/30'
+          'dark:bg-brand-blue/20 dark:hover:bg-brand-blue/30',
+          'active:scale-95'
         )}
       >
-        <Undo2 className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+        <Undo2 className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
         Undo
       </button>
 
-      {/* Close Button */}
+      {/* Close Button - min 44px touch target */}
       <button
         onClick={onDismiss}
-        className="p-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors flex-shrink-0"
+        className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors flex-shrink-0 active:scale-95"
         aria-label="Dismiss notification"
       >
-        <X className="h-4 w-4" />
+        <X className="h-5 w-5" />
       </button>
 
       {/* Progress bar showing time remaining */}
@@ -1145,9 +1147,9 @@ const DiscoveryQueue: React.FC = () => {
           <button
             onClick={loadData}
             disabled={loading}
-            className="inline-flex items-center justify-center px-3 sm:px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue disabled:opacity-50 transition-colors flex-shrink-0"
+            className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] px-3 sm:px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue disabled:opacity-50 transition-colors flex-shrink-0 active:scale-95"
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''} ${isMobile ? '' : 'mr-2'}`} />
+            <RefreshCw className={`h-5 w-5 sm:h-4 sm:w-4 ${loading ? 'animate-spin' : ''} ${isMobile ? '' : 'mr-2'}`} />
             {!isMobile && 'Refresh'}
           </button>
         </div>
@@ -1233,7 +1235,7 @@ const DiscoveryQueue: React.FC = () => {
               <input
                 type="text"
                 id="search"
-                className="pl-10 block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue text-base sm:text-sm"
+                className="pl-10 block w-full min-h-[44px] sm:min-h-0 border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue text-base sm:text-sm"
                 placeholder="Search pending cards..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -1248,7 +1250,7 @@ const DiscoveryQueue: React.FC = () => {
             </label>
             <select
               id="pillar"
-              className="block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue text-base sm:text-sm"
+              className="block w-full min-h-[44px] sm:min-h-0 border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue text-base sm:text-sm"
               value={selectedPillar}
               onChange={(e) => setSelectedPillar(e.target.value)}
             >
@@ -1268,7 +1270,7 @@ const DiscoveryQueue: React.FC = () => {
             </label>
             <select
               id="confidence"
-              className="block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue text-base sm:text-sm"
+              className="block w-full min-h-[44px] sm:min-h-0 border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue text-base sm:text-sm"
               value={confidenceFilter}
               onChange={(e) => setConfidenceFilter(e.target.value as ConfidenceFilter)}
             >
@@ -1289,7 +1291,7 @@ const DiscoveryQueue: React.FC = () => {
             {filteredCards.length > 0 && (
               <button
                 onClick={selectedCards.size === filteredCards.length ? clearSelection : selectAllVisible}
-                className="text-xs sm:text-sm text-brand-blue hover:text-brand-dark-blue dark:hover:text-brand-light-blue transition-colors"
+                className="min-h-[44px] px-2 py-2 -my-2 text-xs sm:text-sm text-brand-blue hover:text-brand-dark-blue dark:hover:text-brand-light-blue transition-colors active:scale-95"
               >
                 {selectedCards.size === filteredCards.length ? 'Deselect All' : 'Select All'}
               </button>
@@ -1343,22 +1345,22 @@ const DiscoveryQueue: React.FC = () => {
               <button
                 onClick={() => handleBulkAction('approve')}
                 disabled={actionLoading === 'bulk'}
-                className="inline-flex items-center px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
+                className="inline-flex items-center justify-center min-h-[44px] px-3 sm:px-3 py-2 rounded-md text-xs sm:text-sm font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 transition-colors active:scale-95"
               >
-                <CheckCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1 sm:mr-1.5" />
+                <CheckCircle className="h-4 w-4 sm:h-4 sm:w-4 mr-1.5 sm:mr-1.5" />
                 {isMobile ? 'Approve' : 'Approve All'}
               </button>
               <button
                 onClick={() => handleBulkAction('reject')}
                 disabled={actionLoading === 'bulk'}
-                className="inline-flex items-center px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
+                className="inline-flex items-center justify-center min-h-[44px] px-3 sm:px-3 py-2 rounded-md text-xs sm:text-sm font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors active:scale-95"
               >
-                <XCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1 sm:mr-1.5" />
+                <XCircle className="h-4 w-4 sm:h-4 sm:w-4 mr-1.5 sm:mr-1.5" />
                 {isMobile ? 'Reject' : 'Reject All'}
               </button>
               <button
                 onClick={clearSelection}
-                className="inline-flex items-center px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                className="inline-flex items-center justify-center min-h-[44px] px-3 sm:px-3 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors active:scale-95"
               >
                 Cancel
               </button>
@@ -1388,7 +1390,7 @@ const DiscoveryQueue: React.FC = () => {
               </p>
               <Link
                 to="/discover"
-                className="mt-6 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-brand-dark-blue transition-colors"
+                className="mt-6 inline-flex items-center justify-center min-h-[44px] px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-brand-dark-blue transition-colors active:scale-95"
               >
                 Browse Intelligence Library
               </Link>
@@ -1409,7 +1411,7 @@ const DiscoveryQueue: React.FC = () => {
                   setSelectedPillar('');
                   setConfidenceFilter('all');
                 }}
-                className="mt-4 inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] transition-colors"
+                className="mt-4 inline-flex items-center justify-center min-h-[44px] px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] transition-colors active:scale-95"
               >
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Clear All Filters
@@ -1453,17 +1455,19 @@ const DiscoveryQueue: React.FC = () => {
                   isLoading && 'opacity-60'
                 )}
               >
-                <div className="flex items-start gap-3 sm:gap-4">
-                  {/* Checkbox */}
-                  <div className="flex-shrink-0 pt-0.5 sm:pt-1">
+                <div className="flex items-start gap-2 sm:gap-4">
+                  {/* Checkbox - wrapped in 44px touch target */}
+                  <label
+                    className="flex-shrink-0 flex items-center justify-center min-h-[44px] min-w-[44px] -m-2 cursor-pointer"
+                    aria-label={`Select ${card.name}`}
+                  >
                     <input
                       type="checkbox"
                       checked={isSelected}
                       onChange={() => toggleCardSelection(card.id)}
-                      className="h-4 w-4 text-brand-blue border-gray-300 dark:border-gray-600 rounded focus:ring-brand-blue"
-                      aria-label={`Select ${card.name}`}
+                      className="h-5 w-5 sm:h-4 sm:w-4 text-brand-blue border-gray-300 dark:border-gray-600 rounded focus:ring-brand-blue cursor-pointer"
                     />
-                  </div>
+                  </label>
 
                   {/* Card Content */}
                   <div className="flex-1 min-w-0">
@@ -1506,70 +1510,71 @@ const DiscoveryQueue: React.FC = () => {
                       {card.summary}
                     </p>
 
-                    {/* Action Buttons - compact on mobile */}
+                    {/* Action Buttons - min 44px touch targets on mobile */}
                     <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                       <button
                         onClick={() => handleReviewAction(card.id, 'approve')}
                         disabled={isLoading}
-                        className="inline-flex items-center px-2 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50 disabled:opacity-50 transition-colors"
+                        className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 px-3 sm:px-3 py-2 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50 disabled:opacity-50 transition-colors active:scale-95"
                         title="Approve this card"
                       >
-                        <CheckCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 sm:mr-1.5" />
+                        <CheckCircle className="h-5 w-5 sm:h-4 sm:w-4 sm:mr-1.5" />
                         <span className="hidden sm:inline ml-1.5">Approve</span>
                       </button>
 
                       <Link
                         to={`/cards/${card.slug}?mode=edit`}
-                        className="inline-flex items-center px-2 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                        className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 px-3 sm:px-3 py-2 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors active:scale-95"
                         title="Edit and approve"
                       >
-                        <Edit3 className="h-3.5 w-3.5 sm:h-4 sm:w-4 sm:mr-1.5" />
+                        <Edit3 className="h-5 w-5 sm:h-4 sm:w-4 sm:mr-1.5" />
                         <span className="hidden sm:inline ml-1.5">Edit</span>
                       </Link>
 
                       <button
                         onClick={() => handleDismiss(card.id, 'irrelevant')}
                         disabled={isLoading}
-                        className="inline-flex items-center px-2 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50 disabled:opacity-50 transition-colors"
+                        className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 px-3 sm:px-3 py-2 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50 disabled:opacity-50 transition-colors active:scale-95"
                         title="Reject this card"
                       >
-                        <XCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 sm:mr-1.5" />
+                        <XCircle className="h-5 w-5 sm:h-4 sm:w-4 sm:mr-1.5" />
                         <span className="hidden sm:inline ml-1.5">Reject</span>
                       </button>
 
-                      {/* More Options Dropdown */}
+                      {/* More Options Dropdown - 44px touch target */}
                       <div className="relative ml-auto sm:ml-0">
                         <button
                           onClick={() => setOpenDropdown(isDropdownOpen ? null : card.id)}
-                          className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                          className="flex items-center justify-center min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:p-1.5 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors active:scale-95"
                           title="More options"
+                          aria-label="More options"
                         >
-                          <MoreHorizontal className="h-4 w-4" />
+                          <MoreHorizontal className="h-5 w-5 sm:h-4 sm:w-4" />
                         </button>
 
                         {isDropdownOpen && (
-                          <div className="absolute right-0 mt-1 w-44 sm:w-48 bg-white dark:bg-[#3d4176] rounded-md shadow-lg border border-gray-200 dark:border-gray-600 py-1 z-10">
+                          <div className="absolute right-0 mt-1 w-48 sm:w-48 bg-white dark:bg-[#3d4176] rounded-md shadow-lg border border-gray-200 dark:border-gray-600 py-1 z-10">
                             <button
                               onClick={() => handleDismiss(card.id, 'duplicate')}
-                              className="w-full px-3 sm:px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
+                              className="w-full min-h-[44px] sm:min-h-0 px-4 py-3 sm:py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500"
                             >
                               Mark as Duplicate
                             </button>
                             <button
                               onClick={() => handleDismiss(card.id, 'out_of_scope')}
-                              className="w-full px-3 sm:px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
+                              className="w-full min-h-[44px] sm:min-h-0 px-4 py-3 sm:py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500"
                             >
                               Out of Scope
                             </button>
                             <button
                               onClick={() => handleDismiss(card.id, 'low_quality')}
-                              className="w-full px-3 sm:px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
+                              className="w-full min-h-[44px] sm:min-h-0 px-4 py-3 sm:py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500"
                             >
                               Low Quality
                             </button>
                             <button
                               onClick={() => handleReviewAction(card.id, 'defer')}
-                              className="w-full px-3 sm:px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
+                              className="w-full min-h-[44px] sm:min-h-0 px-4 py-3 sm:py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500"
                             >
                               Defer for Later
                             </button>
