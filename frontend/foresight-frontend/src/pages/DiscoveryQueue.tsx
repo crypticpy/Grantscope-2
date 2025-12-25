@@ -948,17 +948,17 @@ const DiscoveryQueue: React.FC = () => {
   /**
    * Select all visible cards
    */
-  const selectAllVisible = () => {
+  const selectAllVisible = useCallback(() => {
     const visibleIds = filteredCards.map((c) => c.id);
     setSelectedCards(new Set(visibleIds));
-  };
+  }, [filteredCards]);
 
   /**
    * Clear selection
    */
-  const clearSelection = () => {
+  const clearSelection = useCallback(() => {
     setSelectedCards(new Set());
-  };
+  }, []);
 
   // Filter cards
   const filteredCards = React.useMemo(() => {
