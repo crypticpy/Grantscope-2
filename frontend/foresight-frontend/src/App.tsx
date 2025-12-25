@@ -1,21 +1,32 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, User } from '@supabase/supabase-js';
 import { TooltipProvider } from '@radix-ui/react-tooltip';
 import Header from './components/Header';
+import { AuthContextProvider } from './hooks/useAuthContext';
+import { ProtectedRoute } from './components/ProtectedRoute';
+
+// Synchronous imports for critical path components (login + landing page)
 import Dashboard from './pages/Dashboard';
-import Discover from './pages/Discover';
-import DiscoveryQueue from './pages/DiscoveryQueue';
-import DiscoveryHistory from './pages/DiscoveryHistory';
-import CardDetail from './pages/CardDetail';
-import Compare from './pages/Compare';
-import Workstreams from './pages/Workstreams';
-import WorkstreamFeed from './pages/WorkstreamFeed';
-import Settings from './pages/Settings';
-import Analytics from './pages/Analytics';
 import Login from './pages/Login';
-import { User } from '@supabase/supabase-js';
-import { AuthContextProvider, useAuthContext } from './hooks/useAuthContext';
+
+// Lazy-loaded page components for route-based code splitting
+// Discovery pages - share common discovery patterns
+const Discover = lazy(() => import('./pages/Discover'));
+const DiscoveryQueue = lazy(() => import('./pages/DiscoveryQueue'));
+const DiscoveryHistory = lazy(() => import('./pages/DiscoveryHistory'));
+
+// Card visualization pages - share React Flow and related viz libraries
+const CardDetail = lazy(() => import('./pages/CardDetail'));
+const Compare = lazy(() => import('./pages/Compare'));
+
+// Workstream pages - share workstream components
+const Workstreams = lazy(() => import('./pages/Workstreams'));
+const WorkstreamFeed = lazy(() => import('./pages/WorkstreamFeed'));
+
+// Standalone pages
+const Settings = lazy(() => import('./pages/Settings'));
+const Analytics = lazy(() => import('./pages/Analytics'));
 
 // Supabase configuration
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -88,116 +99,61 @@ function App() {
             {user && <Header />}
             <main className={user ? "pt-16" : ""}>
               <Routes>
-              <Route
-                path="/login"
-                element={
-                  user ? (
-                    <Navigate to="/" replace />
-                  ) : (
-                    <Login />
-                  )
-                }
-              />
-              <Route
-                path="/"
-                element={
-                  user ? (
-                    <Dashboard />
-                  ) : (
-                    <Navigate to="/login" replace />
-                  )
-                }
-              />
-              <Route
-                path="/discover"
-                element={
-                  user ? (
-                    <Discover />
-                  ) : (
-                    <Navigate to="/login" replace />
-                  )
-                }
-              />
-              <Route
-                path="/discover/queue"
-                element={
-                  user ? (
-                    <DiscoveryQueue />
-                  ) : (
-                    <Navigate to="/login" replace />
-                  )
-                }
-              />
-              <Route
-                path="/discover/history"
-                element={
-                  user ? (
-                    <DiscoveryHistory />
-                  ) : (
-                    <Navigate to="/login" replace />
-                  )
-                }
-              />
-              <Route
-                path="/cards/:slug"
-                element={
-                  user ? (
-                    <CardDetail />
-                  ) : (
-                    <Navigate to="/login" replace />
-                  )
-                }
-              />
-              <Route
-                path="/compare"
-                element={
-                  user ? (
-                    <Compare />
-                  ) : (
-                    <Navigate to="/login" replace />
-                  )
-                }
-              />
-              <Route
-                path="/workstreams"
-                element={
-                  user ? (
-                    <Workstreams />
-                  ) : (
-                    <Navigate to="/login" replace />
-                  )
-                }
-              />
-              <Route
-                path="/workstreams/:id"
-                element={
-                  user ? (
-                    <WorkstreamFeed />
-                  ) : (
-                    <Navigate to="/login" replace />
-                  )
-                }
-              />
-              <Route
-                path="/settings"
-                element={
-                  user ? (
-                    <Settings />
-                  ) : (
-                    <Navigate to="/login" replace />
-                  )
-                }
-              />
-              <Route
-                path="/analytics"
-                element={
-                  user ? (
-                    <Analytics />
-                  ) : (
-                    <Navigate to="/login" replace />
-                  )
-                }
-              />
+                {/* Login route - public, redirects to home if already authenticated */}
+                <Route
+                  path="/login"
+                  element={user ? <Navigate to="/" replace /> : <Login />}
+                />
+
+                {/* Dashboard - synchronous landing page (critical path) */}
+                <Route
+                  path="/"
+                  element={<ProtectedRoute element={<Dashboard />} withSuspense={false} />}
+                />
+
+                {/* Discovery pages - lazy-loaded with Suspense */}
+                <Route
+                  path="/discover"
+                  element={<ProtectedRoute element={<Discover />} loadingMessage="Loading discovery..." />}
+                />
+                <Route
+                  path="/discover/queue"
+                  element={<ProtectedRoute element={<DiscoveryQueue />} loadingMessage="Loading queue..." />}
+                />
+                <Route
+                  path="/discover/history"
+                  element={<ProtectedRoute element={<DiscoveryHistory />} loadingMessage="Loading history..." />}
+                />
+
+                {/* Card visualization pages - lazy-loaded with React Flow */}
+                <Route
+                  path="/cards/:slug"
+                  element={<ProtectedRoute element={<CardDetail />} loadingMessage="Loading card details..." />}
+                />
+                <Route
+                  path="/compare"
+                  element={<ProtectedRoute element={<Compare />} loadingMessage="Loading comparison..." />}
+                />
+
+                {/* Workstream pages - lazy-loaded */}
+                <Route
+                  path="/workstreams"
+                  element={<ProtectedRoute element={<Workstreams />} loadingMessage="Loading workstreams..." />}
+                />
+                <Route
+                  path="/workstreams/:id"
+                  element={<ProtectedRoute element={<WorkstreamFeed />} loadingMessage="Loading workstream..." />}
+                />
+
+                {/* Settings and Analytics - lazy-loaded standalone pages */}
+                <Route
+                  path="/settings"
+                  element={<ProtectedRoute element={<Settings />} loadingMessage="Loading settings..." />}
+                />
+                <Route
+                  path="/analytics"
+                  element={<ProtectedRoute element={<Analytics />} loadingMessage="Loading analytics..." />}
+                />
               </Routes>
             </main>
           </div>
