@@ -26,3 +26,9 @@ export {
   StageProgressionTimeline,
   type StageProgressionTimelineProps,
 } from './StageProgressionTimeline';
+
+// Concept Network Diagram - Interactive graph of related cards
+export {
+  ConceptNetworkDiagram,
+  type ConceptNetworkDiagramProps,
+} from './ConceptNetworkDiagram';
