@@ -20,3 +20,9 @@ export {
   TrendVelocitySparklineSkeleton,
   type TrendVelocitySparklineProps,
 } from './TrendVelocitySparkline';
+
+// Stage Progression Timeline - Visual stage transition history
+export {
+  StageProgressionTimeline,
+  type StageProgressionTimelineProps,
+} from './StageProgressionTimeline';
