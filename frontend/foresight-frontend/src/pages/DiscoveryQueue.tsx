@@ -858,7 +858,7 @@ const DiscoveryQueue: React.FC = () => {
   /**
    * Handle card dismissal
    */
-  const handleDismiss = async (cardId: string, reason?: DismissReason) => {
+  const handleDismiss = useCallback(async (cardId: string, reason?: DismissReason) => {
     if (!user) return;
 
     // Find the card before we remove it (needed for undo)
@@ -900,7 +900,7 @@ const DiscoveryQueue: React.FC = () => {
     } finally {
       setActionLoading(null);
     }
-  };
+  }, [user, cards, pushToUndoStack, showToast]);
 
   /**
    * Handle bulk action
