@@ -1,0 +1,64 @@
+{
+  "files_to_modify": {
+    "frontend": [
+      "frontend/foresight-frontend/src/pages/DiscoveryQueue.tsx",
+      "frontend/foresight-frontend/package.json"
+    ]
+  },
+  "files_to_create": {
+    "frontend": [
+      "frontend/foresight-frontend/src/components/ui/Toast.tsx",
+      "frontend/foresight-frontend/src/components/ui/Progress.tsx",
+      "frontend/foresight-frontend/src/hooks/useKeyboardShortcuts.ts",
+      "frontend/foresight-frontend/src/hooks/useUndoStack.ts"
+    ]
+  },
+  "files_to_reference": [
+    "frontend/foresight-frontend/src/pages/DiscoveryQueue.tsx",
+    "frontend/foresight-frontend/src/lib/discovery-api.ts",
+    "frontend/foresight-frontend/src/components/ui/Tooltip.tsx",
+    "frontend/foresight-frontend/src/hooks/useDebounce.ts"
+  ],
+  "patterns": {
+    "component_pattern": "React functional components with TypeScript, using hooks (useState, useEffect, useCallback)",
+    "api_pattern": "All API calls go through discovery-api.ts helper functions with Bearer token authentication",
+    "styling_pattern": "Tailwind CSS classes with dark mode variants (dark:bg-[color])",
+    "radix_ui_pattern": "Radix UI components are unstyled and require manual styling with Tailwind",
+    "state_management": "Local component state with useState/useCallback, no global state management needed for this feature"
+  },
+  "existing_implementations": {
+    "description": "DiscoveryQueue.tsx already exists with card display, filtering, bulk selection, and action handlers (approve, reject, dismiss)",
+    "relevant_files": [
+      "frontend/foresight-frontend/src/pages/DiscoveryQueue.tsx",
+      "frontend/foresight-frontend/src/lib/discovery-api.ts"
+    ],
+    "api_functions_available": [
+      "fetchPendingReviewCards(token): Promise<PendingCard[]>",
+      "reviewCard(token, cardId, action): Promise<void> - action: 'approve' | 'reject' | 'edit' | 'defer'",
+      "dismissCard(token, cardId, reason?, notes?): Promise<void>",
+      "bulkReviewCards(token, cardIds, action): Promise<{processed: number, errors: string[]}>"
+    ],
+    "radix_ui_installed": [
+      "@radix-ui/react-toast@1.2.4",
+      "@radix-ui/react-progress@1.1.1"
+    ]
+  },
+  "technology_stack": {
+    "frontend": {
+      "framework": "React 18.3.1",
+      "language": "TypeScript 5.6.2",
+      "bundler": "Vite 6.0.1",
+      "styling": "Tailwind CSS v3.4.16",
+      "ui_library": "Radix UI (multiple components already installed)",
+      "router": "react-router-dom@6",
+      "icons": "lucide-react@0.364.0",
+      "package_manager": "pnpm"
+    }
+  },
+  "conventions": {
+    "naming": "camelCase for variables/functions, PascalCase for components",
+    "imports": "Organize imports: React, external libraries, local components, types/interfaces",
+    "file_structure": "Pages in src/pages/, components in src/components/, hooks in src/hooks/, lib in src/lib/",
+    "typescript": "Use explicit types for props and state, avoid 'any' type"
+  }
+}

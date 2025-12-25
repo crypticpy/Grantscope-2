@@ -1,0 +1,433 @@
+{
+  "feature": "Enhanced Discovery Queue UX",
+  "workflow_type": "feature",
+  "workflow_rationale": "This is a new feature enhancement that adds significant UI/UX capabilities (keyboard shortcuts, gestures, quick actions, undo functionality) to an existing discovery queue system. While it modifies existing components, it introduces new interaction patterns and user workflows that qualify as feature development rather than simple refactoring.",
+  "phases": [
+    {
+      "id": "phase-1-infrastructure",
+      "name": "Infrastructure Setup",
+      "type": "setup",
+      "description": "Install required dependencies for keyboard shortcuts and gesture handling",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-1-1",
+          "description": "Install react-hotkeys-hook and @use-gesture/react packages",
+          "service": "frontend",
+          "files_to_modify": ["frontend/foresight-frontend/package.json"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd frontend/foresight-frontend && pnpm list react-hotkeys-hook @use-gesture/react",
+            "expected": "Both packages listed in dependencies"
+          },
+          "parallelism": {
+            "can_parallelize_with": [],
+            "parallelism_hint": "sequential",
+            "reason": "Single file modification, must complete before Phase 2"
+          },
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-2-ui-components",
+      "name": "UI Components",
+      "type": "implementation",
+      "description": "Create reusable UI components for Toast notifications and Progress indicator using Radix UI",
+      "depends_on": ["phase-1-infrastructure"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-2-1",
+          "description": "Create Toast wrapper component with Radix UI",
+          "service": "frontend",
+          "files_to_modify": [],
+          "files_to_create": ["frontend/foresight-frontend/src/components/ui/Toast.tsx"],
+          "patterns_from": ["frontend/foresight-frontend/src/components/ui/Tooltip.tsx"],
+          "verification": {
+            "type": "command",
+            "command": "cd frontend/foresight-frontend && npm run build",
+            "expected": "Build succeeds without TypeScript errors"
+          },
+          "parallelism": {
+            "can_parallelize_with": ["subtask-2-2"],
+            "parallelism_hint": "recommended",
+            "reason": "Independent files, no shared state between Toast and Progress components"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-2-2",
+          "description": "Create Progress wrapper component with Radix UI",
+          "service": "frontend",
+          "files_to_modify": [],
+          "files_to_create": ["frontend/foresight-frontend/src/components/ui/Progress.tsx"],
+          "patterns_from": ["frontend/foresight-frontend/src/components/ui/Tooltip.tsx"],
+          "verification": {
+            "type": "command",
+            "command": "cd frontend/foresight-frontend && npm run build",
+            "expected": "Build succeeds without TypeScript errors"
+          },
+          "parallelism": {
+            "can_parallelize_with": ["subtask-2-1"],
+            "parallelism_hint": "recommended",
+            "reason": "Independent files, no shared state between Toast and Progress components"
+          },
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-3-keyboard-navigation",
+      "name": "Keyboard Navigation",
+      "type": "implementation",
+      "description": "Implement keyboard shortcuts for card navigation (j/k keys)",
+      "depends_on": ["phase-2-ui-components"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-3-1",
+          "description": "Create useKeyboardShortcuts custom hook for navigation",
+          "service": "frontend",
+          "files_to_modify": [],
+          "files_to_create": ["frontend/foresight-frontend/src/hooks/useKeyboardShortcuts.ts"],
+          "patterns_from": ["frontend/foresight-frontend/src/hooks/useDebounce.ts"],
+          "verification": {
+            "type": "command",
+            "command": "cd frontend/foresight-frontend && npm run build",
+            "expected": "Build succeeds without TypeScript errors"
+          },
+          "parallelism": {
+            "can_parallelize_with": [],
+            "parallelism_hint": "sequential",
+            "reason": "Must complete before integrating into DiscoveryQueue component"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-3-2",
+          "description": "Add current card tracking and j/k navigation to DiscoveryQueue",
+          "service": "frontend",
+          "files_to_modify": ["frontend/foresight-frontend/src/pages/DiscoveryQueue.tsx"],
+          "files_to_create": [],
+          "patterns_from": ["frontend/foresight-frontend/src/pages/DiscoveryQueue.tsx"],
+          "verification": {
+            "type": "browser",
+            "url": "http://localhost:5173/discovery",
+            "checks": ["j/k keys navigate between cards", "Current card is visually highlighted"]
+          },
+          "parallelism": {
+            "can_parallelize_with": [],
+            "parallelism_hint": "sequential",
+            "reason": "Depends on subtask-3-1 hook being created first"
+          },
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-4-quick-actions",
+      "name": "Quick Actions Enhancement",
+      "type": "implementation",
+      "description": "Add gesture support and keyboard shortcuts for follow/dismiss actions",
+      "depends_on": ["phase-3-keyboard-navigation"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-4-1",
+          "description": "Add swipe gesture bindings to card component using @use-gesture/react",
+          "service": "frontend",
+          "files_to_modify": ["frontend/foresight-frontend/src/pages/DiscoveryQueue.tsx"],
+          "files_to_create": [],
+          "patterns_from": ["frontend/foresight-frontend/src/pages/DiscoveryQueue.tsx"],
+          "verification": {
+            "type": "browser",
+            "url": "http://localhost:5173/discovery",
+            "checks": ["Swipe left dismisses card", "Swipe right follows card", "touchAction: none CSS applied"]
+          },
+          "parallelism": {
+            "can_parallelize_with": [],
+            "parallelism_hint": "sequential",
+            "reason": "Modifies same file as keyboard shortcuts, must run sequentially"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-4-2",
+          "description": "Add f (follow) and d (dismiss) keyboard shortcuts",
+          "service": "frontend",
+          "files_to_modify": ["frontend/foresight-frontend/src/pages/DiscoveryQueue.tsx"],
+          "files_to_create": [],
+          "patterns_from": ["frontend/foresight-frontend/src/hooks/useKeyboardShortcuts.ts"],
+          "verification": {
+            "type": "browser",
+            "url": "http://localhost:5173/discovery",
+            "checks": ["f key follows current card", "d key dismisses current card"]
+          },
+          "parallelism": {
+            "can_parallelize_with": [],
+            "parallelism_hint": "sequential",
+            "reason": "Depends on subtask-4-1 completing, modifies same file"
+          },
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-5-progress-indicator",
+      "name": "Progress Indicator",
+      "type": "implementation",
+      "description": "Add visual progress bar showing queue completion status",
+      "depends_on": ["phase-4-quick-actions"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-5-1",
+          "description": "Add progress bar component to DiscoveryQueue with X of Y counter",
+          "service": "frontend",
+          "files_to_modify": ["frontend/foresight-frontend/src/pages/DiscoveryQueue.tsx"],
+          "files_to_create": [],
+          "patterns_from": ["frontend/foresight-frontend/src/components/ui/Progress.tsx"],
+          "verification": {
+            "type": "browser",
+            "url": "http://localhost:5173/discovery",
+            "checks": ["Progress bar visible at top", "Shows 'X of Y cards' text", "Updates when cards are processed"]
+          },
+          "parallelism": {
+            "can_parallelize_with": ["subtask-6-1"],
+            "parallelism_hint": "recommended",
+            "reason": "Can run in parallel with undo stack hook creation (different functionality)"
+          },
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-6-undo-functionality",
+      "name": "Undo Functionality",
+      "type": "implementation",
+      "description": "Implement undo stack and toast notifications for reversible actions",
+      "depends_on": ["phase-4-quick-actions"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-6-1",
+          "description": "Create useUndoStack custom hook for action history management",
+          "service": "frontend",
+          "files_to_modify": [],
+          "files_to_create": ["frontend/foresight-frontend/src/hooks/useUndoStack.ts"],
+          "patterns_from": ["frontend/foresight-frontend/src/hooks/useDebounce.ts"],
+          "verification": {
+            "type": "command",
+            "command": "cd frontend/foresight-frontend && npm run build",
+            "expected": "Build succeeds without TypeScript errors"
+          },
+          "parallelism": {
+            "can_parallelize_with": ["subtask-5-1"],
+            "parallelism_hint": "recommended",
+            "reason": "Can run in parallel with progress indicator (different functionality)"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-6-2",
+          "description": "Integrate undo stack and toast notifications into DiscoveryQueue actions",
+          "service": "frontend",
+          "files_to_modify": ["frontend/foresight-frontend/src/pages/DiscoveryQueue.tsx"],
+          "files_to_create": [],
+          "patterns_from": [
+            "frontend/foresight-frontend/src/hooks/useUndoStack.ts",
+            "frontend/foresight-frontend/src/components/ui/Toast.tsx"
+          ],
+          "verification": {
+            "type": "browser",
+            "url": "http://localhost:5173/discovery",
+            "checks": ["Toast appears after dismiss/follow", "Undo button visible in toast", "Clicking undo reverses action"]
+          },
+          "parallelism": {
+            "can_parallelize_with": [],
+            "parallelism_hint": "sequential",
+            "reason": "Depends on subtask-6-1 hook being created first"
+          },
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-7-integration",
+      "name": "Integration & Polish",
+      "type": "integration",
+      "description": "Final integration testing and edge case handling",
+      "depends_on": ["phase-5-progress-indicator", "phase-6-undo-functionality"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-7-1",
+          "description": "Add debouncing for rapid keyboard input and handle edge cases",
+          "service": "frontend",
+          "files_to_modify": ["frontend/foresight-frontend/src/pages/DiscoveryQueue.tsx"],
+          "files_to_create": [],
+          "patterns_from": ["frontend/foresight-frontend/src/hooks/useDebounce.ts"],
+          "verification": {
+            "type": "manual",
+            "instructions": "Test: 1) Empty queue shows friendly message, 2) Rapid j/k presses don't break navigation, 3) Last card j/k behavior is correct, 4) Failed API calls show error toast and keep card in queue"
+          },
+          "parallelism": {
+            "can_parallelize_with": [],
+            "parallelism_hint": "sequential",
+            "reason": "Final integration task, must come last"
+          },
+          "status": "pending"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_phases": 7,
+    "total_subtasks": 11,
+    "services_involved": ["frontend"],
+    "parallelism": {
+      "max_parallel_phases": 2,
+      "parallel_groups": [
+        {
+          "phases": ["phase-5-progress-indicator", "phase-6-undo-functionality"],
+          "reason": "Both depend only on phase-4, modify same file but different sections"
+        }
+      ],
+      "parallel_subtasks": [
+        {
+          "subtasks": ["subtask-2-1", "subtask-2-2"],
+          "reason": "Independent component creation, different files"
+        },
+        {
+          "subtasks": ["subtask-5-1", "subtask-6-1"],
+          "reason": "Progress indicator and undo hook are independent functionality"
+        }
+      ],
+      "recommended_workers": 1,
+      "speedup_estimate": "Sequential execution recommended due to DiscoveryQueue.tsx modifications spanning multiple phases"
+    },
+    "startup_command": "source auto-claude/.venv/bin/activate && python auto-claude/run.py --spec 003 --parallel 1"
+  },
+  "verification_strategy": {
+    "risk_level": "medium",
+    "skip_validation": false,
+    "test_creation_phase": "post_implementation",
+    "test_types_required": ["unit", "integration"],
+    "security_scanning_required": false,
+    "staging_deployment_required": false,
+    "acceptance_criteria": [
+      "All existing tests pass",
+      "New keyboard shortcuts work without browser conflicts",
+      "Swipe gestures work on mobile without scroll interference",
+      "Progress indicator updates correctly",
+      "Undo functionality works within 5-second window",
+      "No console errors or warnings",
+      "Performance: 10-card queue review completes in <2 minutes via keyboard-only workflow"
+    ],
+    "verification_steps": [
+      {
+        "name": "TypeScript Build Check",
+        "command": "cd frontend/foresight-frontend && npm run build",
+        "expected_outcome": "Build succeeds with no TypeScript errors",
+        "type": "test",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Lint Check",
+        "command": "cd frontend/foresight-frontend && npm run lint",
+        "expected_outcome": "No linting errors",
+        "type": "test",
+        "required": true,
+        "blocking": false
+      },
+      {
+        "name": "Browser Verification - Keyboard Navigation",
+        "command": "Manual test: Open http://localhost:5173/discovery and test j/k/f/d keys",
+        "expected_outcome": "All keyboard shortcuts work correctly",
+        "type": "browser",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Browser Verification - Gestures",
+        "command": "Manual test: Open discovery queue in Chrome DevTools mobile emulation, test swipe left/right",
+        "expected_outcome": "Swipe gestures work without scroll interference",
+        "type": "browser",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "End-to-End Workflow Test",
+        "command": "Manual test: Complete review of 10 cards using keyboard-only workflow",
+        "expected_outcome": "Complete in under 2 minutes, progress updates correctly, undo works",
+        "type": "e2e",
+        "required": true,
+        "blocking": true
+      }
+    ],
+    "reasoning": "Medium risk UI feature affecting core daily workflow requires thorough browser testing for keyboard shortcuts, gestures, and undo behavior. Unit tests for hooks and integration tests for component interactions ensure reliability. No security-sensitive operations involved."
+  },
+  "qa_acceptance": {
+    "unit_tests": {
+      "required": false,
+      "commands": [],
+      "minimum_coverage": null,
+      "notes": "No test framework configured in package.json. Manual browser verification sufficient for UI feature."
+    },
+    "integration_tests": {
+      "required": false,
+      "commands": [],
+      "services_to_test": [],
+      "notes": "No test framework configured. Integration verified through browser testing."
+    },
+    "e2e_tests": {
+      "required": false,
+      "commands": [],
+      "flows": [],
+      "notes": "No E2E framework configured. Manual E2E testing required."
+    },
+    "browser_verification": {
+      "required": true,
+      "pages": [
+        {
+          "url": "http://localhost:5173/discovery",
+          "checks": [
+            "Card previews show title, pillar, impact score, summary",
+            "j/k keys navigate between cards",
+            "f key follows current card",
+            "d key dismisses current card",
+            "Swipe left/right works in mobile emulation",
+            "Progress bar shows 'X of Y cards' and updates",
+            "Toast notifications appear with undo button",
+            "Undo reverses last action",
+            "No console errors"
+          ]
+        }
+      ]
+    },
+    "database_verification": {
+      "required": false,
+      "checks": [],
+      "notes": "Frontend-only changes, no database schema modifications"
+    },
+    "manual_verification": {
+      "required": true,
+      "steps": [
+        "Test empty queue shows friendly message",
+        "Test rapid j/k presses don't break navigation",
+        "Test last card navigation behavior (wrap or disable)",
+        "Test failed API calls show error toast",
+        "Test keyboard shortcuts disabled in form fields",
+        "Test complete 10-card review in <2 minutes",
+        "Test on Chrome, Firefox, Safari for shortcut conflicts",
+        "Test mobile: iOS Safari and Android Chrome"
+      ]
+    }
+  },
+  "qa_signoff": null
+}
