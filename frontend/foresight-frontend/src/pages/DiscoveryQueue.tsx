@@ -811,7 +811,7 @@ const DiscoveryQueue: React.FC = () => {
   /**
    * Handle card review action
    */
-  const handleReviewAction = async (cardId: string, action: ReviewAction) => {
+  const handleReviewAction = useCallback(async (cardId: string, action: ReviewAction) => {
     if (!user) return;
 
     // Find the card before we remove it (needed for undo)
@@ -853,7 +853,7 @@ const DiscoveryQueue: React.FC = () => {
     } finally {
       setActionLoading(null);
     }
-  };
+  }, [user, cards, pushToUndoStack, showToast]);
 
   /**
    * Handle card dismissal
