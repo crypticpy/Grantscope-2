@@ -20,6 +20,11 @@ import {
   Loader2,
   Tag,
   RefreshCw,
+  FileDown,
+  FileText,
+  Presentation,
+  ChevronDown,
+  X,
 } from 'lucide-react';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
@@ -264,6 +269,10 @@ const WorkstreamFeed: React.FC = () => {
   const [cardsLoading, setCardsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Export state
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [exportLoading, setExportLoading] = useState<'pdf' | 'pptx' | null>(null);
+
   // Load workstream data
   useEffect(() => {
     if (id) {
@@ -444,6 +453,67 @@ const WorkstreamFeed: React.FC = () => {
     }
   };
 
+  /**
+   * Export workstream report
+   */
+  const handleExport = async (format: 'pdf' | 'pptx') => {
+    if (!workstream || !id) return;
+
+    try {
+      setExportLoading(format);
+      setShowExportMenu(false);
+
+      // Get the session token
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('Authentication required');
+      }
+
+      // Build the export URL
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const exportUrl = `${apiUrl}/api/v1/workstreams/${id}/export/${format}`;
+
+      // Fetch the export file
+      const response = await fetch(exportUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Export failed: ${response.status}`);
+      }
+
+      // Get the filename from Content-Disposition header or generate one
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = `${workstream.name.replace(/[^a-zA-Z0-9-_]/g, '_')}.${format}`;
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+
+      // Create blob and download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export failed:', err);
+      // Could add toast notification here
+    } finally {
+      setExportLoading(null);
+    }
+  };
+
   // Loading state
   if (loading) {
     return (
@@ -535,6 +605,65 @@ const WorkstreamFeed: React.FC = () => {
             >
               <RefreshCw className={cn('h-4 w-4', cardsLoading && 'animate-spin')} />
             </button>
+
+            {/* Export Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowExportMenu(!showExportMenu)}
+                disabled={exportLoading !== null}
+                className={cn(
+                  'inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-[#2d3166] transition-colors',
+                  exportLoading !== null && 'opacity-75 cursor-not-allowed'
+                )}
+                title="Export workstream report"
+              >
+                {exportLoading !== null ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <FileDown className="h-4 w-4 mr-2" />
+                )}
+                Export
+                <ChevronDown className={cn('h-4 w-4 ml-1 transition-transform', showExportMenu && 'rotate-180')} />
+              </button>
+
+              {/* Dropdown Menu */}
+              {showExportMenu && (
+                <>
+                  {/* Backdrop to close menu when clicking outside */}
+                  <div
+                    className="fixed inset-0 z-10"
+                    onClick={() => setShowExportMenu(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-[#3d4176] ring-1 ring-black ring-opacity-5 z-20">
+                    <div className="py-1" role="menu" aria-orientation="vertical">
+                      <button
+                        onClick={() => handleExport('pdf')}
+                        className="w-full text-left px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#4d5186] flex items-center gap-3 transition-colors"
+                        role="menuitem"
+                      >
+                        <FileText className="h-5 w-5 text-red-500" />
+                        <div>
+                          <div className="font-medium">PDF Report</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">Printable document format</div>
+                        </div>
+                      </button>
+                      <button
+                        onClick={() => handleExport('pptx')}
+                        className="w-full text-left px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#4d5186] flex items-center gap-3 transition-colors"
+                        role="menuitem"
+                      >
+                        <Presentation className="h-5 w-5 text-orange-500" />
+                        <div>
+                          <div className="font-medium">PowerPoint</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">Presentation slides</div>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
             <Link
               to={`/workstreams/${id}/edit`}
               className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-[#2d3166] transition-colors"
