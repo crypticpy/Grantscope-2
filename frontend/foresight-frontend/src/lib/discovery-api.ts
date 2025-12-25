@@ -65,12 +65,11 @@ export interface DiscoveryRun {
   // Error handling
   error_message: string | null;
   error_details: Record<string, unknown> | null;
+  errors?: string[];
   // Timestamps
   created_at: string | null;
   // Run configuration (optional, populated for detailed run info)
   config?: DiscoveryRunConfig;
-  // Errors collected during run (optional)
-  errors?: string[];
 }
 
 /**
@@ -123,6 +122,185 @@ export type DismissReason =
   | 'out_of_scope'
   | 'already_exists'
   | 'other';
+
+// ============================================================================
+// Advanced Search Types
+// ============================================================================
+
+/**
+ * Date range filter for created_at/updated_at filtering
+ */
+export interface DateRange {
+  start?: string; // ISO date string YYYY-MM-DD
+  end?: string;   // ISO date string YYYY-MM-DD
+}
+
+/**
+ * Min/max threshold for a single score field
+ */
+export interface ScoreThreshold {
+  min?: number; // 0-100
+  max?: number; // 0-100
+}
+
+/**
+ * Collection of score threshold filters
+ */
+export interface ScoreThresholds {
+  impact_score?: ScoreThreshold;
+  relevance_score?: ScoreThreshold;
+  novelty_score?: ScoreThreshold;
+  maturity_score?: ScoreThreshold;
+  velocity_score?: ScoreThreshold;
+  risk_score?: ScoreThreshold;
+  opportunity_score?: ScoreThreshold;
+}
+
+/**
+ * Advanced search filters for intelligence cards.
+ * All filters are optional and combined with AND logic.
+ */
+export interface SearchFilters {
+  pillar_ids?: string[];
+  goal_ids?: string[];
+  stage_ids?: string[];
+  horizon?: 'H1' | 'H2' | 'H3' | 'ALL';
+  date_range?: DateRange;
+  score_thresholds?: ScoreThresholds;
+  status?: string;
+}
+
+/**
+ * Request model for advanced card search
+ */
+export interface AdvancedSearchRequest {
+  query?: string;
+  filters?: SearchFilters;
+  use_vector_search?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * Individual search result with relevance score
+ */
+export interface SearchResultItem {
+  id: string;
+  name: string;
+  slug: string;
+  summary?: string;
+  description?: string;
+  pillar_id?: string;
+  goal_id?: string;
+  anchor_id?: string;
+  stage_id?: string;
+  horizon?: string;
+  novelty_score?: number;
+  maturity_score?: number;
+  impact_score?: number;
+  relevance_score?: number;
+  velocity_score?: number;
+  risk_score?: number;
+  opportunity_score?: number;
+  status?: string;
+  created_at?: string;
+  updated_at?: string;
+  // Search-specific fields
+  search_relevance?: number; // Vector similarity score (0-1)
+  match_highlights?: string[];
+}
+
+/**
+ * Response model for advanced search results
+ */
+export interface AdvancedSearchResponse {
+  results: SearchResultItem[];
+  total_count: number;
+  query?: string;
+  filters_applied?: SearchFilters;
+  search_type: 'vector' | 'text';
+}
+
+// ============================================================================
+// Saved Search Types
+// ============================================================================
+
+/**
+ * Query configuration stored in saved searches
+ */
+export interface SavedSearchQueryConfig {
+  query?: string;
+  filters?: SearchFilters;
+  use_vector_search?: boolean;
+}
+
+/**
+ * Request model for creating a saved search
+ */
+export interface SavedSearchCreate {
+  name: string;
+  query_config: SavedSearchQueryConfig;
+}
+
+/**
+ * Request model for updating a saved search
+ */
+export interface SavedSearchUpdate {
+  name?: string;
+  query_config?: SavedSearchQueryConfig;
+}
+
+/**
+ * Response model for a saved search record
+ */
+export interface SavedSearch {
+  id: string;
+  user_id: string;
+  name: string;
+  query_config: SavedSearchQueryConfig;
+  created_at: string;
+  last_used_at: string;
+  updated_at?: string;
+}
+
+/**
+ * Response model for listing saved searches
+ */
+export interface SavedSearchList {
+  saved_searches: SavedSearch[];
+  total_count: number;
+}
+
+// ============================================================================
+// Search History Types
+// ============================================================================
+
+/**
+ * Response model for a search history record
+ */
+export interface SearchHistoryEntry {
+  id: string;
+  user_id: string;
+  query_config: SavedSearchQueryConfig;
+  executed_at: string;
+  result_count: number;
+}
+
+/**
+ * Request model for recording a search in history
+ */
+export interface SearchHistoryCreate {
+  query_config: SavedSearchQueryConfig;
+  result_count: number;
+}
+
+/**
+ * Response model for listing search history
+ */
+export interface SearchHistoryList {
+  history: SearchHistoryEntry[];
+  total_count: number;
+}
 
 /**
  * Helper function for API requests
@@ -321,6 +499,133 @@ export async function cancelDiscoveryRun(
 export async function fetchPendingCount(token: string): Promise<number> {
   const result = await apiRequest<{ count: number }>('/api/v1/discovery/pending/count', token);
   return result.count;
+}
+
+// ============================================================================
+// Advanced Search API Functions
+// ============================================================================
+
+/**
+ * Execute an advanced search with filters and optional vector search
+ */
+export async function advancedSearch(
+  token: string,
+  request: AdvancedSearchRequest
+): Promise<AdvancedSearchResponse> {
+  return apiRequest<AdvancedSearchResponse>('/api/v1/cards/search', token, {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
+}
+
+// ============================================================================
+// Saved Searches API Functions
+// ============================================================================
+
+/**
+ * List all saved searches for the current user
+ */
+export async function listSavedSearches(
+  token: string,
+  limit?: number
+): Promise<SavedSearchList> {
+  const params = new URLSearchParams();
+  if (limit !== undefined) params.append('limit', String(limit));
+  const queryString = params.toString();
+  const endpoint = `/api/v1/saved-searches${queryString ? `?${queryString}` : ''}`;
+  return apiRequest<SavedSearchList>(endpoint, token);
+}
+
+/**
+ * Create a new saved search
+ */
+export async function createSavedSearch(
+  token: string,
+  savedSearch: SavedSearchCreate
+): Promise<SavedSearch> {
+  return apiRequest<SavedSearch>('/api/v1/saved-searches', token, {
+    method: 'POST',
+    body: JSON.stringify(savedSearch),
+  });
+}
+
+/**
+ * Get a specific saved search by ID (also updates last_used_at)
+ */
+export async function getSavedSearch(
+  token: string,
+  searchId: string
+): Promise<SavedSearch> {
+  return apiRequest<SavedSearch>(`/api/v1/saved-searches/${searchId}`, token);
+}
+
+/**
+ * Update a saved search
+ */
+export async function updateSavedSearch(
+  token: string,
+  searchId: string,
+  updates: SavedSearchUpdate
+): Promise<SavedSearch> {
+  return apiRequest<SavedSearch>(`/api/v1/saved-searches/${searchId}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  });
+}
+
+/**
+ * Delete a saved search
+ */
+export async function deleteSavedSearch(
+  token: string,
+  searchId: string
+): Promise<void> {
+  return apiRequest<void>(`/api/v1/saved-searches/${searchId}`, token, {
+    method: 'DELETE',
+  });
+}
+
+// ============================================================================
+// Search History API Functions
+// ============================================================================
+
+/**
+ * Get the current user's search history
+ */
+export async function getSearchHistory(
+  token: string,
+  limit?: number
+): Promise<SearchHistoryList> {
+  const params = new URLSearchParams();
+  if (limit !== undefined) params.append('limit', String(limit));
+  const queryString = params.toString();
+  const endpoint = `/api/v1/search-history${queryString ? `?${queryString}` : ''}`;
+  return apiRequest<SearchHistoryList>(endpoint, token);
+}
+
+/**
+ * Record a search in the user's history
+ */
+export async function recordSearchHistory(
+  token: string,
+  entry: SearchHistoryCreate
+): Promise<SearchHistoryEntry> {
+  return apiRequest<SearchHistoryEntry>('/api/v1/search-history', token, {
+    method: 'POST',
+    body: JSON.stringify(entry),
+  });
+}
+
+/**
+ * Delete a specific search history entry
+ */
+export async function deleteSearchHistoryEntry(
+  token: string,
+  entryId: string
+): Promise<void> {
+  return apiRequest<void>(`/api/v1/search-history/${entryId}`, token, {
+    method: 'DELETE',
+  });
 }
 
 /**
