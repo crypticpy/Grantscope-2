@@ -45,6 +45,28 @@ interface Pillar {
 type ConfidenceFilter = 'all' | 'high' | 'medium' | 'low';
 
 /**
+ * Undo action types for tracking user actions
+ */
+type UndoActionType = 'approve' | 'reject' | 'dismiss' | 'defer';
+
+/**
+ * Represents an action that can be undone
+ * Stores the action type, affected card, and timestamp for time-limited undo
+ */
+interface UndoAction {
+  type: UndoActionType;
+  card: PendingCard;
+  timestamp: number;
+  /** Optional dismiss reason if action was a dismissal */
+  dismissReason?: DismissReason;
+}
+
+/**
+ * Maximum time window (in ms) during which an action can be undone
+ */
+const UNDO_TIMEOUT_MS = 5000;
+
+/**
  * Parse stage number from stage_id string
  */
 const parseStageNumber = (stageId: string): number | null => {
@@ -330,6 +352,9 @@ const DiscoveryQueue: React.FC = () => {
   // Progress tracking - stores initial count when queue was loaded
   const [initialCardCount, setInitialCardCount] = useState<number>(0);
 
+  // Undo stack - tracks recent actions for undo functionality (LIFO order)
+  const [undoStack, setUndoStack] = useState<UndoAction[]>([]);
+
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPillar, setSelectedPillar] = useState('');
@@ -394,10 +419,96 @@ const DiscoveryQueue: React.FC = () => {
   }, [selectedCards]);
 
   /**
+   * Push an action onto the undo stack
+   * Stores the card data so it can be restored if user undoes the action
+   */
+  const pushToUndoStack = useCallback((action: UndoAction) => {
+    setUndoStack((prev) => {
+      // Remove any expired actions (older than UNDO_TIMEOUT_MS)
+      const now = Date.now();
+      const validActions = prev.filter(
+        (a) => now - a.timestamp < UNDO_TIMEOUT_MS
+      );
+      // Add the new action at the end (most recent)
+      return [...validActions, action];
+    });
+  }, []);
+
+  /**
+   * Undo the most recent action (LIFO)
+   * Returns the action that was undone, or null if no valid action to undo
+   */
+  const undoLastAction = useCallback((): UndoAction | null => {
+    let undoneAction: UndoAction | null = null;
+
+    setUndoStack((prev) => {
+      if (prev.length === 0) return prev;
+
+      const now = Date.now();
+      // Find the most recent action that's still within the undo window (iterate backwards)
+      let lastValidIndex = -1;
+      for (let i = prev.length - 1; i >= 0; i--) {
+        if (now - prev[i].timestamp < UNDO_TIMEOUT_MS) {
+          lastValidIndex = i;
+          break;
+        }
+      }
+
+      if (lastValidIndex === -1) return [];
+
+      // Get the action to undo
+      undoneAction = prev[lastValidIndex];
+
+      // Return stack without the undone action
+      return prev.slice(0, lastValidIndex);
+    });
+
+    // If we found a valid action to undo, restore the card to the list
+    if (undoneAction) {
+      setCards((prevCards) => {
+        // Check if card already exists (prevent duplicates)
+        if (prevCards.some((c) => c.id === undoneAction!.card.id)) {
+          return prevCards;
+        }
+        // Add the card back to the list
+        return [...prevCards, undoneAction!.card];
+      });
+    }
+
+    return undoneAction;
+  }, []);
+
+  /**
+   * Check if there are any undoable actions within the time window
+   */
+  const canUndo = useCallback((): boolean => {
+    const now = Date.now();
+    return undoStack.some((a) => now - a.timestamp < UNDO_TIMEOUT_MS);
+  }, [undoStack]);
+
+  /**
+   * Get the most recent undoable action (for displaying in toast)
+   */
+  const getLastUndoableAction = useCallback((): UndoAction | null => {
+    const now = Date.now();
+    // Find the most recent action within the undo window
+    for (let i = undoStack.length - 1; i >= 0; i--) {
+      if (now - undoStack[i].timestamp < UNDO_TIMEOUT_MS) {
+        return undoStack[i];
+      }
+    }
+    return null;
+  }, [undoStack]);
+
+  /**
    * Handle card review action
    */
   const handleReviewAction = async (cardId: string, action: ReviewAction) => {
     if (!user) return;
+
+    // Find the card before we remove it (needed for undo)
+    const cardToAction = cards.find((c) => c.id === cardId);
+    if (!cardToAction) return;
 
     try {
       setActionLoading(cardId);
@@ -409,6 +520,14 @@ const DiscoveryQueue: React.FC = () => {
       if (!token) throw new Error('Not authenticated');
 
       await reviewCard(token, cardId, action);
+
+      // Push to undo stack before removing (map ReviewAction to UndoActionType)
+      const undoActionType: UndoActionType = action === 'approve' ? 'approve' : action === 'reject' ? 'reject' : 'defer';
+      pushToUndoStack({
+        type: undoActionType,
+        card: cardToAction,
+        timestamp: Date.now(),
+      });
 
       // Remove card from list on success
       setCards((prev) => prev.filter((c) => c.id !== cardId));
@@ -431,6 +550,10 @@ const DiscoveryQueue: React.FC = () => {
   const handleDismiss = async (cardId: string, reason?: DismissReason) => {
     if (!user) return;
 
+    // Find the card before we remove it (needed for undo)
+    const cardToDismiss = cards.find((c) => c.id === cardId);
+    if (!cardToDismiss) return;
+
     try {
       setActionLoading(cardId);
       setOpenDropdown(null);
@@ -441,6 +564,14 @@ const DiscoveryQueue: React.FC = () => {
       if (!token) throw new Error('Not authenticated');
 
       await dismissCard(token, cardId, reason);
+
+      // Push to undo stack before removing
+      pushToUndoStack({
+        type: 'dismiss',
+        card: cardToDismiss,
+        timestamp: Date.now(),
+        dismissReason: reason,
+      });
 
       // Remove card from list on success
       setCards((prev) => prev.filter((c) => c.id !== cardId));

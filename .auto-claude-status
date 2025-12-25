@@ -1,25 +1,25 @@
 {
   "active": true,
-  "spec": "006-advanced-search-and-filtering",
+  "spec": "003-enhanced-discovery-queue-ux",
   "state": "building",
   "subtasks": {
-    "completed": 18,
-    "total": 19,
+    "completed": 6,
+    "total": 10,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "Integration & Polish",
+    "current": "Undo Functionality",
     "id": null,
-    "total": 3
+    "total": 2
   },
   "workers": {
     "active": 0,
     "max": 1
   },
   "session": {
-    "number": 19,
-    "started_at": "2025-12-24T21:14:16.097275"
+    "number": 7,
+    "started_at": "2025-12-24T23:05:17.633810"
   },
-  "last_update": "2025-12-24T21:55:00.497996"
+  "last_update": "2025-12-24T23:19:09.198058"
 }
