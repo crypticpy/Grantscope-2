@@ -69,6 +69,12 @@ export type { ExportDropdownProps, ExportFormat } from './ExportDropdown';
 export { ResearchStatusBanner } from './ResearchStatusBanner';
 export type { ResearchStatusBannerProps } from './ResearchStatusBanner';
 
+/**
+ * Tab navigation component for switching between card detail sections
+ */
+export { CardDetailTabs, DEFAULT_TABS } from './CardDetailTabs';
+export type { CardDetailTabsProps, TabDefinition } from './CardDetailTabs';
+
 // =============================================================================
 // Tab Component Exports
 // =============================================================================
