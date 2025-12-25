@@ -933,7 +933,7 @@ const DiscoveryQueue: React.FC = () => {
   /**
    * Toggle card selection
    */
-  const toggleCardSelection = (cardId: string) => {
+  const toggleCardSelection = useCallback((cardId: string) => {
     setSelectedCards((prev) => {
       const next = new Set(prev);
       if (next.has(cardId)) {
@@ -943,7 +943,7 @@ const DiscoveryQueue: React.FC = () => {
       }
       return next;
     });
-  };
+  }, []);
 
   /**
    * Select all visible cards
