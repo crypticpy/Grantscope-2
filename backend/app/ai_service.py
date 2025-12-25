@@ -111,12 +111,14 @@ class AnalysisResult:
     suggested_stage: int
     triage_score: int  # 1, 3, or 5
 
-    # Scoring (all 1.0-5.0 except likelihood which is 1.0-9.0)
+    # Scoring (all 1.0-5.0 except likelihood which is 1.0-9.0, and velocity/risk which are 1.0-10.0)
     credibility: float
     novelty: float
     likelihood: float
     impact: float
     relevance: float
+    velocity: float  # Speed of trend development (1.0-10.0)
+    risk: float  # Threat/uncertainty level (1.0-10.0)
 
     # Timing
     time_to_awareness_months: int
@@ -207,6 +209,20 @@ Triage Scores:
 3=Resolves toward known alternative (expected development)
 5=Novel/game-changing (unexpected, significant implications)
 
+Velocity Score (1.0-10.0): Speed of trend development
+1-2=Very slow (decades to develop)
+3-4=Slow (5-10 years)
+5-6=Moderate (2-5 years)
+7-8=Fast (1-2 years)
+9-10=Rapid (months, accelerating quickly)
+
+Risk Score (1.0-10.0): Threat/uncertainty level for municipal operations
+1-2=Minimal risk (well-understood, low uncertainty)
+3-4=Low risk (some unknowns, manageable)
+5-6=Moderate risk (notable uncertainties, requires monitoring)
+7-8=High risk (significant threats or uncertainties)
+9-10=Critical risk (major threats, urgent attention needed)
+
 Article Title: {title}
 Source: {source}
 Published: {published_at}
@@ -231,6 +247,8 @@ Respond with JSON:
   "likelihood": 1.0-9.0,
   "impact": 1.0-5.0,
   "relevance": 1.0-5.0,
+  "velocity": 1.0-10.0,
+  "risk": 1.0-10.0,
   "time_to_awareness_months": number,
   "time_to_prepare_months": number,
 
@@ -488,6 +506,8 @@ class AIService:
                 likelihood=5.0,
                 impact=3.0,
                 relevance=3.0,
+                velocity=5.0,
+                risk=5.0,
                 time_to_awareness_months=12,
                 time_to_prepare_months=24,
                 suggested_card_name=title[:50],
@@ -519,6 +539,8 @@ class AIService:
             likelihood=result.get("likelihood", 5.0),
             impact=result.get("impact", 3.0),
             relevance=result.get("relevance", 3.0),
+            velocity=result.get("velocity", 5.0),
+            risk=result.get("risk", 5.0),
             time_to_awareness_months=result.get("time_to_awareness_months", 12),
             time_to_prepare_months=result.get("time_to_prepare_months", 24),
             suggested_card_name=result.get("suggested_card_name", title[:50]),
