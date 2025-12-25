@@ -6,6 +6,9 @@
  * ConfidenceBadge, StageBadge, AnchorBadge, and Top25Badge.
  */
 
+import React from 'react';
+import { Tooltip } from '../components/ui/Tooltip';
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -216,4 +219,83 @@ export function getSizeClasses(
   }
 
   return classes.join(' ');
+}
+
+// =============================================================================
+// Badge Tooltip Wrapper
+// =============================================================================
+
+/**
+ * Props for the BadgeTooltipWrapper component
+ */
+export interface BadgeTooltipWrapperProps {
+  /**
+   * The badge element to wrap
+   */
+  children: React.ReactNode;
+
+  /**
+   * Tooltip content - can be string or React node
+   */
+  content: React.ReactNode;
+
+  /**
+   * When true, returns children directly without tooltip wrapper
+   * @default false
+   */
+  disabled?: boolean;
+}
+
+/**
+ * A wrapper component that encapsulates the common tooltip pattern used by badge components.
+ *
+ * Provides consistent tooltip positioning and styling across all badge components:
+ * - Position: top with center alignment
+ * - Padding: p-3 content padding
+ *
+ * When disabled, returns children directly without the tooltip wrapper.
+ *
+ * @param props - The component props
+ * @returns The badge wrapped in a tooltip, or just the badge if disabled
+ *
+ * @example
+ * // Basic usage
+ * <BadgeTooltipWrapper
+ *   content={<TooltipContent data={data} />}
+ *   disabled={disableTooltip}
+ * >
+ *   {badge}
+ * </BadgeTooltipWrapper>
+ *
+ * @example
+ * // Simple text content
+ * <BadgeTooltipWrapper content="Additional information" disabled={false}>
+ *   <span className="badge">Label</span>
+ * </BadgeTooltipWrapper>
+ *
+ * @example
+ * // With disabled tooltip
+ * <BadgeTooltipWrapper content="Won't show" disabled={true}>
+ *   {badge}
+ * </BadgeTooltipWrapper>
+ */
+export function BadgeTooltipWrapper({
+  children,
+  content,
+  disabled = false,
+}: BadgeTooltipWrapperProps): React.ReactElement {
+  if (disabled) {
+    return <>{children}</>;
+  }
+
+  return (
+    <Tooltip
+      content={content}
+      side="top"
+      align="center"
+      contentClassName="p-3"
+    >
+      {children}
+    </Tooltip>
+  );
 }
