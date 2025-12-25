@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Heart, Calendar, ExternalLink, FileText, TrendingUp, Eye, Info, RefreshCw, Search, Loader2, ChevronDown, ChevronUp, Copy, Check, Download, FileSpreadsheet, Presentation, GitBranch } from 'lucide-react';
+import { ArrowLeft, Heart, Calendar, ExternalLink, FileText, TrendingUp, Eye, Info, RefreshCw, Search, Loader2, ChevronDown, ChevronUp, Copy, Check, Download, FileSpreadsheet, Presentation, GitBranch, ArrowLeftRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
@@ -703,6 +703,29 @@ const CardDetail: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3 ml-4">
+            {/* Compare button */}
+            <Tooltip
+              content={
+                <div className="max-w-[200px]">
+                  <p className="font-medium">Compare Trends</p>
+                  <p className="text-xs text-gray-500">Select another card to compare trends side-by-side</p>
+                </div>
+              }
+              side="bottom"
+            >
+              <button
+                onClick={() => {
+                  // Store this card for comparison and navigate to Discover
+                  sessionStorage.setItem('compareCard', JSON.stringify({ id: card.id, name: card.name }));
+                  navigate('/discover?compare=true');
+                }}
+                className="inline-flex items-center px-3 py-2 border border-extended-purple/30 rounded-md shadow-sm text-sm font-medium text-extended-purple bg-extended-purple/10 hover:bg-extended-purple hover:text-white transition-colors"
+              >
+                <ArrowLeftRight className="h-4 w-4 mr-2" />
+                Compare
+              </button>
+            </Tooltip>
+
             {/* Research buttons */}
             <Tooltip
               content={

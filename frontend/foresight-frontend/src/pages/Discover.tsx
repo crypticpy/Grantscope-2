@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { Search, Filter, Grid, List, Eye, Heart, Clock, Star, Inbox, History, Calendar, Sparkles, Bookmark, Trash2, ChevronDown, ChevronUp, Loader2, X, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
+import { Search, Filter, Grid, List, Eye, Heart, Clock, Star, Inbox, History, Calendar, Sparkles, Bookmark, Trash2, ChevronDown, ChevronUp, Loader2, X, AlertTriangle, RefreshCw, ArrowLeftRight, Check } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
@@ -119,6 +119,7 @@ const formatCardDate = (createdAt: string, updatedAt?: string): { label: string;
 
 const Discover: React.FC = () => {
   const { user } = useAuthContext();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [cards, setCards] = useState<Card[]>([]);
   const [pillars, setPillars] = useState<Pillar[]>([]);
@@ -132,6 +133,10 @@ const Discover: React.FC = () => {
   const [sortOption, setSortOption] = useState<SortOption>('newest');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [followedCardIds, setFollowedCardIds] = useState<Set<string>>(new Set());
+
+  // Comparison mode state
+  const [compareMode, setCompareMode] = useState(false);
+  const [selectedForCompare, setSelectedForCompare] = useState<Array<{ id: string; name: string }>>([]);
 
   // Score threshold filters (minimum values, 0-100)
   const [impactMin, setImpactMin] = useState<number>(0);
@@ -584,6 +589,63 @@ const Discover: React.FC = () => {
     loadSearchHistory();
   }, [loadSearchHistory]);
 
+  // Initialize comparison mode from URL params or sessionStorage
+  useEffect(() => {
+    const isCompareMode = searchParams.get('compare') === 'true';
+    if (isCompareMode) {
+      setCompareMode(true);
+
+      // Check if there's a card stored from CardDetail
+      const storedCard = sessionStorage.getItem('compareCard');
+      if (storedCard) {
+        try {
+          const cardData = JSON.parse(storedCard);
+          if (cardData.id && cardData.name) {
+            setSelectedForCompare([cardData]);
+          }
+        } catch {
+          // Invalid data, ignore
+        }
+        // Clear the stored card after using it
+        sessionStorage.removeItem('compareCard');
+      }
+    }
+  }, [searchParams]);
+
+  // Toggle card selection for comparison
+  const toggleCardForCompare = useCallback((card: { id: string; name: string }) => {
+    setSelectedForCompare((prev) => {
+      const isSelected = prev.some((c) => c.id === card.id);
+      if (isSelected) {
+        return prev.filter((c) => c.id !== card.id);
+      }
+      // Limit to 2 cards
+      if (prev.length >= 2) {
+        // Replace the oldest selection
+        return [prev[1], card];
+      }
+      return [...prev, card];
+    });
+  }, []);
+
+  // Navigate to comparison view
+  const navigateToCompare = useCallback(() => {
+    if (selectedForCompare.length === 2) {
+      const ids = selectedForCompare.map((c) => c.id).join(',');
+      navigate(`/compare?card_ids=${ids}`);
+    }
+  }, [selectedForCompare, navigate]);
+
+  // Exit comparison mode
+  const exitCompareMode = useCallback(() => {
+    setCompareMode(false);
+    setSelectedForCompare([]);
+    // Remove compare param from URL
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('compare');
+    setSearchParams(newParams);
+  }, [searchParams, setSearchParams]);
+
   // Handle clicking a history item to re-run the search
   const handleHistoryClick = useCallback((entry: SearchHistoryEntry) => {
     handleSelectSavedSearch(entry.query_config);
@@ -697,6 +759,25 @@ const Discover: React.FC = () => {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                if (compareMode) {
+                  exitCompareMode();
+                } else {
+                  setCompareMode(true);
+                }
+              }}
+              className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                compareMode
+                  ? 'text-white bg-extended-purple border border-extended-purple'
+                  : 'text-extended-purple bg-extended-purple/10 border border-extended-purple/30 hover:bg-extended-purple hover:text-white'
+              }`}
+              aria-pressed={compareMode}
+              title={compareMode ? 'Exit compare mode' : 'Select cards to compare'}
+            >
+              <ArrowLeftRight className="w-4 h-4" />
+              {compareMode ? 'Exit Compare' : 'Compare'}
+            </button>
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
               className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
@@ -1174,6 +1255,80 @@ const Discover: React.FC = () => {
         </div>
       </div>
 
+      {/* Compare Mode Banner */}
+      {compareMode && (
+        <div className="mb-6 p-4 bg-extended-purple/10 border border-extended-purple/30 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <ArrowLeftRight className="h-5 w-5 text-extended-purple" />
+              <div>
+                <p className="font-medium text-gray-900 dark:text-white">
+                  Compare Mode Active
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                  {selectedForCompare.length === 0
+                    ? 'Click on cards to select them for comparison (max 2)'
+                    : selectedForCompare.length === 1
+                    ? `Selected: ${selectedForCompare[0].name} — Click another card to compare`
+                    : `Ready to compare: ${selectedForCompare[0].name} vs ${selectedForCompare[1].name}`}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {selectedForCompare.length > 0 && (
+                <button
+                  onClick={() => setSelectedForCompare([])}
+                  className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
+                >
+                  Clear Selection
+                </button>
+              )}
+              <button
+                onClick={navigateToCompare}
+                disabled={selectedForCompare.length !== 2}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-extended-purple text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-extended-purple/90 transition-colors"
+              >
+                <ArrowLeftRight className="h-4 w-4" />
+                Compare Cards
+              </button>
+              <button
+                onClick={exitCompareMode}
+                className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                title="Exit compare mode"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Selected Cards Pills */}
+          {selectedForCompare.length > 0 && (
+            <div className="mt-3 flex items-center gap-2 flex-wrap">
+              {selectedForCompare.map((card, index) => (
+                <span
+                  key={card.id}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-gray-800 rounded-full text-sm border border-extended-purple/30"
+                >
+                  <span className="font-medium text-extended-purple">
+                    {index + 1}.
+                  </span>
+                  <span className="text-gray-700 dark:text-gray-200 truncate max-w-[200px]">
+                    {card.name}
+                  </span>
+                  <button
+                    onClick={() => toggleCardForCompare(card)}
+                    className="text-gray-400 hover:text-red-500 transition-colors"
+                    title="Remove from comparison"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Error Banner */}
       {error && (
         <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
@@ -1318,21 +1473,50 @@ const Discover: React.FC = () => {
         <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' : 'space-y-4'}>
           {cards.map((card) => {
             const stageNumber = parseStageNumber(card.stage_id);
+            const isSelectedForCompare = selectedForCompare.some((c) => c.id === card.id);
 
             return (
               <div
                 key={card.id}
-                className={`bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 border-l-4 border-transparent transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-l-brand-blue`}
+                onClick={compareMode ? () => toggleCardForCompare({ id: card.id, name: card.name }) : undefined}
+                className={`bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 border-l-4 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg relative ${
+                  compareMode
+                    ? isSelectedForCompare
+                      ? 'border-l-extended-purple ring-2 ring-extended-purple/50 cursor-pointer'
+                      : 'border-transparent hover:border-l-extended-purple/50 cursor-pointer'
+                    : 'border-transparent hover:border-l-brand-blue'
+                }`}
               >
+                {/* Compare Mode Selection Indicator */}
+                {compareMode && (
+                  <div
+                    className={`absolute top-3 right-3 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                      isSelectedForCompare
+                        ? 'bg-extended-purple border-extended-purple text-white'
+                        : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
+                    }`}
+                  >
+                    {isSelectedForCompare && (
+                      <Check className="h-4 w-4" />
+                    )}
+                  </div>
+                )}
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex-1">
                     <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                      <Link
-                        to={`/cards/${card.slug}`}
-                        className="hover:text-brand-blue transition-colors"
-                      >
-                        {card.name}
-                      </Link>
+                      {compareMode ? (
+                        <span className="hover:text-extended-purple transition-colors cursor-pointer">
+                          {card.name}
+                        </span>
+                      ) : (
+                        <Link
+                          to={`/cards/${card.slug}`}
+                          className="hover:text-brand-blue transition-colors"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {card.name}
+                        </Link>
+                      )}
                     </h3>
                     <div className="flex items-center gap-2 flex-wrap mb-3">
                       {/* Search Relevance Badge - shown when semantic search is used */}
@@ -1355,21 +1539,26 @@ const Discover: React.FC = () => {
                       )}
                     </div>
                   </div>
-                  <button
-                    onClick={() => toggleFollowCard(card.id)}
-                    className={`flex-shrink-0 p-2 transition-colors ${
-                      followedCardIds.has(card.id)
-                        ? 'text-red-500 hover:text-red-600'
-                        : 'text-gray-400 hover:text-red-500'
-                    }`}
-                    title={followedCardIds.has(card.id) ? 'Unfollow card' : 'Follow card'}
-                    aria-pressed={followedCardIds.has(card.id)}
-                  >
-                    <Heart
-                      className="h-5 w-5"
-                      fill={followedCardIds.has(card.id) ? 'currentColor' : 'none'}
-                    />
-                  </button>
+                  {!compareMode && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleFollowCard(card.id);
+                      }}
+                      className={`flex-shrink-0 p-2 transition-colors ${
+                        followedCardIds.has(card.id)
+                          ? 'text-red-500 hover:text-red-600'
+                          : 'text-gray-400 hover:text-red-500'
+                      }`}
+                      title={followedCardIds.has(card.id) ? 'Unfollow card' : 'Follow card'}
+                      aria-pressed={followedCardIds.has(card.id)}
+                    >
+                      <Heart
+                        className="h-5 w-5"
+                        fill={followedCardIds.has(card.id) ? 'currentColor' : 'none'}
+                      />
+                    </button>
+                  )}
                 </div>
 
                 <p className="text-gray-600 dark:text-gray-400 mb-4 line-clamp-3">
@@ -1405,13 +1594,21 @@ const Discover: React.FC = () => {
                 </div>
 
                 <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600 flex items-center justify-between">
-                  <Link
-                    to={`/cards/${card.slug}`}
-                    className="inline-flex items-center text-sm text-brand-blue hover:text-brand-dark-blue dark:text-brand-blue dark:hover:text-brand-light-blue transition-colors"
-                  >
-                    <Eye className="h-4 w-4 mr-1" />
-                    View Details
-                  </Link>
+                  {compareMode ? (
+                    <span className="inline-flex items-center text-sm text-extended-purple">
+                      <ArrowLeftRight className="h-4 w-4 mr-1" />
+                      {isSelectedForCompare ? 'Selected' : 'Click to select'}
+                    </span>
+                  ) : (
+                    <Link
+                      to={`/cards/${card.slug}`}
+                      className="inline-flex items-center text-sm text-brand-blue hover:text-brand-dark-blue dark:text-brand-blue dark:hover:text-brand-light-blue transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Eye className="h-4 w-4 mr-1" />
+                      View Details
+                    </Link>
+                  )}
                   {/* Date display */}
                   <span className="inline-flex items-center text-xs text-gray-500 dark:text-gray-400">
                     <Calendar className="h-3 w-3 mr-1" />
