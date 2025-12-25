@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Compass, FolderOpen, Settings, LogOut, Menu, X, Sun, Moon, Inbox } from 'lucide-react';
+import { Home, Compass, FolderOpen, Settings, LogOut, Menu, X, Sun, Moon, Inbox, BarChart3 } from 'lucide-react';
 import { useAuthContext } from '../hooks/useAuthContext';
 import { supabase } from '../App';
 import { fetchPendingCount } from '../lib/discovery-api';
@@ -58,6 +58,7 @@ const Header: React.FC = () => {
     { name: 'Discover', href: '/discover', icon: Compass },
     { name: 'Queue', href: '/discover/queue', icon: Inbox, badge: pendingCount > 0 ? pendingCount : undefined },
     { name: 'Workstreams', href: '/workstreams', icon: FolderOpen },
+    { name: 'Analytics', href: '/analytics', icon: BarChart3 },
     { name: 'Settings', href: '/settings', icon: Settings },
   ];
 

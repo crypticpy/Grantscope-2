@@ -11,6 +11,7 @@ import CardDetail from './pages/CardDetail';
 import Workstreams from './pages/Workstreams';
 import WorkstreamFeed from './pages/WorkstreamFeed';
 import Settings from './pages/Settings';
+import Analytics from './pages/Analytics';
 import Login from './pages/Login';
 import { User } from '@supabase/supabase-js';
 import { AuthContextProvider, useAuthContext } from './hooks/useAuthContext';
@@ -171,6 +172,16 @@ function App() {
                 element={
                   user ? (
                     <Settings />
+                  ) : (
+                    <Navigate to="/login" replace />
+                  )
+                }
+              />
+              <Route
+                path="/analytics"
+                element={
+                  user ? (
+                    <Analytics />
                   ) : (
                     <Navigate to="/login" replace />
                   )
