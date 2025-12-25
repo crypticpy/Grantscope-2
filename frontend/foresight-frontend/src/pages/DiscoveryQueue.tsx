@@ -905,7 +905,7 @@ const DiscoveryQueue: React.FC = () => {
   /**
    * Handle bulk action
    */
-  const handleBulkAction = async (action: ReviewAction) => {
+  const handleBulkAction = useCallback(async (action: ReviewAction) => {
     if (!user || selectedCards.size === 0) return;
 
     try {
@@ -928,7 +928,7 @@ const DiscoveryQueue: React.FC = () => {
     } finally {
       setActionLoading(null);
     }
-  };
+  }, [user, selectedCards]);
 
   /**
    * Toggle card selection
