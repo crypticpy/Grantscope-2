@@ -32,6 +32,15 @@ export interface Card {
 }
 
 /**
+ * Discovery run configuration
+ */
+export interface DiscoveryRunConfig {
+  source_types?: string[];
+  pillar_focus?: string[];
+  max_cards?: number;
+}
+
+/**
  * Discovery run metadata - matches backend DiscoveryRun Pydantic model
  */
 export interface DiscoveryRun {
@@ -58,6 +67,10 @@ export interface DiscoveryRun {
   error_details: Record<string, unknown> | null;
   // Timestamps
   created_at: string | null;
+  // Run configuration (optional, populated for detailed run info)
+  config?: DiscoveryRunConfig;
+  // Errors collected during run (optional)
+  errors?: string[];
 }
 
 /**
@@ -75,6 +88,24 @@ export interface PendingCard extends Card {
     suggested: string;
     reason: string;
   }[];
+}
+
+/**
+ * Score breakdown showing contribution from each scoring factor
+ */
+export interface ScoreBreakdown {
+  novelty: number;
+  workstream_relevance: number;
+  pillar_alignment: number;
+  followed_context: number;
+}
+
+/**
+ * Personalized card extends Card with discovery score for queue ranking
+ */
+export interface PersonalizedCard extends Card {
+  discovery_score: number;
+  score_breakdown?: ScoreBreakdown;
 }
 
 /**
@@ -290,4 +321,28 @@ export async function cancelDiscoveryRun(
 export async function fetchPendingCount(token: string): Promise<number> {
   const result = await apiRequest<{ count: number }>('/api/v1/discovery/pending/count', token);
   return result.count;
+}
+
+/**
+ * Fetch personalized discovery queue with multi-factor scoring
+ *
+ * Returns cards ranked by discovery_score, which combines:
+ * - Novelty (recent/unseen cards)
+ * - Workstream relevance (matching user's workstream filters)
+ * - Pillar alignment (cards in user's active pillars)
+ * - Followed context (similar to user's followed cards)
+ */
+export async function fetchPersonalizedDiscoveryQueue(
+  token: string,
+  limit: number = 20,
+  offset: number = 0
+): Promise<PersonalizedCard[]> {
+  const params = new URLSearchParams();
+  params.append('limit', String(limit));
+  params.append('offset', String(offset));
+
+  const queryString = params.toString();
+  const endpoint = `/api/v1/me/discovery/queue?${queryString}`;
+
+  return apiRequest<PersonalizedCard[]>(endpoint, token);
 }
