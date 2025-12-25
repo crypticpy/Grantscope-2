@@ -519,3 +519,66 @@ class RelatedCardsList(BaseModel):
         ...,
         description="UUID of the card these relationships are for"
     )
+
+
+# ============================================================================
+# Card Comparison Models
+# ============================================================================
+
+class CardData(BaseModel):
+    """
+    Basic card data for comparison view.
+
+    Contains essential card metadata for side-by-side comparison.
+    """
+    id: str = Field(..., description="UUID of the card")
+    name: str = Field(..., description="Card display name")
+    slug: str = Field(..., description="URL-friendly card identifier")
+    summary: Optional[str] = Field(None, description="Brief card summary")
+    pillar_id: Optional[str] = Field(None, description="Strategic pillar code")
+    goal_id: Optional[str] = Field(None, description="Goal ID")
+    stage_id: Optional[str] = Field(None, description="Maturity stage ID")
+    horizon: Optional[str] = Field(None, description="Planning horizon (H1, H2, H3)")
+    # Current scores for comparison
+    maturity_score: Optional[int] = Field(None, ge=0, le=100, description="Current maturity score")
+    velocity_score: Optional[int] = Field(None, ge=0, le=100, description="Current velocity score")
+    novelty_score: Optional[int] = Field(None, ge=0, le=100, description="Current novelty score")
+    impact_score: Optional[int] = Field(None, ge=0, le=100, description="Current impact score")
+    relevance_score: Optional[int] = Field(None, ge=0, le=100, description="Current relevance score")
+    risk_score: Optional[int] = Field(None, ge=0, le=100, description="Current risk score")
+    opportunity_score: Optional[int] = Field(None, ge=0, le=100, description="Current opportunity score")
+    created_at: Optional[datetime] = Field(None, description="Card creation timestamp")
+    updated_at: Optional[datetime] = Field(None, description="Card last update timestamp")
+
+
+class CardComparisonItem(BaseModel):
+    """
+    Complete comparison data for a single card.
+
+    Includes card metadata, score history, and stage history
+    for comprehensive trend comparison visualization.
+    """
+    card: CardData = Field(..., description="Card metadata and current scores")
+    score_history: List[ScoreHistory] = Field(
+        default_factory=list,
+        description="Historical score snapshots for timeline chart"
+    )
+    stage_history: List[StageHistory] = Field(
+        default_factory=list,
+        description="Stage transition history for progression visualization"
+    )
+
+
+class CardComparisonResponse(BaseModel):
+    """
+    Response model for card comparison API endpoint.
+
+    Returns parallel data for two cards to enable synchronized
+    timeline charts and comparative metrics visualization.
+    """
+    card1: CardComparisonItem = Field(..., description="First card's comparison data")
+    card2: CardComparisonItem = Field(..., description="Second card's comparison data")
+    comparison_generated_at: datetime = Field(
+        ...,
+        description="Timestamp when comparison data was generated"
+    )
