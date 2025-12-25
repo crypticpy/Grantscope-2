@@ -4,7 +4,7 @@ import { Search, Filter, Grid, List, Eye, Heart, Clock, Star, Inbox, History, Ca
 import { format, formatDistanceToNow } from 'date-fns';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
-import { useDebouncedValue } from '../hooks/useDebounce';
+import { useDebouncedValue, useDebouncedCallback } from '../hooks/useDebounce';
 import { PillarBadge } from '../components/PillarBadge';
 import { HorizonBadge } from '../components/HorizonBadge';
 import { StageBadge } from '../components/StageBadge';
@@ -354,8 +354,8 @@ const Discover: React.FC = () => {
 
           setCards(mappedCards);
 
-          // Record search to history (async, non-blocking)
-          recordSearchToHistory(currentQueryConfig, mappedCards.length);
+          // Record search to history (debounced 2s to reduce API calls during rapid filter changes)
+          debouncedRecordSearchToHistory(currentQueryConfig, mappedCards.length);
 
           setLoading(false);
           return;
@@ -414,8 +414,9 @@ const Discover: React.FC = () => {
       setCards(data || []);
 
       // Record search to history (skip quick filters since they're preset, not user searches)
+      // Uses 2-second debounce to reduce API calls during rapid filter adjustments
       if (!quickFilter) {
-        recordSearchToHistory(currentQueryConfig, (data || []).length);
+        debouncedRecordSearchToHistory(currentQueryConfig, (data || []).length);
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
@@ -563,6 +564,14 @@ const Discover: React.FC = () => {
       // Silently fail - history recording is not critical
     }
   }, [user?.id]);
+
+  // Debounced version of recordSearchToHistory with 2000ms delay
+  // This allows users time to settle on their final search before recording to history
+  // Search results still appear immediately (after 300ms filter debounce)
+  const { debouncedCallback: debouncedRecordSearchToHistory } = useDebouncedCallback(
+    recordSearchToHistory,
+    2000
+  );
 
   // Load search history
   const loadSearchHistory = useCallback(async () => {
