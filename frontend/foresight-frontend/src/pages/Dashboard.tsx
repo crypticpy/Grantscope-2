@@ -8,6 +8,7 @@ import { HorizonBadge } from '../components/HorizonBadge';
 import { StageBadge } from '../components/StageBadge';
 import { Top25Badge } from '../components/Top25Badge';
 import { fetchPendingCount } from '../lib/discovery-api';
+import { parseStageNumber } from '../lib/stage-utils';
 
 interface Card {
   id: string;
@@ -175,12 +176,6 @@ const Dashboard: React.FC = () => {
       'low': 'from-emerald-50 dark:from-emerald-900/10'
     };
     return gradients[priority] || 'from-gray-50 dark:from-gray-800/50';
-  };
-
-  // Helper to parse stage_id to number
-  const parseStageNumber = (stageId: string): number | null => {
-    const num = parseInt(stageId, 10);
-    return isNaN(num) ? null : num;
   };
 
   if (loading) {

@@ -29,6 +29,7 @@ import { StageBadge } from '../components/StageBadge';
 import { ConfidenceBadge } from '../components/ConfidenceBadge';
 import { Tooltip } from '../components/ui/Tooltip';
 import { cn } from '../lib/utils';
+import { parseStageNumber } from '../lib/stage-utils';
 import {
   fetchPendingReviewCards,
   reviewCard,
@@ -74,14 +75,6 @@ const UNDO_TIMEOUT_MS = 5000;
  * from rapid key presses
  */
 const ACTION_DEBOUNCE_MS = 300;
-
-/**
- * Parse stage number from stage_id string
- */
-const parseStageNumber = (stageId: string): number | null => {
-  const match = stageId.match(/^(\d+)/);
-  return match ? parseInt(match[1], 10) : null;
-};
 
 /**
  * Format date for display
