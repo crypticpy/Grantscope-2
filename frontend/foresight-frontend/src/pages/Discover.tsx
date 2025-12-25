@@ -1650,13 +1650,21 @@ const Discover: React.FC = () => {
             ariaLabel="Intelligence cards list"
           />
         ) : (
-          // Grid view with standard rendering (will be virtualized in subtask 3.2)
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {cards.map((card) => (
-              <div key={card.id}>
-                {renderCardItem(card)}
-              </div>
-            ))}
+          // Virtualized grid view for better performance with many cards
+          <div className="h-[calc(100vh-400px)] min-h-[500px]">
+            <VirtualizedGrid
+              items={cards}
+              getItemKey={(card) => card.id}
+              estimatedRowHeight={280}
+              gap={24}
+              columns={{ sm: 1, md: 2, lg: 3 }}
+              overscan={3}
+              renderItem={(card) => (
+                <div className="h-full">
+                  {renderCardItem(card)}
+                </div>
+              )}
+            />
           </div>
         )
       ) : null}
