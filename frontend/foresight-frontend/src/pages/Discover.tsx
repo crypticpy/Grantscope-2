@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Search, Filter, Grid, List, Eye, Heart, Clock, Star, Inbox, History, Calendar, Sparkles } from 'lucide-react';
+import { Search, Filter, Grid, List, Eye, Heart, Clock, Star, Inbox, History, Calendar, Sparkles, Bookmark } from 'lucide-react';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
 import { PillarBadge } from '../components/PillarBadge';
 import { HorizonBadge } from '../components/HorizonBadge';
 import { StageBadge } from '../components/StageBadge';
 import { Top25Badge } from '../components/Top25Badge';
-import { advancedSearch, AdvancedSearchRequest } from '../lib/discovery-api';
+import { SaveSearchModal } from '../components/SaveSearchModal';
+import { advancedSearch, AdvancedSearchRequest, SavedSearchQueryConfig } from '../lib/discovery-api';
 import { highlightText } from '../lib/highlight-utils';
 
 interface Card {
