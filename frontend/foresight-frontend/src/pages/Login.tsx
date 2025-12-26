@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuthContext } from '../hooks/useAuthContext';
+import { LoadingButton } from '../components/ui/LoadingButton';
 
 const Login: React.FC = () => {
   const { signIn } = useAuthContext();
@@ -85,20 +86,14 @@ const Login: React.FC = () => {
           </div>
 
           <div>
-            <button
+            <LoadingButton
               type="submit"
-              disabled={loading}
-              className="group relative w-full flex justify-center py-2.5 px-4 border border-transparent text-sm font-semibold rounded-md text-white bg-brand-blue hover:bg-brand-dark-blue focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150"
+              loading={loading}
+              loadingText="Signing in..."
+              className="w-full font-semibold"
             >
-              {loading ? (
-                <div className="flex items-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Signing in...
-                </div>
-              ) : (
-                'Sign in'
-              )}
-            </button>
+              Sign in
+            </LoadingButton>
           </div>
 
           <div className="text-center">
