@@ -11,7 +11,7 @@ import { Clock, TrendingUp, Sparkles } from 'lucide-react';
 import { Tooltip } from './ui/Tooltip';
 import { cn } from '../lib/utils';
 import { getHorizonByCode, type Horizon } from '../data/taxonomy';
-import { getSizeClasses, getIconSize, type BadgeSize } from '../lib/badge-utils';
+import { getSizeClasses, getIconSize } from '../lib/badge-utils';
 
 export interface HorizonBadgeProps {
   /** Horizon code ('H1', 'H2', or 'H3') */

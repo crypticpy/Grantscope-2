@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { Tooltip } from './ui/Tooltip';
 import { cn } from '../lib/utils';
-import { getSizeClasses, getIconSize, type BadgeSize } from '../lib/badge-utils';
+import { getSizeClasses, getIconSize } from '../lib/badge-utils';
 import { getAnchorByName, type Anchor } from '../data/taxonomy';
 
 // Icon mapping for anchors

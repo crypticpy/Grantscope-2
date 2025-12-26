@@ -1527,7 +1527,7 @@ const DiscoveryQueue: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-3 sm:space-y-4">
-          {filteredCards.map((card, index) => {
+          {filteredCards.map((card) => {
             const stageNumber = parseStageNumber(card.stage_id);
             const isSelected = selectedCards.has(card.id);
             const isLoading = actionLoading === card.id;

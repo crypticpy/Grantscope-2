@@ -17,7 +17,7 @@ const Login: React.FC = () => {
     try {
       await signIn(email, password);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to sign in';
+      const message = err instanceof Error && err.message ? err.message : 'Failed to sign in';
       setError(message);
     } finally {
       setLoading(false);
