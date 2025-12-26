@@ -1,25 +1,25 @@
 {
   "active": true,
-  "spec": "027-create-shared-badge-component-utilities-to-reduce-",
+  "spec": "022-add-virtualization-for-card-lists-in-discover-and-",
   "state": "building",
   "subtasks": {
-    "completed": 9,
-    "total": 15,
-    "in_progress": 0,
+    "completed": 12,
+    "total": 14,
+    "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "",
-    "id": 0,
-    "total": 0
+    "current": "Discover Page Virtualization",
+    "id": null,
+    "total": 4
   },
   "workers": {
     "active": 0,
     "max": 1
   },
   "session": {
-    "number": 1,
-    "started_at": "2025-12-25T12:43:56.673781"
+    "number": 14,
+    "started_at": "2025-12-25T10:45:25.887982"
   },
-  "last_update": "2025-12-25T12:59:12.384092"
+  "last_update": "2025-12-25T11:27:37.028869"
 }
