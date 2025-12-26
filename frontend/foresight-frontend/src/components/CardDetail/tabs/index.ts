@@ -22,5 +22,6 @@ export type { SourcesTabProps } from './SourcesTab';
 export { TimelineTab } from './TimelineTab';
 export type { TimelineTabProps } from './TimelineTab';
 
-// Future tab exports (as components are created):
-// export { RelatedTab } from './RelatedTab';
+// Related tab
+export { RelatedTab } from './RelatedTab';
+export type { RelatedTabProps } from './RelatedTab';
