@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User, Bell, Shield, Database } from 'lucide-react';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
+import { LoadingButton } from '../components/ui/LoadingButton';
 
 const Settings: React.FC = () => {
   const { user, signOut } = useAuthContext();
@@ -13,6 +14,7 @@ const Settings: React.FC = () => {
   });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   useEffect(() => {
     loadProfile();
@@ -62,10 +64,12 @@ const Settings: React.FC = () => {
   };
 
   const handleSignOut = async () => {
+    setIsSigningOut(true);
     try {
       await signOut();
     } catch (error) {
       console.error('Error signing out:', error);
+      setIsSigningOut(false);
     }
   };
 
@@ -172,13 +176,14 @@ const Settings: React.FC = () => {
               )}
 
               <div className="flex justify-end">
-                <button
+                <LoadingButton
                   type="submit"
-                  disabled={loading}
-                  className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-brand-dark-blue focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  loading={loading}
+                  loadingText="Updating..."
+                  className="shadow-sm"
                 >
-                  {loading ? 'Updating...' : 'Update Profile'}
-                </button>
+                  Update Profile
+                </LoadingButton>
               </div>
             </form>
           </div>
@@ -301,12 +306,15 @@ const Settings: React.FC = () => {
           </div>
           <div className="p-6">
             <div className="space-y-4">
-              <button
+              <LoadingButton
                 onClick={handleSignOut}
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+                variant="danger"
+                loading={isSigningOut}
+                loadingText="Signing out..."
+                className="w-full"
               >
                 Sign Out
-              </button>
+              </LoadingButton>
               <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
                 Sign out of your Foresight account. You'll need to sign in again to access the system.
               </p>
