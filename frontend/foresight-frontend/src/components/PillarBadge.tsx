@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { Tooltip } from './ui/Tooltip';
 import { cn } from '../lib/utils';
+import { getSizeClasses, getIconSize } from '../lib/badge-utils';
 import {
   getPillarByCode,
   getGoalsByPillar,
@@ -95,25 +96,6 @@ function getPillarColorClasses(pillar: Pillar): {
   return colorMap[pillar.code] || { bg: 'bg-gray-100', text: 'text-gray-800', border: 'border-gray-300' };
 }
 
-/**
- * Get size classes for the badge
- */
-function getSizeClasses(size: 'sm' | 'md' | 'lg'): string {
-  const sizeMap = {
-    sm: 'px-1.5 py-0.5 text-xs',
-    md: 'px-2 py-1 text-sm',
-    lg: 'px-3 py-1.5 text-base',
-  };
-  return sizeMap[size];
-}
-
-/**
- * Get icon size for the badge
- */
-function getIconSize(size: 'sm' | 'md' | 'lg'): number {
-  const sizeMap = { sm: 12, md: 14, lg: 16 };
-  return sizeMap[size];
-}
 
 /**
  * Tooltip content component for pillar

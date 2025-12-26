@@ -15,6 +15,7 @@ import {
   getHorizonByCode,
   type MaturityStage,
 } from '../data/taxonomy';
+import { getBadgeBaseClasses, BadgeSize } from '../lib/badge-utils';
 
 export interface StageBadgeProps {
   /** Stage number (1-8) */
@@ -71,9 +72,11 @@ function getStageColorClasses(horizonCode: string): {
 }
 
 /**
- * Get size classes for the badge
+ * Get size classes for the badge.
+ * Returns an object with separate container and text classes because StageBadge
+ * applies text sizing to child elements, not the container itself.
  */
-function getSizeClasses(size: 'sm' | 'md' | 'lg'): {
+function getSizeClasses(size: BadgeSize): {
   container: string;
   text: string;
   number: string;
@@ -198,7 +201,7 @@ export function StageBadge({
     return (
       <span
         className={cn(
-          'inline-flex items-center rounded font-medium border',
+          getBadgeBaseClasses(),
           'bg-gray-100 text-gray-600 border-gray-300',
           getSizeClasses(size).container,
           getSizeClasses(size).text,
@@ -302,12 +305,11 @@ export function StageBadge({
   const badge = (
     <span
       className={cn(
-        'inline-flex items-center rounded font-medium border cursor-default',
+        getBadgeBaseClasses({ hasTooltip: !disableTooltip }),
         colors.bg,
         colors.text,
         colors.border,
         sizeClasses.container,
-        !disableTooltip && 'cursor-pointer',
         className
       )}
       role="status"
