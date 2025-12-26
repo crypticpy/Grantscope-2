@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
 import { cn } from '../lib/utils';
+import { parseStageNumber } from '../lib/stage-utils';
 import { Tooltip } from '../components/ui/Tooltip';
 
 // Badge Components
@@ -113,16 +114,6 @@ interface Note {
   is_private: boolean;
   created_at: string;
 }
-
-/**
- * Parse stage number from stage_id string
- * Handles formats like "1_concept", "3_prototype", etc.
- */
-const parseStageNumber = (stageId: string): number | null => {
-  if (!stageId) return null;
-  const match = stageId.match(/^(\d+)/);
-  return match ? parseInt(match[1], 10) : null;
-};
 
 /**
  * Get score color classes based on score value

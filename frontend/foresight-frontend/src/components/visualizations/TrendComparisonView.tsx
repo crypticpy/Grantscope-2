@@ -30,6 +30,7 @@ import {
 } from 'recharts';
 
 import { cn } from '../../lib/utils';
+import { parseStageNumber } from '../../lib/stage-utils';
 import { supabase } from '../../App';
 import { useAuthContext } from '../../hooks/useAuthContext';
 
@@ -75,15 +76,6 @@ interface ScoreDifference {
 // ============================================================================
 // Utility Functions
 // ============================================================================
-
-/**
- * Parse stage number from stage_id string (e.g., "1_concept" -> 1)
- */
-function parseStageNumber(stageId: string | null | undefined): number | null {
-  if (!stageId) return null;
-  const match = stageId.match(/^(\d+)/);
-  return match ? parseInt(match[1], 10) : null;
-}
 
 /**
  * Calculate score differences between two cards
