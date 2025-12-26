@@ -8,7 +8,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Bookmark,
-  X,
   Trash2,
   Play,
   Loader2,

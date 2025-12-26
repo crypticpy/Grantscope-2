@@ -15,7 +15,6 @@ import {
   Edit,
   Eye,
   Heart,
-  HeartOff,
   Filter,
   Loader2,
   Tag,
@@ -24,7 +23,6 @@ import {
   FileText,
   Presentation,
   ChevronDown,
-  X,
 } from 'lucide-react';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
@@ -33,7 +31,7 @@ import { PillarBadge, PillarBadgeGroup } from '../components/PillarBadge';
 import { HorizonBadge } from '../components/HorizonBadge';
 import { StageBadge } from '../components/StageBadge';
 import { Top25Badge } from '../components/Top25Badge';
-import { getStageByNumber, getPillarByCode } from '../data/taxonomy';
+// Removed unused taxonomy imports
 
 // ============================================================================
 // Types
@@ -73,10 +71,7 @@ interface Card {
   created_at: string;
 }
 
-interface CardFollow {
-  card_id: string;
-  priority: 'low' | 'medium' | 'high';
-}
+// CardFollow interface moved to shared types or removed if unused
 
 // ============================================================================
 // Helper Components
@@ -258,7 +253,7 @@ function CardItem({
 
 const WorkstreamFeed: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const _navigate = useNavigate();
   const { user } = useAuthContext();
 
   // State

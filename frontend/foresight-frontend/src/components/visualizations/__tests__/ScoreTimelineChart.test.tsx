@@ -310,7 +310,8 @@ describe('getScoreConfig', () => {
   });
 
   it('returns undefined for invalid score type', () => {
-    const config = getScoreConfig('invalid_score' as any);
+    // Testing invalid input - using type assertion to test runtime behavior
+    const config = getScoreConfig('invalid_score' as Parameters<typeof getScoreConfig>[0]);
     expect(config).toBeUndefined();
   });
 });

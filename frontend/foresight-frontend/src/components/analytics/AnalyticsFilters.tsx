@@ -29,9 +29,9 @@ import {
   Shield,
   type LucideIcon,
 } from 'lucide-react';
-import { format, subDays, subMonths, startOfMonth, endOfMonth, parseISO } from 'date-fns';
+import { format, subDays, subMonths, startOfMonth, parseISO } from 'date-fns';
 import { cn } from '../../lib/utils';
-import { pillars, stages, horizons, type Pillar, type MaturityStage, type Horizon } from '../../data/taxonomy';
+import { pillars, stages, horizons, type MaturityStage } from '../../data/taxonomy';
 
 // ============================================================================
 // Type Definitions

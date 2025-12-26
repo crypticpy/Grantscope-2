@@ -16,8 +16,20 @@ import { ConceptNetworkDiagram } from '../ConceptNetworkDiagram';
 import type { RelatedCard } from '../../../lib/discovery-api';
 
 // Mock @xyflow/react to avoid complex DOM operations
+interface MockNode {
+  id: string;
+  position: { x: number; y: number };
+  data: Record<string, unknown>;
+}
+
+interface MockEdge {
+  id: string;
+  source: string;
+  target: string;
+}
+
 vi.mock('@xyflow/react', () => ({
-  ReactFlow: ({ nodes, edges, children }: { nodes: any[]; edges: any[]; children: React.ReactNode }) => (
+  ReactFlow: ({ nodes, edges, children }: { nodes: MockNode[]; edges: MockEdge[]; children: React.ReactNode }) => (
     <div data-testid="react-flow" data-nodes={nodes.length} data-edges={edges.length}>
       {children}
     </div>
@@ -37,8 +49,8 @@ vi.mock('@xyflow/react', () => ({
     Lines: 'lines',
     Cross: 'cross',
   },
-  useNodesState: (initialNodes: any[]) => [initialNodes, vi.fn(), vi.fn()],
-  useEdgesState: (initialEdges: any[]) => [initialEdges, vi.fn(), vi.fn()],
+  useNodesState: (initialNodes: MockNode[]) => [initialNodes, vi.fn(), vi.fn()],
+  useEdgesState: (initialEdges: MockEdge[]) => [initialEdges, vi.fn(), vi.fn()],
 }));
 
 // ============================================================================

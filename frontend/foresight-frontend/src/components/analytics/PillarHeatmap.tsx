@@ -14,7 +14,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { pillars, getPillarByCode, stages, type Pillar } from '../../data/taxonomy';
+import { pillars, stages } from '../../data/taxonomy';
 
 // ============================================================================
 // Type Definitions
@@ -129,7 +129,7 @@ export const PillarHeatmap: React.FC<PillarHeatmapProps> = ({
   title,
   onPillarClick,
   showStages = false,
-  stageBreakdown,
+  stageBreakdown: _stageBreakdown,
 }) => {
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
   const [containerWidth, setContainerWidth] = useState(0);

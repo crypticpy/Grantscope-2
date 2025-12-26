@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
-import { Search, Filter, Grid, List, Eye, Heart, Clock, Star, Inbox, History, Calendar, Sparkles, Bookmark, Trash2, ChevronDown, ChevronUp, Loader2, X, AlertTriangle, RefreshCw, ArrowLeftRight, Check } from 'lucide-react';
+import { Search, Filter, Grid, List, Eye, Heart, Clock, Star, Inbox, History, Calendar, Sparkles, Bookmark, ChevronDown, ChevronUp, Loader2, X, AlertTriangle, RefreshCw, ArrowLeftRight, Check } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
@@ -559,7 +559,7 @@ const Discover: React.FC = () => {
           return updated.slice(0, 50);
         });
       }
-    } catch (error) {
+    } catch (_error) {
       // Silently fail - history recording is not critical
     }
   }, [user?.id]);
@@ -577,7 +577,7 @@ const Discover: React.FC = () => {
         const response = await getSearchHistory(token, 20);
         setSearchHistory(response.history);
       }
-    } catch (error) {
+    } catch (_error) {
       // Silently fail - history is not critical
     } finally {
       setHistoryLoading(false);
@@ -664,7 +664,7 @@ const Discover: React.FC = () => {
         await deleteSearchHistoryEntry(token, entryId);
         setSearchHistory((prev) => prev.filter((h) => h.id !== entryId));
       }
-    } catch (error) {
+    } catch (_error) {
       // Silently fail
     } finally {
       setDeletingHistoryId(null);
@@ -681,7 +681,7 @@ const Discover: React.FC = () => {
         await clearSearchHistory(token);
         setSearchHistory([]);
       }
-    } catch (error) {
+    } catch (_error) {
       // Silently fail
     }
   }, []);

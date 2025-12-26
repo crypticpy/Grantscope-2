@@ -227,7 +227,7 @@ const CardDetail: React.FC = () => {
   const [scoreHistoryLoading, setScoreHistoryLoading] = useState(false);
   const [stageHistoryLoading, setStageHistoryLoading] = useState(false);
   const [scoreHistoryError, setScoreHistoryError] = useState<string | null>(null);
-  const [stageHistoryError, setStageHistoryError] = useState<string | null>(null);
+  const [_stageHistoryError, setStageHistoryError] = useState<string | null>(null);
 
   // Related cards state (concept network)
   const [relatedCards, setRelatedCards] = useState<RelatedCard[]>([]);
@@ -272,8 +272,9 @@ const CardDetail: React.FC = () => {
 
       const response = await getScoreHistory(token, card.id);
       setScoreHistory(response.history);
-    } catch (error: any) {
-      setScoreHistoryError(error.message || 'Failed to load score history');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to load score history';
+      setScoreHistoryError(message);
     } finally {
       setScoreHistoryLoading(false);
     }
@@ -295,8 +296,9 @@ const CardDetail: React.FC = () => {
 
       const response = await getStageHistory(token, card.id);
       setStageHistory(response.history);
-    } catch (error: any) {
-      setStageHistoryError(error.message || 'Failed to load stage history');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to load stage history';
+      setStageHistoryError(message);
     } finally {
       setStageHistoryLoading(false);
     }
@@ -318,8 +320,9 @@ const CardDetail: React.FC = () => {
 
       const response = await getRelatedCards(token, card.id);
       setRelatedCards(response.related_cards);
-    } catch (error: any) {
-      setRelatedCardsError(error.message || 'Failed to load related cards');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to load related cards';
+      setRelatedCardsError(message);
     } finally {
       setRelatedCardsLoading(false);
     }
@@ -400,7 +403,7 @@ const CardDetail: React.FC = () => {
         .maybeSingle();  // Use maybeSingle to avoid 406 error when no row exists
 
       setIsFollowing(!!data);
-    } catch (error) {
+    } catch (_error) {
       setIsFollowing(false);
     }
   };
@@ -497,9 +500,10 @@ const CardDetail: React.FC = () => {
 
       // Start polling for task status
       pollTaskStatus(task.id);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error triggering research:', error);
-      setResearchError(error.message || 'Failed to start research');
+      const message = error instanceof Error ? error.message : 'Failed to start research';
+      setResearchError(message);
       setIsResearching(false);
     }
   };
@@ -535,7 +539,7 @@ const CardDetail: React.FC = () => {
           // Still processing, poll again in 2 seconds
           setTimeout(poll, 2000);
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Error polling task status:', error);
         setIsResearching(false);
         setResearchError('Failed to check research status');
@@ -603,8 +607,9 @@ const CardDetail: React.FC = () => {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-    } catch (error: any) {
-      setExportError(error.message || 'Failed to export card');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to export card';
+      setExportError(message);
     } finally {
       setIsExporting(false);
     }
@@ -974,23 +979,23 @@ const CardDetail: React.FC = () => {
                   <ReactMarkdown
                     components={{
                       // Style links
-                      a: ({ node, ...props }) => (
+                      a: ({ node: _node, ...props }) => (
                         <a {...props} className="text-blue-600 hover:text-blue-800 underline" target="_blank" rel="noopener noreferrer" />
                       ),
                       // Style headings
-                      h1: ({ node, ...props }) => <h1 {...props} className="text-xl font-bold text-gray-900 dark:text-white mt-4 mb-2" />,
-                      h2: ({ node, ...props }) => <h2 {...props} className="text-lg font-semibold text-gray-900 dark:text-white mt-3 mb-2" />,
-                      h3: ({ node, ...props }) => <h3 {...props} className="text-base font-semibold text-gray-800 dark:text-gray-100 mt-2 mb-1" />,
+                      h1: ({ node: _node, ...props }) => <h1 {...props} className="text-xl font-bold text-gray-900 dark:text-white mt-4 mb-2" />,
+                      h2: ({ node: _node, ...props }) => <h2 {...props} className="text-lg font-semibold text-gray-900 dark:text-white mt-3 mb-2" />,
+                      h3: ({ node: _node, ...props }) => <h3 {...props} className="text-base font-semibold text-gray-800 dark:text-gray-100 mt-2 mb-1" />,
                       // Style paragraphs
-                      p: ({ node, ...props }) => <p {...props} className="text-gray-700 dark:text-gray-300 mb-3 leading-relaxed" />,
+                      p: ({ node: _node, ...props }) => <p {...props} className="text-gray-700 dark:text-gray-300 mb-3 leading-relaxed" />,
                       // Style lists
-                      ul: ({ node, ...props }) => <ul {...props} className="list-disc list-inside mb-3 space-y-1" />,
-                      ol: ({ node, ...props }) => <ol {...props} className="list-decimal list-inside mb-3 space-y-1" />,
-                      li: ({ node, ...props }) => <li {...props} className="text-gray-700 dark:text-gray-300" />,
+                      ul: ({ node: _node, ...props }) => <ul {...props} className="list-disc list-inside mb-3 space-y-1" />,
+                      ol: ({ node: _node, ...props }) => <ol {...props} className="list-decimal list-inside mb-3 space-y-1" />,
+                      li: ({ node: _node, ...props }) => <li {...props} className="text-gray-700 dark:text-gray-300" />,
                       // Style code
-                      code: ({ node, ...props }) => <code {...props} className="bg-gray-200 dark:bg-gray-700 px-1 py-0.5 rounded text-sm" />,
+                      code: ({ node: _node, ...props }) => <code {...props} className="bg-gray-200 dark:bg-gray-700 px-1 py-0.5 rounded text-sm" />,
                       // Style blockquotes
-                      blockquote: ({ node, ...props }) => (
+                      blockquote: ({ node: _node, ...props }) => (
                         <blockquote {...props} className="border-l-4 border-blue-500 pl-4 italic text-gray-600 dark:text-gray-400 my-3" />
                       ),
                     }}
@@ -1007,18 +1012,18 @@ const CardDetail: React.FC = () => {
       {/* Tabs - horizontally scrollable on mobile */}
       <div className="border-b border-gray-200 dark:border-gray-700 mb-6 sm:mb-8 -mx-4 px-4 sm:mx-0 sm:px-0">
         <nav className="-mb-px flex space-x-4 sm:space-x-8 overflow-x-auto scrollbar-hide" role="tablist">
-          {[
+          {([
             { id: 'overview', name: 'Overview', icon: Eye },
             { id: 'sources', name: 'Sources', icon: FileText },
             { id: 'timeline', name: 'Timeline', icon: Calendar },
             { id: 'notes', name: 'Notes', icon: TrendingUp },
             { id: 'related', name: 'Related', icon: GitBranch },
-          ].map((tab) => {
+          ] as const).map((tab) => {
             const Icon = tab.icon;
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => setActiveTab(tab.id)}
                 role="tab"
                 aria-selected={activeTab === tab.id}
                 className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center whitespace-nowrap transition-colors flex-shrink-0 ${
@@ -1240,18 +1245,18 @@ const CardDetail: React.FC = () => {
                           <div className="prose prose-sm dark:prose-invert max-w-none max-h-[60vh] sm:max-h-[400px] overflow-y-auto overflow-x-hidden p-3 bg-gray-50 dark:bg-gray-800 rounded-lg break-words">
                             <ReactMarkdown
                               components={{
-                                a: ({ node, ...props }) => (
+                                a: ({ node: _node, ...props }) => (
                                   <a {...props} className="text-blue-600 hover:text-blue-800 underline" target="_blank" rel="noopener noreferrer" />
                                 ),
-                                h1: ({ node, ...props }) => <h1 {...props} className="text-lg font-bold text-gray-900 dark:text-white mt-3 mb-2" />,
-                                h2: ({ node, ...props }) => <h2 {...props} className="text-base font-semibold text-gray-900 dark:text-white mt-2 mb-1" />,
-                                h3: ({ node, ...props }) => <h3 {...props} className="text-sm font-semibold text-gray-800 dark:text-gray-100 mt-2 mb-1" />,
-                                p: ({ node, ...props }) => <p {...props} className="text-gray-700 dark:text-gray-300 mb-2 text-sm leading-relaxed" />,
-                                ul: ({ node, ...props }) => <ul {...props} className="list-disc list-inside mb-2 space-y-0.5" />,
-                                ol: ({ node, ...props }) => <ol {...props} className="list-decimal list-inside mb-2 space-y-0.5" />,
-                                li: ({ node, ...props }) => <li {...props} className="text-gray-700 dark:text-gray-300 text-sm" />,
-                                code: ({ node, ...props }) => <code {...props} className="bg-gray-200 dark:bg-gray-700 px-1 py-0.5 rounded text-xs" />,
-                                blockquote: ({ node, ...props }) => (
+                                h1: ({ node: _node, ...props }) => <h1 {...props} className="text-lg font-bold text-gray-900 dark:text-white mt-3 mb-2" />,
+                                h2: ({ node: _node, ...props }) => <h2 {...props} className="text-base font-semibold text-gray-900 dark:text-white mt-2 mb-1" />,
+                                h3: ({ node: _node, ...props }) => <h3 {...props} className="text-sm font-semibold text-gray-800 dark:text-gray-100 mt-2 mb-1" />,
+                                p: ({ node: _node, ...props }) => <p {...props} className="text-gray-700 dark:text-gray-300 mb-2 text-sm leading-relaxed" />,
+                                ul: ({ node: _node, ...props }) => <ul {...props} className="list-disc list-inside mb-2 space-y-0.5" />,
+                                ol: ({ node: _node, ...props }) => <ol {...props} className="list-decimal list-inside mb-2 space-y-0.5" />,
+                                li: ({ node: _node, ...props }) => <li {...props} className="text-gray-700 dark:text-gray-300 text-sm" />,
+                                code: ({ node: _node, ...props }) => <code {...props} className="bg-gray-200 dark:bg-gray-700 px-1 py-0.5 rounded text-xs" />,
+                                blockquote: ({ node: _node, ...props }) => (
                                   <blockquote {...props} className="border-l-4 border-blue-500 pl-3 italic text-gray-600 dark:text-gray-400 my-2 text-sm" />
                                 ),
                               }}

@@ -40,7 +40,7 @@ export interface AuthContextType {
   signOut: () => Promise<void>;
 }
 
-const AuthContext = React.createContext<AuthContextType | undefined>(undefined);
+// AuthContext is provided by AuthContextProvider from hooks/useAuthContext
 
 function App() {
   const [user, setUser] = useState<User | null>(null);

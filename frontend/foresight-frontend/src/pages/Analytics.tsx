@@ -8,7 +8,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { format, subDays, subMonths, parseISO } from 'date-fns';
+import { format, subDays, subMonths } from 'date-fns';
 import {
   BarChart3,
   TrendingUp,
@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
-import { pillars, stages, type Pillar, type MaturityStage } from '../data/taxonomy';
+import { pillars, stages } from '../data/taxonomy';
 import TrendVelocityChart, { type VelocityDataPoint } from '../components/analytics/TrendVelocityChart';
 import PillarHeatmap, { type PillarCoverageItem } from '../components/analytics/PillarHeatmap';
 import InsightsPanel, { type InsightsResponse } from '../components/analytics/InsightsPanel';
@@ -371,7 +371,7 @@ const StatsCard: React.FC<StatsCardProps> = ({
 // ============================================================================
 
 const Analytics: React.FC = () => {
-  const { user } = useAuthContext();
+  const { user: _user } = useAuthContext();
 
   // Filter state
   const [filters, setFilters] = useState<AnalyticsFilters>({
@@ -420,7 +420,7 @@ const Analytics: React.FC = () => {
   const loadStats = useCallback(async () => {
     setLoadingStats(true);
     try {
-      const { start } = getDateRangeFromPeriod(filters.timePeriod);
+      const { start: _start } = getDateRangeFromPeriod(filters.timePeriod);
       const oneWeekAgo = subDays(new Date(), 7);
 
       // Build base query
@@ -488,7 +488,7 @@ const Analytics: React.FC = () => {
         newThisWeek: newCount || 0,
         avgVelocity: Math.round(avgVelocity),
       });
-    } catch (error) {
+    } catch (_error) {
       // Silently fail for stats - non-critical
     } finally {
       setLoadingStats(false);
@@ -533,7 +533,7 @@ const Analytics: React.FC = () => {
 
       const params = getFilterParams();
       // Don't pass pillar_id for coverage - we want all pillars
-      const { pillar_id, ...coverageParams } = params;
+      const { pillar_id: _pillar_id, ...coverageParams } = params;
       const response = await fetchPillarCoverage(session.access_token, coverageParams);
 
       setPillarCoverage(response.data || []);

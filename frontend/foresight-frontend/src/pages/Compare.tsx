@@ -6,13 +6,10 @@
  */
 
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import { TrendComparisonView } from '../components/visualizations/TrendComparisonView';
 
 const Compare: React.FC = () => {
-  const navigate = useNavigate();
-
-  const handleCardClick = (cardId: string) => {
+  const handleCardClick = (_cardId: string) => {
     // Could navigate to card detail, but for now just log
     // The TrendComparisonView already has links to card detail pages
   };

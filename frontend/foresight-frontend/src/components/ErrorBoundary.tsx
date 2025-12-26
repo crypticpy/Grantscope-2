@@ -17,25 +17,23 @@ export interface ErrorBoundaryProps {
 
 interface ErrorBoundaryState {
   hasError: boolean;
-  error: any;
+  error: Error | null;
   isRetrying: boolean;
 }
 
 /**
  * Serialize an error for display
  */
-const serializeError = (error: any): string => {
-  if (error instanceof Error) {
-    return error.message + '\n' + error.stack;
-  }
-  return JSON.stringify(error, null, 2);
+const serializeError = (error: Error | null): string => {
+  if (!error) return 'Unknown error';
+  return error.message + '\n' + (error.stack || '');
 };
 
 /**
  * Check if the error is a chunk/module load failure
  * These occur when lazy-loaded components fail to load (network issues, etc.)
  */
-const isChunkLoadError = (error: any): boolean => {
+const isChunkLoadError = (error: Error | null): boolean => {
   if (!error) return false;
 
   const errorMessage = error.message?.toLowerCase() || '';
@@ -58,7 +56,7 @@ const isChunkLoadError = (error: any): boolean => {
 /**
  * Get user-friendly error message based on error type
  */
-const getUserFriendlyMessage = (error: any, customMessage?: string): { title: string; description: string } => {
+const getUserFriendlyMessage = (error: Error | null, customMessage?: string): { title: string; description: string } => {
   if (customMessage) {
     return {
       title: 'Something went wrong',
@@ -106,7 +104,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
     this.state = { hasError: false, error: null, isRetrying: false };
   }
 
-  static getDerivedStateFromError(error: any): Partial<ErrorBoundaryState> {
+  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
     return { hasError: true, error };
   }
 

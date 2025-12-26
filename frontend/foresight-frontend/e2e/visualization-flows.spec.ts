@@ -12,7 +12,7 @@
  * 6. Synchronized timeline charts in comparison view
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 
 // Test configuration
 const TEST_TIMEOUT = 30000;
@@ -26,7 +26,7 @@ const TEST_TIMEOUT = 30000;
  * In a real scenario, this would use proper auth flow or test tokens
  * Note: Must navigate to app URL first before accessing localStorage
  */
-async function mockAuthentication(page: any) {
+async function mockAuthentication(page: Page) {
   // Navigate to app URL first to avoid SecurityError accessing localStorage
   await page.goto('/');
   await page.waitForLoadState('domcontentloaded');
@@ -55,7 +55,7 @@ async function mockAuthentication(page: any) {
 /**
  * Wait for visualization components to load
  */
-async function waitForVisualizationsToLoad(page: any, timeout = 10000) {
+async function waitForVisualizationsToLoad(page: Page, timeout = 10000) {
   // Wait for any loading spinners to disappear
   await page.waitForSelector('.animate-spin', { state: 'hidden', timeout }).catch(() => {});
   // Give charts time to render
@@ -263,7 +263,7 @@ test.describe('Concept Network Visualization', () => {
     const cardLink = page.locator('[data-testid="card-link"], a[href*="/cards/"]').first();
     if (await cardLink.isVisible()) {
       await cardLink.click();
-      const initialUrl = page.url();
+      const _initialUrl = page.url();
       await page.waitForLoadState('networkidle');
 
       const relatedTab = page.locator('button:has-text("Related"), [data-testid="related-tab"]');

@@ -42,9 +42,7 @@ import { StageBadge } from '../StageBadge';
 import {
   compareCards,
   type CardComparisonResponse,
-  type CardComparisonItem,
   type ScoreHistory,
-  type StageHistory,
   type CardData,
 } from '../../lib/discovery-api';
 

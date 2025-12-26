@@ -129,10 +129,15 @@ const Dashboard: React.FC = () => {
 
       setRecentCards(recentData || []);
       // Transform Supabase nested response to match our interface
-      const transformedFollowing = (followingData || []).map((item: any) => ({
+      interface SupabaseFollowRow {
+        id: string;
+        priority: string;
+        cards: Card;
+      }
+      const transformedFollowing = (followingData || []).map((item: SupabaseFollowRow) => ({
         id: item.id,
         priority: item.priority,
-        cards: item.cards as Card
+        cards: item.cards
       }));
       setFollowingCards(transformedFollowing);
 

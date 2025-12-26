@@ -236,7 +236,7 @@ export interface HorizonIndicatorProps {
 
 export function HorizonIndicator({
   horizon,
-  size = 'sm',
+  size: _size = 'sm',
   className,
 }: HorizonIndicatorProps) {
   const horizons: ('H1' | 'H2' | 'H3')[] = ['H1', 'H2', 'H3'];

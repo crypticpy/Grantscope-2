@@ -5,13 +5,11 @@ import { useDrag } from '@use-gesture/react';
 import * as Progress from '@radix-ui/react-progress';
 import {
   Search,
-  Filter,
   CheckCircle,
   XCircle,
   Edit3,
   Clock,
   Inbox,
-  ChevronDown,
   RefreshCw,
   AlertTriangle,
   Sparkles,
@@ -289,7 +287,7 @@ interface SwipeableCardProps {
 }
 
 function SwipeableCard({
-  cardId,
+  cardId: _cardId,
   onSwipeLeft,
   onSwipeRight,
   disabled = false,

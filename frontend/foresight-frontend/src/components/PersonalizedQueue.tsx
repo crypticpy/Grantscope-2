@@ -248,7 +248,7 @@ export function PersonalizedQueue({
       if (data) {
         setFollowedCardIds(new Set(data.map(f => f.card_id)));
       }
-    } catch (err) {
+    } catch (_err) {
       // Silent fail for followed cards - non-critical
     }
   }, [user?.id]);
@@ -327,7 +327,7 @@ export function PersonalizedQueue({
 
     try {
       await dismissCard(session.access_token, cardId, 'irrelevant');
-    } catch (err) {
+    } catch (_err) {
       // Revert on error by reloading
       setOffset(0);
       loadQueue(false);
@@ -369,7 +369,7 @@ export function PersonalizedQueue({
             priority: 'medium'
           });
       }
-    } catch (err) {
+    } catch (_err) {
       // Revert optimistic update on error
       setFollowedCardIds(prev => {
         const newSet = new Set(prev);

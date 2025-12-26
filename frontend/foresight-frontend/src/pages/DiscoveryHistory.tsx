@@ -135,7 +135,7 @@ const ProgressIndicator: React.FC<{
         {DISCOVERY_STAGES.map((stage, idx) => {
           const status = stages?.[stage.id] || 'pending';
           const Icon = stage.icon;
-          const isActive = stage.id === current_stage;
+          const _isActive = stage.id === current_stage;
 
           return (
             <div key={stage.id} className="flex items-center">
@@ -442,7 +442,7 @@ const DiscoveryHistory: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [triggerLoading, setTriggerLoading] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
-  const [discoveryConfig, setDiscoveryConfig] = useState<DiscoveryConfig | null>(null);
+  const [_discoveryConfig, setDiscoveryConfig] = useState<DiscoveryConfig | null>(null);
 
   // Fetch discovery config on mount
   useEffect(() => {

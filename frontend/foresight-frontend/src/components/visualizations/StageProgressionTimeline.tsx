@@ -14,8 +14,6 @@ import { Tooltip } from '../ui/Tooltip';
 import { cn } from '../../lib/utils';
 import {
   getStageByNumber,
-  getHorizonByCode,
-  type MaturityStage,
 } from '../../data/taxonomy';
 import type { StageHistory } from '../../lib/discovery-api';
 
@@ -337,7 +335,7 @@ interface EmptyStateProps {
 function EmptyState({ currentStage }: EmptyStateProps) {
   const stageData = currentStage ? getStageByNumber(currentStage) : null;
   const horizon = stageData?.horizon || 'H1';
-  const colors = getHorizonColorClasses(horizon);
+  const _colors = getHorizonColorClasses(horizon);
 
   return (
     <div className="flex flex-col items-center justify-center py-8 px-4 text-center">

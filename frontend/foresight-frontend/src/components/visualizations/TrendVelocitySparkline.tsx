@@ -141,8 +141,8 @@ export function TrendVelocitySparkline({
 
   // Calculate domain for Y axis (with padding)
   const velocityValues = chartData.map((d) => d.velocity_score);
-  const minValue = Math.max(0, Math.min(...velocityValues) - 5);
-  const maxValue = Math.min(100, Math.max(...velocityValues) + 5);
+  const _minValue = Math.max(0, Math.min(...velocityValues) - 5);
+  const _maxValue = Math.min(100, Math.max(...velocityValues) + 5);
 
   return (
     <div

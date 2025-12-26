@@ -21,12 +21,9 @@ import { cn } from '../lib/utils';
 import { PillarBadge } from './PillarBadge';
 import {
   pillars,
-  goals,
   stages,
   horizons,
   getGoalsByPillar,
-  type Pillar,
-  type Goal,
 } from '../data/taxonomy';
 
 // ============================================================================
