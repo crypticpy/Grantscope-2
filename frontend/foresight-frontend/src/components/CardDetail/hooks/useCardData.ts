@@ -303,7 +303,7 @@ export function useCardData(
         });
         setIsFollowing(true);
       }
-    } catch (error) {
+    } catch (_err) {
       // Silently fail - the UI will remain in sync with actual state on next load
     }
   }, [user, card, isFollowing]);
@@ -335,7 +335,7 @@ export function useCardData(
           return true;
         }
         return false;
-      } catch (error) {
+      } catch (_err) {
         return false;
       }
     },

@@ -13,7 +13,7 @@
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { CardDetail } from '../CardDetail';
@@ -264,7 +264,7 @@ vi.mock('../../../App', () => {
     const chainMock: Record<string, unknown> = {};
 
     chainMock.select = vi.fn(() => {
-      chainMock.eq = vi.fn((field: string, value: string) => {
+      chainMock.eq = vi.fn((field: string, _value: string) => {
         if (table === 'cards' && field === 'slug') {
           chainMock.eq = vi.fn(() => ({
             single: vi.fn(() => Promise.resolve({ data: mockCardData, error: null })),

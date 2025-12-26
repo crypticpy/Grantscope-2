@@ -239,8 +239,7 @@ describe('getScoreColorClasses', () => {
 // ============================================================================
 
 describe('formatRelativeTime', () => {
-  // Store original Date to restore after tests
-  const RealDate = Date;
+  // Using vi.useFakeTimers for date mocking
 
   beforeEach(() => {
     // Mock the current date to 2024-01-15T12:00:00Z
