@@ -297,14 +297,14 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* Following Cards */}
-      {followingCards.length > 0 && (
-        <div className="mb-8">
-          <div className="flex items-center gap-2 mb-4">
-            <Star className="h-5 w-5 text-amber-500 fill-amber-500" />
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-              Your Followed Cards
-            </h2>
-          </div>
+      <div className="mb-8">
+        <div className="flex items-center gap-2 mb-4">
+          <Star className="h-5 w-5 text-amber-500 fill-amber-500" />
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+            Your Followed Cards
+          </h2>
+        </div>
+        {followingCards.length > 0 ? (
           <div className="grid gap-4">
             {followingCards.slice(0, 3).map((following) => {
               const stageNum = parseStageNumber(following.cards.stage_id);
@@ -370,8 +370,30 @@ const Dashboard: React.FC = () => {
               );
             })}
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="text-center py-12 bg-white dark:bg-[#2d3166] rounded-lg shadow">
+            <Star className="mx-auto h-12 w-12 text-gray-400" />
+            <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
+              Start Following Cards
+            </h3>
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto">
+              Follow cards to build your personalized intelligence feed.
+              <br />
+              <span className="text-gray-400">Browse the Discover page and click the heart icon on any card to start following it.</span>
+            </p>
+            <div className="mt-6">
+              <Link
+                to="/discover"
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-brand-dark-blue transition-colors"
+              >
+                <Eye className="h-4 w-4 mr-2" />
+                Explore Cards
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </Link>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Recent Cards */}
       <div>
