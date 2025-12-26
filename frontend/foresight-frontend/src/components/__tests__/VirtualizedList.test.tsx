@@ -13,8 +13,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
-import { useRef, createRef } from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { createRef } from 'react';
 import { VirtualizedList, VirtualizedListHandle, VirtualizedListProps } from '../VirtualizedList';
 
 // Mock scrolling behavior for virtualization
@@ -437,7 +437,7 @@ describe('VirtualizedList', () => {
           <VirtualizedList
             ref={ref}
             items={items}
-            renderItem={(item, index) => <div>{item.name}</div>}
+            renderItem={(item) => <div>{item.name}</div>}
             testId="virtualized-list"
           />
         </div>
@@ -459,7 +459,7 @@ describe('VirtualizedList', () => {
           <VirtualizedList
             ref={ref}
             items={items}
-            renderItem={(item, index) => <div>{item.name}</div>}
+            renderItem={(item) => <div>{item.name}</div>}
             testId="virtualized-list"
           />
         </div>
@@ -481,7 +481,7 @@ describe('VirtualizedList', () => {
           <VirtualizedList
             ref={ref}
             items={items}
-            renderItem={(item, index) => <div>{item.name}</div>}
+            renderItem={(item) => <div>{item.name}</div>}
             testId="virtualized-list"
           />
         </div>
@@ -503,7 +503,7 @@ describe('VirtualizedList', () => {
           <VirtualizedList
             ref={ref}
             items={items}
-            renderItem={(item, index) => <div>{item.name}</div>}
+            renderItem={(item) => <div>{item.name}</div>}
             testId="virtualized-list"
           />
         </div>

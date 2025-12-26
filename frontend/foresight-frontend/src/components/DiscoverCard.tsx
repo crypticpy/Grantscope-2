@@ -140,7 +140,7 @@ export const DiscoverCard = memo(function DiscoverCard({
   compareMode,
   isSelectedForCompare,
   searchTerm,
-  viewMode,
+  viewMode: _viewMode,
   onFollowToggle,
   onCompareToggle,
 }: DiscoverCardProps) {

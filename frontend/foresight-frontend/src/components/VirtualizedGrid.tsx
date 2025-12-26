@@ -345,7 +345,7 @@ export const VirtualizedGrid = forwardRef(VirtualizedGridInner) as <T>(
 /**
  * Helper function to scroll to a specific item index
  */
-export function scrollToItemIndex<T>(
+export function scrollToItemIndex(
   virtualizer: ReturnType<typeof useVirtualizer>,
   itemIndex: number,
   columnCount: number
