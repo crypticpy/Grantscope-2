@@ -263,24 +263,68 @@ const SWIPE_CONFIG = {
  * - Angle detection distinguishes swipes from vertical scrolling
  * - Enhanced visual feedback with direction icons
  * - Threshold indicators show when swipe will trigger
+ *
+ * Memoization:
+ * - Wrapped with React.memo to prevent unnecessary re-renders
+ * - Custom comparison function compares primitive props by value
+ * - Callback refs compared by reference (should be stable via useCallback at call site)
+ * - onSwipeLeft/onSwipeRight accept cardId parameter for stable callback pattern
  */
 interface SwipeableCardProps {
   cardId: string;
-  onSwipeLeft: () => void;
-  onSwipeRight: () => void;
+  /** Callback when card is swiped left - receives cardId for stable reference pattern */
+  onSwipeLeft: (cardId: string) => void;
+  /** Callback when card is swiped right - receives cardId for stable reference pattern */
+  onSwipeRight: (cardId: string) => void;
   disabled?: boolean;
   children: React.ReactNode;
   className?: string;
   style?: React.CSSProperties;
   tabIndex?: number;
-  onClick?: () => void;
+  /** Callback when card is clicked - receives cardId for stable reference pattern */
+  onClick?: (cardId: string) => void;
   cardRef?: (el: HTMLDivElement | null) => void;
   /** Whether we're on a mobile device (affects swipe thresholds) */
   isMobile?: boolean;
 }
 
-function SwipeableCard({
-  cardId: _cardId,
+/**
+ * Custom comparison function for SwipeableCard memoization
+ * Compares props to determine if re-render is needed
+ */
+function areSwipeableCardPropsEqual(
+  prevProps: SwipeableCardProps,
+  nextProps: SwipeableCardProps
+): boolean {
+  // Compare primitive props by value
+  if (prevProps.cardId !== nextProps.cardId) return false;
+  if (prevProps.disabled !== nextProps.disabled) return false;
+  if (prevProps.className !== nextProps.className) return false;
+  if (prevProps.tabIndex !== nextProps.tabIndex) return false;
+  if (prevProps.isMobile !== nextProps.isMobile) return false;
+
+  // Compare callbacks by reference
+  // These should be stable if wrapped with useCallback at the call site
+  if (prevProps.onSwipeLeft !== nextProps.onSwipeLeft) return false;
+  if (prevProps.onSwipeRight !== nextProps.onSwipeRight) return false;
+  if (prevProps.onClick !== nextProps.onClick) return false;
+  if (prevProps.cardRef !== nextProps.cardRef) return false;
+
+  // Compare style object by reference (shallow)
+  // If style objects are recreated, they'll cause re-renders
+  // Consider using useMemo for style objects at call site
+  if (prevProps.style !== nextProps.style) return false;
+
+  // Compare children by reference
+  // React children are typically new references on each render
+  // but this is expected behavior - parent changes cause child re-renders
+  if (prevProps.children !== nextProps.children) return false;
+
+  return true;
+}
+
+const SwipeableCard = React.memo(function SwipeableCard({
+  cardId,
   onSwipeLeft,
   onSwipeRight,
   disabled = false,
@@ -355,11 +399,12 @@ function SwipeableCard({
       const meetsVelocityThreshold = Math.abs(vx) >= SWIPE_CONFIG.velocity;
 
       // Trigger action if either threshold is met
+      // Pass cardId to callbacks for stable reference pattern
       if (meetsDistanceThreshold || meetsVelocityThreshold) {
         if (dx < 0 && mx < 0) {
-          onSwipeLeft();
+          onSwipeLeft(cardId);
         } else if (dx > 0 && mx > 0) {
-          onSwipeRight();
+          onSwipeRight(cardId);
         }
       }
     },
@@ -459,12 +504,17 @@ function SwipeableCard({
     );
   };
 
+  // Create a stable click handler that passes cardId to the onClick callback
+  const handleClick = useCallback(() => {
+    onClick?.(cardId);
+  }, [onClick, cardId]);
+
   return (
     <div
       {...bind()}
       ref={cardRef}
       tabIndex={tabIndex}
-      onClick={onClick}
+      onClick={handleClick}
       className={cn(className, 'relative')}
       style={{
         ...style,
@@ -478,7 +528,7 @@ function SwipeableCard({
       {children}
     </div>
   );
-}
+}, areSwipeableCardPropsEqual);
 
 /**
  * Get human-readable action description for toast
@@ -500,6 +550,11 @@ function getActionDescription(action: UndoAction): { verb: string; icon: React.R
  * UndoToast Component
  * Displays a toast notification with an undo button after actions
  * Auto-dismisses after UNDO_TIMEOUT_MS with a visual countdown
+ *
+ * Memoization:
+ * - Wrapped with React.memo to prevent unnecessary re-renders
+ * - onUndo and onDismiss callbacks should be memoized at call site (via useCallback)
+ * - timeRemaining will change frequently, but other props remain stable
  */
 interface UndoToastProps {
   action: UndoAction;
@@ -508,7 +563,7 @@ interface UndoToastProps {
   timeRemaining: number; // ms remaining until auto-dismiss
 }
 
-function UndoToast({ action, onUndo, onDismiss, timeRemaining }: UndoToastProps) {
+const UndoToast = React.memo(function UndoToast({ action, onUndo, onDismiss, timeRemaining }: UndoToastProps) {
   const { verb, icon } = getActionDescription(action);
   const progressPercent = Math.max(0, (timeRemaining / UNDO_TIMEOUT_MS) * 100);
 
@@ -571,7 +626,7 @@ function UndoToast({ action, onUndo, onDismiss, timeRemaining }: UndoToastProps)
       </div>
     </div>
   );
-}
+});
 
 const DiscoveryQueue: React.FC = () => {
   const { user } = useAuthContext();
@@ -608,6 +663,9 @@ const DiscoveryQueue: React.FC = () => {
   // Keyboard navigation state
   const [focusedCardIndex, setFocusedCardIndex] = useState<number>(-1);
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  // Cache for stable ref callbacks per card ID - prevents new function references on each render
+  const cardRefCallbacksCache = useRef<Map<string, (el: HTMLDivElement | null) => void>>(new Map());
 
   // Debounce ref to prevent rapid keyboard input from double-executing actions
   const lastActionTimeRef = useRef<number>(0);
@@ -802,7 +860,7 @@ const DiscoveryQueue: React.FC = () => {
   /**
    * Handle card review action
    */
-  const handleReviewAction = async (cardId: string, action: ReviewAction) => {
+  const handleReviewAction = useCallback(async (cardId: string, action: ReviewAction) => {
     if (!user) return;
 
     // Find the card before we remove it (needed for undo)
@@ -844,12 +902,12 @@ const DiscoveryQueue: React.FC = () => {
     } finally {
       setActionLoading(null);
     }
-  };
+  }, [user, cards, pushToUndoStack, showToast]);
 
   /**
    * Handle card dismissal
    */
-  const handleDismiss = async (cardId: string, reason?: DismissReason) => {
+  const handleDismiss = useCallback(async (cardId: string, reason?: DismissReason) => {
     if (!user) return;
 
     // Find the card before we remove it (needed for undo)
@@ -891,12 +949,43 @@ const DiscoveryQueue: React.FC = () => {
     } finally {
       setActionLoading(null);
     }
-  };
+  }, [user, cards, pushToUndoStack, showToast]);
+
+  /**
+   * Stable callback for swipe-right action (approve)
+   * Used by SwipeableCard - accepts cardId parameter for stable reference pattern
+   * This prevents creating new function references per card per render
+   */
+  const handleSwipeApprove = useCallback((cardId: string) => {
+    handleReviewAction(cardId, 'approve');
+  }, [handleReviewAction]);
+
+  /**
+   * Stable callback for swipe-left action (dismiss as irrelevant)
+   * Used by SwipeableCard - accepts cardId parameter for stable reference pattern
+   * This prevents creating new function references per card per render
+   */
+  const handleSwipeDismiss = useCallback((cardId: string) => {
+    handleDismiss(cardId, 'irrelevant');
+  }, [handleDismiss]);
+
+  /**
+   * Stable callback for card click action (set focused card)
+   * Used by SwipeableCard - accepts cardId parameter for stable reference pattern
+   * This prevents creating new function references per card per render
+   * Looks up the index from filteredCards at click time to handle filter changes correctly
+   */
+  const handleCardClick = useCallback((cardId: string) => {
+    const index = filteredCards.findIndex(c => c.id === cardId);
+    if (index !== -1) {
+      setFocusedCardIndex(index);
+    }
+  }, [filteredCards]);
 
   /**
    * Handle bulk action
    */
-  const handleBulkAction = async (action: ReviewAction) => {
+  const handleBulkAction = useCallback(async (action: ReviewAction) => {
     if (!user || selectedCards.size === 0) return;
 
     try {
@@ -919,12 +1008,12 @@ const DiscoveryQueue: React.FC = () => {
     } finally {
       setActionLoading(null);
     }
-  };
+  }, [user, selectedCards]);
 
   /**
    * Toggle card selection
    */
-  const toggleCardSelection = (cardId: string) => {
+  const toggleCardSelection = useCallback((cardId: string) => {
     setSelectedCards((prev) => {
       const next = new Set(prev);
       if (next.has(cardId)) {
@@ -934,22 +1023,22 @@ const DiscoveryQueue: React.FC = () => {
       }
       return next;
     });
-  };
+  }, []);
 
   /**
    * Select all visible cards
    */
-  const selectAllVisible = () => {
+  const selectAllVisible = useCallback(() => {
     const visibleIds = filteredCards.map((c) => c.id);
     setSelectedCards(new Set(visibleIds));
-  };
+  }, [filteredCards]);
 
   /**
    * Clear selection
    */
-  const clearSelection = () => {
+  const clearSelection = useCallback(() => {
     setSelectedCards(new Set());
-  };
+  }, []);
 
   // Filter cards
   const filteredCards = React.useMemo(() => {
@@ -1120,6 +1209,32 @@ const DiscoveryQueue: React.FC = () => {
       setFocusedCardIndex(filteredCards.length > 0 ? 0 : -1);
     }
   }, [filteredCards.length, focusedCardIndex]);
+
+  /**
+   * Ref callback factory for card elements
+   * Returns a stable callback that updates the cardRefs Map for a specific card ID.
+   * Uses a persistent cache (cardRefCallbacksCache) to ensure the same callback instance
+   * is returned for the same card ID across renders, preventing unnecessary re-renders
+   * of SwipeableCard components.
+   *
+   * The returned function handles both mount (el !== null) and unmount (el === null) cases.
+   */
+  const getCardRefCallback = useCallback((cardId: string) => {
+    // Check cache first - return existing callback if available
+    let callback = cardRefCallbacksCache.current.get(cardId);
+    if (!callback) {
+      // Create and cache a new callback for this card ID
+      callback = (el: HTMLDivElement | null) => {
+        if (el) {
+          cardRefs.current.set(cardId, el);
+        } else {
+          cardRefs.current.delete(cardId);
+        }
+      };
+      cardRefCallbacksCache.current.set(cardId, callback);
+    }
+    return callback;
+  }, []);
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
@@ -1424,18 +1539,12 @@ const DiscoveryQueue: React.FC = () => {
                 key={card.id}
                 cardId={card.id}
                 isMobile={isMobile}
-                cardRef={(el) => {
-                  if (el) {
-                    cardRefs.current.set(card.id, el);
-                  } else {
-                    cardRefs.current.delete(card.id);
-                  }
-                }}
-                onSwipeRight={() => handleReviewAction(card.id, 'approve')}
-                onSwipeLeft={() => handleDismiss(card.id, 'irrelevant')}
+                cardRef={getCardRefCallback(card.id)}
+                onSwipeRight={handleSwipeApprove}
+                onSwipeLeft={handleSwipeDismiss}
                 disabled={isLoading}
                 tabIndex={isFocused ? 0 : -1}
-                onClick={() => setFocusedCardIndex(index)}
+                onClick={handleCardClick}
                 className={cn(
                   'bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6 border-l-4 transition-all duration-200',
                   isFocused
