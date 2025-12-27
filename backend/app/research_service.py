@@ -45,6 +45,68 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
+# GPT Researcher Azure OpenAI Configuration
+# ============================================================================
+# GPT Researcher requires specific env var formats that differ from our app's config.
+# This function ensures the correct format is set before GPTResearcher is used.
+
+def _configure_gpt_researcher_for_azure():
+    """
+    Configure environment variables for GPT Researcher to use Azure OpenAI.
+
+    GPT Researcher expects:
+    - SMART_LLM = "azure_openai:<deployment-name>"
+    - FAST_LLM = "azure_openai:<deployment-name>"
+    - EMBEDDING = "azure_openai:<deployment-name>"
+    - AZURE_OPENAI_API_KEY (not AZURE_OPENAI_KEY)
+    - OPENAI_API_VERSION (not AZURE_OPENAI_API_VERSION)
+
+    Our app uses different naming, so we translate here.
+    """
+    # Get our app's Azure config
+    azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT", "")
+    azure_key = os.getenv("AZURE_OPENAI_KEY") or os.getenv("AZURE_OPENAI_API_KEY", "")
+    api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-05-01-preview")
+
+    # Get deployment names from our config
+    chat_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT_CHAT", "gpt-41")
+    chat_mini_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT_CHAT_MINI", "gpt-41-mini")
+    embedding_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT_EMBEDDING", "text-embedding-ada-002")
+
+    # Set GPT Researcher expected env vars with azure_openai: prefix
+    gptr_config = {
+        # LLM config with required azure_openai: prefix
+        "SMART_LLM": f"azure_openai:{chat_deployment}",
+        "FAST_LLM": f"azure_openai:{chat_mini_deployment}",
+        "EMBEDDING": f"azure_openai:{embedding_deployment}",
+
+        # Azure credentials (GPT Researcher expects these exact names)
+        "AZURE_OPENAI_API_KEY": azure_key,
+        "AZURE_OPENAI_ENDPOINT": azure_endpoint,
+        "OPENAI_API_VERSION": api_version,
+
+        # Token limits
+        "FAST_TOKEN_LIMIT": "4000",
+        "SMART_TOKEN_LIMIT": "4000",
+        "STRATEGIC_TOKEN_LIMIT": "4000",
+    }
+
+    # Set each env var if not already correctly set
+    for key, value in gptr_config.items():
+        if value:  # Only set if we have a value
+            current = os.getenv(key, "")
+            if current != value:
+                os.environ[key] = value
+                logger.debug(f"GPT Researcher config: {key}={value[:50]}..." if len(value) > 50 else f"GPT Researcher config: {key}={value}")
+
+    logger.info(f"GPT Researcher configured for Azure OpenAI: SMART_LLM={gptr_config['SMART_LLM']}, FAST_LLM={gptr_config['FAST_LLM']}")
+
+
+# Configure GPT Researcher on module load
+_configure_gpt_researcher_for_azure()
+
+
+# ============================================================================
 # Data Classes
 # ============================================================================
 
