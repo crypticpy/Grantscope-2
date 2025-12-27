@@ -84,6 +84,8 @@ def _configure_gpt_researcher_for_azure():
         "AZURE_OPENAI_API_KEY": azure_key,
         "AZURE_OPENAI_ENDPOINT": azure_endpoint,
         "OPENAI_API_VERSION": api_version,
+        # Some GPT Researcher components (e.g. embeddings) read this directly.
+        "AZURE_OPENAI_API_VERSION": api_version,
 
         # Token limits
         "FAST_TOKEN_LIMIT": "4000",
@@ -299,12 +301,16 @@ class ResearchService:
             Tuple of (sources, report_text, cost)
         """
         # Use Firecrawl as scraper if available for better content extraction
-        scraper_type = "firecrawl" if self.firecrawl else None
-        researcher = GPTResearcher(
-            query=query,
-            report_type=report_type,
-            scraper=scraper_type,
-        )
+        # IMPORTANT: Do not pass arbitrary kwargs (e.g. `scraper=`) into GPTResearcher.
+        # GPTResearcher stores unknown kwargs and forwards them into LLM calls, which can
+        # break Azure/OpenAI requests with "unknown parameter" errors and lead to
+        # `LLM Response: None` downstream.
+        if self.firecrawl:
+            os.environ.setdefault("SCRAPER", "firecrawl")
+        else:
+            os.environ.setdefault("SCRAPER", "bs")
+
+        researcher = GPTResearcher(query=query, report_type=report_type)
 
         # Wrap GPT Researcher calls in try/except to handle LLM failures gracefully
         try:

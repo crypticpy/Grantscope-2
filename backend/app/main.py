@@ -786,9 +786,11 @@ async def debug_gpt_researcher():
         "EMBEDDING_PROVIDER": os.getenv("EMBEDDING_PROVIDER", "NOT SET"),
         "OPENAI_API_VERSION": os.getenv("OPENAI_API_VERSION", "NOT SET"),
         "AZURE_OPENAI_API_VERSION": os.getenv("AZURE_OPENAI_API_VERSION", "NOT SET"),
+        "SCRAPER": os.getenv("SCRAPER", "NOT SET"),
         "AZURE_OPENAI_ENDPOINT": os.getenv("AZURE_OPENAI_ENDPOINT", "NOT SET")[:50] + "..." if os.getenv("AZURE_OPENAI_ENDPOINT") else "NOT SET",
         "AZURE_OPENAI_API_KEY": "SET" if os.getenv("AZURE_OPENAI_API_KEY") else "NOT SET",
         "TAVILY_API_KEY": "SET" if os.getenv("TAVILY_API_KEY") else "NOT SET",
+        "FIRECRAWL_API_KEY": "SET" if os.getenv("FIRECRAWL_API_KEY") else "NOT SET",
     }
 
     # Test GPT Researcher config parsing
@@ -812,30 +814,66 @@ async def debug_gpt_researcher():
         gptr_config_status = "error"
         gptr_config_error = str(e)
 
-    # Test LangChain Azure OpenAI connection
-    langchain_status = "unknown"
-    langchain_error = None
-    langchain_response = None
+    # Test LangChain Azure OpenAI connection (FAST + SMART deployments)
+    langchain_tests: Dict[str, Any] = {}
 
     try:
         from langchain_openai import AzureChatOpenAI
 
-        # Use the parsed config or fall back to env vars
-        deployment = parsed_config.get('fast_llm_model') or os.getenv("FAST_LLM", "").split(":")[-1]
+        for label, deployment in [
+            ("fast", parsed_config.get("fast_llm_model")),
+            ("smart", parsed_config.get("smart_llm_model")),
+        ]:
+            env_key = "FAST_LLM" if label == "fast" else "SMART_LLM"
+            deployment = deployment or os.getenv(env_key, "").split(":")[-1]
+            try:
+                llm = AzureChatOpenAI(
+                    azure_deployment=deployment,
+                    api_version=os.getenv("OPENAI_API_VERSION", "2024-05-01-preview"),
+                    temperature=0,
+                    max_tokens=10,
+                )
 
-        llm = AzureChatOpenAI(
-            azure_deployment=deployment,
-            api_version=os.getenv("OPENAI_API_VERSION", "2024-05-01-preview"),
-            temperature=0,
-            max_tokens=10,
-        )
-
-        response = llm.invoke("Say 'hello' in one word")
-        langchain_response = response.content if hasattr(response, 'content') else str(response)
-        langchain_status = "success"
+                response = llm.invoke("Say 'hello' in one word")
+                langchain_tests[label] = {
+                    "status": "success",
+                    "deployment": deployment,
+                    "response": response.content if hasattr(response, "content") else str(response),
+                    "error": None,
+                }
+            except Exception as e:
+                langchain_tests[label] = {
+                    "status": "error",
+                    "deployment": deployment,
+                    "response": None,
+                    "error": str(e),
+                }
     except Exception as e:
-        langchain_status = "error"
-        langchain_error = str(e)
+        langchain_tests["import_error"] = {"status": "error", "error": str(e)}
+
+    # Test GPT Researcher internal LLM utility (closest to agent selection path)
+    gptr_llm_test: Dict[str, Any] = {"status": "unknown", "error": None, "response": None}
+    try:
+        from gpt_researcher.config import Config
+        from gpt_researcher.utils.llm import create_chat_completion
+
+        cfg = Config()
+        gptr_llm_test["provider"] = getattr(cfg, "smart_llm_provider", None)
+        gptr_llm_test["model"] = getattr(cfg, "smart_llm_model", None)
+
+        resp = await create_chat_completion(
+            model=cfg.smart_llm_model,
+            llm_provider=cfg.smart_llm_provider,
+            llm_kwargs=cfg.llm_kwargs,
+            messages=[{"role": "user", "content": "Reply with exactly: ok"}],
+            temperature=0,
+            max_tokens=8,
+        )
+        gptr_llm_test["status"] = "success"
+        gptr_llm_test["response"] = resp
+    except Exception as e:
+        gptr_llm_test["status"] = "error"
+        gptr_llm_test["error"] = str(e)
 
     return {
         "env_vars": config_vars,
@@ -844,11 +882,8 @@ async def debug_gpt_researcher():
             "error": gptr_config_error,
             "parsed": parsed_config,
         },
-        "langchain_azure_test": {
-            "status": langchain_status,
-            "error": langchain_error,
-            "response": langchain_response,
-        }
+        "langchain_azure_test": langchain_tests,
+        "gptr_llm_test": gptr_llm_test,
     }
 
 # User endpoints

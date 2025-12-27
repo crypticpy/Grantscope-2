@@ -1,8 +1,8 @@
 # GPT Researcher Azure OpenAI Fix Summary
 
 **Date**: December 27, 2025
-**Status**: FIX IMPLEMENTED - AWAITING DEPLOYMENT
-**Commits**: `606312a` (fix), `ef2c6c9` (debug endpoint)
+**Status**: FIX UPDATED - READY TO DEPLOY
+**Commits**: See latest git history
 
 ---
 
@@ -10,7 +10,11 @@
 
 GPT Researcher was returning `LLM Response: None` causing research to fail with 0 sources discovered.
 
-**Root Cause**: GPT Researcher requires specific environment variable formats that differ from our app's configuration:
+## Root Causes
+
+### 1) Env var translation (Azure OpenAI)
+
+GPT Researcher requires specific environment variable formats that differ from our app's configuration:
 
 | Our App Uses | GPT Researcher Expects |
 |--------------|------------------------|
@@ -23,13 +27,35 @@ The critical missing piece was the **`azure_openai:` prefix** in the SMART_LLM a
 
 ---
 
-## Solution Implemented
+### 2) Passing unsupported `scraper=` kwarg into GPTResearcher
+
+In `backend/app/research_service.py` we were instantiating GPT Researcher like:
+
+```py
+GPTResearcher(..., scraper="firecrawl")
+```
+
+However, in current GPT Researcher versions (e.g. `0.14.x`), `GPTResearcher.__init__` does **not** accept a `scraper` parameter. Extra kwargs are stored and then forwarded into internal LLM calls, which can break AzureChatOpenAI/OpenAI requests with "unknown parameter" errors.
+
+This manifests as:
+- `LLM Response: None`
+- `Error in reading JSON ... NoneType`
+- `expected string or bytes-like object, got 'NoneType'`
+
+---
+
+## Solutions Implemented
 
 Added `_configure_gpt_researcher_for_azure()` function in `backend/app/research_service.py` that:
 
 1. Reads our app's Azure config (AZURE_OPENAI_KEY, AZURE_OPENAI_DEPLOYMENT_CHAT, etc.)
 2. Translates to GPT Researcher's expected format (SMART_LLM=azure_openai:gpt-41, etc.)
 3. Sets the env vars correctly at module load time, BEFORE GPTResearcher is initialized
+4. Also sets `AZURE_OPENAI_API_VERSION` because GPT Researcher embeddings read it directly
+
+Updated GPT Researcher initialization to:
+- **Stop passing `scraper=` kwarg** (prevents forwarding into LLM calls)
+- Configure scraper via env (`SCRAPER=firecrawl` or `SCRAPER=bs`) instead
 
 **Files Modified**:
 - `backend/app/research_service.py` - Added auto-config function
