@@ -774,7 +774,7 @@ async def health_check():
 
 @app.get("/api/v1/debug/gpt-researcher")
 async def debug_gpt_researcher():
-    """Debug GPT Researcher configuration and Azure OpenAI connection."""
+    """Debug GPT Researcher configuration and Azure OpenAI connection. v2"""
     import os
 
     # Get GPT Researcher relevant env vars
