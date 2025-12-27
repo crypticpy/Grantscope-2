@@ -20,30 +20,8 @@ export default defineConfig({
     },
   },
   build: {
-    rollupOptions: {
-      output: {
-manualChunks: (id) => {
-          // React Flow - separate chunk for heavy visualization library
-          if (id.includes('@xyflow/react') || id.includes('reactflow')) {
-            return 'reactflow'
-          }
-          // Date utilities
-          if (id.includes('date-fns')) {
-            return 'vendor-date'
-          }
-          // React core libraries
-          if (
-            id.includes('node_modules/react/') ||
-            id.includes('node_modules/react-dom/') ||
-            id.includes('node_modules/react-router') ||
-            id.includes('node_modules/scheduler/')
-          ) {
-            return 'vendor-react'
-          }
-          // Note: Recharts/D3 go to default vendor chunk to avoid circular dep issues
-        }
-      }
-    }
+    // Let Vite/Rollup handle code splitting automatically
+    // Manual chunking was causing module initialization order issues
   },
   test: {
     globals: true,
