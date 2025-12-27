@@ -22,8 +22,10 @@ import {
   FileSpreadsheet,
   Presentation,
   ArrowLeftRight,
+  Briefcase,
 } from 'lucide-react';
 import { Tooltip } from '../ui/Tooltip';
+import { AddToWorkstreamModal } from './AddToWorkstreamModal';
 import type { Card, ResearchTask } from './types';
 import { API_BASE_URL } from './utils';
 
@@ -79,6 +81,10 @@ export function CardActionButtons({
   const [showExportDropdown, setShowExportDropdown] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+
+  // Workstream modal state
+  const [showWorkstreamModal, setShowWorkstreamModal] = useState(false);
+  const [workstreamSuccess, setWorkstreamSuccess] = useState<string | null>(null);
 
   /**
    * Handle export to different formats
@@ -151,6 +157,29 @@ export function CardActionButtons({
    */
   const handleBackdropClick = useCallback(() => {
     setShowExportDropdown(false);
+  }, []);
+
+  /**
+   * Handle follow button with optional workstream prompt
+   */
+  const handleFollowClick = useCallback(() => {
+    onToggleFollow();
+    // If not already following, show the workstream modal after following
+    if (!isFollowing) {
+      // Small delay to let the follow action complete
+      setTimeout(() => {
+        setShowWorkstreamModal(true);
+      }, 300);
+    }
+  }, [isFollowing, onToggleFollow]);
+
+  /**
+   * Handle workstream add success
+   */
+  const handleWorkstreamSuccess = useCallback((workstreamName: string) => {
+    setWorkstreamSuccess(workstreamName);
+    // Clear success message after a few seconds
+    setTimeout(() => setWorkstreamSuccess(null), 4000);
   }, []);
 
   return (
@@ -293,9 +322,30 @@ export function CardActionButtons({
           )}
         </div>
 
+        {/* Add to Workstream button */}
+        <Tooltip
+          content={
+            <div className="max-w-[200px]">
+              <p className="font-medium">Add to Workstream</p>
+              <p className="text-xs text-gray-500">
+                Add this card to one of your research workstreams
+              </p>
+            </div>
+          }
+          side="bottom"
+        >
+          <button
+            onClick={() => setShowWorkstreamModal(true)}
+            className="inline-flex items-center justify-center min-h-[44px] sm:min-h-0 px-3 py-2 border border-brand-green/30 rounded-md shadow-sm text-sm font-medium text-brand-green bg-brand-green/10 hover:bg-brand-green hover:text-white transition-colors active:scale-95"
+          >
+            <Briefcase className="h-4 w-4 mr-2" />
+            Workstream
+          </button>
+        </Tooltip>
+
         {/* Follow button */}
         <button
-          onClick={onToggleFollow}
+          onClick={handleFollowClick}
           className={`inline-flex items-center justify-center min-h-[44px] sm:min-h-0 px-4 py-2 border rounded-md shadow-sm text-sm font-medium transition-colors active:scale-95 ${
             isFollowing
               ? 'border-red-300 text-red-700 bg-red-50 hover:bg-red-100'
@@ -338,6 +388,30 @@ export function CardActionButtons({
       {showExportDropdown && (
         <div className="fixed inset-0 z-10" onClick={handleBackdropClick} />
       )}
+
+      {/* Workstream Success Message */}
+      {workstreamSuccess && (
+        <div className="mt-4 rounded-lg border bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800 p-4">
+          <div className="flex items-center gap-3">
+            <div className="h-5 w-5 rounded-full bg-green-500 text-white flex items-center justify-center text-xs font-bold">
+              ✓
+            </div>
+            <p className="text-sm text-green-800 dark:text-green-200">
+              Added to <span className="font-medium">{workstreamSuccess}</span>
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Add to Workstream Modal */}
+      <AddToWorkstreamModal
+        isOpen={showWorkstreamModal}
+        onClose={() => setShowWorkstreamModal(false)}
+        cardId={card.id}
+        cardName={card.name}
+        onSuccess={handleWorkstreamSuccess}
+        getAuthToken={getAuthToken}
+      />
     </>
   );
 }

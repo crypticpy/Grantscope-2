@@ -985,6 +985,31 @@ const DiscoveryQueue: React.FC = () => {
     handleDismiss(cardId, 'irrelevant');
   }, [handleDismiss]);
 
+  // Filter cards - MUST be defined before callbacks that use it
+  const filteredCards = React.useMemo(() => {
+    let result = cards;
+
+    // Apply search filter
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      result = result.filter(
+        (card) =>
+          card.name.toLowerCase().includes(term) ||
+          card.summary.toLowerCase().includes(term)
+      );
+    }
+
+    // Apply pillar filter
+    if (selectedPillar) {
+      result = result.filter((card) => card.pillar_id === selectedPillar);
+    }
+
+    // Apply confidence filter
+    result = filterByConfidence(result, confidenceFilter);
+
+    return result;
+  }, [cards, searchTerm, selectedPillar, confidenceFilter]);
+
   /**
    * Stable callback for card click action (set focused card)
    * Used by SwipeableCard - accepts cardId parameter for stable reference pattern
@@ -1055,31 +1080,6 @@ const DiscoveryQueue: React.FC = () => {
   const clearSelection = useCallback(() => {
     setSelectedCards(new Set());
   }, []);
-
-  // Filter cards
-  const filteredCards = React.useMemo(() => {
-    let result = cards;
-
-    // Apply search filter
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      result = result.filter(
-        (card) =>
-          card.name.toLowerCase().includes(term) ||
-          card.summary.toLowerCase().includes(term)
-      );
-    }
-
-    // Apply pillar filter
-    if (selectedPillar) {
-      result = result.filter((card) => card.pillar_id === selectedPillar);
-    }
-
-    // Apply confidence filter
-    result = filterByConfidence(result, confidenceFilter);
-
-    return result;
-  }, [cards, searchTerm, selectedPillar, confidenceFilter]);
 
   // Stats
   const stats = React.useMemo(() => {

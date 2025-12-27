@@ -2059,3 +2059,343 @@ class ExportService:
         finally:
             # Clean up chart temp files
             self.cleanup_temp_files(temp_files_to_cleanup)
+
+    # ========================================================================
+    # Executive Brief Export Methods
+    # ========================================================================
+
+    async def generate_brief_pdf(
+        self,
+        brief_title: str,
+        card_name: str,
+        executive_summary: str,
+        content_markdown: str,
+        generated_at: Optional[datetime] = None,
+        version: Optional[int] = None
+    ) -> str:
+        """
+        Generate a PDF export for an executive brief.
+
+        Args:
+            brief_title: Title for the brief (usually card name)
+            card_name: Name of the card this brief is for
+            executive_summary: Executive summary text
+            content_markdown: Full brief content in markdown format
+            generated_at: When the brief was generated
+            version: Version number of the brief
+
+        Returns:
+            Path to the generated PDF file
+
+        Raises:
+            Exception: If PDF generation fails
+        """
+        try:
+            # Create temp file for PDF
+            pdf_file = tempfile.NamedTemporaryFile(
+                suffix='.pdf',
+                delete=False,
+                prefix='foresight_brief_'
+            )
+            pdf_path = pdf_file.name
+            pdf_file.close()
+
+            # Create PDF document
+            doc = SimpleDocTemplate(
+                pdf_path,
+                pagesize=PDF_PAGE_SIZE,
+                rightMargin=PDF_MARGIN,
+                leftMargin=PDF_MARGIN,
+                topMargin=PDF_MARGIN,
+                bottomMargin=PDF_MARGIN
+            )
+
+            # Get styles
+            styles = self._get_pdf_styles()
+
+            # Build document elements
+            elements = []
+
+            # Title
+            title_text = f"Executive Brief: {brief_title}"
+            if version and version > 1:
+                title_text += f" (v{version})"
+            elements.append(Paragraph(title_text, styles['Title']))
+            elements.append(Spacer(1, 6))
+
+            # Horizontal rule
+            elements.append(HRFlowable(
+                width="100%",
+                thickness=2,
+                color=PDF_COLORS["primary"],
+                spaceBefore=6,
+                spaceAfter=12
+            ))
+
+            # Metadata
+            meta_parts = [f"Card: {card_name}"]
+            if generated_at:
+                meta_parts.append(f"Generated: {generated_at.strftime('%Y-%m-%d %H:%M UTC')}")
+            if version:
+                meta_parts.append(f"Version: {version}")
+            elements.append(Paragraph(" | ".join(meta_parts), styles['Small']))
+            elements.append(Spacer(1, 12))
+
+            # Executive Summary section
+            elements.append(Paragraph("Executive Summary", styles['Heading1']))
+            elements.append(Paragraph(executive_summary or "No summary available.", styles['Body']))
+            elements.append(Spacer(1, 18))
+
+            # Full Brief Content
+            elements.append(Paragraph("Full Brief", styles['Heading1']))
+            elements.append(Spacer(1, 6))
+
+            # Parse markdown content into paragraphs
+            # Simple markdown parsing - split by double newlines for paragraphs
+            if content_markdown:
+                paragraphs = content_markdown.split('\n\n')
+                for para_text in paragraphs:
+                    para_text = para_text.strip()
+                    if not para_text:
+                        continue
+
+                    # Handle headers
+                    if para_text.startswith('# '):
+                        elements.append(Paragraph(para_text[2:], styles['Heading1']))
+                    elif para_text.startswith('## '):
+                        elements.append(Paragraph(para_text[3:], styles['Heading2']))
+                    elif para_text.startswith('### '):
+                        # Create a heading3 style on the fly
+                        heading3_style = ParagraphStyle(
+                            'Heading3',
+                            parent=styles['Body'],
+                            fontSize=PDF_BODY_FONT_SIZE,
+                            fontName='Helvetica-Bold',
+                            spaceBefore=10,
+                            spaceAfter=4,
+                        )
+                        elements.append(Paragraph(para_text[4:], heading3_style))
+                    elif para_text.startswith('- ') or para_text.startswith('* '):
+                        # Bullet list items
+                        bullet_style = ParagraphStyle(
+                            'Bullet',
+                            parent=styles['Body'],
+                            leftIndent=20,
+                            firstLineIndent=-10,
+                            spaceBefore=2,
+                            spaceAfter=2,
+                        )
+                        # Handle multi-line bullets
+                        lines = para_text.split('\n')
+                        for line in lines:
+                            line = line.strip()
+                            if line.startswith('- ') or line.startswith('* '):
+                                elements.append(Paragraph(f"• {line[2:]}", bullet_style))
+                            elif line:
+                                elements.append(Paragraph(line, styles['Body']))
+                    else:
+                        # Regular paragraph - handle inline markdown
+                        # Convert **bold** to <b>bold</b>
+                        import re
+                        formatted = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', para_text)
+                        # Convert *italic* to <i>italic</i>
+                        formatted = re.sub(r'\*(.+?)\*', r'<i>\1</i>', formatted)
+                        # Handle line breaks within paragraph
+                        formatted = formatted.replace('\n', '<br/>')
+                        elements.append(Paragraph(formatted, styles['Body']))
+
+                    elements.append(Spacer(1, 4))
+            else:
+                elements.append(Paragraph("No content available.", styles['Body']))
+
+            # Footer
+            elements.append(Spacer(1, 24))
+            elements.append(HRFlowable(
+                width="100%",
+                thickness=1,
+                color=PDF_COLORS["light"],
+                spaceBefore=6,
+                spaceAfter=6
+            ))
+
+            footer_text = f"Export Date: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}"
+            elements.append(Paragraph(footer_text, styles['Small']))
+            elements.append(Paragraph(
+                "Generated by Foresight Intelligence Platform",
+                styles['Small']
+            ))
+
+            # Build PDF
+            doc.build(elements)
+
+            logger.info(f"Generated brief PDF export: {brief_title}")
+            return pdf_path
+
+        except Exception as e:
+            logger.error(f"Error generating brief PDF: {e}")
+            raise
+
+    async def generate_brief_pptx(
+        self,
+        brief_title: str,
+        card_name: str,
+        executive_summary: str,
+        content_markdown: str,
+        generated_at: Optional[datetime] = None,
+        version: Optional[int] = None
+    ) -> str:
+        """
+        Generate a PowerPoint presentation for an executive brief.
+
+        Args:
+            brief_title: Title for the brief (usually card name)
+            card_name: Name of the card this brief is for
+            executive_summary: Executive summary text
+            content_markdown: Full brief content in markdown format
+            generated_at: When the brief was generated
+            version: Version number of the brief
+
+        Returns:
+            Path to the generated PowerPoint file
+
+        Raises:
+            Exception: If PowerPoint generation fails
+        """
+        try:
+            logger.info(f"Generating brief PowerPoint: {brief_title}")
+
+            # Create presentation
+            prs = Presentation()
+            prs.slide_width = PPTX_SLIDE_WIDTH
+            prs.slide_height = PPTX_SLIDE_HEIGHT
+
+            # 1. Title slide
+            subtitle = f"Executive Brief for {card_name}"
+            if version and version > 1:
+                subtitle += f" • Version {version}"
+            if generated_at:
+                subtitle += f" • {generated_at.strftime('%B %d, %Y')}"
+
+            self._add_title_slide(
+                prs,
+                title=brief_title,
+                subtitle=subtitle
+            )
+
+            # 2. Executive Summary slide
+            if executive_summary:
+                slide_layout = prs.slide_layouts[6]  # Blank layout
+                slide = prs.slides.add_slide(slide_layout)
+
+                # Title bar
+                title_bar = slide.shapes.add_shape(
+                    MSO_SHAPE.RECTANGLE,
+                    Inches(0), Inches(0),
+                    PPTX_SLIDE_WIDTH, Inches(1.2)
+                )
+                title_bar.fill.solid()
+                title_bar.fill.fore_color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["secondary"])
+                title_bar.line.fill.background()
+
+                # Title
+                title_box = slide.shapes.add_textbox(
+                    PPTX_MARGIN, Inches(0.3),
+                    PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.8)
+                )
+                title_frame = title_box.text_frame
+                title_para = title_frame.paragraphs[0]
+                title_para.text = "Executive Summary"
+                title_para.font.size = Pt(32)
+                title_para.font.bold = True
+                title_para.font.color.rgb = RGBColor(255, 255, 255)
+
+                # Summary content
+                summary_box = slide.shapes.add_textbox(
+                    PPTX_MARGIN, Inches(1.6),
+                    PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(5.5)
+                )
+                summary_frame = summary_box.text_frame
+                summary_frame.word_wrap = True
+                summary_para = summary_frame.paragraphs[0]
+                # Truncate if too long for slide
+                summary_text = executive_summary[:1500] if len(executive_summary) > 1500 else executive_summary
+                summary_para.text = summary_text
+                summary_para.font.size = PPTX_BODY_FONT_SIZE
+                summary_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
+                summary_para.line_spacing = 1.4
+
+            # 3. Content slides - parse markdown into sections
+            if content_markdown:
+                sections = self._parse_markdown_sections(content_markdown)
+
+                for section_title, section_content in sections:
+                    self._add_description_slide(
+                        prs,
+                        title=section_title or "Brief Content",
+                        description=section_content
+                    )
+
+            # Save presentation to temp file
+            temp_file = tempfile.NamedTemporaryFile(
+                suffix='.pptx',
+                delete=False,
+                prefix='foresight_brief_'
+            )
+            prs.save(temp_file.name)
+
+            logger.info(f"Brief PowerPoint generated successfully: {temp_file.name}")
+            return temp_file.name
+
+        except Exception as e:
+            logger.error(f"Error generating brief PowerPoint: {e}")
+            raise
+
+    def _parse_markdown_sections(
+        self,
+        content_markdown: str,
+        max_sections: int = 10
+    ) -> List[Tuple[str, str]]:
+        """
+        Parse markdown content into sections based on headers.
+
+        Args:
+            content_markdown: Markdown content to parse
+            max_sections: Maximum number of sections to return
+
+        Returns:
+            List of (title, content) tuples
+        """
+        import re
+
+        sections = []
+        current_title = "Overview"
+        current_content = []
+
+        lines = content_markdown.split('\n')
+
+        for line in lines:
+            # Check for headers
+            header_match = re.match(r'^(#{1,3})\s+(.+)$', line)
+            if header_match:
+                # Save previous section if it has content
+                if current_content:
+                    content_text = '\n'.join(current_content).strip()
+                    if content_text:
+                        sections.append((current_title, content_text))
+
+                current_title = header_match.group(2)
+                current_content = []
+            else:
+                current_content.append(line)
+
+        # Don't forget the last section
+        if current_content:
+            content_text = '\n'.join(current_content).strip()
+            if content_text:
+                sections.append((current_title, content_text))
+
+        # If no sections were found, return all content as one section
+        if not sections and content_markdown.strip():
+            sections = [("Brief Content", content_markdown.strip())]
+
+        return sections[:max_sections]

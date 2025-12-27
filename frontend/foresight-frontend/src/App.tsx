@@ -23,6 +23,7 @@ const Compare = lazy(() => import('./pages/Compare'));
 // Workstream pages - share workstream components
 const Workstreams = lazy(() => import('./pages/Workstreams'));
 const WorkstreamFeed = lazy(() => import('./pages/WorkstreamFeed'));
+const WorkstreamKanban = lazy(() => import('./pages/WorkstreamKanban'));
 
 // Standalone pages
 const Settings = lazy(() => import('./pages/Settings'));
@@ -136,6 +137,10 @@ function App() {
                 />
 
                 {/* Workstream pages - lazy-loaded */}
+                <Route
+                  path="/workstreams/:id/board"
+                  element={<ProtectedRoute element={<WorkstreamKanban />} loadingMessage="Loading kanban board..." />}
+                />
                 <Route
                   path="/workstreams"
                   element={<ProtectedRoute element={<Workstreams />} loadingMessage="Loading workstreams..." />}

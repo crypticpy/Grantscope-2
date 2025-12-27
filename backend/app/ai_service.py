@@ -499,7 +499,7 @@ class AIService:
 
         logger.debug(f"Generating embedding for text ({len(truncated)} chars)")
 
-        response = await self.client.embeddings.create(
+        response = self.client.embeddings.create(
             model="text-embedding-ada-002",
             input=truncated,
             timeout=REQUEST_TIMEOUT
@@ -530,7 +530,7 @@ class AIService:
 
         logger.debug(f"Triaging source: {title[:50]}...")
 
-        response = await self.client.chat.completions.create(
+        response = self.client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
@@ -580,7 +580,7 @@ class AIService:
 
         logger.info(f"Analyzing source: {title[:50]}...")
 
-        response = await self.client.chat.completions.create(
+        response = self.client.chat.completions.create(
             model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
@@ -683,7 +683,7 @@ class AIService:
 
         logger.debug("Extracting entities from content")
 
-        response = await self.client.chat.completions.create(
+        response = self.client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
@@ -757,7 +757,7 @@ Respond with JSON:
 
         logger.debug(f"Checking card match: {source_card_name} vs {existing_card_name}")
 
-        response = await self.client.chat.completions.create(
+        response = self.client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
@@ -831,7 +831,7 @@ Respond with JSON:
 
         logger.debug(f"Enhancing card from research: {current_name}")
 
-        response = await self.client.chat.completions.create(
+        response = self.client.chat.completions.create(
             model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
@@ -918,7 +918,7 @@ Respond with JSON:
 
         logger.info(f"Generating comprehensive deep research report for: {card_name}")
 
-        response = await self.client.chat.completions.create(
+        response = self.client.chat.completions.create(
             model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=4000,  # Allow for comprehensive report

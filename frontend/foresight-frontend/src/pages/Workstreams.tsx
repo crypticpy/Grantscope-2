@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Plus, FolderOpen, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
@@ -126,8 +127,23 @@ function WorkstreamCard({ workstream, onEdit, onDelete }: WorkstreamCardProps) {
     return nums.join(', ');
   };
 
+  const handleEditClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onEdit();
+  };
+
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onDelete();
+  };
+
   return (
-    <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 border-l-4 border-transparent transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-l-brand-blue">
+    <Link
+      to={`/workstreams/${workstream.id}/board`}
+      className="block bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 border-l-4 border-transparent transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-l-brand-blue cursor-pointer"
+    >
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex-1 min-w-0">
@@ -244,7 +260,7 @@ function WorkstreamCard({ workstream, onEdit, onDelete }: WorkstreamCardProps) {
           </span>
           <div className="flex items-center gap-2">
             <button
-              onClick={onEdit}
+              onClick={handleEditClick}
               className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-[#3d4176] border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-brand-blue transition-colors"
               aria-label={`Edit ${workstream.name}`}
             >
@@ -252,7 +268,7 @@ function WorkstreamCard({ workstream, onEdit, onDelete }: WorkstreamCardProps) {
               Edit
             </button>
             <button
-              onClick={onDelete}
+              onClick={handleDeleteClick}
               className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-red-700 dark:text-red-400 bg-white dark:bg-[#3d4176] border border-red-300 dark:border-red-500/50 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-red-500 transition-colors"
               aria-label={`Delete ${workstream.name}`}
             >
@@ -262,7 +278,7 @@ function WorkstreamCard({ workstream, onEdit, onDelete }: WorkstreamCardProps) {
           </div>
         </div>
       </div>
-    </div>
+    </Link>
   );
 }
 

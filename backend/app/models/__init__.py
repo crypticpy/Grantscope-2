@@ -56,6 +56,18 @@ from .history import (
     ScoreHistoryResponse,
 )
 
+from .brief import (
+    # Executive brief models
+    BriefStatusEnum,
+    BriefSection,
+    ExecutiveBriefCreate,
+    ExecutiveBriefResponse,
+    BriefGenerateResponse,
+    BriefStatusResponse,
+    BriefListItem,
+    VALID_BRIEF_STATUSES,
+)
+
 __all__ = [
     # Validation models
     "ClassificationValidation",
@@ -94,4 +106,13 @@ __all__ = [
     "ScoreHistory",
     "ScoreHistoryCreate",
     "ScoreHistoryResponse",
+    # Executive brief models
+    "BriefStatusEnum",
+    "BriefSection",
+    "ExecutiveBriefCreate",
+    "ExecutiveBriefResponse",
+    "BriefGenerateResponse",
+    "BriefStatusResponse",
+    "BriefListItem",
+    "VALID_BRIEF_STATUSES",
 ]

@@ -35,6 +35,16 @@ logger = logging.getLogger(__name__)
 # Research service import
 from app.research_service import ResearchService
 
+# Executive brief service import
+from app.brief_service import ExecutiveBriefService
+from app.models.brief import (
+    ExecutiveBriefResponse,
+    BriefGenerateResponse,
+    BriefStatusResponse,
+    BriefVersionsResponse,
+    BriefVersionListItem,
+)
+
 # Search models import
 from app.models.search import (
     AdvancedSearchRequest,
@@ -90,7 +100,7 @@ app = FastAPI(
 )
 
 # CORS middleware - Configure allowed origins from environment
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173,http://localhost:5174").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -246,6 +256,104 @@ class WorkstreamUpdate(BaseModel):
     keywords: Optional[List[str]] = None
     is_active: Optional[bool] = None
     auto_add: Optional[bool] = None
+
+
+# ============================================================================
+# Workstream Kanban Card Models
+# ============================================================================
+
+# Valid status values for workstream cards (Kanban columns)
+VALID_WORKSTREAM_CARD_STATUSES = {"inbox", "screening", "research", "brief", "watching", "archived"}
+
+
+class WorkstreamCardBase(BaseModel):
+    """Base model for workstream card data."""
+    id: str
+    workstream_id: str
+    card_id: str
+    added_by: str
+    added_at: datetime
+    status: str = "inbox"
+    position: int = 0
+    notes: Optional[str] = None
+    reminder_at: Optional[datetime] = None
+    added_from: str = "manual"
+    updated_at: Optional[datetime] = None
+
+
+class WorkstreamCardWithDetails(BaseModel):
+    """Workstream card with full card details for display."""
+    id: str
+    workstream_id: str
+    card_id: str
+    added_by: str
+    added_at: datetime
+    status: str
+    position: int
+    notes: Optional[str] = None
+    reminder_at: Optional[datetime] = None
+    added_from: str
+    updated_at: Optional[datetime] = None
+    # Card details
+    card: Optional[Dict[str, Any]] = None
+
+
+class WorkstreamCardCreate(BaseModel):
+    """Request model for adding a card to a workstream."""
+    card_id: str = Field(..., description="UUID of the card to add")
+    status: Optional[str] = Field("inbox", description="Initial status (column)")
+    notes: Optional[str] = Field(None, max_length=5000, description="Optional notes")
+
+    @validator('card_id')
+    def validate_card_id_format(cls, v):
+        """Validate UUID format for card_id."""
+        import re
+        uuid_pattern = re.compile(
+            r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+            re.IGNORECASE
+        )
+        if not uuid_pattern.match(v):
+            raise ValueError('Invalid UUID format for card_id')
+        return v
+
+    @validator('status')
+    def validate_status(cls, v):
+        """Validate status is a valid Kanban column."""
+        if v and v not in VALID_WORKSTREAM_CARD_STATUSES:
+            raise ValueError(f"Invalid status. Must be one of: {', '.join(sorted(VALID_WORKSTREAM_CARD_STATUSES))}")
+        return v or "inbox"
+
+
+class WorkstreamCardUpdate(BaseModel):
+    """Request model for updating a workstream card."""
+    status: Optional[str] = Field(None, description="New status (column)")
+    position: Optional[int] = Field(None, ge=0, description="New position in column")
+    notes: Optional[str] = Field(None, max_length=5000, description="Card notes")
+    reminder_at: Optional[str] = Field(None, description="Reminder timestamp (ISO format)")
+
+    @validator('status')
+    def validate_status(cls, v):
+        """Validate status is a valid Kanban column."""
+        if v and v not in VALID_WORKSTREAM_CARD_STATUSES:
+            raise ValueError(f"Invalid status. Must be one of: {', '.join(sorted(VALID_WORKSTREAM_CARD_STATUSES))}")
+        return v
+
+
+class WorkstreamCardsGroupedResponse(BaseModel):
+    """Response model for cards grouped by status (Kanban view)."""
+    inbox: List[WorkstreamCardWithDetails] = []
+    screening: List[WorkstreamCardWithDetails] = []
+    research: List[WorkstreamCardWithDetails] = []
+    brief: List[WorkstreamCardWithDetails] = []
+    watching: List[WorkstreamCardWithDetails] = []
+    archived: List[WorkstreamCardWithDetails] = []
+
+
+class AutoPopulateResponse(BaseModel):
+    """Response model for auto-populate results."""
+    added: int = Field(..., description="Number of cards added")
+    cards: List[WorkstreamCardWithDetails] = Field(default=[], description="Cards that were added")
+
 
 class Note(BaseModel):
     id: str
@@ -3195,16 +3303,26 @@ async def get_workstream_feed(
     if workstream.get("goal_ids"):
         query = query.in_("goal_id", workstream["goal_ids"])
 
-    # Filter by stage_ids
-    if workstream.get("stage_ids"):
-        query = query.in_("stage_id", workstream["stage_ids"])
+    # Note: stage_ids filter applied in Python because card stage_id format
+    # is "5_implementing" while workstream stores ["4", "5", "6"]
 
     # Filter by horizon (skip if ALL)
     if workstream.get("horizon") and workstream["horizon"] != "ALL":
         query = query.eq("horizon", workstream["horizon"])
 
     response = query.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
-    cards = response.data
+    cards = response.data or []
+
+    # Apply stage filtering (extract number prefix from stage_id like "5_implementing")
+    stage_ids = workstream.get("stage_ids", [])
+    if stage_ids:
+        filtered_by_stage = []
+        for card in cards:
+            card_stage_id = card.get("stage_id") or ""
+            stage_num = card_stage_id.split("_")[0] if "_" in card_stage_id else card_stage_id
+            if stage_num in stage_ids:
+                filtered_by_stage.append(card)
+        cards = filtered_by_stage
 
     # Apply keyword filtering in Python (PostgREST doesn't support OR across multiple text columns easily)
     keywords = workstream.get("keywords", [])
@@ -3222,6 +3340,984 @@ async def get_workstream_feed(
         return filtered_cards
 
     return cards
+
+
+# ============================================================================
+# Workstream Kanban Card Endpoints
+# ============================================================================
+
+@app.get("/api/v1/me/workstreams/{workstream_id}/cards", response_model=WorkstreamCardsGroupedResponse)
+async def get_workstream_cards(
+    workstream_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get all cards in a workstream grouped by status (Kanban view).
+
+    Returns cards organized into columns:
+    - inbox: Newly added cards awaiting review
+    - screening: Cards being screened for relevance
+    - research: Cards actively being researched
+    - brief: Cards with completed briefs
+    - watching: Cards being monitored for updates
+    - archived: Archived cards
+
+    Each card includes full card details joined from the cards table.
+
+    Args:
+        workstream_id: UUID of the workstream
+        current_user: Authenticated user (injected)
+
+    Returns:
+        WorkstreamCardsGroupedResponse with cards grouped by status
+
+    Raises:
+        HTTPException 404: Workstream not found or not owned by user
+    """
+    # Verify workstream belongs to user
+    ws_response = supabase.table("workstreams").select("id, user_id").eq("id", workstream_id).execute()
+    if not ws_response.data:
+        raise HTTPException(status_code=404, detail="Workstream not found")
+
+    if ws_response.data[0]["user_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Not authorized to access this workstream")
+
+    # Fetch all cards with joined card details, ordered by position
+    cards_response = supabase.table("workstream_cards").select(
+        "*, cards(*)"
+    ).eq("workstream_id", workstream_id).order("position").execute()
+
+    # Group cards by status
+    grouped = {
+        "inbox": [],
+        "screening": [],
+        "research": [],
+        "brief": [],
+        "watching": [],
+        "archived": []
+    }
+
+    for item in cards_response.data or []:
+        card_status = item.get("status", "inbox")
+        if card_status not in grouped:
+            card_status = "inbox"
+
+        card_with_details = WorkstreamCardWithDetails(
+            id=item["id"],
+            workstream_id=item["workstream_id"],
+            card_id=item["card_id"],
+            added_by=item["added_by"],
+            added_at=item["added_at"],
+            status=item.get("status", "inbox"),
+            position=item.get("position", 0),
+            notes=item.get("notes"),
+            reminder_at=item.get("reminder_at"),
+            added_from=item.get("added_from", "manual"),
+            updated_at=item.get("updated_at"),
+            card=item.get("cards")
+        )
+        grouped[card_status].append(card_with_details)
+
+    return WorkstreamCardsGroupedResponse(**grouped)
+
+
+@app.post("/api/v1/me/workstreams/{workstream_id}/cards", response_model=WorkstreamCardWithDetails)
+async def add_card_to_workstream(
+    workstream_id: str,
+    card_data: WorkstreamCardCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Add a card to a workstream.
+
+    The card will be added with the specified status (defaults to 'inbox')
+    and positioned at the end of that column.
+
+    Args:
+        workstream_id: UUID of the workstream
+        card_data: Card addition request (card_id, optional status/notes)
+        current_user: Authenticated user (injected)
+
+    Returns:
+        WorkstreamCardWithDetails with the created card association
+
+    Raises:
+        HTTPException 404: Workstream or card not found
+        HTTPException 403: Not authorized
+        HTTPException 409: Card already in workstream
+    """
+    # Verify workstream belongs to user
+    ws_response = supabase.table("workstreams").select("id, user_id").eq("id", workstream_id).execute()
+    if not ws_response.data:
+        raise HTTPException(status_code=404, detail="Workstream not found")
+
+    if ws_response.data[0]["user_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Not authorized to add cards to this workstream")
+
+    # Verify card exists
+    card_response = supabase.table("cards").select("*").eq("id", card_data.card_id).execute()
+    if not card_response.data:
+        raise HTTPException(status_code=404, detail="Card not found")
+
+    # Check if card is already in workstream
+    existing = supabase.table("workstream_cards").select("id").eq(
+        "workstream_id", workstream_id
+    ).eq("card_id", card_data.card_id).execute()
+    if existing.data:
+        raise HTTPException(status_code=409, detail="Card is already in this workstream")
+
+    # Get max position for the target status column
+    status = card_data.status or "inbox"
+    position_response = supabase.table("workstream_cards").select("position").eq(
+        "workstream_id", workstream_id
+    ).eq("status", status).order("position", desc=True).limit(1).execute()
+
+    next_position = 0
+    if position_response.data:
+        next_position = position_response.data[0]["position"] + 1
+
+    # Create workstream card record
+    now = datetime.now().isoformat()
+    new_card = {
+        "workstream_id": workstream_id,
+        "card_id": card_data.card_id,
+        "added_by": current_user["id"],
+        "added_at": now,
+        "status": status,
+        "position": next_position,
+        "notes": card_data.notes,
+        "added_from": "manual",
+        "updated_at": now
+    }
+
+    result = supabase.table("workstream_cards").insert(new_card).execute()
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Failed to add card to workstream")
+
+    inserted = result.data[0]
+    return WorkstreamCardWithDetails(
+        id=inserted["id"],
+        workstream_id=inserted["workstream_id"],
+        card_id=inserted["card_id"],
+        added_by=inserted["added_by"],
+        added_at=inserted["added_at"],
+        status=inserted.get("status", "inbox"),
+        position=inserted.get("position", 0),
+        notes=inserted.get("notes"),
+        reminder_at=inserted.get("reminder_at"),
+        added_from=inserted.get("added_from", "manual"),
+        updated_at=inserted.get("updated_at"),
+        card=card_response.data[0]
+    )
+
+
+@app.patch("/api/v1/me/workstreams/{workstream_id}/cards/{card_id}", response_model=WorkstreamCardWithDetails)
+async def update_workstream_card(
+    workstream_id: str,
+    card_id: str,
+    update_data: WorkstreamCardUpdate,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Update a workstream card's status, position, notes, or reminder.
+
+    When changing status (moving to a different column), the card is placed
+    at the end of the new column unless a specific position is provided.
+
+    Args:
+        workstream_id: UUID of the workstream
+        card_id: UUID of the card
+        update_data: Update request (status, position, notes, reminder_at)
+        current_user: Authenticated user (injected)
+
+    Returns:
+        WorkstreamCardWithDetails with updated data
+
+    Raises:
+        HTTPException 404: Workstream or card not found
+        HTTPException 403: Not authorized
+    """
+    # Verify workstream belongs to user
+    ws_response = supabase.table("workstreams").select("id, user_id").eq("id", workstream_id).execute()
+    if not ws_response.data:
+        raise HTTPException(status_code=404, detail="Workstream not found")
+
+    if ws_response.data[0]["user_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Not authorized to update cards in this workstream")
+
+    # Fetch the workstream card
+    wsc_response = supabase.table("workstream_cards").select("*, cards(*)").eq(
+        "workstream_id", workstream_id
+    ).eq("card_id", card_id).execute()
+
+    if not wsc_response.data:
+        raise HTTPException(status_code=404, detail="Card not found in this workstream")
+
+    existing = wsc_response.data[0]
+    workstream_card_id = existing["id"]
+
+    # Build update dict
+    update_dict = {"updated_at": datetime.now().isoformat()}
+
+    if update_data.status is not None:
+        # If status changed, recalculate position
+        if update_data.status != existing.get("status"):
+            # Get max position in new column
+            position_response = supabase.table("workstream_cards").select("position").eq(
+                "workstream_id", workstream_id
+            ).eq("status", update_data.status).order("position", desc=True).limit(1).execute()
+
+            next_position = 0
+            if position_response.data:
+                next_position = position_response.data[0]["position"] + 1
+
+            update_dict["status"] = update_data.status
+            update_dict["position"] = update_data.position if update_data.position is not None else next_position
+        else:
+            update_dict["status"] = update_data.status
+            if update_data.position is not None:
+                update_dict["position"] = update_data.position
+    elif update_data.position is not None:
+        update_dict["position"] = update_data.position
+
+    if update_data.notes is not None:
+        update_dict["notes"] = update_data.notes
+
+    if update_data.reminder_at is not None:
+        update_dict["reminder_at"] = update_data.reminder_at
+
+    # Perform update
+    result = supabase.table("workstream_cards").update(update_dict).eq("id", workstream_card_id).execute()
+
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Failed to update workstream card")
+
+    updated = result.data[0]
+
+    # Re-fetch with card details for response
+    final_response = supabase.table("workstream_cards").select("*, cards(*)").eq(
+        "id", workstream_card_id
+    ).execute()
+
+    if not final_response.data:
+        raise HTTPException(status_code=500, detail="Failed to retrieve updated card")
+
+    item = final_response.data[0]
+    return WorkstreamCardWithDetails(
+        id=item["id"],
+        workstream_id=item["workstream_id"],
+        card_id=item["card_id"],
+        added_by=item["added_by"],
+        added_at=item["added_at"],
+        status=item.get("status", "inbox"),
+        position=item.get("position", 0),
+        notes=item.get("notes"),
+        reminder_at=item.get("reminder_at"),
+        added_from=item.get("added_from", "manual"),
+        updated_at=item.get("updated_at"),
+        card=item.get("cards")
+    )
+
+
+@app.delete("/api/v1/me/workstreams/{workstream_id}/cards/{card_id}")
+async def remove_card_from_workstream(
+    workstream_id: str,
+    card_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Remove a card from a workstream.
+
+    This only removes the association; the card itself is not deleted.
+
+    Args:
+        workstream_id: UUID of the workstream
+        card_id: UUID of the card
+        current_user: Authenticated user (injected)
+
+    Returns:
+        Success message
+
+    Raises:
+        HTTPException 404: Workstream or card not found
+        HTTPException 403: Not authorized
+    """
+    # Verify workstream belongs to user
+    ws_response = supabase.table("workstreams").select("id, user_id").eq("id", workstream_id).execute()
+    if not ws_response.data:
+        raise HTTPException(status_code=404, detail="Workstream not found")
+
+    if ws_response.data[0]["user_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Not authorized to remove cards from this workstream")
+
+    # Check card exists in workstream
+    existing = supabase.table("workstream_cards").select("id").eq(
+        "workstream_id", workstream_id
+    ).eq("card_id", card_id).execute()
+
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Card not found in this workstream")
+
+    # Delete the association
+    supabase.table("workstream_cards").delete().eq(
+        "workstream_id", workstream_id
+    ).eq("card_id", card_id).execute()
+
+    return {"status": "removed", "message": "Card removed from workstream"}
+
+
+@app.post("/api/v1/me/workstreams/{workstream_id}/cards/{card_id}/deep-dive", response_model=ResearchTask)
+async def trigger_card_deep_dive(
+    workstream_id: str,
+    card_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Trigger deep research for a card in the workstream.
+
+    Creates a research task with task_type='deep_research' for the specified card.
+    The research runs asynchronously; poll GET /research/{task_id} for status.
+
+    Rate limited to 2 deep research requests per card per day.
+
+    Args:
+        workstream_id: UUID of the workstream
+        card_id: UUID of the card
+        current_user: Authenticated user (injected)
+
+    Returns:
+        ResearchTask with the created task details
+
+    Raises:
+        HTTPException 404: Workstream or card not found
+        HTTPException 403: Not authorized
+        HTTPException 429: Daily rate limit exceeded
+    """
+    # Verify workstream belongs to user
+    ws_response = supabase.table("workstreams").select("id, user_id").eq("id", workstream_id).execute()
+    if not ws_response.data:
+        raise HTTPException(status_code=404, detail="Workstream not found")
+
+    if ws_response.data[0]["user_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Not authorized to access this workstream")
+
+    # Verify card exists in workstream
+    wsc_response = supabase.table("workstream_cards").select("id").eq(
+        "workstream_id", workstream_id
+    ).eq("card_id", card_id).execute()
+
+    if not wsc_response.data:
+        raise HTTPException(status_code=404, detail="Card not found in this workstream")
+
+    # Check rate limit for deep research
+    service = ResearchService(supabase, openai_client)
+    if not await service.check_rate_limit(card_id):
+        raise HTTPException(status_code=429, detail="Daily deep research limit reached (2 per card)")
+
+    # Create research task
+    task_record = {
+        "user_id": current_user["id"],
+        "card_id": card_id,
+        "task_type": "deep_research",
+        "status": "queued"
+    }
+
+    task_result = supabase.table("research_tasks").insert(task_record).execute()
+
+    if not task_result.data:
+        raise HTTPException(status_code=500, detail="Failed to create research task")
+
+    task = task_result.data[0]
+    task_id = task["id"]
+
+    # Create task data for background execution
+    task_data = ResearchTaskCreate(
+        card_id=card_id,
+        task_type="deep_research"
+    )
+
+    # Execute research in background (non-blocking)
+    asyncio.create_task(
+        execute_research_task_background(task_id, task_data, current_user["id"])
+    )
+
+    return ResearchTask(**task)
+
+
+@app.post("/api/v1/me/workstreams/{workstream_id}/auto-populate", response_model=AutoPopulateResponse)
+async def auto_populate_workstream(
+    workstream_id: str,
+    current_user: dict = Depends(get_current_user),
+    limit: int = Query(default=20, ge=1, le=50, description="Maximum cards to add")
+):
+    """
+    Auto-populate workstream with matching cards.
+
+    Finds cards matching the workstream's filter criteria (pillars, goals, stages,
+    horizon, keywords) that are not already in the workstream, and adds them
+    to the 'inbox' column.
+
+    Args:
+        workstream_id: UUID of the workstream
+        current_user: Authenticated user (injected)
+        limit: Maximum number of cards to add (default: 20, max: 50)
+
+    Returns:
+        AutoPopulateResponse with count and details of added cards
+
+    Raises:
+        HTTPException 404: Workstream not found
+        HTTPException 403: Not authorized
+    """
+    # Verify workstream belongs to user
+    ws_response = supabase.table("workstreams").select("*").eq("id", workstream_id).eq("user_id", current_user["id"]).execute()
+    if not ws_response.data:
+        raise HTTPException(status_code=404, detail="Workstream not found")
+
+    workstream = ws_response.data[0]
+
+    # Get existing card IDs in workstream
+    existing_response = supabase.table("workstream_cards").select("card_id").eq(
+        "workstream_id", workstream_id
+    ).execute()
+    existing_card_ids = {item["card_id"] for item in existing_response.data or []}
+
+    # Build query based on workstream filters
+    query = supabase.table("cards").select("*").eq("status", "active")
+
+    # Apply filters
+    if workstream.get("pillar_ids"):
+        query = query.in_("pillar_id", workstream["pillar_ids"])
+
+    if workstream.get("goal_ids"):
+        query = query.in_("goal_id", workstream["goal_ids"])
+
+    # Note: stage_ids filter is applied client-side because card stage_id format
+    # is "5_implementing" while workstream stores ["4", "5", "6"]
+    # We need to extract the number prefix for comparison
+
+    if workstream.get("horizon") and workstream["horizon"] != "ALL":
+        query = query.eq("horizon", workstream["horizon"])
+
+    # Fetch more cards than limit to account for filtering
+    fetch_limit = min(limit * 3, 100)
+    response = query.order("created_at", desc=True).limit(fetch_limit).execute()
+    cards = response.data or []
+
+    # Apply stage filtering (extract number prefix from stage_id like "5_implementing")
+    stage_ids = workstream.get("stage_ids", [])
+    if stage_ids:
+        filtered_by_stage = []
+        for card in cards:
+            card_stage_id = card.get("stage_id") or ""
+            # Extract number prefix (e.g., "5" from "5_implementing")
+            stage_num = card_stage_id.split("_")[0] if "_" in card_stage_id else card_stage_id
+            if stage_num in stage_ids:
+                filtered_by_stage.append(card)
+        cards = filtered_by_stage
+
+    # Apply keyword filtering
+    keywords = workstream.get("keywords", [])
+    if keywords:
+        filtered_cards = []
+        for card in cards:
+            card_text = " ".join([
+                (card.get("name") or "").lower(),
+                (card.get("summary") or "").lower(),
+                (card.get("description") or "").lower()
+            ])
+            if any(keyword.lower() in card_text for keyword in keywords):
+                filtered_cards.append(card)
+        cards = filtered_cards
+
+    # Filter out cards already in workstream
+    candidates = [c for c in cards if c["id"] not in existing_card_ids][:limit]
+
+    if not candidates:
+        return AutoPopulateResponse(added=0, cards=[])
+
+    # Get current max position in inbox
+    position_response = supabase.table("workstream_cards").select("position").eq(
+        "workstream_id", workstream_id
+    ).eq("status", "inbox").order("position", desc=True).limit(1).execute()
+
+    start_position = 0
+    if position_response.data:
+        start_position = position_response.data[0]["position"] + 1
+
+    # Add cards to workstream
+    now = datetime.now().isoformat()
+    new_records = []
+    for idx, card in enumerate(candidates):
+        new_records.append({
+            "workstream_id": workstream_id,
+            "card_id": card["id"],
+            "added_by": current_user["id"],
+            "added_at": now,
+            "status": "inbox",
+            "position": start_position + idx,
+            "added_from": "auto",
+            "updated_at": now
+        })
+
+    # Insert all records
+    result = supabase.table("workstream_cards").insert(new_records).execute()
+
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Failed to auto-populate workstream")
+
+    # Build response with card details
+    added_cards = []
+    card_map = {c["id"]: c for c in candidates}
+    for item in result.data:
+        added_cards.append(WorkstreamCardWithDetails(
+            id=item["id"],
+            workstream_id=item["workstream_id"],
+            card_id=item["card_id"],
+            added_by=item["added_by"],
+            added_at=item["added_at"],
+            status=item.get("status", "inbox"),
+            position=item.get("position", 0),
+            notes=item.get("notes"),
+            reminder_at=item.get("reminder_at"),
+            added_from=item.get("added_from", "auto"),
+            updated_at=item.get("updated_at"),
+            card=card_map.get(item["card_id"])
+        ))
+
+    logger.info(f"Auto-populated workstream {workstream_id} with {len(added_cards)} cards")
+
+    return AutoPopulateResponse(added=len(added_cards), cards=added_cards)
+
+
+# Executive Brief endpoints
+@app.post("/api/v1/me/workstreams/{workstream_id}/cards/{card_id}/brief", response_model=BriefGenerateResponse)
+async def generate_executive_brief(
+    workstream_id: str,
+    card_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Generate a new version of an executive brief for a card in a workstream.
+
+    Creates a new brief version that runs asynchronously.
+    Each call creates a new version (v1, v2, v3, etc.).
+    Poll GET .../brief/status for completion status.
+
+    Args:
+        workstream_id: UUID of the workstream
+        card_id: UUID of the card
+        current_user: Authenticated user (injected)
+
+    Returns:
+        BriefGenerateResponse with brief ID, version, and pending status
+
+    Raises:
+        HTTPException 404: Workstream or card not found
+        HTTPException 403: Not authorized to access workstream
+    """
+    # Verify workstream belongs to user
+    ws_response = supabase.table("workstreams").select("id, user_id").eq("id", workstream_id).execute()
+    if not ws_response.data:
+        raise HTTPException(status_code=404, detail="Workstream not found")
+
+    if ws_response.data[0]["user_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Not authorized to access this workstream")
+
+    # Verify card exists in workstream and get the workstream_cards record
+    wsc_response = supabase.table("workstream_cards").select("id, card_id").eq(
+        "workstream_id", workstream_id
+    ).eq("card_id", card_id).execute()
+
+    if not wsc_response.data:
+        raise HTTPException(status_code=404, detail="Card not found in this workstream")
+
+    workstream_card_id = wsc_response.data[0]["id"]
+
+    # Create brief service
+    brief_service = ExecutiveBriefService(supabase, openai_client)
+
+    try:
+        # Check if there's a brief currently generating
+        existing_brief = await brief_service.get_brief_by_workstream_card(workstream_card_id)
+
+        if existing_brief and existing_brief.get("status") in ("pending", "generating"):
+            # Don't allow generating while another is in progress
+            return BriefGenerateResponse(
+                id=existing_brief["id"],
+                status=existing_brief["status"],
+                version=existing_brief.get("version", 1),
+                message="Brief generation already in progress"
+            )
+
+        # Get the last completed brief to determine new sources
+        last_completed = await brief_service.get_latest_completed_brief(workstream_card_id)
+        since_timestamp = None
+        sources_since_previous = None
+
+        if last_completed and last_completed.get("generated_at"):
+            since_timestamp = last_completed["generated_at"]
+            # Count new sources since last brief
+            new_source_count = await brief_service.count_new_sources(card_id, since_timestamp)
+            if new_source_count > 0:
+                sources_since_previous = {
+                    "count": new_source_count,
+                    "since_version": last_completed.get("version", 1),
+                    "since_date": since_timestamp
+                }
+
+        # Create the brief record with pending status (auto-increments version)
+        brief_record = await brief_service.create_brief_record(
+            workstream_card_id=workstream_card_id,
+            card_id=card_id,
+            user_id=current_user["id"],
+            sources_since_previous=sources_since_previous
+        )
+
+        brief_id = brief_record["id"]
+        brief_version = brief_record.get("version", 1)
+
+        # Queue background generation (non-blocking)
+        asyncio.create_task(
+            brief_service.generate_executive_brief(
+                brief_id=brief_id,
+                workstream_card_id=workstream_card_id,
+                card_id=card_id,
+                since_timestamp=since_timestamp
+            )
+        )
+
+        return BriefGenerateResponse(
+            id=brief_id,
+            status="pending",
+            version=brief_version,
+            message=f"Brief v{brief_version} generation started"
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to initiate brief generation: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to start brief generation: {str(e)}")
+
+
+@app.get("/api/v1/me/workstreams/{workstream_id}/cards/{card_id}/brief", response_model=ExecutiveBriefResponse)
+async def get_executive_brief(
+    workstream_id: str,
+    card_id: str,
+    version: Optional[int] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get an executive brief for a card in a workstream.
+
+    Returns the latest version by default, or a specific version if provided.
+    Returns 404 if no brief exists.
+
+    Args:
+        workstream_id: UUID of the workstream
+        card_id: UUID of the card
+        version: Optional version number (defaults to latest)
+        current_user: Authenticated user (injected)
+
+    Returns:
+        ExecutiveBriefResponse with full brief content
+
+    Raises:
+        HTTPException 404: Workstream, card, or brief not found
+        HTTPException 403: Not authorized to access workstream
+    """
+    # Verify workstream belongs to user
+    ws_response = supabase.table("workstreams").select("id, user_id").eq("id", workstream_id).execute()
+    if not ws_response.data:
+        raise HTTPException(status_code=404, detail="Workstream not found")
+
+    if ws_response.data[0]["user_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Not authorized to access this workstream")
+
+    # Verify card exists in workstream and get the workstream_cards record
+    wsc_response = supabase.table("workstream_cards").select("id").eq(
+        "workstream_id", workstream_id
+    ).eq("card_id", card_id).execute()
+
+    if not wsc_response.data:
+        raise HTTPException(status_code=404, detail="Card not found in this workstream")
+
+    workstream_card_id = wsc_response.data[0]["id"]
+
+    # Fetch the brief (latest or specific version)
+    brief_service = ExecutiveBriefService(supabase, openai_client)
+    brief = await brief_service.get_brief_by_workstream_card(workstream_card_id, version=version)
+
+    if not brief:
+        if version:
+            raise HTTPException(status_code=404, detail=f"Brief version {version} not found")
+        raise HTTPException(status_code=404, detail="No brief found for this card")
+
+    return ExecutiveBriefResponse(**brief)
+
+
+@app.get("/api/v1/me/workstreams/{workstream_id}/cards/{card_id}/brief/versions", response_model=BriefVersionsResponse)
+async def get_brief_versions(
+    workstream_id: str,
+    card_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get all versions of executive briefs for a card in a workstream.
+
+    Returns a list of all brief versions, ordered by version number descending.
+
+    Args:
+        workstream_id: UUID of the workstream
+        card_id: UUID of the card
+        current_user: Authenticated user (injected)
+
+    Returns:
+        BriefVersionsResponse with list of all versions
+
+    Raises:
+        HTTPException 404: Workstream or card not found
+        HTTPException 403: Not authorized to access workstream
+    """
+    # Verify workstream belongs to user
+    ws_response = supabase.table("workstreams").select("id, user_id").eq("id", workstream_id).execute()
+    if not ws_response.data:
+        raise HTTPException(status_code=404, detail="Workstream not found")
+
+    if ws_response.data[0]["user_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Not authorized to access this workstream")
+
+    # Verify card exists in workstream and get the workstream_cards record
+    wsc_response = supabase.table("workstream_cards").select("id").eq(
+        "workstream_id", workstream_id
+    ).eq("card_id", card_id).execute()
+
+    if not wsc_response.data:
+        raise HTTPException(status_code=404, detail="Card not found in this workstream")
+
+    workstream_card_id = wsc_response.data[0]["id"]
+
+    # Fetch all versions
+    brief_service = ExecutiveBriefService(supabase, openai_client)
+    versions = await brief_service.get_brief_versions(workstream_card_id)
+
+    # Convert to response model
+    version_items = [
+        BriefVersionListItem(
+            id=v["id"],
+            version=v.get("version", 1),
+            status=v["status"],
+            summary=v.get("summary"),
+            sources_since_previous=v.get("sources_since_previous"),
+            generated_at=v.get("generated_at"),
+            created_at=v["created_at"],
+            model_used=v.get("model_used")
+        )
+        for v in versions
+    ]
+
+    return BriefVersionsResponse(
+        workstream_card_id=workstream_card_id,
+        card_id=card_id,
+        total_versions=len(version_items),
+        versions=version_items
+    )
+
+
+@app.get("/api/v1/me/workstreams/{workstream_id}/cards/{card_id}/brief/status", response_model=BriefStatusResponse)
+async def get_brief_status(
+    workstream_id: str,
+    card_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get the status of brief generation for a card.
+
+    Used for polling during async brief generation.
+    Returns status, summary (if complete), or error (if failed).
+
+    Args:
+        workstream_id: UUID of the workstream
+        card_id: UUID of the card
+        current_user: Authenticated user (injected)
+
+    Returns:
+        BriefStatusResponse with generation status
+
+    Raises:
+        HTTPException 404: Workstream, card, or brief not found
+        HTTPException 403: Not authorized to access workstream
+    """
+    # Verify workstream belongs to user
+    ws_response = supabase.table("workstreams").select("id, user_id").eq("id", workstream_id).execute()
+    if not ws_response.data:
+        raise HTTPException(status_code=404, detail="Workstream not found")
+
+    if ws_response.data[0]["user_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Not authorized to access this workstream")
+
+    # Verify card exists in workstream and get the workstream_cards record
+    wsc_response = supabase.table("workstream_cards").select("id").eq(
+        "workstream_id", workstream_id
+    ).eq("card_id", card_id).execute()
+
+    if not wsc_response.data:
+        raise HTTPException(status_code=404, detail="Card not found in this workstream")
+
+    workstream_card_id = wsc_response.data[0]["id"]
+
+    # Fetch the most recent brief
+    brief_service = ExecutiveBriefService(supabase, openai_client)
+    brief = await brief_service.get_brief_by_workstream_card(workstream_card_id)
+
+    if not brief:
+        raise HTTPException(status_code=404, detail="No brief found for this card")
+
+    # Build progress message based on status
+    progress_message = None
+    if brief["status"] == "pending":
+        progress_message = "Brief generation queued..."
+    elif brief["status"] == "generating":
+        progress_message = "Generating executive brief..."
+
+    return BriefStatusResponse(
+        id=brief["id"],
+        status=brief["status"],
+        version=brief.get("version", 1),
+        summary=brief.get("summary"),
+        error_message=brief.get("error_message"),
+        generated_at=brief.get("generated_at"),
+        progress_message=progress_message
+    )
+
+
+@app.get("/api/v1/me/workstreams/{workstream_id}/cards/{card_id}/brief/export/{format}")
+async def export_brief(
+    workstream_id: str,
+    card_id: str,
+    format: str,
+    version: Optional[int] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Export an executive brief in the specified format.
+
+    Exports the brief content (not the original card) as a PDF or PowerPoint
+    presentation formatted for executive communication.
+
+    Args:
+        workstream_id: UUID of the workstream
+        card_id: UUID of the card
+        format: Export format (pdf or pptx)
+        version: Optional version number to export (defaults to latest)
+        current_user: Authenticated user (injected)
+
+    Returns:
+        FileResponse with the exported brief document
+
+    Raises:
+        HTTPException 400: Invalid export format
+        HTTPException 404: Workstream, card, or brief not found
+        HTTPException 403: Not authorized to access workstream
+    """
+    # Validate format
+    format_lower = format.lower()
+    if format_lower not in ("pdf", "pptx"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid export format: {format}. Supported formats: pdf, pptx"
+        )
+
+    # Verify workstream belongs to user
+    ws_response = supabase.table("workstreams").select("id, user_id").eq("id", workstream_id).execute()
+    if not ws_response.data:
+        raise HTTPException(status_code=404, detail="Workstream not found")
+
+    if ws_response.data[0]["user_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Not authorized to access this workstream")
+
+    # Verify card exists in workstream and get the workstream_cards record
+    wsc_response = supabase.table("workstream_cards").select("id").eq(
+        "workstream_id", workstream_id
+    ).eq("card_id", card_id).execute()
+
+    if not wsc_response.data:
+        raise HTTPException(status_code=404, detail="Card not found in this workstream")
+
+    workstream_card_id = wsc_response.data[0]["id"]
+
+    # Fetch the brief
+    brief_service = ExecutiveBriefService(supabase, openai_client)
+    brief = await brief_service.get_brief_by_workstream_card(workstream_card_id, version=version)
+
+    if not brief:
+        raise HTTPException(status_code=404, detail="No brief found for this card")
+
+    if brief["status"] != "completed":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Brief is not yet complete. Please wait for generation to finish."
+        )
+
+    # Fetch card name for the export
+    card_response = supabase.table("cards").select("name").eq("id", card_id).single().execute()
+    card_name = card_response.data["name"] if card_response.data else "Unknown Card"
+
+    # Generate export using ExportService
+    export_service = ExportService(supabase)
+
+    try:
+        # Parse generated_at if present
+        generated_at = None
+        if brief.get("generated_at"):
+            from datetime import datetime
+            if isinstance(brief["generated_at"], str):
+                generated_at = datetime.fromisoformat(brief["generated_at"].replace("Z", "+00:00"))
+            else:
+                generated_at = brief["generated_at"]
+
+        if format_lower == "pdf":
+            file_path = await export_service.generate_brief_pdf(
+                brief_title=card_name,
+                card_name=card_name,
+                executive_summary=brief.get("summary", ""),
+                content_markdown=brief.get("content_markdown", ""),
+                generated_at=generated_at,
+                version=brief.get("version", 1)
+            )
+            content_type = "application/pdf"
+            extension = "pdf"
+        else:
+            file_path = await export_service.generate_brief_pptx(
+                brief_title=card_name,
+                card_name=card_name,
+                executive_summary=brief.get("summary", ""),
+                content_markdown=brief.get("content_markdown", ""),
+                generated_at=generated_at,
+                version=brief.get("version", 1)
+            )
+            content_type = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            extension = "pptx"
+
+        # Generate safe filename
+        safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in card_name)
+        safe_name = safe_name[:50]  # Limit length
+        version_str = f"_v{brief.get('version', 1)}" if brief.get('version', 1) > 1 else ""
+        filename = f"Brief_{safe_name}{version_str}.{extension}"
+
+        return FileResponse(
+            path=file_path,
+            filename=filename,
+            media_type=content_type,
+            background=None
+        )
+
+    except Exception as e:
+        logger.error(f"Brief export generation failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate export: {str(e)}"
+        )
+
 
 # Taxonomy endpoints
 @app.get("/api/v1/taxonomy")
