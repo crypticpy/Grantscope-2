@@ -49,7 +49,8 @@ RUN groupadd --gid 1000 appgroup \
 # =============================================================================
 # Copy requirements first to leverage Docker layer caching
 # Dependencies change less frequently than application code
-COPY requirements.txt .
+# Note: Using backend/ prefix because Docker context is repo root
+COPY backend/requirements.txt .
 
 # Install Python dependencies
 # --no-cache-dir reduces image size by not caching pip downloads
@@ -60,7 +61,8 @@ RUN pip install --no-cache-dir --upgrade pip \
 # Application Code
 # =============================================================================
 # Copy application code with proper ownership
-COPY --chown=appuser:appgroup app/ ./app/
+# Note: Using backend/ prefix because Docker context is repo root
+COPY --chown=appuser:appgroup backend/app/ ./app/
 
 # =============================================================================
 # Switch to Non-Root User
