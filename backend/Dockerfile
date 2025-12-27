@@ -64,6 +64,10 @@ RUN pip install --no-cache-dir --upgrade pip \
 # Note: Using backend/ prefix because Docker context is repo root
 COPY --chown=appuser:appgroup backend/app/ ./app/
 
+# Copy entrypoint (supports web vs worker via FORESIGHT_PROCESS_TYPE)
+COPY --chown=appuser:appgroup backend/entrypoint.sh /app/entrypoint.sh
+RUN chmod 755 /app/entrypoint.sh
+
 # =============================================================================
 # Switch to Non-Root User
 # =============================================================================
@@ -97,13 +101,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 #
 # IMPORTANT: Railway provides PORT env var dynamically - we MUST use it
 # The shell form allows environment variable substitution
-CMD gunicorn app.main:app \
-    --workers 4 \
-    --worker-class uvicorn.workers.UvicornWorker \
-    --bind "0.0.0.0:${PORT:-8000}" \
-    --timeout 120 \
-    --graceful-timeout 30 \
-    --keep-alive 5 \
-    --access-logfile - \
-    --error-logfile - \
-    --capture-output
+CMD ["/app/entrypoint.sh"]

@@ -26,6 +26,12 @@ nohup uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 > ../backend.log 
 BACKEND_PID=$!
 echo "Backend started with PID: $BACKEND_PID"
 
+# Start worker in background (executes long-running jobs like deep research)
+echo "🧰 Starting background worker..."
+nohup python -m app.worker > ../worker.log 2>&1 &
+WORKER_PID=$!
+echo "Worker started with PID: $WORKER_PID"
+
 # Wait for backend to start
 echo "⏳ Waiting for backend to start..."
 sleep 5
@@ -71,6 +77,7 @@ cleanup() {
     echo ""
     echo "🛑 Stopping services..."
     kill $BACKEND_PID 2>/dev/null
+    kill $WORKER_PID 2>/dev/null
     echo "✅ All services stopped"
     exit 0
 }

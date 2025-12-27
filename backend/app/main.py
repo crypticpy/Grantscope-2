@@ -3339,15 +3339,12 @@ async def run_weekly_discovery():
             "cards_deduplicated": 0,
             "sources_found": 0,
             "started_at": datetime.now().isoformat(),
-            "summary_report": {"config": config.dict()}
+            "summary_report": {"stage": "queued", "config": config.dict()}
         }
 
         supabase.table("discovery_runs").insert(run_record).execute()
 
-        # Execute discovery (pass existing run_id to avoid duplicate record)
-        await execute_discovery_run_background(run_id, config, user_id)
-
-        logger.info(f"Weekly discovery run {run_id} completed")
+        logger.info(f"Weekly discovery run queued: {run_id}")
 
     except Exception as e:
         logger.error(f"Weekly discovery failed: {str(e)}")
@@ -3944,15 +3941,7 @@ async def trigger_card_deep_dive(
     task_id = task["id"]
 
     # Create task data for background execution
-    task_data = ResearchTaskCreate(
-        card_id=card_id,
-        task_type="deep_research"
-    )
-
-    # Execute research in background (non-blocking)
-    asyncio.create_task(
-        execute_research_task_background(task_id, task_data, current_user["id"])
-    )
+    # Task execution is handled by the background worker (see `app.worker`).
 
     return ResearchTask(**task)
 
@@ -4172,12 +4161,11 @@ async def generate_executive_brief(
             since_timestamp = last_completed["generated_at"]
             # Count new sources since last brief
             new_source_count = await brief_service.count_new_sources(card_id, since_timestamp)
-            if new_source_count > 0:
-                sources_since_previous = {
-                    "count": new_source_count,
-                    "since_version": last_completed.get("version", 1),
-                    "since_date": since_timestamp
-                }
+            sources_since_previous = {
+                "count": new_source_count,
+                "since_version": last_completed.get("version", 1),
+                "since_date": since_timestamp
+            }
 
         # Create the brief record with pending status (auto-increments version)
         brief_record = await brief_service.create_brief_record(
@@ -4190,21 +4178,11 @@ async def generate_executive_brief(
         brief_id = brief_record["id"]
         brief_version = brief_record.get("version", 1)
 
-        # Queue background generation (non-blocking)
-        asyncio.create_task(
-            brief_service.generate_executive_brief(
-                brief_id=brief_id,
-                workstream_card_id=workstream_card_id,
-                card_id=card_id,
-                since_timestamp=since_timestamp
-            )
-        )
-
         return BriefGenerateResponse(
             id=brief_id,
             status="pending",
             version=brief_version,
-            message=f"Brief v{brief_version} generation started"
+            message=f"Brief v{brief_version} queued for generation"
         )
 
     except Exception as e:
@@ -4652,9 +4630,7 @@ async def create_research_task(
     task_id = task["id"]
 
     # Execute research in background (non-blocking)
-    asyncio.create_task(
-        execute_research_task_background(task_id, task_data, current_user["id"])
-    )
+    # Task execution is handled by the background worker (see `app.worker`).
 
     return ResearchTask(**task)
 
@@ -4805,9 +4781,9 @@ async def get_research_task(
     def _get_timeout_seconds(task_type: str, status: str) -> int:
         if status == "queued":
             try:
-                return int(os.getenv("RESEARCH_TASK_QUEUED_TIMEOUT_SECONDS", "300"))
+                return int(os.getenv("RESEARCH_TASK_QUEUED_TIMEOUT_SECONDS", "900"))
             except ValueError:
-                return 300
+                return 900
         defaults = {
             "update": 15 * 60,
             "deep_research": 45 * 60,
@@ -4951,6 +4927,7 @@ async def trigger_discovery_run(
             "triggered_by": "manual",
             "triggered_by_user": current_user["id"],
             "summary_report": {
+                "stage": "queued",
                 "config": resolved_config
             },
             "cards_created": 0,
@@ -4968,10 +4945,7 @@ async def trigger_discovery_run(
         run = result.data[0]
         run_id = run["id"]
 
-        # Execute discovery in background (non-blocking)
-        asyncio.create_task(
-            execute_discovery_run_background(run_id, config, current_user["id"])
-        )
+        # Discovery execution is handled by the background worker (see `app.worker`).
 
         return DiscoveryRun(**run)
 
@@ -5323,6 +5297,15 @@ async def delete_saved_search(
 # Add scheduler for nightly jobs
 def start_scheduler():
     """Start the APScheduler for background jobs"""
+    # Prevent duplicate scheduler starts (e.g., web + worker misconfiguration).
+    try:
+        if scheduler.running:
+            logger.info("Scheduler already running; skipping start")
+            return
+    except Exception:
+        # Defensive: if scheduler doesn't expose `running`, continue.
+        pass
+
     # Nightly content scan at 6:00 AM UTC
     scheduler.add_job(
         run_nightly_scan,
@@ -5395,15 +5378,6 @@ async def run_nightly_scan():
                 task_result = supabase.table("research_tasks").insert(task_record).execute()
 
                 if task_result.data:
-                    task_id = task_result.data[0]["id"]
-                    # Execute in background
-                    asyncio.create_task(
-                        execute_research_task_background(
-                            task_id,
-                            ResearchTaskCreate(card_id=card["id"], task_type="update"),
-                            user_id
-                        )
-                    )
                     tasks_queued += 1
                     logger.info(f"Nightly scan: Queued update for '{card['name']}'")
 
@@ -5740,11 +5714,19 @@ async def get_trend_velocity(
 async def lifespan(app: FastAPI):
     """Manage application lifecycle - startup and shutdown"""
     # Startup
-    start_scheduler()
+    enable_scheduler = os.getenv("FORESIGHT_ENABLE_SCHEDULER", "false").strip().lower() in ("1", "true", "yes", "y", "on")
+    if enable_scheduler:
+        start_scheduler()
+    else:
+        logger.info("Scheduler disabled (set FORESIGHT_ENABLE_SCHEDULER=true to enable)")
     logger.info("Foresight API started")
     yield
     # Shutdown
-    scheduler.shutdown()
+    try:
+        if getattr(scheduler, "running", False):
+            scheduler.shutdown()
+    except Exception:
+        pass
     logger.info("Foresight API shutdown complete")
 
 

@@ -59,6 +59,13 @@ source venv/bin/activate
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+### Manual Worker Start (required for deep research / discovery / briefs)
+```bash
+cd backend
+source venv/bin/activate
+python -m app.worker
+```
+
 ### Manual Frontend Start (if needed)
 ```bash
 cd frontend/foresight-frontend

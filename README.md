@@ -51,7 +51,7 @@ Foresight automates the discovery, analysis, and tracking of emerging trends, te
 - Python 3.11+
 - Node.js 18+ (pnpm recommended)
 - Supabase account
-- OpenAI API key
+- Azure OpenAI credentials (or OpenAI, depending on configuration)
 
 ### 1. Database Setup
 
@@ -74,6 +74,9 @@ cp .env.example .env
 
 # Run the server
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# In a separate terminal, run the background worker (required for deep research, discovery, briefs)
+python -m app.worker
 ```
 
 ### 3. Frontend Setup
@@ -206,6 +209,7 @@ Detailed documentation is available in the `/docs` folder:
 - [AI Pipeline](docs/07_AI_PIPELINE.md)
 - [MVP Scope](docs/08_MVP_SCOPE.md)
 - [Taxonomy](docs/09_TAXONOMY.md)
+- [Railway Worker Setup](docs/RAILWAY_WORKER_SETUP.md)
 
 ---
 
