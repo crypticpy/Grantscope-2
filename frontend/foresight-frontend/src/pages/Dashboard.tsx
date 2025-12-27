@@ -9,6 +9,7 @@ import { StageBadge } from '../components/StageBadge';
 import { Top25Badge } from '../components/Top25Badge';
 import { fetchPendingCount } from '../lib/discovery-api';
 import { parseStageNumber } from '../lib/stage-utils';
+import { logger } from '../lib/logger';
 
 interface Card {
   id: string;
@@ -72,7 +73,7 @@ const Dashboard: React.FC = () => {
       }
     } catch (err) {
       // Silently fail - non-critical
-      console.debug('Could not fetch pending count:', err);
+      logger.debug('Could not fetch pending count:', err);
     }
   };
 

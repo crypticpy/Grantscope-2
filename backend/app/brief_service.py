@@ -30,6 +30,9 @@ from dataclasses import dataclass
 from supabase import Client
 import openai
 
+# Azure OpenAI deployment names
+from app.openai_provider import get_chat_deployment
+
 logger = logging.getLogger(__name__)
 
 
@@ -348,8 +351,6 @@ class ExecutiveBriefService:
     status tracking, AI-powered content synthesis, and comprehensive
     metadata tracking for monitoring and cost analysis.
     """
-
-    MODEL = "gpt-4o"
 
     def __init__(self, supabase: Client, openai_client: openai.AsyncOpenAI):
         """
@@ -782,9 +783,12 @@ class ExecutiveBriefService:
 
         logger.info(f"Generating executive brief for card: {card.get('name', 'Unknown')}")
 
-        # Call OpenAI API (synchronous client)
+        # Get Azure deployment name for chat completions
+        model_deployment = get_chat_deployment()
+
+        # Call Azure OpenAI API (synchronous client)
         response = self.openai_client.chat.completions.create(
-            model=self.MODEL,
+            model=model_deployment,
             messages=[
                 {
                     "role": "system",
@@ -814,7 +818,7 @@ class ExecutiveBriefService:
             content_json=content_json,
             prompt_tokens=response.usage.prompt_tokens,
             completion_tokens=response.usage.completion_tokens,
-            model_used=self.MODEL
+            model_used=model_deployment
         )
 
     async def generate_executive_brief(

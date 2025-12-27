@@ -26,6 +26,7 @@ import {
   getBriefVersions as getBriefVersionsApi,
 } from '@/lib/workstream-api';
 import type { ExecutiveBrief, BriefStatus, BriefVersionListItem } from '@/lib/workstream-api';
+import { logger } from '@/lib/logger';
 
 // ============================================================================
 // Types
@@ -255,7 +256,7 @@ export function useBriefGeneration(
           // If status is 'pending' or 'generating', continue polling
         } catch (pollError) {
           // Network error during polling - continue trying unless max attempts reached
-          console.warn(`Brief status poll failed for ${cardId}:`, pollError);
+          logger.warn(`Brief status poll failed for ${cardId}:`, pollError);
           // Don't stop polling on network errors - the server might be temporarily unavailable
         }
       };

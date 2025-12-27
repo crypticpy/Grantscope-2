@@ -19,8 +19,27 @@ from pydantic import BaseModel, Field, validator
 import uuid
 from dotenv import load_dotenv
 from supabase import create_client, Client
-import openai
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+# Azure OpenAI provider - centralized client configuration
+from app.openai_provider import (
+    azure_openai_client,
+    azure_openai_embedding_client,
+    get_chat_deployment,
+    get_chat_mini_deployment,
+    get_embedding_deployment,
+)
+
+# Security module import
+from app.security import (
+    setup_security,
+    get_rate_limiter,
+    rate_limit_sensitive,
+    rate_limit_auth,
+    rate_limit_discovery,
+    log_security_event,
+    get_client_ip,
+)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -99,8 +118,54 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS middleware - Configure allowed origins from environment
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173,http://localhost:5174").split(",")
+# =============================================================================
+# CORS Configuration
+# =============================================================================
+# Environment-aware CORS: production uses strict HTTPS origins only,
+# development allows localhost for local development workflows.
+
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
+
+# Configure allowed origins based on environment
+if ENVIRONMENT == "production":
+    # Production: strict HTTPS origins only
+    default_origins = "https://foresight.vercel.app"
+    ALLOWED_ORIGINS_RAW = os.getenv("ALLOWED_ORIGINS", default_origins).split(",")
+
+    # Validate production origins: must be HTTPS, no localhost
+    ALLOWED_ORIGINS = []
+    for origin in ALLOWED_ORIGINS_RAW:
+        origin = origin.strip()
+        if not origin:
+            continue
+        if not origin.startswith("https://"):
+            print(f"[CORS] WARNING: Rejecting non-HTTPS origin in production: {origin}")
+            continue
+        if "localhost" in origin or "127.0.0.1" in origin:
+            print(f"[CORS] WARNING: Rejecting localhost origin in production: {origin}")
+            continue
+        ALLOWED_ORIGINS.append(origin)
+
+    # Fail-safe: ensure at least the default production origin is present
+    if not ALLOWED_ORIGINS:
+        ALLOWED_ORIGINS = ["https://foresight.vercel.app"]
+        print("[CORS] WARNING: No valid origins configured, using default production origin")
+else:
+    # Development: allow localhost for local development
+    default_origins = "http://localhost:3000,http://localhost:5173,http://localhost:5174"
+    ALLOWED_ORIGINS_RAW = os.getenv("ALLOWED_ORIGINS", default_origins).split(",")
+
+    # Clean and validate development origins
+    ALLOWED_ORIGINS = [origin.strip() for origin in ALLOWED_ORIGINS_RAW if origin.strip()]
+
+# Reject empty configuration (should never happen due to defaults, but safety check)
+if not ALLOWED_ORIGINS:
+    raise ValueError("CORS configuration error: No valid allowed origins configured")
+
+# Log CORS configuration at startup
+print(f"[CORS] Environment: {ENVIRONMENT}")
+print(f"[CORS] Allowed origins: {ALLOWED_ORIGINS}")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -113,33 +178,15 @@ app.add_middleware(
 # Compresses responses larger than 500 bytes to reduce bandwidth usage
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
+# =============================================================================
+# Security Middleware Setup
+# =============================================================================
+# Configure rate limiting, security headers, request size limits, and secure error handling
+# This MUST be called after CORS middleware is added (order matters)
+setup_security(app, ALLOWED_ORIGINS)
 
-# Global exception handler to ensure CORS headers on error responses
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    """
-    Handle all unhandled exceptions and ensure CORS headers are included.
-
-    This prevents CORS errors in the browser when the server returns 500 errors,
-    as the CORSMiddleware may not add headers when an exception is raised.
-    """
-    # Get the origin from the request
-    origin = request.headers.get("origin", "")
-
-    # Build response headers - only add CORS if origin is allowed
-    headers = {}
-    if origin in ALLOWED_ORIGINS:
-        headers["Access-Control-Allow-Origin"] = origin
-        headers["Access-Control-Allow-Credentials"] = "true"
-
-    # Log the error for debugging
-    logger.error(f"Unhandled exception: {type(exc).__name__}: {str(exc)}")
-
-    return JSONResponse(
-        status_code=500,
-        content={"detail": str(exc)},
-        headers=headers
-    )
+# Get the rate limiter instance for use in endpoint decorators
+limiter = get_rate_limiter()
 
 
 # Security
@@ -149,13 +196,16 @@ security = HTTPBearer()
 supabase_url = os.getenv("SUPABASE_URL")
 supabase_key = os.getenv("SUPABASE_ANON_KEY")
 supabase_service_key = os.getenv("SUPABASE_SERVICE_KEY")
-openai_api_key = os.getenv("OPENAI_API_KEY")
 
 if not all([supabase_url, supabase_key, supabase_service_key]):
-    raise ValueError("Missing required environment variables")
+    raise ValueError("Missing required Supabase environment variables")
 
 supabase: Client = create_client(supabase_url, supabase_service_key)
-openai_client = openai.OpenAI(api_key=openai_api_key)
+
+# Azure OpenAI client is initialized in openai_provider module (fail-fast on missing config)
+# Use azure_openai_client for chat completions
+# Use azure_openai_embedding_client for embeddings (uses different API version)
+openai_client = azure_openai_client
 
 # Initialize scheduler for nightly jobs
 scheduler = AsyncIOScheduler()
@@ -635,26 +685,72 @@ class ProcessingMetrics(BaseModel):
 
 
 # Authentication dependency
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Get current authenticated user"""
+async def get_current_user(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """
+    Get current authenticated user with security logging.
+
+    Validates JWT token via Supabase Auth, which handles:
+    - Token signature verification
+    - Token expiration checking
+    - Token revocation status
+
+    Security features:
+    - Logs authentication failures with client IP for audit
+    - Returns generic error messages to prevent user enumeration
+    - Rate limited at the endpoint level
+    """
     try:
         token = credentials.credentials
+
+        # Validate token is not empty and has reasonable length
+        if not token or len(token) < 20:
+            log_security_event("auth_invalid_token_format", request)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication credentials"
+            )
+
+        # Validate token with Supabase Auth (handles signature, expiration, revocation)
         response = supabase.auth.get_user(token)
+
         if response.user:
             # Get user profile
             profile_response = supabase.table("users").select("*").eq("id", response.user.id).execute()
             if profile_response.data:
+                # Log successful auth for audit trail (info level, not warning)
+                logger.debug(f"Authenticated user: {response.user.id}")
                 return profile_response.data[0]
             else:
-                logger.warning(f"User profile not found for user_id: {response.user.id}")
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User profile not found")
+                # User exists in auth but not in users table - potential issue
+                logger.warning(f"User profile not found for authenticated user_id: {response.user.id}")
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="User profile not found"
+                )
         else:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+            # Token was valid format but not a valid session
+            log_security_event("auth_invalid_session", request)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication credentials"
+            )
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Authentication error: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication credentials")
+        # Log the actual error for debugging but return generic message
+        log_security_event(
+            "auth_error",
+            request,
+            {"error_type": type(e).__name__, "error_msg": str(e)[:100]}
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials"
+        )
 
 # API Routes
 
@@ -801,9 +897,9 @@ async def search_cards(
         # Vector search path
         if request.use_vector_search and request.query:
             try:
-                # Get embedding for search query
-                embedding_response = openai_client.embeddings.create(
-                    model="text-embedding-ada-002",
+                # Get embedding for search query (uses embedding client with specific API version)
+                embedding_response = azure_openai_embedding_client.embeddings.create(
+                    model=get_embedding_deployment(),
                     input=request.query
                 )
                 query_embedding = embedding_response.data[0].embedding
@@ -2004,7 +2100,9 @@ async def review_card(
 
 
 @app.post("/api/v1/cards/bulk-review")
+@limiter.limit("10/minute")
 async def bulk_review_cards(
+    request: Request,
     bulk_data: BulkReviewRequest,
     current_user: dict = Depends(get_current_user)
 ):
@@ -3027,11 +3125,11 @@ async def get_analytics_insights(
         ])
 
         try:
-            # Generate insights using OpenAI
+            # Generate insights using Azure OpenAI
             prompt = INSIGHTS_GENERATION_PROMPT.format(trends_data=trends_data)
 
             ai_response = openai_client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=get_chat_mini_deployment(),
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"},
                 max_tokens=1000,
@@ -4337,7 +4435,8 @@ async def get_taxonomy():
 
 # Admin endpoints
 @app.post("/api/v1/admin/scan")
-async def trigger_manual_scan(current_user: dict = Depends(get_current_user)):
+@limiter.limit("3/minute")
+async def trigger_manual_scan(request: Request, current_user: dict = Depends(get_current_user)):
     """
     Manually trigger content scan for all active cards.
 
@@ -4388,7 +4487,9 @@ async def trigger_manual_scan(current_user: dict = Depends(get_current_user)):
 # ============================================================================
 
 @app.post("/api/v1/research", response_model=ResearchTask)
+@limiter.limit("5/minute")
 async def create_research_task(
+    request: Request,
     task_data: ResearchTaskCreate,
     current_user: dict = Depends(get_current_user)
 ):
@@ -4569,7 +4670,9 @@ async def get_discovery_config(current_user: dict = Depends(get_current_user)):
 
 
 @app.post("/api/v1/discovery/run", response_model=DiscoveryRun)
+@limiter.limit("3/minute")
 async def trigger_discovery_run(
+    request: Request,
     config: DiscoveryConfigRequest = DiscoveryConfigRequest(),
     current_user: dict = Depends(get_current_user)
 ):

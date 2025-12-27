@@ -31,6 +31,7 @@ import {
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
 import { cn } from '../lib/utils';
+import { logger } from '../lib/logger';
 import {
   KanbanBoard,
   KanbanErrorBoundary,
@@ -546,7 +547,7 @@ const WorkstreamKanban: React.FC = () => {
         }
       } catch (err) {
         // Silent fail - auto-populate is an enhancement, not critical
-        console.warn('Auto-populate on load failed:', err);
+        logger.warn('Auto-populate on load failed:', err);
       }
     };
 

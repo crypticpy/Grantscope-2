@@ -16,6 +16,13 @@ from dataclasses import dataclass, field
 from functools import wraps
 import openai
 
+# Azure OpenAI deployment names
+from app.openai_provider import (
+    get_chat_deployment,
+    get_chat_mini_deployment,
+    get_embedding_deployment,
+)
+
 logger = logging.getLogger(__name__)
 
 # Retry configuration
@@ -500,7 +507,7 @@ class AIService:
         logger.debug(f"Generating embedding for text ({len(truncated)} chars)")
 
         response = self.client.embeddings.create(
-            model="text-embedding-ada-002",
+            model=get_embedding_deployment(),
             input=truncated,
             timeout=REQUEST_TIMEOUT
         )
@@ -531,7 +538,7 @@ class AIService:
         logger.debug(f"Triaging source: {title[:50]}...")
 
         response = self.client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=get_chat_mini_deployment(),
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             max_tokens=200,
@@ -581,7 +588,7 @@ class AIService:
         logger.info(f"Analyzing source: {title[:50]}...")
 
         response = self.client.chat.completions.create(
-            model="gpt-4o",
+            model=get_chat_deployment(),
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             max_tokens=1500,
@@ -684,7 +691,7 @@ class AIService:
         logger.debug("Extracting entities from content")
 
         response = self.client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=get_chat_mini_deployment(),
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             max_tokens=800,
@@ -758,7 +765,7 @@ Respond with JSON:
         logger.debug(f"Checking card match: {source_card_name} vs {existing_card_name}")
 
         response = self.client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=get_chat_mini_deployment(),
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             max_tokens=300,
@@ -832,7 +839,7 @@ Respond with JSON:
         logger.debug(f"Enhancing card from research: {current_name}")
 
         response = self.client.chat.completions.create(
-            model="gpt-4o",
+            model=get_chat_deployment(),
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             max_tokens=1500,
@@ -919,7 +926,7 @@ Respond with JSON:
         logger.info(f"Generating comprehensive deep research report for: {card_name}")
 
         response = self.client.chat.completions.create(
-            model="gpt-4o",
+            model=get_chat_deployment(),
             messages=[{"role": "user", "content": prompt}],
             max_tokens=4000,  # Allow for comprehensive report
             timeout=REQUEST_TIMEOUT * 3  # Extended timeout for long report
