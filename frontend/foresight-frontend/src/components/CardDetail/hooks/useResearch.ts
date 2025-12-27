@@ -24,7 +24,7 @@
  * ```
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { Card, ResearchTask } from '../types';
 import { API_BASE_URL } from '../utils';
 
@@ -97,6 +97,10 @@ export function useResearch(
   // Ref to track polling timeout for cleanup
   const pollingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  const getTaskStorageKey = useCallback((cardId: string) => {
+    return `foresight:activeResearchTask:${cardId}`;
+  }, []);
+
   /**
    * Check if deep research is available (rate limit: 2 per day)
    */
@@ -121,7 +125,7 @@ export function useResearch(
    * completes, fails, or encounters an error.
    */
   const pollTaskStatus = useCallback(
-    async (taskId: string) => {
+    async (taskId: string, cardId: string) => {
       const token = await getAuthToken();
       if (!token) {
         setIsResearching(false);
@@ -145,11 +149,25 @@ export function useResearch(
           if (task.status === 'completed') {
             setIsResearching(false);
             cleanupPolling();
+            try {
+              if (typeof window !== 'undefined') {
+                window.localStorage.removeItem(getTaskStorageKey(cardId));
+              }
+            } catch {
+              // Ignore storage errors
+            }
             onResearchComplete?.();
           } else if (task.status === 'failed') {
             setIsResearching(false);
             setResearchError(task.error_message || 'Research failed');
             cleanupPolling();
+            try {
+              if (typeof window !== 'undefined') {
+                window.localStorage.removeItem(getTaskStorageKey(cardId));
+              }
+            } catch {
+              // Ignore storage errors
+            }
           } else {
             // Continue polling
             pollingTimeoutRef.current = setTimeout(poll, 2000);
@@ -163,8 +181,27 @@ export function useResearch(
 
       poll();
     },
-    [getAuthToken, onResearchComplete, cleanupPolling]
+    [getAuthToken, onResearchComplete, cleanupPolling, getTaskStorageKey]
   );
+
+  // Rehydrate an in-flight task after refresh/navigation.
+  useEffect(() => {
+    cleanupPolling();
+    if (!card?.id) return;
+
+    try {
+      if (typeof window === 'undefined') return;
+      const existingTaskId = window.localStorage.getItem(getTaskStorageKey(card.id));
+      if (!existingTaskId) return;
+
+      setIsResearching(true);
+      setResearchError(null);
+      pollTaskStatus(existingTaskId, card.id);
+    } catch {
+      // Ignore storage errors
+    }
+    return cleanupPolling;
+  }, [card?.id, cleanupPolling, getTaskStorageKey, pollTaskStatus]);
 
   /**
    * Trigger a research task
@@ -214,7 +251,14 @@ export function useResearch(
 
         const task: ResearchTask = await response.json();
         setResearchTask(task);
-        pollTaskStatus(task.id);
+        try {
+          if (typeof window !== 'undefined') {
+            window.localStorage.setItem(getTaskStorageKey(card.id), task.id);
+          }
+        } catch {
+          // Ignore storage errors
+        }
+        pollTaskStatus(task.id, card.id);
       } catch (error: unknown) {
         setResearchError(
           error instanceof Error ? error.message : 'Failed to start research'
@@ -222,7 +266,7 @@ export function useResearch(
         setIsResearching(false);
       }
     },
-    [card, isResearching, canDeepResearch, getAuthToken, pollTaskStatus]
+    [card, isResearching, canDeepResearch, getAuthToken, pollTaskStatus, getTaskStorageKey]
   );
 
   /**
@@ -256,7 +300,14 @@ export function useResearch(
   const dismissTask = useCallback(() => {
     setResearchTask(null);
     setShowReport(false);
-  }, []);
+    try {
+      if (typeof window !== 'undefined' && card?.id) {
+        window.localStorage.removeItem(getTaskStorageKey(card.id));
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }, [card?.id, getTaskStorageKey]);
 
   /**
    * Reset all research state
@@ -268,7 +319,14 @@ export function useResearch(
     setResearchError(null);
     setShowReport(false);
     setReportCopied(false);
-  }, [cleanupPolling]);
+    try {
+      if (typeof window !== 'undefined' && card?.id) {
+        window.localStorage.removeItem(getTaskStorageKey(card.id));
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }, [cleanupPolling, card?.id, getTaskStorageKey]);
 
   return {
     researchTask,

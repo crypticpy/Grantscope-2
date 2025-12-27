@@ -6,7 +6,7 @@ import logging
 import os
 import asyncio
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 
 from fastapi import FastAPI, Depends, HTTPException, status, Request, Query
@@ -4679,20 +4679,55 @@ async def execute_research_task_background(
     service = ResearchService(supabase, openai_client)
 
     try:
+        def _get_timeout_seconds(task_type: str) -> int:
+            defaults = {
+                "update": 15 * 60,
+                "deep_research": 45 * 60,
+                "workstream_analysis": 45 * 60,
+            }
+            env_keys = {
+                "update": "RESEARCH_TASK_TIMEOUT_UPDATE_SECONDS",
+                "deep_research": "RESEARCH_TASK_TIMEOUT_DEEP_RESEARCH_SECONDS",
+                "workstream_analysis": "RESEARCH_TASK_TIMEOUT_WORKSTREAM_ANALYSIS_SECONDS",
+            }
+            env_key = env_keys.get(task_type)
+            if env_key:
+                try:
+                    return int(os.getenv(env_key, str(defaults.get(task_type, 45 * 60))))
+                except ValueError:
+                    return defaults.get(task_type, 45 * 60)
+            return defaults.get(task_type, 45 * 60)
+
         # Update status to processing
+        now = datetime.now(timezone.utc).isoformat()
         supabase.table("research_tasks").update({
             "status": "processing",
-            "started_at": datetime.now().isoformat()
+            "started_at": now,
+            "result_summary": {
+                "stage": f"running:{task_data.task_type}",
+                "heartbeat_at": now,
+            }
         }).eq("id", task_id).execute()
+
+        timeout_seconds = _get_timeout_seconds(task_data.task_type)
 
         # Execute based on task type
         if task_data.task_type == "update":
-            result = await service.execute_update(task_data.card_id, task_id)
+            result = await asyncio.wait_for(
+                service.execute_update(task_data.card_id, task_id),
+                timeout=timeout_seconds
+            )
         elif task_data.task_type == "deep_research":
-            result = await service.execute_deep_research(task_data.card_id, task_id)
+            result = await asyncio.wait_for(
+                service.execute_deep_research(task_data.card_id, task_id),
+                timeout=timeout_seconds
+            )
         elif task_data.task_type == "workstream_analysis":
-            result = await service.execute_workstream_analysis(
-                task_data.workstream_id, task_id, user_id
+            result = await asyncio.wait_for(
+                service.execute_workstream_analysis(
+                    task_data.workstream_id, task_id, user_id
+                ),
+                timeout=timeout_seconds
             )
         else:
             raise ValueError(f"Unknown task type: {task_data.task_type}")
@@ -4712,15 +4747,23 @@ async def execute_research_task_background(
         # Update as completed
         supabase.table("research_tasks").update({
             "status": "completed",
-            "completed_at": datetime.now().isoformat(),
+            "completed_at": datetime.now(timezone.utc).isoformat(),
             "result_summary": result_summary
+        }).eq("id", task_id).execute()
+
+    except asyncio.TimeoutError:
+        # Update as failed (timeout)
+        supabase.table("research_tasks").update({
+            "status": "failed",
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "error_message": f"Research task timed out while {task_data.task_type} was running"
         }).eq("id", task_id).execute()
 
     except Exception as e:
         # Update as failed
         supabase.table("research_tasks").update({
             "status": "failed",
-            "completed_at": datetime.now().isoformat(),
+            "completed_at": datetime.now(timezone.utc).isoformat(),
             "error_message": str(e)
         }).eq("id", task_id).execute()
 
@@ -4743,7 +4786,101 @@ async def get_research_task(
     if not result.data:
         raise HTTPException(status_code=404, detail="Research task not found")
 
-    return ResearchTask(**result.data)
+    task = result.data
+
+    def _parse_dt(value: Any) -> Optional[datetime]:
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            dt = value
+        else:
+            try:
+                dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            except ValueError:
+                return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+
+    def _get_timeout_seconds(task_type: str, status: str) -> int:
+        if status == "queued":
+            try:
+                return int(os.getenv("RESEARCH_TASK_QUEUED_TIMEOUT_SECONDS", "300"))
+            except ValueError:
+                return 300
+        defaults = {
+            "update": 15 * 60,
+            "deep_research": 45 * 60,
+            "workstream_analysis": 45 * 60,
+        }
+        env_keys = {
+            "update": "RESEARCH_TASK_TIMEOUT_UPDATE_SECONDS",
+            "deep_research": "RESEARCH_TASK_TIMEOUT_DEEP_RESEARCH_SECONDS",
+            "workstream_analysis": "RESEARCH_TASK_TIMEOUT_WORKSTREAM_ANALYSIS_SECONDS",
+        }
+        env_key = env_keys.get(task_type)
+        if env_key:
+            try:
+                return int(os.getenv(env_key, str(defaults.get(task_type, 45 * 60))))
+            except ValueError:
+                return defaults.get(task_type, 45 * 60)
+        return defaults.get(task_type, 45 * 60)
+
+    def _maybe_fail_stale_task(task_row: Dict[str, Any]) -> Dict[str, Any]:
+        status_val = task_row.get("status")
+        if status_val not in ("queued", "processing"):
+            return task_row
+
+        summary = task_row.get("result_summary") or {}
+        heartbeat_dt = _parse_dt(summary.get("heartbeat_at")) if isinstance(summary, dict) else None
+
+        base_dt = None
+        if status_val == "processing":
+            base_dt = heartbeat_dt or _parse_dt(task_row.get("started_at")) or _parse_dt(task_row.get("created_at"))
+        else:
+            base_dt = _parse_dt(task_row.get("created_at"))
+
+        if not base_dt:
+            return task_row
+
+        timeout_seconds = _get_timeout_seconds(task_row.get("task_type", ""), status_val)
+        age_seconds = (datetime.now(timezone.utc) - base_dt).total_seconds()
+
+        if age_seconds <= timeout_seconds:
+            return task_row
+
+        age_minutes = int(age_seconds // 60)
+        error_message = (
+            f"Research task stalled (no progress for ~{age_minutes} minutes). "
+            "This can happen if the server restarts mid-task. Please retry."
+        )
+
+        new_summary = dict(summary) if isinstance(summary, dict) else {}
+        new_summary.update({
+            "timed_out": True,
+            "timed_out_at": datetime.now(timezone.utc).isoformat(),
+            "timeout_seconds": timeout_seconds,
+        })
+
+        updates = {
+            "status": "failed",
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "error_message": error_message,
+            "result_summary": new_summary,
+        }
+
+        try:
+            supabase.table("research_tasks").update(updates).eq("id", task_id).eq("user_id", current_user["id"]).execute()
+            task_row.update(updates)
+        except Exception:
+            # If we can't update, return original task row.
+            return task_row
+
+        return task_row
+
+    task = _maybe_fail_stale_task(task)
+
+    return ResearchTask(**task)
 
 
 @app.get("/api/v1/me/research-tasks", response_model=List[ResearchTask])
