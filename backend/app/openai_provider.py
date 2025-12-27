@@ -71,7 +71,7 @@ class AzureOpenAIConfig:
         # API versions (different for chat vs embeddings)
         self.chat_api_version = _get_optional_env(
             "AZURE_OPENAI_API_VERSION",
-            "2025-01-01-preview"
+            "2024-12-01-preview"
         )
         self.embedding_api_version = _get_optional_env(
             "AZURE_OPENAI_EMBEDDING_API_VERSION",

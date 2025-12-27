@@ -66,7 +66,7 @@ def _configure_gpt_researcher_for_azure():
     # Get our app's Azure config
     azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT", "")
     azure_key = os.getenv("AZURE_OPENAI_KEY") or os.getenv("AZURE_OPENAI_API_KEY", "")
-    api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-05-01-preview")
+    api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview")
 
     # Get deployment names from our config
     chat_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT_CHAT", "gpt-4.1")
