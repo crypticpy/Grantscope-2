@@ -69,8 +69,8 @@ def _configure_gpt_researcher_for_azure():
     api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-05-01-preview")
 
     # Get deployment names from our config
-    chat_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT_CHAT", "gpt-41")
-    chat_mini_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT_CHAT_MINI", "gpt-41-mini")
+    chat_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT_CHAT", "gpt-4.1")
+    chat_mini_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT_CHAT_MINI", "gpt-4.1-mini")
     embedding_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT_EMBEDDING", "text-embedding-ada-002")
 
     # Set GPT Researcher expected env vars with azure_openai: prefix

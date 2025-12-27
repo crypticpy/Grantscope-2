@@ -81,11 +81,11 @@ class AzureOpenAIConfig:
         # Deployment names (Azure-specific model deployment names)
         self.deployment_chat = _get_optional_env(
             "AZURE_OPENAI_DEPLOYMENT_CHAT",
-            "gpt-41"
+            "gpt-4.1"
         )
         self.deployment_chat_mini = _get_optional_env(
             "AZURE_OPENAI_DEPLOYMENT_CHAT_MINI",
-            "gpt-41-mini"
+            "gpt-4.1-mini"
         )
         self.deployment_embedding = _get_optional_env(
             "AZURE_OPENAI_DEPLOYMENT_EMBEDDING",
