@@ -22,23 +22,25 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-manualChunks: {
-          // React core libraries
-          'vendor-react': [
-            'react',
-            'react-dom',
-            'react-router-dom',
-            'scheduler'
-          ],
-          // React Flow - heavy visualization library
-          'reactflow': [
-            '@xyflow/react'
-          ],
+manualChunks: (id) => {
+          // React Flow - separate chunk for heavy visualization library
+          if (id.includes('@xyflow/react') || id.includes('reactflow')) {
+            return 'reactflow'
+          }
           // Date utilities
-          'vendor-date': [
-            'date-fns'
-          ]
-          // Note: Recharts/D3 are NOT manually chunked to avoid circular dep issues
+          if (id.includes('date-fns')) {
+            return 'vendor-date'
+          }
+          // React core libraries
+          if (
+            id.includes('node_modules/react/') ||
+            id.includes('node_modules/react-dom/') ||
+            id.includes('node_modules/react-router') ||
+            id.includes('node_modules/scheduler/')
+          ) {
+            return 'vendor-react'
+          }
+          // Note: Recharts/D3 go to default vendor chunk to avoid circular dep issues
         }
       }
     }
