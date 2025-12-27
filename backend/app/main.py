@@ -771,6 +771,86 @@ async def health_check():
         }
     }
 
+
+@app.get("/api/v1/debug/gpt-researcher")
+async def debug_gpt_researcher():
+    """Debug GPT Researcher configuration and Azure OpenAI connection."""
+    import os
+
+    # Get GPT Researcher relevant env vars
+    config_vars = {
+        "SMART_LLM": os.getenv("SMART_LLM", "NOT SET"),
+        "FAST_LLM": os.getenv("FAST_LLM", "NOT SET"),
+        "EMBEDDING": os.getenv("EMBEDDING", "NOT SET"),
+        "LLM_PROVIDER": os.getenv("LLM_PROVIDER", "NOT SET"),
+        "EMBEDDING_PROVIDER": os.getenv("EMBEDDING_PROVIDER", "NOT SET"),
+        "OPENAI_API_VERSION": os.getenv("OPENAI_API_VERSION", "NOT SET"),
+        "AZURE_OPENAI_API_VERSION": os.getenv("AZURE_OPENAI_API_VERSION", "NOT SET"),
+        "AZURE_OPENAI_ENDPOINT": os.getenv("AZURE_OPENAI_ENDPOINT", "NOT SET")[:50] + "..." if os.getenv("AZURE_OPENAI_ENDPOINT") else "NOT SET",
+        "AZURE_OPENAI_API_KEY": "SET" if os.getenv("AZURE_OPENAI_API_KEY") else "NOT SET",
+        "TAVILY_API_KEY": "SET" if os.getenv("TAVILY_API_KEY") else "NOT SET",
+    }
+
+    # Test GPT Researcher config parsing
+    gptr_config_status = "unknown"
+    gptr_config_error = None
+    parsed_config = {}
+
+    try:
+        from gpt_researcher.config import Config
+        config = Config()
+        parsed_config = {
+            "fast_llm_provider": getattr(config, 'fast_llm_provider', 'N/A'),
+            "fast_llm_model": getattr(config, 'fast_llm_model', 'N/A'),
+            "smart_llm_provider": getattr(config, 'smart_llm_provider', 'N/A'),
+            "smart_llm_model": getattr(config, 'smart_llm_model', 'N/A'),
+            "embedding_provider": getattr(config, 'embedding_provider', 'N/A'),
+            "embedding_model": getattr(config, 'embedding_model', 'N/A'),
+        }
+        gptr_config_status = "parsed"
+    except Exception as e:
+        gptr_config_status = "error"
+        gptr_config_error = str(e)
+
+    # Test LangChain Azure OpenAI connection
+    langchain_status = "unknown"
+    langchain_error = None
+    langchain_response = None
+
+    try:
+        from langchain_openai import AzureChatOpenAI
+
+        # Use the parsed config or fall back to env vars
+        deployment = parsed_config.get('fast_llm_model') or os.getenv("FAST_LLM", "").split(":")[-1]
+
+        llm = AzureChatOpenAI(
+            azure_deployment=deployment,
+            api_version=os.getenv("OPENAI_API_VERSION", "2024-05-01-preview"),
+            temperature=0,
+            max_tokens=10,
+        )
+
+        response = llm.invoke("Say 'hello' in one word")
+        langchain_response = response.content if hasattr(response, 'content') else str(response)
+        langchain_status = "success"
+    except Exception as e:
+        langchain_status = "error"
+        langchain_error = str(e)
+
+    return {
+        "env_vars": config_vars,
+        "gptr_config": {
+            "status": gptr_config_status,
+            "error": gptr_config_error,
+            "parsed": parsed_config,
+        },
+        "langchain_azure_test": {
+            "status": langchain_status,
+            "error": langchain_error,
+            "response": langchain_response,
+        }
+    }
+
 # User endpoints
 @app.get("/api/v1/me", response_model=UserProfile)
 async def get_current_user_profile(current_user: dict = Depends(get_current_user)):
