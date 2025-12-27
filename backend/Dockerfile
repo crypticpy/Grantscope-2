@@ -78,9 +78,10 @@ EXPOSE 8000
 # =============================================================================
 # Container health check for orchestration platforms (Railway, Kubernetes, etc.)
 # Checks the /api/v1/health endpoint every 30 seconds
-# Allows 40 seconds for initial startup before first check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/api/v1/health || exit 1
+# Allows 60 seconds for initial startup (matplotlib font caching takes ~5s)
+# NOTE: Uses PORT env var which Railway provides dynamically
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:${PORT:-8000}/api/v1/health || exit 1
 
 # =============================================================================
 # Production Server Command
@@ -91,13 +92,16 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # - Graceful timeout: 30s for clean shutdown on SIGTERM
 # - Keep-alive: 5s for connection reuse
 # - Access logging: Enabled for observability
-CMD ["gunicorn", "app.main:app", \
-     "--workers", "4", \
-     "--worker-class", "uvicorn.workers.UvicornWorker", \
-     "--bind", "0.0.0.0:8000", \
-     "--timeout", "120", \
-     "--graceful-timeout", "30", \
-     "--keep-alive", "5", \
-     "--access-logfile", "-", \
-     "--error-logfile", "-", \
-     "--capture-output"]
+#
+# IMPORTANT: Railway provides PORT env var dynamically - we MUST use it
+# The shell form allows environment variable substitution
+CMD gunicorn app.main:app \
+    --workers 4 \
+    --worker-class uvicorn.workers.UvicornWorker \
+    --bind "0.0.0.0:${PORT:-8000}" \
+    --timeout 120 \
+    --graceful-timeout 30 \
+    --keep-alive 5 \
+    --access-logfile - \
+    --error-logfile - \
+    --capture-output
