@@ -703,7 +703,8 @@ class DiscoveryService:
     def __init__(
         self,
         supabase: Client,
-        openai_client: openai.OpenAI
+        openai_client: openai.OpenAI,
+        triggered_by_user_id: Optional[str] = None,
     ):
         """
         Initialize discovery service.
@@ -711,9 +712,11 @@ class DiscoveryService:
         Args:
             supabase: Supabase client for database operations
             openai_client: OpenAI client for AI operations
+            triggered_by_user_id: Optional user ID to attribute created cards to
         """
         self.supabase = supabase
         self.openai_client = openai_client
+        self.triggered_by_user_id = triggered_by_user_id
         self.ai_service = AIService(openai_client)
         self.query_generator = QueryGenerator()
 
@@ -931,10 +934,7 @@ class DiscoveryService:
                 logger.info("Dry run - skipping card creation/enrichment")
                 card_result = CardActionResult([], [], 0, 0, 0)
             else:
-                card_result = await self._create_or_enrich_cards(
-                    dedup_result,
-                    config
-                )
+                card_result = await self._create_or_enrich_cards(run_id, dedup_result, config)
                 logger.info(
                     f"Card actions: {len(card_result.cards_created)} created, "
                     f"{len(card_result.cards_enriched)} enriched, "
@@ -2304,6 +2304,7 @@ class DiscoveryService:
 
     async def _create_or_enrich_cards(
         self,
+        run_id: str,
         dedup_result: DeduplicationResult,
         config: DiscoveryConfig
     ) -> CardActionResult:
@@ -2395,7 +2396,7 @@ class DiscoveryService:
                 confidence = self._calculate_discovery_confidence(primary_source)
 
                 # Create new card from primary source
-                card_id = await self._create_card_from_source(primary_source)
+                card_id = await self._create_card_from_source(primary_source, run_id=run_id, confidence=confidence)
                 if not card_id:
                     if primary_source.discovered_source_id:
                         await self._update_source_outcome(
@@ -2574,7 +2575,9 @@ class DiscoveryService:
 
     async def _create_card_from_source(
         self,
-        source: ProcessedSource
+        source: ProcessedSource,
+        run_id: str,
+        confidence: Optional[float] = None,
     ) -> Optional[str]:
         """
         Create a new card from a processed source.
@@ -2609,6 +2612,14 @@ class DiscoveryService:
             goal_id = convert_goal_id(analysis.goals[0])
 
         try:
+            now = datetime.now().isoformat()
+            ai_confidence = None
+            if confidence is not None:
+                try:
+                    ai_confidence = round(float(confidence), 2)
+                except Exception:
+                    ai_confidence = None
+
             result = self.supabase.table("cards").insert({
                 "name": analysis.suggested_card_name,
                 "slug": slug,
@@ -2627,10 +2638,20 @@ class DiscoveryService:
                 "velocity_score": int(analysis.velocity * 10),  # 1-10 scale to 0-100
                 "risk_score": int(analysis.risk * 10),  # 1-10 scale to 0-100
 
-                "status": "draft",  # New cards start as draft
+                "status": "draft",  # New cards start as draft (review queue)
+                "review_status": "pending_review",
+                "discovered_at": now,
+                "discovery_run_id": run_id,
+                "ai_confidence": ai_confidence,
+                "discovery_metadata": {
+                    "source_url": source.raw.url,
+                    "source_title": source.raw.title,
+                    "source_name": source.raw.source_name,
+                },
                 # Note: removed discovery_source - column doesn't exist in schema
-                "created_at": datetime.now().isoformat(),
-                "updated_at": datetime.now().isoformat(),
+                "created_by": self.triggered_by_user_id,
+                "created_at": now,
+                "updated_at": now,
             }).execute()
 
             if result.data:
@@ -2705,6 +2726,7 @@ class DiscoveryService:
         try:
             self.supabase.table("cards").update({
                 "status": "active",
+                "review_status": "active",
                 "auto_approved_at": datetime.now().isoformat(),
                 "updated_at": datetime.now().isoformat()
             }).eq("id", card_id).execute()
@@ -2757,6 +2779,32 @@ class DiscoveryService:
             result: Discovery result
         """
         try:
+            # Preserve any existing fields (e.g., initial config + live progress)
+            # that may have been written into `summary_report` earlier in the run.
+            existing_report: Dict[str, Any] = {}
+            try:
+                existing = self.supabase.table("discovery_runs").select("summary_report").eq("id", run_id).single().execute()
+                raw_report = existing.data.get("summary_report") if existing.data else None
+                if isinstance(raw_report, dict):
+                    existing_report = raw_report
+            except Exception:
+                existing_report = {}
+
+            final_report = {
+                "stage": result.status.value,
+                "markdown": result.summary_report,
+                "queries_executed": result.queries_executed,
+                "sources_blocked": result.sources_blocked,
+                "sources_added": result.sources_added,
+                "auto_approved": result.auto_approved,
+                "pending_review": result.pending_review,
+                "execution_time_seconds": result.execution_time_seconds,
+                "cards_created_ids": result.cards_created,
+                "cards_enriched_ids": result.cards_enriched,
+            }
+
+            updated_report = {**existing_report, **final_report}
+
             self.supabase.table("discovery_runs").update({
                 "status": result.status.value,
                 "completed_at": result.completed_at.isoformat() if result.completed_at else None,
@@ -2769,17 +2817,7 @@ class DiscoveryService:
                 "estimated_cost": result.estimated_cost,
                 "error_message": result.errors[0] if result.errors else None,
                 "error_details": {"errors": result.errors} if result.errors else None,
-                "summary_report": {
-                    "markdown": result.summary_report,
-                    "queries_executed": result.queries_executed,
-                    "sources_blocked": result.sources_blocked,
-                    "sources_added": result.sources_added,
-                    "auto_approved": result.auto_approved,
-                    "pending_review": result.pending_review,
-                    "execution_time_seconds": result.execution_time_seconds,
-                    "cards_created_ids": result.cards_created,
-                    "cards_enriched_ids": result.cards_enriched,
-                },
+                "summary_report": updated_report,
             }).eq("id", run_id).execute()
         except Exception as e:
             logger.warning(f"Failed to update run record: {e}")

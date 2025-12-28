@@ -178,11 +178,27 @@ const Discover: React.FC = () => {
   // Virtualized grid ref for grid view
   const virtualizedGridRef = useRef<VirtualizedGridHandle>(null);
 
+  // When users change sort, reset scroll so the "top" of the sorted list is visible.
+  const hasMountedForSortReset = useRef(false);
+  useEffect(() => {
+    if (!hasMountedForSortReset.current) {
+      hasMountedForSortReset.current = true;
+      return;
+    }
+
+    if (viewMode === 'list') {
+      virtualizedListRef.current?.setScrollOffset(0);
+    } else {
+      virtualizedGridRef.current?.setScrollOffset(0);
+    }
+  }, [sortOption, viewMode]);
+
   // Scroll restoration for list view - saves position when navigating to card detail
   useScrollRestoration({
     storageKey: 'discover-list',
     enabled: viewMode === 'list',
-    clearAfterRestore: false,
+    clearAfterRestore: true,
+    saveOnBeforeUnload: false,
     getScrollPosition: () => virtualizedListRef.current?.getScrollOffset() ?? 0,
     setScrollPosition: (position) => virtualizedListRef.current?.setScrollOffset(position),
   });
@@ -191,7 +207,8 @@ const Discover: React.FC = () => {
   useScrollRestoration({
     storageKey: 'discover-grid',
     enabled: viewMode === 'grid',
-    clearAfterRestore: false,
+    clearAfterRestore: true,
+    saveOnBeforeUnload: false,
     getScrollPosition: () => virtualizedGridRef.current?.getScrollOffset() ?? 0,
     setScrollPosition: (position) => virtualizedGridRef.current?.setScrollOffset(position),
   });
@@ -1150,7 +1167,7 @@ const Discover: React.FC = () => {
               value={sortOption}
               onChange={(e) => setSortOption(e.target.value as SortOption)}
             >
-              <option value="newest">Newest First</option>
+              <option value="newest">Newest Created</option>
               <option value="oldest">Oldest First</option>
               <option value="recently_updated">Recently Updated</option>
               <option value="least_recently_updated">Least Recently Updated</option>

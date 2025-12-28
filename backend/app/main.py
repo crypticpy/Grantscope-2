@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field, validator
 import uuid
 from dotenv import load_dotenv
 from supabase import create_client, Client
+from postgrest.exceptions import APIError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 # Azure OpenAI provider - centralized client configuration
@@ -201,6 +202,35 @@ if not all([supabase_url, supabase_key, supabase_service_key]):
     raise ValueError("Missing required Supabase environment variables")
 
 supabase: Client = create_client(supabase_url, supabase_service_key)
+
+# =============================================================================
+# Supabase helpers
+# =============================================================================
+
+def _is_missing_supabase_table_error(exc: Exception, table_name: str) -> bool:
+    """Best-effort detection for missing PostgREST table errors."""
+    try:
+        if isinstance(exc, APIError):
+            message = f"{exc.message or ''} {exc.details or ''}".lower()
+        else:
+            message = str(exc).lower()
+    except Exception:
+        return False
+
+    table = table_name.lower()
+    if table not in message:
+        return False
+
+    return any(
+        marker in message
+        for marker in (
+            "could not find the table",
+            "schema cache",
+            "does not exist",
+            "relation",
+            "undefined_table",
+        )
+    )
 
 # Azure OpenAI client is initialized in openai_provider module (fail-fast on missing config)
 # Use azure_openai_client for chat completions
@@ -943,8 +973,12 @@ async def get_pending_review_cards(
     Returns discovered cards that need human review, ordered by AI confidence
     (descending) and discovery date.
     """
-    query = supabase.table("cards").select("*").in_(
-        "review_status", ["discovered", "pending_review"]
+    # Backward-compatible: include draft cards even if `review_status` wasn't set correctly.
+    query = (
+        supabase.table("cards")
+        .select("*")
+        .neq("review_status", "rejected")
+        .or_("review_status.in.(discovered,pending_review),status.eq.draft")
     )
 
     if pillar_id:
@@ -954,6 +988,8 @@ async def get_pending_review_cards(
         "ai_confidence", desc=True
     ).order(
         "discovered_at", desc=True
+    ).order(
+        "created_at", desc=True
     ).range(offset, offset + limit - 1).execute()
 
     return response.data
@@ -2069,11 +2105,13 @@ async def get_pending_review_count(
     Returns:
         Object with count field
     """
-    response = supabase.table("cards").select(
-        "id", count="exact"
-    ).in_(
-        "review_status", ["discovered", "pending_review"]
-    ).execute()
+    response = (
+        supabase.table("cards")
+        .select("id", count="exact")
+        .neq("review_status", "rejected")
+        .or_("review_status.in.(discovered,pending_review),status.eq.draft")
+        .execute()
+    )
 
     return {"count": response.count or 0}
 
@@ -4981,7 +5019,7 @@ async def execute_discovery_run_background(
         )
 
         # Execute discovery using the service (pass existing run_id to avoid duplicate)
-        service = DiscoveryService(supabase, openai_client)
+        service = DiscoveryService(supabase, openai_client, triggered_by_user_id=user_id)
         result = await service.execute_discovery_run(discovery_config, existing_run_id=run_id)
 
         # Update the run record with results (service already updates its own record,
@@ -4996,7 +5034,6 @@ async def execute_discovery_run_background(
             "cards_enriched": len(result.cards_enriched),
             "cards_deduplicated": result.sources_duplicate,
             "estimated_cost": result.estimated_cost,
-            "summary_report": {"markdown": result.summary_report, "errors": result.errors}
         }).eq("id", run_id).execute()
 
         logger.info(f"Discovery run {run_id} completed: {len(result.cards_created)} cards created, {len(result.cards_enriched)} enriched")
@@ -5101,11 +5138,18 @@ async def list_saved_searches(
 
     Returns saved searches ordered by last_used_at descending (most recently used first).
     """
-    response = supabase.table("saved_searches").select("*").eq(
-        "user_id", current_user["id"]
-    ).order("last_used_at", desc=True).execute()
+    try:
+        response = supabase.table("saved_searches").select("*").eq(
+            "user_id", current_user["id"]
+        ).order("last_used_at", desc=True).execute()
+    except Exception as e:
+        if _is_missing_supabase_table_error(e, "saved_searches"):
+            logger.warning("saved_searches table missing; returning empty list")
+            return SavedSearchList(saved_searches=[], total_count=0)
+        logger.error(f"Failed to list saved searches: {e}")
+        raise HTTPException(status_code=500, detail="Failed to list saved searches")
 
-    saved_searches = [SavedSearch(**ss) for ss in response.data]
+    saved_searches = [SavedSearch(**ss) for ss in (response.data or [])]
     return SavedSearchList(
         saved_searches=saved_searches,
         total_count=len(saved_searches)
@@ -5143,7 +5187,13 @@ async def create_saved_search(
         "updated_at": now
     }
 
-    response = supabase.table("saved_searches").insert(ss_dict).execute()
+    try:
+        response = supabase.table("saved_searches").insert(ss_dict).execute()
+    except Exception as e:
+        if _is_missing_supabase_table_error(e, "saved_searches"):
+            raise HTTPException(status_code=503, detail="Saved searches are not configured (missing saved_searches table)")
+        logger.error(f"Failed to create saved search: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create saved search")
     if response.data:
         return SavedSearch(**response.data[0])
     else:
@@ -5172,9 +5222,15 @@ async def get_saved_search(
         HTTPException 403: Saved search belongs to another user
     """
     # Fetch the saved search
-    response = supabase.table("saved_searches").select("*").eq(
-        "id", saved_search_id
-    ).execute()
+    try:
+        response = supabase.table("saved_searches").select("*").eq(
+            "id", saved_search_id
+        ).execute()
+    except Exception as e:
+        if _is_missing_supabase_table_error(e, "saved_searches"):
+            raise HTTPException(status_code=503, detail="Saved searches are not configured (missing saved_searches table)")
+        logger.error(f"Failed to fetch saved search {saved_search_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch saved search")
 
     if not response.data:
         raise HTTPException(status_code=404, detail="Saved search not found")
@@ -5186,9 +5242,15 @@ async def get_saved_search(
         raise HTTPException(status_code=403, detail="Not authorized to access this saved search")
 
     # Update last_used_at timestamp
-    update_response = supabase.table("saved_searches").update({
-        "last_used_at": datetime.now().isoformat()
-    }).eq("id", saved_search_id).execute()
+    try:
+        update_response = supabase.table("saved_searches").update({
+            "last_used_at": datetime.now().isoformat()
+        }).eq("id", saved_search_id).execute()
+    except Exception as e:
+        if _is_missing_supabase_table_error(e, "saved_searches"):
+            raise HTTPException(status_code=503, detail="Saved searches are not configured (missing saved_searches table)")
+        logger.error(f"Failed to update saved search last_used_at {saved_search_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update saved search")
 
     if update_response.data:
         return SavedSearch(**update_response.data[0])
@@ -5222,9 +5284,15 @@ async def update_saved_search(
         HTTPException 403: Saved search belongs to another user
     """
     # First check if saved search exists
-    ss_check = supabase.table("saved_searches").select("*").eq(
-        "id", saved_search_id
-    ).execute()
+    try:
+        ss_check = supabase.table("saved_searches").select("*").eq(
+            "id", saved_search_id
+        ).execute()
+    except Exception as e:
+        if _is_missing_supabase_table_error(e, "saved_searches"):
+            raise HTTPException(status_code=503, detail="Saved searches are not configured (missing saved_searches table)")
+        logger.error(f"Failed to fetch saved search for update {saved_search_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch saved search")
 
     if not ss_check.data:
         raise HTTPException(status_code=404, detail="Saved search not found")
@@ -5244,9 +5312,15 @@ async def update_saved_search(
     update_dict["updated_at"] = datetime.now().isoformat()
 
     # Perform update
-    response = supabase.table("saved_searches").update(update_dict).eq(
-        "id", saved_search_id
-    ).execute()
+    try:
+        response = supabase.table("saved_searches").update(update_dict).eq(
+            "id", saved_search_id
+        ).execute()
+    except Exception as e:
+        if _is_missing_supabase_table_error(e, "saved_searches"):
+            raise HTTPException(status_code=503, detail="Saved searches are not configured (missing saved_searches table)")
+        logger.error(f"Failed to update saved search {saved_search_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update saved search")
 
     if response.data:
         return SavedSearch(**response.data[0])
@@ -5277,9 +5351,15 @@ async def delete_saved_search(
         HTTPException 403: Saved search belongs to another user
     """
     # First check if saved search exists
-    ss_check = supabase.table("saved_searches").select("*").eq(
-        "id", saved_search_id
-    ).execute()
+    try:
+        ss_check = supabase.table("saved_searches").select("*").eq(
+            "id", saved_search_id
+        ).execute()
+    except Exception as e:
+        if _is_missing_supabase_table_error(e, "saved_searches"):
+            raise HTTPException(status_code=503, detail="Saved searches are not configured (missing saved_searches table)")
+        logger.error(f"Failed to fetch saved search for delete {saved_search_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch saved search")
 
     if not ss_check.data:
         raise HTTPException(status_code=404, detail="Saved search not found")
@@ -5289,7 +5369,13 @@ async def delete_saved_search(
         raise HTTPException(status_code=403, detail="Not authorized to delete this saved search")
 
     # Perform delete
-    supabase.table("saved_searches").delete().eq("id", saved_search_id).execute()
+    try:
+        supabase.table("saved_searches").delete().eq("id", saved_search_id).execute()
+    except Exception as e:
+        if _is_missing_supabase_table_error(e, "saved_searches"):
+            raise HTTPException(status_code=503, detail="Saved searches are not configured (missing saved_searches table)")
+        logger.error(f"Failed to delete saved search {saved_search_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete saved search")
 
     return {"status": "deleted", "message": "Saved search successfully deleted"}
 
@@ -5438,6 +5524,9 @@ async def list_search_history(
         )
 
     except Exception as e:
+        if _is_missing_supabase_table_error(e, "search_history"):
+            logger.warning("search_history table missing; returning empty list")
+            return SearchHistoryList(history=[], total_count=0)
         logger.error(f"Failed to fetch search history: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -5493,6 +5582,8 @@ async def record_search_history(
     except HTTPException:
         raise
     except Exception as e:
+        if _is_missing_supabase_table_error(e, "search_history"):
+            raise HTTPException(status_code=503, detail="Search history is not configured (missing search_history table)")
         logger.error(f"Failed to record search history: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -5535,6 +5626,8 @@ async def delete_search_history_entry(
     except HTTPException:
         raise
     except Exception as e:
+        if _is_missing_supabase_table_error(e, "search_history"):
+            raise HTTPException(status_code=503, detail="Search history is not configured (missing search_history table)")
         logger.error(f"Failed to delete search history entry: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -5559,6 +5652,8 @@ async def clear_search_history(
         return None
 
     except Exception as e:
+        if _is_missing_supabase_table_error(e, "search_history"):
+            raise HTTPException(status_code=503, detail="Search history is not configured (missing search_history table)")
         logger.error(f"Failed to clear search history: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

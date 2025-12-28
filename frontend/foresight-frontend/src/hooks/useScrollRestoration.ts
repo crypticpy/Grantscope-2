@@ -53,6 +53,13 @@ export interface UseScrollRestorationOptions {
    * Default: true
    */
   enabled?: boolean;
+  /**
+   * Whether to persist scroll position across full page reloads.
+   * When false, scroll is still saved/restored for in-app navigation (unmount/mount),
+   * but won't be saved on refresh/close tab.
+   * Default: true
+   */
+  saveOnBeforeUnload?: boolean;
 }
 
 /**
@@ -121,6 +128,7 @@ export function useScrollRestoration(
     getScrollPosition = () => window.scrollY,
     setScrollPosition = (position: number) => window.scrollTo({ top: position, behavior: 'instant' }),
     enabled = true,
+    saveOnBeforeUnload = true,
   } = options;
 
   const location = useLocation();
@@ -259,7 +267,7 @@ export function useScrollRestoration(
 
   // Save scroll position before page unload (refresh, close tab, navigate away)
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !saveOnBeforeUnload) return;
 
     const handleBeforeUnload = () => {
       isNavigatingAwayRef.current = true;
@@ -280,7 +288,7 @@ export function useScrollRestoration(
       window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [enabled, saveScrollPosition]);
+  }, [enabled, saveOnBeforeUnload, saveScrollPosition]);
 
   // Save scroll position when component unmounts (navigation)
   useEffect(() => {

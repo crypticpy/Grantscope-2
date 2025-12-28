@@ -263,6 +263,24 @@ const RunRow: React.FC<{
 }> = ({ run, onCancel, cancelling }) => {
   const [expanded, setExpanded] = useState(false);
 
+  const summaryReport = (run.summary_report && typeof run.summary_report === 'object')
+    ? (run.summary_report as Record<string, unknown>)
+    : {};
+
+  const configFromSummary = summaryReport.config;
+  const markdownReport = typeof summaryReport.markdown === 'string' ? summaryReport.markdown : null;
+  const createdCardIds = Array.isArray(summaryReport.cards_created_ids)
+    ? (summaryReport.cards_created_ids as string[])
+    : [];
+
+  const derivedErrors = (() => {
+    const detailsErrors = (run.error_details as Record<string, unknown> | null)?.errors;
+    if (Array.isArray(detailsErrors)) return detailsErrors as string[];
+    const reportErrors = summaryReport.errors;
+    if (Array.isArray(reportErrors)) return reportErrors as string[];
+    return [];
+  })();
+
   return (
     <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
       <div className="w-full px-4 py-3 flex items-center justify-between bg-white dark:bg-gray-800">
@@ -363,45 +381,64 @@ const RunRow: React.FC<{
           </div>
 
           {/* Configuration */}
-          {run.config && (
+          {configFromSummary != null && typeof configFromSummary === 'object' && (
             <div className="mb-3">
               <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
                 Configuration
               </div>
-              <div className="flex flex-wrap gap-2">
-                {run.config.source_types?.map((type) => (
-                  <span
-                    key={type}
-                    className="px-2 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs"
-                  >
-                    {type}
-                  </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                {Object.entries(configFromSummary as Record<string, unknown>).map(([key, value]) => (
+                  <div key={key} className="flex items-start gap-2">
+                    <span className="text-gray-500 dark:text-gray-400 min-w-[140px]">{key}:</span>
+                    <span className="text-gray-900 dark:text-gray-100 break-words">
+                      {Array.isArray(value) ? value.join(', ') : String(value)}
+                    </span>
+                  </div>
                 ))}
-                {run.config.pillar_focus?.map((pillar) => (
-                  <span
-                    key={pillar}
-                    className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded text-xs"
-                  >
-                    {pillar}
-                  </span>
-                ))}
-                {run.config.max_cards && (
-                  <span className="px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 rounded text-xs">
-                    Max {run.config.max_cards} cards
-                  </span>
-                )}
+              </div>
+            </div>
+          )}
+
+          {/* Created cards */}
+          {createdCardIds.length > 0 && (
+            <div className="mb-3">
+              <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                Created Cards
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm text-gray-700 dark:text-gray-300">
+                  {createdCardIds.length} card(s) created in this run.
+                </div>
+                <Link
+                  to="/discover/queue"
+                  className="text-sm text-brand-blue hover:text-brand-dark-blue dark:text-blue-400 dark:hover:text-blue-300"
+                >
+                  View review queue →
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {/* Summary report */}
+          {markdownReport && (
+            <div className="mb-3">
+              <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                Summary Report
+              </div>
+              <div className="text-sm whitespace-pre-wrap bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-3 max-h-64 overflow-auto">
+                {markdownReport}
               </div>
             </div>
           )}
 
           {/* Errors */}
-          {run.errors && run.errors.length > 0 && (
+          {derivedErrors.length > 0 && (
             <div>
               <div className="text-xs font-medium text-red-600 dark:text-red-400 uppercase tracking-wide mb-2">
-                Errors ({run.errors.length})
+                Errors ({derivedErrors.length})
               </div>
               <div className="space-y-1">
-                {run.errors.slice(0, 5).map((error, idx) => (
+                {derivedErrors.slice(0, 5).map((error, idx) => (
                   <div
                     key={idx}
                     className="text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 rounded px-2 py-1"
@@ -409,9 +446,9 @@ const RunRow: React.FC<{
                     {error}
                   </div>
                 ))}
-                {run.errors.length > 5 && (
+                {derivedErrors.length > 5 && (
                   <div className="text-sm text-red-500 italic">
-                    +{run.errors.length - 5} more errors
+                    +{derivedErrors.length - 5} more errors
                   </div>
                 )}
               </div>
