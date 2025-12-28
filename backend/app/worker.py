@@ -221,15 +221,26 @@ class ForesightWorker:
         )
 
         service = ExecutiveBriefService(supabase, openai_client)
-        await asyncio.wait_for(
-            service.generate_executive_brief(
-                brief_id=brief_id,
-                workstream_card_id=brief["workstream_card_id"],
-                card_id=brief["card_id"],
-                since_timestamp=since_timestamp,
-            ),
-            timeout=self.brief_timeout_seconds,
-        )
+        try:
+            await asyncio.wait_for(
+                service.generate_executive_brief(
+                    brief_id=brief_id,
+                    workstream_card_id=brief["workstream_card_id"],
+                    card_id=brief["card_id"],
+                    since_timestamp=since_timestamp,
+                ),
+                timeout=self.brief_timeout_seconds,
+            )
+        except asyncio.TimeoutError:
+            await service.update_brief_status(
+                brief_id,
+                "failed",
+                error_message=f"Brief generation timed out after {self.brief_timeout_seconds} seconds",
+            )
+        except BaseException as e:
+            # Includes CancelledError which is not an Exception.
+            await service.update_brief_status(brief_id, "failed", error_message=str(e))
+            raise
         return True
 
     async def _process_one_discovery_run(self) -> bool:
@@ -294,10 +305,35 @@ class ForesightWorker:
             },
         )
 
-        await asyncio.wait_for(
-            execute_discovery_run_background(run_id, config, triggered_by_user),
-            timeout=self.discovery_timeout_seconds,
-        )
+        try:
+            await asyncio.wait_for(
+                execute_discovery_run_background(run_id, config, triggered_by_user),
+                timeout=self.discovery_timeout_seconds,
+            )
+        except asyncio.TimeoutError:
+            summary_report["stage"] = "failed"
+            summary_report["timed_out"] = True
+            summary_report["timed_out_at"] = datetime.now(timezone.utc).isoformat()
+            supabase.table("discovery_runs").update(
+                {
+                    "status": "failed",
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "error_message": f"Discovery run timed out after {self.discovery_timeout_seconds} seconds",
+                    "summary_report": summary_report,
+                }
+            ).eq("id", run_id).execute()
+        except BaseException as e:
+            summary_report["stage"] = "failed"
+            summary_report["failed_at"] = datetime.now(timezone.utc).isoformat()
+            supabase.table("discovery_runs").update(
+                {
+                    "status": "failed",
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "error_message": str(e),
+                    "summary_report": summary_report,
+                }
+            ).eq("id", run_id).execute()
+            raise
         return True
 
 
