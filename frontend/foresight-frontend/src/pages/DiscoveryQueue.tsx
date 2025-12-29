@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useDrag } from '@use-gesture/react';
@@ -1144,15 +1144,15 @@ const DiscoveryQueue: React.FC = () => {
     });
   }, [filteredCards.length]);
 
+  // Stable hotkey options to prevent object recreation on every render
+  const hotkeyOptions = useMemo(() => ({
+    preventDefault: true,
+    enableOnFormTags: false,
+  }), []);
+
   // Keyboard shortcuts for navigation (disabled in form fields)
-  useHotkeys('j', navigateNext, {
-    preventDefault: true,
-    enableOnFormTags: false,
-  }, [navigateNext]);
-  useHotkeys('k', navigatePrevious, {
-    preventDefault: true,
-    enableOnFormTags: false,
-  }, [navigatePrevious]);
+  useHotkeys('j', navigateNext, hotkeyOptions, [navigateNext]);
+  useHotkeys('k', navigatePrevious, hotkeyOptions, [navigatePrevious]);
 
   /**
    * Follow/approve the focused card (f key)
@@ -1166,10 +1166,7 @@ const DiscoveryQueue: React.FC = () => {
         handleReviewAction(focusedCardId, 'approve');
       }
     },
-    {
-      preventDefault: true,
-      enableOnFormTags: false,
-    },
+    hotkeyOptions,
     [focusedCardId, actionLoading, handleReviewAction, canExecuteAction]
   );
 
@@ -1185,10 +1182,7 @@ const DiscoveryQueue: React.FC = () => {
         handleDismiss(focusedCardId, 'irrelevant');
       }
     },
-    {
-      preventDefault: true,
-      enableOnFormTags: false,
-    },
+    hotkeyOptions,
     [focusedCardId, actionLoading, handleDismiss, canExecuteAction]
   );
 
@@ -1204,10 +1198,7 @@ const DiscoveryQueue: React.FC = () => {
         handleUndoFromToast();
       }
     },
-    {
-      preventDefault: true,
-      enableOnFormTags: false,
-    },
+    hotkeyOptions,
     [toastVisible, canUndo, handleUndoFromToast, canExecuteAction]
   );
 
