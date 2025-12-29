@@ -7,6 +7,17 @@ import { useLocation } from 'react-router-dom';
 const SCROLL_STORAGE_PREFIX = 'scroll_position_';
 
 /**
+ * Default scroll position getter - defined at module level for stable reference
+ */
+const defaultGetScrollPosition = () => window.scrollY;
+
+/**
+ * Default scroll position setter - defined at module level for stable reference
+ */
+const defaultSetScrollPosition = (position: number) =>
+  window.scrollTo({ top: position, behavior: 'instant' });
+
+/**
  * Configuration options for scroll restoration
  */
 export interface UseScrollRestorationOptions {
@@ -125,8 +136,8 @@ export function useScrollRestoration(
     restoreDelay = 50,
     debounce = true,
     debounceDelay = 100,
-    getScrollPosition = () => window.scrollY,
-    setScrollPosition = (position: number) => window.scrollTo({ top: position, behavior: 'instant' }),
+    getScrollPosition = defaultGetScrollPosition,
+    setScrollPosition = defaultSetScrollPosition,
     enabled = true,
     saveOnBeforeUnload = true,
   } = options;
