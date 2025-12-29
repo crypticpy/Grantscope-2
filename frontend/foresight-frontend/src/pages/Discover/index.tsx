@@ -189,14 +189,33 @@ const Discover: React.FC = () => {
     }
   }, [sortOption, viewMode]);
 
+  // Stable scroll position callbacks for useScrollRestoration
+  // Using useCallback to prevent infinite re-renders from unstable function references
+  const getListScrollPosition = useCallback(
+    () => virtualizedListRef.current?.getScrollOffset() ?? 0,
+    []
+  );
+  const setListScrollPosition = useCallback(
+    (position: number) => virtualizedListRef.current?.setScrollOffset(position),
+    []
+  );
+  const getGridScrollPosition = useCallback(
+    () => virtualizedGridRef.current?.getScrollOffset() ?? 0,
+    []
+  );
+  const setGridScrollPosition = useCallback(
+    (position: number) => virtualizedGridRef.current?.setScrollOffset(position),
+    []
+  );
+
   // Scroll restoration
   useScrollRestoration({
     storageKey: 'discover-list',
     enabled: viewMode === 'list',
     clearAfterRestore: true,
     saveOnBeforeUnload: false,
-    getScrollPosition: () => virtualizedListRef.current?.getScrollOffset() ?? 0,
-    setScrollPosition: (position) => virtualizedListRef.current?.setScrollOffset(position),
+    getScrollPosition: getListScrollPosition,
+    setScrollPosition: setListScrollPosition,
   });
 
   useScrollRestoration({
@@ -204,8 +223,8 @@ const Discover: React.FC = () => {
     enabled: viewMode === 'grid',
     clearAfterRestore: true,
     saveOnBeforeUnload: false,
-    getScrollPosition: () => virtualizedGridRef.current?.getScrollOffset() ?? 0,
-    setScrollPosition: (position) => virtualizedGridRef.current?.setScrollOffset(position),
+    getScrollPosition: getGridScrollPosition,
+    setScrollPosition: setGridScrollPosition,
   });
 
   // Build current search query config for saving
