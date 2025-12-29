@@ -631,6 +631,15 @@ const UndoToast = React.memo(function UndoToast({ action, onUndo, onDismiss, tim
 });
 
 const DiscoveryQueue: React.FC = () => {
+  // DEBUG: Render counter to detect infinite loops
+  const renderCount = useRef(0);
+  renderCount.current += 1;
+  if (renderCount.current > 50) {
+    console.error('DiscoveryQueue: Too many renders detected!', renderCount.current);
+    return <div className="p-8 text-red-500">Render loop detected! Check console for details.</div>;
+  }
+  console.log('DiscoveryQueue render #', renderCount.current);
+
   const { user } = useAuthContext();
   const isMobile = useIsMobile();
 
@@ -1247,7 +1256,7 @@ const DiscoveryQueue: React.FC = () => {
           <div className="min-w-0 flex-1">
             <h1 className="text-2xl sm:text-3xl font-bold text-brand-dark-blue dark:text-white flex items-center gap-2 sm:gap-3">
               <Sparkles className="h-6 w-6 sm:h-8 sm:w-8 text-brand-blue flex-shrink-0" />
-              <span className="truncate">Discovery Queue [v3]</span>
+              <span className="truncate">Discovery Queue [v4-debug]</span>
             </h1>
             <p className="mt-1 sm:mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400">
               Review AI-discovered cards before they're added to the intelligence library.
