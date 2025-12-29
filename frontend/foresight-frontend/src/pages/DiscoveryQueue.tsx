@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useDrag } from '@use-gesture/react';
 import * as Progress from '@radix-ui/react-progress';
@@ -633,6 +633,7 @@ const UndoToast = React.memo(function UndoToast({ action, onUndo, onDismiss, tim
 const DiscoveryQueue: React.FC = () => {
   const { user } = useAuthContext();
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
 
   // Stable scroll restoration options - useMemo prevents object recreation on each render
   const scrollRestorationOptions = useMemo(() => ({
@@ -1012,17 +1013,16 @@ const DiscoveryQueue: React.FC = () => {
   }, [cards, searchTerm, selectedPillar, confidenceFilter]);
 
   /**
-   * Stable callback for card click action (set focused card)
-   * Used by SwipeableCard - accepts cardId parameter for stable reference pattern
-   * This prevents creating new function references per card per render
-   * Looks up the index from filteredCards at click time to handle filter changes correctly
+   * Open the full card view for a pending-review card.
+   * Uses `mode=review` so CardDetail can load non-active cards when opened from the queue.
    */
-  const handleCardClick = useCallback((cardId: string) => {
-    const index = filteredCards.findIndex(c => c.id === cardId);
-    if (index !== -1) {
-      setFocusedCardIndex(index);
-    }
-  }, [filteredCards]);
+  const openCardDetail = useCallback(
+    (card: PendingCard) => {
+      if (!card.slug) return;
+      navigate(`/cards/${encodeURIComponent(card.slug)}?mode=review`);
+    },
+    [navigate]
+  );
 
   /**
    * Handle bulk action
@@ -1535,6 +1535,7 @@ const DiscoveryQueue: React.FC = () => {
           getItemKey={(card) => card.id}
           focusedIndex={focusedCardIndex}
           onFocusedIndexChange={setFocusedCardIndex}
+          onItemClick={openCardDetail}
           ariaLabel="Discovery queue cards"
           scrollContainerClassName="h-[calc(100vh-280px)] sm:h-[calc(100vh-300px)]"
           renderItem={(card, _index) => {
@@ -1545,21 +1546,20 @@ const DiscoveryQueue: React.FC = () => {
             const isFocused = focusedCardId === card.id;
 
             return (
-              <SwipeableCard
-                cardId={card.id}
-                isMobile={isMobile}
-                cardRef={getCardRefCallback(card.id)}
-                onSwipeRight={handleSwipeApprove}
-                onSwipeLeft={handleSwipeDismiss}
-                disabled={isLoading}
-                tabIndex={isFocused ? 0 : -1}
-                onClick={handleCardClick}
-                className={cn(
-                  'bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6 border-l-4 transition-all duration-200',
-                  isFocused
-                    ? 'border-l-brand-blue ring-2 ring-brand-blue/50 shadow-lg'
-                    : isSelected
-                      ? 'border-l-brand-blue ring-2 ring-brand-blue/20'
+                <SwipeableCard
+                  cardId={card.id}
+                  isMobile={isMobile}
+                  cardRef={getCardRefCallback(card.id)}
+                  onSwipeRight={handleSwipeApprove}
+                  onSwipeLeft={handleSwipeDismiss}
+                  disabled={isLoading}
+                  tabIndex={isFocused ? 0 : -1}
+                  className={cn(
+                    'bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6 border-l-4 transition-all duration-200 cursor-pointer',
+                    isFocused
+                      ? 'border-l-brand-blue ring-2 ring-brand-blue/50 shadow-lg'
+                      : isSelected
+                        ? 'border-l-brand-blue ring-2 ring-brand-blue/20'
                       : 'border-transparent hover:border-l-brand-blue',
                   isLoading && 'opacity-60'
                 )}

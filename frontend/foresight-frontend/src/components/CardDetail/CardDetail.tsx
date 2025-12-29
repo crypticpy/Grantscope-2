@@ -19,7 +19,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Eye, FileText, Calendar, TrendingUp, GitBranch } from 'lucide-react';
 import { supabase } from '../../App';
 import { useAuthContext } from '../../hooks/useAuthContext';
@@ -80,6 +80,13 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = '' }) => {
   const { slug } = useParams<{ slug: string }>();
   const { user } = useAuthContext();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Allow viewing non-active cards (e.g., pending review) when opened from the queue.
+  const mode = searchParams.get('mode');
+  const isReviewMode = mode === 'review' || mode === 'edit';
+  const backLink = isReviewMode ? '/discover/queue' : '/discover';
+  const backLinkText = isReviewMode ? 'Back to Review Queue' : 'Back to Discover';
 
   // Core card data
   const [card, setCard] = useState<Card | null>(null);
@@ -121,12 +128,17 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = '' }) => {
   const loadCardDetail = useCallback(async () => {
     if (!slug) return;
     try {
-      const { data: cardData } = await supabase
+      let query = supabase
         .from('cards')
         .select('*')
-        .eq('slug', slug)
-        .eq('status', 'active')
-        .single();
+        .eq('slug', slug);
+
+      // Default: only show active cards. Review mode: allow pending/draft cards.
+      if (!isReviewMode) {
+        query = query.eq('status', 'active');
+      }
+
+      const { data: cardData } = await query.single();
 
       if (cardData) {
         setCard(cardData);
@@ -147,7 +159,7 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = '' }) => {
     } finally {
       setLoading(false);
     }
-  }, [slug, user?.id]);
+  }, [slug, user?.id, isReviewMode]);
 
   // Load score/stage history and related cards
   const loadScoreHistory = useCallback(async () => {
@@ -336,8 +348,8 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = '' }) => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Card not found</h1>
-          <Link to="/discover" className="text-brand-blue hover:text-brand-dark-blue mt-4 inline-block transition-colors">
-            Back to Discover
+          <Link to={backLink} className="text-brand-blue hover:text-brand-dark-blue mt-4 inline-block transition-colors">
+            {backLinkText}
           </Link>
         </div>
       </div>
@@ -347,7 +359,7 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = '' }) => {
   return (
     <div className={cn('max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8', className)}>
       {/* Header with action buttons */}
-      <CardDetailHeader card={card}>
+      <CardDetailHeader card={card} backLink={backLink} backLinkText={backLinkText}>
         <CardActionButtons
           card={card}
           isFollowing={isFollowing}
