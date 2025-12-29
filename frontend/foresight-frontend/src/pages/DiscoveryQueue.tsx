@@ -634,19 +634,15 @@ const DiscoveryQueue: React.FC = () => {
   const { user } = useAuthContext();
   const isMobile = useIsMobile();
 
-  // Stable scroll restoration options - prevents hook from recreating callbacks
-  const scrollRestorationOptions = useMemo(() => ({
+  // Enable scroll position restoration for navigation
+  useScrollRestoration({
     storageKey: 'discovery-queue',
+    // Don't clear after restore - allows restoring on browser back/forward
     clearAfterRestore: false,
+    // Debounce scroll position saves for performance
     debounce: true,
     debounceDelay: 100,
-    // Provide stable function references to prevent infinite re-renders
-    getScrollPosition: () => window.scrollY,
-    setScrollPosition: (position: number) => window.scrollTo({ top: position, behavior: 'instant' }),
-  }), []);
-
-  // Enable scroll position restoration for navigation
-  useScrollRestoration(scrollRestorationOptions);
+  });
 
   const [cards, setCards] = useState<PendingCard[]>([]);
   const [pillars, setPillars] = useState<Pillar[]>([]);
@@ -1247,7 +1243,7 @@ const DiscoveryQueue: React.FC = () => {
           <div className="min-w-0 flex-1">
             <h1 className="text-2xl sm:text-3xl font-bold text-brand-dark-blue dark:text-white flex items-center gap-2 sm:gap-3">
               <Sparkles className="h-6 w-6 sm:h-8 sm:w-8 text-brand-blue flex-shrink-0" />
-              <span className="truncate">Discovery Queue [v3]</span>
+              <span className="truncate">Discovery Queue</span>
             </h1>
             <p className="mt-1 sm:mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400">
               Review AI-discovered cards before they're added to the intelligence library.
