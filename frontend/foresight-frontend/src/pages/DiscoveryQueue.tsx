@@ -631,16 +631,23 @@ const UndoToast = React.memo(function UndoToast({ action, onUndo, onDismiss, tim
 });
 
 const DiscoveryQueue: React.FC = () => {
-  // DEBUG: Render counter to detect infinite loops
-  const renderCount = useRef(0);
-  renderCount.current += 1;
-  if (renderCount.current > 50) {
-    console.error('DiscoveryQueue: Too many renders detected!', renderCount.current);
-    return <div className="p-8 text-red-500">Render loop detected! Check console for details.</div>;
-  }
-  console.log('DiscoveryQueue render #', renderCount.current);
-
+  // DEBUG v6: Minimal component to isolate crash
   const { user } = useAuthContext();
+
+  // Return minimal UI immediately to test if basic rendering works
+  if (!user) {
+    return <div className="p-8">No user - redirecting...</div>;
+  }
+
+  return (
+    <div className="p-8">
+      <h1 className="text-2xl font-bold">Discovery Queue [v6-minimal]</h1>
+      <p>If you see this, basic rendering works!</p>
+      <p>User: {user.email}</p>
+    </div>
+  );
+
+  /* DISABLED: All hooks and full component for debugging
   const isMobile = useIsMobile();
 
   // Stable scroll restoration options - prevents hook from recreating callbacks
@@ -1742,6 +1749,7 @@ const DiscoveryQueue: React.FC = () => {
       )}
     </div>
   );
+  END OF DISABLED BLOCK */
 };
 
 export default DiscoveryQueue;
