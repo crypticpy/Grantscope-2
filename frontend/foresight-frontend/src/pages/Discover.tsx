@@ -326,6 +326,32 @@ const Discover: React.FC = () => {
           query = query.or(`name.ilike.%${debouncedFilters.searchTerm}%,summary.ilike.%${debouncedFilters.searchTerm}%`);
         }
 
+        // Apply all filters (pillar, stage, horizon, scores, dates)
+        if (selectedPillar) {
+          query = query.eq('pillar_id', selectedPillar);
+        }
+        if (selectedStage) {
+          query = query.eq('stage_id', selectedStage);
+        }
+        if (selectedHorizon) {
+          query = query.eq('horizon', selectedHorizon);
+        }
+        if (debouncedFilters.impactMin > 0) {
+          query = query.gte('impact_score', debouncedFilters.impactMin);
+        }
+        if (debouncedFilters.relevanceMin > 0) {
+          query = query.gte('relevance_score', debouncedFilters.relevanceMin);
+        }
+        if (debouncedFilters.noveltyMin > 0) {
+          query = query.gte('novelty_score', debouncedFilters.noveltyMin);
+        }
+        if (dateFrom) {
+          query = query.gte('created_at', dateFrom);
+        }
+        if (dateTo) {
+          query = query.lte('created_at', dateTo);
+        }
+
         const sortConfig = getSortConfig(sortOption);
         const { data } = await query.order(sortConfig.column, { ascending: sortConfig.ascending });
         setCards(data || []);
@@ -367,7 +393,7 @@ const Discover: React.FC = () => {
           const response = await advancedSearch(token, searchRequest);
 
           // Map search results to Card interface
-          const mappedCards: Card[] = response.results.map((result) => ({
+          let mappedCards: Card[] = response.results.map((result) => ({
             id: result.id,
             name: result.name,
             slug: result.slug,
@@ -383,10 +409,20 @@ const Discover: React.FC = () => {
             risk_score: result.risk_score || 0,
             opportunity_score: result.opportunity_score || 0,
             created_at: result.created_at || '',
+            updated_at: result.updated_at,
             anchor_id: result.anchor_id,
             // Include search relevance score from vector search (0-1 similarity)
             search_relevance: result.search_relevance,
           }));
+
+          // Apply client-side sorting to semantic search results
+          const sortConfig = getSortConfig(sortOption);
+          mappedCards = mappedCards.sort((a, b) => {
+            const aVal = sortConfig.column === 'created_at' ? a.created_at : (a.updated_at || a.created_at);
+            const bVal = sortConfig.column === 'created_at' ? b.created_at : (b.updated_at || b.created_at);
+            const comparison = aVal.localeCompare(bVal);
+            return sortConfig.ascending ? comparison : -comparison;
+          });
 
           setCards(mappedCards);
 
