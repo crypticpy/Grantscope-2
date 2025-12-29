@@ -40,10 +40,10 @@ import {
   type DismissReason,
 } from '../lib/discovery-api';
 
-// DEBUG v6: Minimal component to isolate infinite re-render crash
-// All other code has been temporarily removed to test if basic rendering works
+// DEBUG v7: Testing useIsMobile hook
 const DiscoveryQueue: React.FC = () => {
   const { user } = useAuthContext();
+  const isMobile = useIsMobile();
 
   if (!user) {
     return <div className="p-8">No user - redirecting...</div>;
@@ -51,9 +51,10 @@ const DiscoveryQueue: React.FC = () => {
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-bold">Discovery Queue [v6-minimal]</h1>
-      <p className="mt-2">If you see this, basic rendering works!</p>
+      <h1 className="text-2xl font-bold">Discovery Queue [v7-isMobile]</h1>
+      <p className="mt-2">If you see this, useIsMobile works!</p>
       <p className="mt-1 text-gray-600">User: {user.email}</p>
+      <p className="mt-1 text-gray-600">isMobile: {String(isMobile)}</p>
       <Link to="/" className="mt-4 inline-block text-blue-600 hover:underline">
         ← Back to Dashboard
       </Link>
