@@ -428,42 +428,45 @@ const Discover: React.FC = () => {
     }
   };
 
-  const toggleFollowCard = async (cardId: string) => {
-    if (!user?.id) return;
+  const toggleFollowCard = useCallback(
+    async (cardId: string) => {
+      if (!user?.id) return;
 
-    const isFollowing = followedCardIds.has(cardId);
+      const isFollowing = followedCardIds.has(cardId);
 
-    // Optimistic update
-    setFollowedCardIds((prev) => {
-      const newSet = new Set(prev);
-      if (isFollowing) {
-        newSet.delete(cardId);
-      } else {
-        newSet.add(cardId);
-      }
-      return newSet;
-    });
-
-    try {
-      if (isFollowing) {
-        await supabase.from('card_follows').delete().eq('user_id', user.id).eq('card_id', cardId);
-      } else {
-        await supabase.from('card_follows').insert({ user_id: user.id, card_id: cardId, priority: 'medium' });
-      }
-    } catch (error) {
-      console.error('Error toggling card follow:', error);
-      // Revert optimistic update
+      // Optimistic update
       setFollowedCardIds((prev) => {
         const newSet = new Set(prev);
         if (isFollowing) {
-          newSet.add(cardId);
-        } else {
           newSet.delete(cardId);
+        } else {
+          newSet.add(cardId);
         }
         return newSet;
       });
-    }
-  };
+
+      try {
+        if (isFollowing) {
+          await supabase.from('card_follows').delete().eq('user_id', user.id).eq('card_id', cardId);
+        } else {
+          await supabase.from('card_follows').insert({ user_id: user.id, card_id: cardId, priority: 'medium' });
+        }
+      } catch (error) {
+        console.error('Error toggling card follow:', error);
+        // Revert optimistic update
+        setFollowedCardIds((prev) => {
+          const newSet = new Set(prev);
+          if (isFollowing) {
+            newSet.add(cardId);
+          } else {
+            newSet.delete(cardId);
+          }
+          return newSet;
+        });
+      }
+    },
+    [user?.id, followedCardIds]
+  );
 
   // Apply saved search configuration
   const handleSelectSavedSearch = useCallback(
