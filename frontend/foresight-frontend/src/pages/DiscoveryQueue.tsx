@@ -1157,6 +1157,9 @@ const DiscoveryQueue: React.FC = () => {
     });
   }, [filteredCards.length]);
 
+  // DEBUG: Temporarily disabled all useHotkeys to test if they cause infinite re-renders
+  // TODO: Re-enable after fixing the root cause
+  /*
   // Stable hotkey options to prevent object recreation on every render
   const hotkeyOptions = useMemo(() => ({
     preventDefault: true,
@@ -1167,11 +1170,6 @@ const DiscoveryQueue: React.FC = () => {
   useHotkeys('j', navigateNext, hotkeyOptions, [navigateNext]);
   useHotkeys('k', navigatePrevious, hotkeyOptions, [navigatePrevious]);
 
-  /**
-   * Follow/approve the focused card (f key)
-   * Only works when a card is focused and not in a form field
-   * Debounced to prevent rapid double-execution
-   */
   useHotkeys(
     'f',
     () => {
@@ -1183,11 +1181,6 @@ const DiscoveryQueue: React.FC = () => {
     [focusedCardId, actionLoading, handleReviewAction, canExecuteAction]
   );
 
-  /**
-   * Dismiss the focused card (d key)
-   * Only works when a card is focused and not in a form field
-   * Debounced to prevent rapid double-execution
-   */
   useHotkeys(
     'd',
     () => {
@@ -1199,11 +1192,6 @@ const DiscoveryQueue: React.FC = () => {
     [focusedCardId, actionLoading, handleDismiss, canExecuteAction]
   );
 
-  /**
-   * Undo last action (z key)
-   * Only works when there's an undoable action
-   * Debounced to prevent accidental double-undo
-   */
   useHotkeys(
     'z',
     () => {
@@ -1214,6 +1202,7 @@ const DiscoveryQueue: React.FC = () => {
     hotkeyOptions,
     [toastVisible, canUndo, handleUndoFromToast, canExecuteAction]
   );
+  */
 
   // Reset focus when filtered cards change
   useEffect(() => {
@@ -1256,7 +1245,7 @@ const DiscoveryQueue: React.FC = () => {
           <div className="min-w-0 flex-1">
             <h1 className="text-2xl sm:text-3xl font-bold text-brand-dark-blue dark:text-white flex items-center gap-2 sm:gap-3">
               <Sparkles className="h-6 w-6 sm:h-8 sm:w-8 text-brand-blue flex-shrink-0" />
-              <span className="truncate">Discovery Queue [v4-debug]</span>
+              <span className="truncate">Discovery Queue [v5-no-hotkeys]</span>
             </h1>
             <p className="mt-1 sm:mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400">
               Review AI-discovered cards before they're added to the intelligence library.
