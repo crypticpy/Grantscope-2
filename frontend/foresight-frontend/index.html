@@ -10,47 +10,7 @@
   <link rel="apple-touch-icon" href="/logo-icon.png" />
   <meta name="theme-color" content="#44499C" />
 
-  <!--
-    Content Security Policy
-
-    This CSP provides defense-in-depth against XSS and data injection attacks.
-
-    Directives:
-    - default-src 'self': Only allow resources from same origin by default
-    - script-src 'self': Scripts only from same origin (Vite handles module loading)
-    - style-src 'self' 'unsafe-inline': Allow inline styles (required for CSS-in-JS/Tailwind)
-    - style-src-elem: Allow Google Fonts stylesheets
-    - font-src: Allow Google Fonts and same origin fonts
-    - img-src: Allow images from self, data URIs, and blob URLs (for dynamic images)
-    - connect-src: Allow API connections to backend and Supabase
-    - frame-ancestors 'none': Prevent clickjacking by disallowing iframe embedding
-    - base-uri 'self': Prevent base tag injection attacks
-    - form-action 'self': Restrict form submissions to same origin
-    - object-src 'none': Block plugins (Flash, Java, etc.)
-    - upgrade-insecure-requests: Upgrade HTTP to HTTPS automatically
-
-    Note: Supabase URLs use wildcards since they're configured via environment variables.
-    The backend API URL is configured for both localhost (dev) and production domains.
-  -->
-  <meta http-equiv="Content-Security-Policy" content="
-    default-src 'self';
-    script-src 'self';
-    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-    style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com;
-    font-src 'self' https://fonts.gstatic.com;
-    img-src 'self' data: blob: https:;
-    connect-src 'self' https://*.supabase.co wss://*.supabase.co http://localhost:8000 https://*.railway.app https://*.up.railway.app;
-    frame-ancestors 'none';
-    base-uri 'self';
-    form-action 'self';
-    object-src 'none';
-    upgrade-insecure-requests;
-  " />
-
-  <!-- Additional Security Headers -->
-  <meta http-equiv="X-Content-Type-Options" content="nosniff" />
-  <meta http-equiv="X-Frame-Options" content="DENY" />
-  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <!-- Security headers (CSP, X-Frame-Options, etc.) are configured at the HTTP layer (see `vercel.json`). -->
 </head>
 
 <body>

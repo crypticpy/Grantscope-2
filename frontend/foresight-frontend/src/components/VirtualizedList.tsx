@@ -137,6 +137,16 @@ function VirtualizedListInner<T>(
   const parentRef = useRef<HTMLDivElement>(null);
   const internalFocusedIndex = useRef<number>(focusedIndex ?? -1);
 
+  // TanStack Virtual tracks option identity (including `getItemKey`) and can
+  // trigger a rerender via `onChange` during render if these change. Ensure we
+  // provide stable function references to avoid render-loop crashes (#301).
+  const getScrollElement = useCallback(() => parentRef.current, []);
+  const estimateSizeFn = useCallback(() => estimatedSize, [estimatedSize]);
+  const getVirtualizerItemKey = useCallback(
+    (index: number) => getItemKey?.(items[index], index) ?? index,
+    [getItemKey, items]
+  );
+
   // Update internal focused index when controlled value changes
   useEffect(() => {
     if (focusedIndex !== undefined) {
@@ -147,12 +157,10 @@ function VirtualizedListInner<T>(
   // Initialize the virtualizer
   const virtualizer = useVirtualizer({
     count: items.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => estimatedSize,
+    getScrollElement,
+    estimateSize: estimateSizeFn,
     overscan,
-    getItemKey: getItemKey
-      ? (index) => getItemKey(items[index], index)
-      : undefined,
+    getItemKey: getItemKey ? getVirtualizerItemKey : undefined,
     gap,
     paddingStart,
     paddingEnd,
