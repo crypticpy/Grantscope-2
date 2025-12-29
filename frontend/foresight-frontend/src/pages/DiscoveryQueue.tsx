@@ -1749,7 +1749,8 @@ const DiscoveryQueue: React.FC = () => {
       )}
     </div>
   );
-  END OF DISABLED BLOCK */
+  // END OF DISABLED BLOCK
+  */
 };
 
 export default DiscoveryQueue;
