@@ -634,15 +634,16 @@ const DiscoveryQueue: React.FC = () => {
   const { user } = useAuthContext();
   const isMobile = useIsMobile();
 
-  // Enable scroll position restoration for navigation
-  useScrollRestoration({
+  // Stable scroll restoration options - useMemo prevents object recreation on each render
+  const scrollRestorationOptions = useMemo(() => ({
     storageKey: 'discovery-queue',
-    // Don't clear after restore - allows restoring on browser back/forward
     clearAfterRestore: false,
-    // Debounce scroll position saves for performance
     debounce: true,
     debounceDelay: 100,
-  });
+  }), []);
+
+  // Enable scroll position restoration for navigation
+  useScrollRestoration(scrollRestorationOptions);
 
   const [cards, setCards] = useState<PendingCard[]>([]);
   const [pillars, setPillars] = useState<Pillar[]>([]);
