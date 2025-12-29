@@ -1,0 +1,1241 @@
+/**
+ * Discover Page
+ *
+ * The main intelligence library browser. Features:
+ * - Virtualized grid/list views for large card counts
+ * - Semantic (AI) and text-based search
+ * - Multi-dimensional filtering (pillar, stage, horizon, scores, dates)
+ * - Card comparison mode
+ * - Follow functionality
+ * - Saved searches and search history
+ *
+ * @module Discover
+ *
+ * Directory Structure:
+ * - index.tsx - Main page component (this file)
+ * - types.ts - TypeScript interfaces
+ * - utils.ts - Utility functions
+ * - components/DiscoverCard.tsx - Card rendering component
+ * - hooks/useSearchHistory.ts - Search history management
+ */
+
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
+import {
+  Search,
+  Filter,
+  Grid,
+  List,
+  Eye,
+  Clock,
+  Star,
+  Inbox,
+  History,
+  Calendar,
+  Sparkles,
+  Bookmark,
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+  X,
+  AlertTriangle,
+  RefreshCw,
+  ArrowLeftRight,
+} from 'lucide-react';
+import { supabase } from '../../App';
+import { useAuthContext } from '../../hooks/useAuthContext';
+import { useDebouncedValue } from '../../hooks/useDebounce';
+import { useScrollRestoration } from '../../hooks/useScrollRestoration';
+import { SaveSearchModal } from '../../components/SaveSearchModal';
+import { SearchSidebar } from '../../components/SearchSidebar';
+import { VirtualizedGrid, VirtualizedGridHandle } from '../../components/VirtualizedGrid';
+import { VirtualizedList, VirtualizedListHandle } from '../../components/VirtualizedList';
+import {
+  advancedSearch,
+  type AdvancedSearchRequest,
+  type SavedSearchQueryConfig,
+} from '../../lib/discovery-api';
+
+// Local imports from modular structure
+import type { Card, Pillar, Stage, SortOption, FilterState } from './types';
+import { getSortConfig, getScoreColorClasses, formatHistoryTime } from './utils';
+import { DiscoverCard } from './components';
+import { useSearchHistory } from './hooks';
+
+/**
+ * Build a short description of a query config for display
+ */
+function getHistoryDescription(config: SavedSearchQueryConfig): string {
+  const parts: string[] = [];
+
+  if (config.query) {
+    parts.push(`"${config.query}"`);
+  }
+
+  if (config.filters) {
+    const { pillar_ids, stage_ids, horizon, date_range, score_thresholds } = config.filters;
+
+    if (pillar_ids && pillar_ids.length > 0) {
+      parts.push(`${pillar_ids.length} pillar(s)`);
+    }
+    if (stage_ids && stage_ids.length > 0) {
+      parts.push(`${stage_ids.length} stage(s)`);
+    }
+    if (horizon && horizon !== 'ALL') {
+      parts.push(`${horizon}`);
+    }
+    if (date_range && (date_range.start || date_range.end)) {
+      parts.push('date filter');
+    }
+    if (score_thresholds && Object.keys(score_thresholds).length > 0) {
+      parts.push('score filters');
+    }
+  }
+
+  if (parts.length === 0 && !config.use_vector_search) {
+    return 'All cards';
+  }
+
+  return parts.join(' • ') || (config.use_vector_search ? 'Semantic search' : 'All cards');
+}
+
+/**
+ * Discover Page Component
+ */
+const Discover: React.FC = () => {
+  const { user } = useAuthContext();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [cards, setCards] = useState<Card[]>([]);
+  const [pillars, setPillars] = useState<Pillar[]>([]);
+  const [stages, setStages] = useState<Stage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedPillar, setSelectedPillar] = useState('');
+  const [selectedStage, setSelectedStage] = useState('');
+  const [selectedHorizon, setSelectedHorizon] = useState('');
+  const [sortOption, setSortOption] = useState<SortOption>('newest');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [followedCardIds, setFollowedCardIds] = useState<Set<string>>(new Set());
+
+  // Comparison mode state
+  const [compareMode, setCompareMode] = useState(false);
+  const [selectedForCompare, setSelectedForCompare] = useState<Array<{ id: string; name: string }>>([]);
+
+  // Score threshold filters (minimum values, 0-100)
+  const [impactMin, setImpactMin] = useState<number>(0);
+  const [relevanceMin, setRelevanceMin] = useState<number>(0);
+  const [noveltyMin, setNoveltyMin] = useState<number>(0);
+
+  // Date range filters (YYYY-MM-DD format)
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
+
+  // Semantic search toggle
+  const [useSemanticSearch, setUseSemanticSearch] = useState<boolean>(false);
+
+  // Debounce filter values that change rapidly
+  const filterState = useMemo<FilterState>(
+    () => ({
+      searchTerm,
+      impactMin,
+      relevanceMin,
+      noveltyMin,
+    }),
+    [searchTerm, impactMin, relevanceMin, noveltyMin]
+  );
+
+  const { debouncedValue: debouncedFilters, isPending: isFilterPending } = useDebouncedValue(filterState, 300);
+
+  // Save search modal state
+  const [showSaveSearchModal, setShowSaveSearchModal] = useState(false);
+
+  // Saved searches sidebar state
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
+
+  // Search history hook
+  const {
+    searchHistory,
+    historyLoading,
+    isHistoryExpanded,
+    toggleHistoryExpanded,
+    deletingHistoryId,
+    recordSearch,
+    deleteHistoryEntry,
+    clearHistory,
+  } = useSearchHistory(user?.id);
+
+  // Quick filter from URL params
+  const quickFilter = searchParams.get('filter') || '';
+
+  // Virtualized refs
+  const virtualizedListRef = useRef<VirtualizedListHandle>(null);
+  const virtualizedGridRef = useRef<VirtualizedGridHandle>(null);
+
+  // Reset scroll when sort changes
+  const hasMountedForSortReset = useRef(false);
+  useEffect(() => {
+    if (!hasMountedForSortReset.current) {
+      hasMountedForSortReset.current = true;
+      return;
+    }
+
+    if (viewMode === 'list') {
+      virtualizedListRef.current?.setScrollOffset(0);
+    } else {
+      virtualizedGridRef.current?.setScrollOffset(0);
+    }
+  }, [sortOption, viewMode]);
+
+  // Scroll restoration
+  useScrollRestoration({
+    storageKey: 'discover-list',
+    enabled: viewMode === 'list',
+    clearAfterRestore: true,
+    saveOnBeforeUnload: false,
+    getScrollPosition: () => virtualizedListRef.current?.getScrollOffset() ?? 0,
+    setScrollPosition: (position) => virtualizedListRef.current?.setScrollOffset(position),
+  });
+
+  useScrollRestoration({
+    storageKey: 'discover-grid',
+    enabled: viewMode === 'grid',
+    clearAfterRestore: true,
+    saveOnBeforeUnload: false,
+    getScrollPosition: () => virtualizedGridRef.current?.getScrollOffset() ?? 0,
+    setScrollPosition: (position) => virtualizedGridRef.current?.setScrollOffset(position),
+  });
+
+  // Build current search query config for saving
+  const currentQueryConfig = useMemo<SavedSearchQueryConfig>(() => {
+    const config: SavedSearchQueryConfig = {
+      use_vector_search: useSemanticSearch,
+    };
+
+    if (searchTerm.trim()) {
+      config.query = searchTerm.trim();
+    }
+
+    const filters: SavedSearchQueryConfig['filters'] = {};
+
+    if (selectedPillar) filters.pillar_ids = [selectedPillar];
+    if (selectedStage) filters.stage_ids = [selectedStage];
+    if (selectedHorizon) filters.horizon = selectedHorizon as 'H1' | 'H2' | 'H3';
+    if (dateFrom || dateTo) {
+      filters.date_range = {
+        ...(dateFrom && { start: dateFrom }),
+        ...(dateTo && { end: dateTo }),
+      };
+    }
+    if (impactMin > 0 || relevanceMin > 0 || noveltyMin > 0) {
+      filters.score_thresholds = {
+        ...(impactMin > 0 && { impact_score: { min: impactMin } }),
+        ...(relevanceMin > 0 && { relevance_score: { min: relevanceMin } }),
+        ...(noveltyMin > 0 && { novelty_score: { min: noveltyMin } }),
+      };
+    }
+
+    if (Object.keys(filters).length > 0) {
+      config.filters = filters;
+    }
+
+    return config;
+  }, [searchTerm, selectedPillar, selectedStage, selectedHorizon, dateFrom, dateTo, impactMin, relevanceMin, noveltyMin, useSemanticSearch]);
+
+  // Load initial data
+  useEffect(() => {
+    loadDiscoverData();
+    loadFollowedCards();
+  }, [user?.id]);
+
+  // Load cards when filters change
+  useEffect(() => {
+    loadCards();
+  }, [debouncedFilters, selectedPillar, selectedStage, selectedHorizon, quickFilter, followedCardIds, dateFrom, dateTo, useSemanticSearch, sortOption]);
+
+  const loadDiscoverData = async () => {
+    try {
+      const { data: pillarsData } = await supabase.from('pillars').select('*').order('name');
+      const { data: stagesData } = await supabase.from('stages').select('*').order('sort_order');
+
+      setPillars(pillarsData || []);
+      setStages(stagesData || []);
+    } catch (error) {
+      console.error('Error loading discover data:', error);
+    }
+  };
+
+  const loadFollowedCards = async () => {
+    if (!user?.id) return;
+    try {
+      const { data } = await supabase.from('card_follows').select('card_id').eq('user_id', user.id);
+      if (data) {
+        setFollowedCardIds(new Set(data.map((f) => f.card_id)));
+      }
+    } catch (error) {
+      console.error('Error loading followed cards:', error);
+    }
+  };
+
+  const loadCards = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Handle "following" filter
+      if (quickFilter === 'following') {
+        if (followedCardIds.size === 0) {
+          setCards([]);
+          setLoading(false);
+          return;
+        }
+
+        let query = supabase.from('cards').select('*').eq('status', 'active').in('id', Array.from(followedCardIds));
+
+        if (debouncedFilters.searchTerm) {
+          query = query.or(`name.ilike.%${debouncedFilters.searchTerm}%,summary.ilike.%${debouncedFilters.searchTerm}%`);
+        }
+        if (selectedPillar) query = query.eq('pillar_id', selectedPillar);
+        if (selectedStage) query = query.eq('stage_id', selectedStage);
+        if (selectedHorizon) query = query.eq('horizon', selectedHorizon);
+        if (debouncedFilters.impactMin > 0) query = query.gte('impact_score', debouncedFilters.impactMin);
+        if (debouncedFilters.relevanceMin > 0) query = query.gte('relevance_score', debouncedFilters.relevanceMin);
+        if (debouncedFilters.noveltyMin > 0) query = query.gte('novelty_score', debouncedFilters.noveltyMin);
+        if (dateFrom) query = query.gte('created_at', dateFrom);
+        if (dateTo) query = query.lte('created_at', dateTo);
+
+        const sortConfig = getSortConfig(sortOption);
+        const { data } = await query.order(sortConfig.column, { ascending: sortConfig.ascending });
+        setCards(data || []);
+        setLoading(false);
+        return;
+      }
+
+      // Semantic search
+      if (useSemanticSearch && debouncedFilters.searchTerm.trim()) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData?.session?.access_token;
+
+        if (token) {
+          const searchRequest: AdvancedSearchRequest = {
+            query: debouncedFilters.searchTerm,
+            use_vector_search: true,
+            filters: {
+              ...(selectedPillar && { pillar_ids: [selectedPillar] }),
+              ...(selectedStage && { stage_ids: [selectedStage] }),
+              ...(selectedHorizon && { horizon: selectedHorizon as 'H1' | 'H2' | 'H3' }),
+              ...((dateFrom || dateTo) && {
+                date_range: {
+                  ...(dateFrom && { start: dateFrom }),
+                  ...(dateTo && { end: dateTo }),
+                },
+              }),
+              ...((debouncedFilters.impactMin > 0 || debouncedFilters.relevanceMin > 0 || debouncedFilters.noveltyMin > 0) && {
+                score_thresholds: {
+                  ...(debouncedFilters.impactMin > 0 && { impact_score: { min: debouncedFilters.impactMin } }),
+                  ...(debouncedFilters.relevanceMin > 0 && { relevance_score: { min: debouncedFilters.relevanceMin } }),
+                  ...(debouncedFilters.noveltyMin > 0 && { novelty_score: { min: debouncedFilters.noveltyMin } }),
+                },
+              }),
+            },
+            limit: 100,
+          };
+
+          const response = await advancedSearch(token, searchRequest);
+
+          let mappedCards: Card[] = response.results.map((result) => ({
+            id: result.id,
+            name: result.name,
+            slug: result.slug,
+            summary: result.summary || result.description || '',
+            pillar_id: result.pillar_id || '',
+            stage_id: result.stage_id || '',
+            horizon: (result.horizon as 'H1' | 'H2' | 'H3') || 'H1',
+            novelty_score: result.novelty_score || 0,
+            maturity_score: result.maturity_score || 0,
+            impact_score: result.impact_score || 0,
+            relevance_score: result.relevance_score || 0,
+            velocity_score: result.velocity_score || 0,
+            risk_score: result.risk_score || 0,
+            opportunity_score: result.opportunity_score || 0,
+            created_at: result.created_at || '',
+            updated_at: result.updated_at,
+            anchor_id: result.anchor_id,
+            search_relevance: result.search_relevance,
+          }));
+
+          const sortConfig = getSortConfig(sortOption);
+          mappedCards = mappedCards.sort((a, b) => {
+            const aVal = sortConfig.column === 'created_at' ? a.created_at : a.updated_at || a.created_at;
+            const bVal = sortConfig.column === 'created_at' ? b.created_at : b.updated_at || b.created_at;
+            const comparison = aVal.localeCompare(bVal);
+            return sortConfig.ascending ? comparison : -comparison;
+          });
+
+          setCards(mappedCards);
+          recordSearch(currentQueryConfig, mappedCards.length);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Standard Supabase query
+      let query = supabase.from('cards').select('*').eq('status', 'active');
+
+      if (quickFilter === 'new') {
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+        query = query.gte('created_at', oneWeekAgo.toISOString());
+      }
+
+      if (selectedPillar) query = query.eq('pillar_id', selectedPillar);
+      if (selectedStage) query = query.eq('stage_id', selectedStage);
+      if (selectedHorizon) query = query.eq('horizon', selectedHorizon);
+      if (debouncedFilters.searchTerm) {
+        query = query.or(`name.ilike.%${debouncedFilters.searchTerm}%,summary.ilike.%${debouncedFilters.searchTerm}%`);
+      }
+      if (debouncedFilters.impactMin > 0) query = query.gte('impact_score', debouncedFilters.impactMin);
+      if (debouncedFilters.relevanceMin > 0) query = query.gte('relevance_score', debouncedFilters.relevanceMin);
+      if (debouncedFilters.noveltyMin > 0) query = query.gte('novelty_score', debouncedFilters.noveltyMin);
+      if (dateFrom) query = query.gte('created_at', dateFrom);
+      if (dateTo) query = query.lte('created_at', dateTo);
+
+      const sortConfig = getSortConfig(sortOption);
+      const { data } = await query.order(sortConfig.column, { ascending: sortConfig.ascending });
+
+      setCards(data || []);
+
+      if (!quickFilter) {
+        recordSearch(currentQueryConfig, (data || []).length);
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
+
+      if (err instanceof TypeError && err.message.includes('fetch')) {
+        setError('Network error: Unable to connect to the server.');
+      } else if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+        setError('Authentication error: Please sign in to use advanced search features.');
+      } else if (errorMessage.includes('500')) {
+        setError('Server error: The search service is temporarily unavailable.');
+      } else if (errorMessage.includes('timeout')) {
+        setError('Request timeout: Try narrowing your filters.');
+      } else {
+        setError(`Failed to load cards: ${errorMessage}`);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleFollowCard = async (cardId: string) => {
+    if (!user?.id) return;
+
+    const isFollowing = followedCardIds.has(cardId);
+
+    // Optimistic update
+    setFollowedCardIds((prev) => {
+      const newSet = new Set(prev);
+      if (isFollowing) {
+        newSet.delete(cardId);
+      } else {
+        newSet.add(cardId);
+      }
+      return newSet;
+    });
+
+    try {
+      if (isFollowing) {
+        await supabase.from('card_follows').delete().eq('user_id', user.id).eq('card_id', cardId);
+      } else {
+        await supabase.from('card_follows').insert({ user_id: user.id, card_id: cardId, priority: 'medium' });
+      }
+    } catch (error) {
+      console.error('Error toggling card follow:', error);
+      // Revert optimistic update
+      setFollowedCardIds((prev) => {
+        const newSet = new Set(prev);
+        if (isFollowing) {
+          newSet.add(cardId);
+        } else {
+          newSet.delete(cardId);
+        }
+        return newSet;
+      });
+    }
+  };
+
+  // Apply saved search configuration
+  const handleSelectSavedSearch = useCallback(
+    (config: SavedSearchQueryConfig) => {
+      setSearchTerm(config.query ?? '');
+      setUseSemanticSearch(config.use_vector_search ?? false);
+
+      const filters = config.filters ?? {};
+      setSelectedPillar(filters.pillar_ids?.[0] ?? '');
+      setSelectedStage(filters.stage_ids?.[0] ?? '');
+      setSelectedHorizon(filters.horizon && filters.horizon !== 'ALL' ? filters.horizon : '');
+      setDateFrom(filters.date_range?.start ?? '');
+      setDateTo(filters.date_range?.end ?? '');
+      setImpactMin(filters.score_thresholds?.impact_score?.min ?? 0);
+      setRelevanceMin(filters.score_thresholds?.relevance_score?.min ?? 0);
+      setNoveltyMin(filters.score_thresholds?.novelty_score?.min ?? 0);
+
+      setSearchParams({});
+      setIsSidebarOpen(false);
+    },
+    [setSearchParams]
+  );
+
+  const handleSaveSearchSuccess = useCallback(() => {
+    setShowSaveSearchModal(false);
+    setSidebarRefreshKey((prev) => prev + 1);
+  }, []);
+
+  // Comparison mode handlers
+  useEffect(() => {
+    const isCompareMode = searchParams.get('compare') === 'true';
+    if (isCompareMode) {
+      setCompareMode(true);
+      const storedCard = sessionStorage.getItem('compareCard');
+      if (storedCard) {
+        try {
+          const cardData = JSON.parse(storedCard);
+          if (cardData.id && cardData.name) {
+            setSelectedForCompare([cardData]);
+          }
+        } catch {
+          // Invalid data
+        }
+        sessionStorage.removeItem('compareCard');
+      }
+    }
+  }, [searchParams]);
+
+  const toggleCardForCompare = useCallback((card: { id: string; name: string }) => {
+    setSelectedForCompare((prev) => {
+      const isSelected = prev.some((c) => c.id === card.id);
+      if (isSelected) {
+        return prev.filter((c) => c.id !== card.id);
+      }
+      if (prev.length >= 2) {
+        return [prev[1], card];
+      }
+      return [...prev, card];
+    });
+  }, []);
+
+  const navigateToCompare = useCallback(() => {
+    if (selectedForCompare.length === 2) {
+      const ids = selectedForCompare.map((c) => c.id).join(',');
+      navigate(`/compare?card_ids=${ids}`);
+    }
+  }, [selectedForCompare, navigate]);
+
+  const exitCompareMode = useCallback(() => {
+    setCompareMode(false);
+    setSelectedForCompare([]);
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('compare');
+    setSearchParams(newParams);
+  }, [searchParams, setSearchParams]);
+
+  // Render card item
+  const renderCardItem = useCallback(
+    (card: Card) => {
+      const isSelectedForCompare = selectedForCompare.some((c) => c.id === card.id);
+
+      return (
+        <DiscoverCard
+          card={card}
+          compareMode={compareMode}
+          isSelectedForCompare={isSelectedForCompare}
+          isFollowed={followedCardIds.has(card.id)}
+          searchTerm={searchTerm}
+          onToggleCompare={toggleCardForCompare}
+          onToggleFollow={toggleFollowCard}
+        />
+      );
+    },
+    [compareMode, selectedForCompare, followedCardIds, searchTerm, toggleCardForCompare, toggleFollowCard]
+  );
+
+  return (
+    <>
+      {/* Saved Searches Sidebar */}
+      <SearchSidebar
+        isOpen={isSidebarOpen}
+        onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
+        onSelectSearch={handleSelectSavedSearch}
+        refreshKey={sidebarRefreshKey}
+      />
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-brand-dark-blue dark:text-white">Discover Intelligence</h1>
+              <p className="mt-2 text-gray-600 dark:text-gray-400">
+                Explore emerging trends and technologies relevant to Austin&apos;s strategic priorities.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => (compareMode ? exitCompareMode() : setCompareMode(true))}
+                className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  compareMode
+                    ? 'text-white bg-extended-purple border border-extended-purple'
+                    : 'text-extended-purple bg-extended-purple/10 border border-extended-purple/30 hover:bg-extended-purple hover:text-white'
+                }`}
+                aria-pressed={compareMode}
+              >
+                <ArrowLeftRight className="w-4 h-4" />
+                {compareMode ? 'Exit Compare' : 'Compare'}
+              </button>
+              <button
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  isSidebarOpen
+                    ? 'text-brand-blue bg-brand-light-blue dark:bg-brand-blue/20 border border-brand-blue/30'
+                    : 'text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+                }`}
+                aria-pressed={isSidebarOpen}
+              >
+                <Bookmark className="w-4 h-4" />
+                Saved Searches
+              </button>
+              <Link
+                to="/discover/queue"
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                <Inbox className="w-4 h-4" />
+                Review Queue
+              </Link>
+              <Link
+                to="/discover/history"
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                <History className="w-4 h-4" />
+                Run History
+              </Link>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Filter Chips */}
+        <div className="flex items-center gap-3 mb-6">
+          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Quick filters:</span>
+          <button
+            onClick={() => setSearchParams({})}
+            className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              !quickFilter
+                ? 'bg-brand-blue text-white'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+            }`}
+          >
+            <Eye className="h-4 w-4 mr-1.5" />
+            All Cards
+          </button>
+          <button
+            onClick={() => setSearchParams({ filter: 'new' })}
+            className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              quickFilter === 'new'
+                ? 'bg-brand-green text-white'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+            }`}
+          >
+            <Clock className="h-4 w-4 mr-1.5" />
+            New This Week
+          </button>
+          <button
+            onClick={() => setSearchParams({ filter: 'following' })}
+            className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              quickFilter === 'following'
+                ? 'bg-extended-purple text-white'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+            }`}
+          >
+            <Star className="h-4 w-4 mr-1.5" />
+            Following
+          </button>
+        </div>
+
+        {/* Filters */}
+        <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+            {/* Search */}
+            <div className="lg:col-span-2">
+              <label htmlFor="search" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Search
+              </label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                <input
+                  type="text"
+                  id="search"
+                  className="pl-10 block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                  placeholder={useSemanticSearch ? 'Semantic search (finds related concepts)...' : 'Search cards...'}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+              {/* Semantic Search Toggle */}
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={useSemanticSearch}
+                  onClick={() => setUseSemanticSearch(!useSemanticSearch)}
+                  className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 ${
+                    useSemanticSearch ? 'bg-extended-purple' : 'bg-gray-200 dark:bg-gray-600'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      useSemanticSearch ? 'translate-x-4' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+                <label
+                  className={`flex items-center gap-1.5 text-sm cursor-pointer ${
+                    useSemanticSearch ? 'text-extended-purple font-medium' : 'text-gray-600 dark:text-gray-400'
+                  }`}
+                  onClick={() => setUseSemanticSearch(!useSemanticSearch)}
+                >
+                  <Sparkles className={`h-4 w-4 ${useSemanticSearch ? 'text-extended-purple' : 'text-gray-400'}`} />
+                  Semantic Search
+                </label>
+                {useSemanticSearch && (
+                  <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">(finds conceptually related cards)</span>
+                )}
+              </div>
+            </div>
+
+            {/* Pillar Filter */}
+            <div>
+              <label htmlFor="pillar" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Strategic Pillar
+              </label>
+              <select
+                id="pillar"
+                className="block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                value={selectedPillar}
+                onChange={(e) => setSelectedPillar(e.target.value)}
+              >
+                <option value="">All Pillars</option>
+                {pillars.map((pillar) => (
+                  <option key={pillar.id} value={pillar.id}>
+                    {pillar.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Stage Filter */}
+            <div>
+              <label htmlFor="stage" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Maturity Stage
+              </label>
+              <select
+                id="stage"
+                className="block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                value={selectedStage}
+                onChange={(e) => setSelectedStage(e.target.value)}
+              >
+                <option value="">All Stages</option>
+                {stages.map((stage) => (
+                  <option key={stage.id} value={stage.id}>
+                    {stage.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Horizon Filter */}
+            <div>
+              <label htmlFor="horizon" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Horizon
+              </label>
+              <select
+                id="horizon"
+                className="block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                value={selectedHorizon}
+                onChange={(e) => setSelectedHorizon(e.target.value)}
+              >
+                <option value="">All Horizons</option>
+                <option value="H1">H1 (0-2 years)</option>
+                <option value="H2">H2 (2-5 years)</option>
+                <option value="H3">H3 (5+ years)</option>
+              </select>
+            </div>
+
+            {/* Sort */}
+            <div>
+              <label htmlFor="sort" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Sort By
+              </label>
+              <select
+                id="sort"
+                className="block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                value={sortOption}
+                onChange={(e) => setSortOption(e.target.value as SortOption)}
+              >
+                <option value="newest">Newest Created</option>
+                <option value="oldest">Oldest First</option>
+                <option value="recently_updated">Recently Updated</option>
+                <option value="least_recently_updated">Least Recently Updated</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Date Range Filters */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+            <div className="lg:col-span-2 flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-gray-400 flex-shrink-0" />
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Date Range:</span>
+            </div>
+            <div>
+              <label htmlFor="dateFrom" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Created After
+              </label>
+              <input
+                type="date"
+                id="dateFrom"
+                className="block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+              />
+            </div>
+            <div>
+              <label htmlFor="dateTo" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Created Before
+              </label>
+              <input
+                type="date"
+                id="dateTo"
+                className="block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Score Threshold Sliders */}
+          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Minimum Score Thresholds</h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Impact Score Slider */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label htmlFor="impactMin" className="text-sm text-gray-600 dark:text-gray-400">
+                    Impact
+                  </label>
+                  <span className={`text-sm font-medium ${impactMin > 0 ? getScoreColorClasses(impactMin) : 'text-gray-500 dark:text-gray-400'}`}>
+                    {impactMin > 0 ? `≥ ${impactMin}` : 'Any'}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  id="impactMin"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={impactMin}
+                  onChange={(e) => setImpactMin(Number(e.target.value))}
+                  className="w-full h-2 bg-gray-200 dark:bg-gray-600 rounded-lg appearance-none cursor-pointer accent-brand-blue"
+                />
+                <div className="flex justify-between text-xs text-gray-400 mt-1">
+                  <span>0</span>
+                  <span>50</span>
+                  <span>100</span>
+                </div>
+              </div>
+
+              {/* Relevance Score Slider */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label htmlFor="relevanceMin" className="text-sm text-gray-600 dark:text-gray-400">
+                    Relevance
+                  </label>
+                  <span className={`text-sm font-medium ${relevanceMin > 0 ? getScoreColorClasses(relevanceMin) : 'text-gray-500 dark:text-gray-400'}`}>
+                    {relevanceMin > 0 ? `≥ ${relevanceMin}` : 'Any'}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  id="relevanceMin"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={relevanceMin}
+                  onChange={(e) => setRelevanceMin(Number(e.target.value))}
+                  className="w-full h-2 bg-gray-200 dark:bg-gray-600 rounded-lg appearance-none cursor-pointer accent-brand-blue"
+                />
+                <div className="flex justify-between text-xs text-gray-400 mt-1">
+                  <span>0</span>
+                  <span>50</span>
+                  <span>100</span>
+                </div>
+              </div>
+
+              {/* Novelty Score Slider */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label htmlFor="noveltyMin" className="text-sm text-gray-600 dark:text-gray-400">
+                    Novelty
+                  </label>
+                  <span className={`text-sm font-medium ${noveltyMin > 0 ? getScoreColorClasses(noveltyMin) : 'text-gray-500 dark:text-gray-400'}`}>
+                    {noveltyMin > 0 ? `≥ ${noveltyMin}` : 'Any'}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  id="noveltyMin"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={noveltyMin}
+                  onChange={(e) => setNoveltyMin(Number(e.target.value))}
+                  className="w-full h-2 bg-gray-200 dark:bg-gray-600 rounded-lg appearance-none cursor-pointer accent-brand-blue"
+                />
+                <div className="flex justify-between text-xs text-gray-400 mt-1">
+                  <span>0</span>
+                  <span>50</span>
+                  <span>100</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Recent Search History */}
+          {user?.id && searchHistory.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+              <button onClick={toggleHistoryExpanded} className="w-full flex items-center justify-between text-left">
+                <div className="flex items-center gap-2">
+                  <History className="h-4 w-4 text-gray-400" />
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Recent Searches ({searchHistory.length})</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {historyLoading && <Loader2 className="h-4 w-4 text-gray-400 animate-spin" />}
+                  {isHistoryExpanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+                </div>
+              </button>
+
+              {isHistoryExpanded && (
+                <div className="mt-3 space-y-2 max-h-64 overflow-y-auto">
+                  <div className="flex justify-end mb-2">
+                    <button
+                      onClick={clearHistory}
+                      className="text-xs text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                    >
+                      Clear all
+                    </button>
+                  </div>
+
+                  {searchHistory.map((entry) => (
+                    <div
+                      key={entry.id}
+                      onClick={() => handleSelectSavedSearch(entry.query_config)}
+                      className="group flex items-start justify-between gap-2 p-2 rounded-md border border-gray-200 dark:border-gray-600 hover:border-brand-blue hover:bg-brand-light-blue/50 dark:hover:bg-brand-blue/10 cursor-pointer transition-all"
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleSelectSavedSearch(entry.query_config);
+                        }
+                      }}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {entry.query_config.use_vector_search && (
+                            <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[10px] font-medium bg-extended-purple/10 text-extended-purple">
+                              <Sparkles className="h-2.5 w-2.5" />
+                              AI
+                            </span>
+                          )}
+                          <span className="text-sm text-gray-900 dark:text-white truncate">{getHistoryDescription(entry.query_config)}</span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs text-gray-400">{formatHistoryTime(entry.executed_at)}</span>
+                          <span className="text-xs text-gray-400">•</span>
+                          <span className="text-xs text-gray-400">
+                            {entry.result_count} result{entry.result_count !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={(e) => deleteHistoryEntry(entry.id, e)}
+                        disabled={deletingHistoryId === entry.id}
+                        className="p-1 text-gray-400 hover:text-red-500 rounded opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50 shrink-0"
+                        title="Remove from history"
+                      >
+                        {deletingHistoryId === entry.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* View Controls and Save Search */}
+          <div className="mt-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-gray-600 dark:text-gray-400">Showing {cards.length} cards</p>
+              {isFilterPending && (
+                <span className="inline-flex items-center gap-1 text-xs text-brand-blue">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Updating...
+                </span>
+              )}
+            </div>
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={() => setShowSaveSearchModal(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-brand-blue bg-brand-light-blue dark:bg-brand-blue/20 border border-brand-blue/30 rounded-md hover:bg-brand-blue hover:text-white dark:hover:bg-brand-blue transition-colors"
+              >
+                <Bookmark className="h-4 w-4" />
+                Save Search
+              </button>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`p-2 rounded-md transition-colors ${
+                    viewMode === 'grid'
+                      ? 'bg-brand-light-blue text-brand-blue dark:bg-brand-blue/20'
+                      : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                  }`}
+                  aria-label="Grid view"
+                  aria-pressed={viewMode === 'grid'}
+                >
+                  <Grid className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`p-2 rounded-md transition-colors ${
+                    viewMode === 'list'
+                      ? 'bg-brand-light-blue text-brand-blue dark:bg-brand-blue/20'
+                      : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                  }`}
+                  aria-label="List view"
+                  aria-pressed={viewMode === 'list'}
+                >
+                  <List className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Compare Mode Banner */}
+        {compareMode && (
+          <div className="mb-6 p-4 bg-extended-purple/10 border border-extended-purple/30 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <ArrowLeftRight className="h-5 w-5 text-extended-purple" />
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-white">Compare Mode Active</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">
+                    {selectedForCompare.length === 0
+                      ? 'Click on cards to select them for comparison (max 2)'
+                      : selectedForCompare.length === 1
+                        ? `Selected: ${selectedForCompare[0].name} — Click another card to compare`
+                        : `Ready to compare: ${selectedForCompare[0].name} vs ${selectedForCompare[1].name}`}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {selectedForCompare.length > 0 && (
+                  <button onClick={() => setSelectedForCompare([])} className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900">
+                    Clear Selection
+                  </button>
+                )}
+                <button
+                  onClick={navigateToCompare}
+                  disabled={selectedForCompare.length !== 2}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-extended-purple text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-extended-purple/90 transition-colors"
+                >
+                  <ArrowLeftRight className="h-4 w-4" />
+                  Compare Cards
+                </button>
+                <button onClick={exitCompareMode} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {selectedForCompare.length > 0 && (
+              <div className="mt-3 flex items-center gap-2 flex-wrap">
+                {selectedForCompare.map((card, index) => (
+                  <span
+                    key={card.id}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-gray-800 rounded-full text-sm border border-extended-purple/30"
+                  >
+                    <span className="font-medium text-extended-purple">{index + 1}.</span>
+                    <span className="text-gray-700 dark:text-gray-200 truncate max-w-[200px]">{card.name}</span>
+                    <button onClick={() => toggleCardForCompare(card)} className="text-gray-400 hover:text-red-500 transition-colors">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Error Banner */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-medium text-red-700 dark:text-red-300">{error}</p>
+                <button
+                  onClick={() => {
+                    setError(null);
+                    loadCards();
+                  }}
+                  className="mt-2 inline-flex items-center gap-1.5 text-sm text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 transition-colors"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Try again
+                </button>
+              </div>
+              <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Cards Grid/List */}
+        {loading || isFilterPending ? (
+          <div className="flex flex-col items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue"></div>
+            {isFilterPending && !loading && <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">Updating search...</p>}
+          </div>
+        ) : cards.length === 0 && !error ? (
+          <div className="text-center py-12 bg-white dark:bg-[#2d3166] rounded-lg shadow">
+            {quickFilter === 'following' ? (
+              <Star className="mx-auto h-12 w-12 text-gray-400" />
+            ) : useSemanticSearch && searchTerm ? (
+              <Sparkles className="mx-auto h-12 w-12 text-gray-400" />
+            ) : searchTerm || selectedPillar || selectedStage || selectedHorizon || dateFrom || dateTo || impactMin > 0 || relevanceMin > 0 || noveltyMin > 0 ? (
+              <Filter className="mx-auto h-12 w-12 text-gray-400" />
+            ) : (
+              <Inbox className="mx-auto h-12 w-12 text-gray-400" />
+            )}
+
+            <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
+              {quickFilter === 'following'
+                ? "You're Not Following Any Cards"
+                : quickFilter === 'new'
+                  ? 'No New Cards This Week'
+                  : useSemanticSearch && searchTerm
+                    ? 'No Semantic Matches Found'
+                    : searchTerm || selectedPillar || selectedStage || selectedHorizon || dateFrom || dateTo || impactMin > 0 || relevanceMin > 0 || noveltyMin > 0
+                      ? 'No Cards Match Your Filters'
+                      : 'No Cards Available'}
+            </h3>
+
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto">
+              {quickFilter === 'following'
+                ? 'Start following cards to build your personalized feed. Click the heart icon on any card to follow it.'
+                : quickFilter === 'new'
+                  ? 'Check back soon for newly discovered intelligence cards.'
+                  : useSemanticSearch && searchTerm
+                    ? `No cards matched your semantic search for "${searchTerm}". Try different keywords, or switch to standard text search.`
+                    : searchTerm
+                      ? `No cards matched your search for "${searchTerm}". Try different keywords or enable semantic search for broader matches.`
+                      : selectedPillar || selectedStage || selectedHorizon || dateFrom || dateTo || impactMin > 0 || relevanceMin > 0 || noveltyMin > 0
+                        ? 'Your current filter combination returned no results. Try removing some filters or adjusting score thresholds.'
+                        : 'The intelligence library is empty. Cards will appear here as they are discovered.'}
+            </p>
+
+            <div className="mt-6 flex flex-wrap justify-center gap-3">
+              {quickFilter === 'following' && (
+                <Link
+                  to="/discover"
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-brand-dark-blue transition-colors"
+                >
+                  <Eye className="h-4 w-4 mr-2" />
+                  Browse All Cards
+                </Link>
+              )}
+              {(searchTerm || selectedPillar || selectedStage || selectedHorizon || dateFrom || dateTo || impactMin > 0 || relevanceMin > 0 || noveltyMin > 0) &&
+                !quickFilter && (
+                  <button
+                    onClick={() => {
+                      setSearchTerm('');
+                      setSelectedPillar('');
+                      setSelectedStage('');
+                      setSelectedHorizon('');
+                      setDateFrom('');
+                      setDateTo('');
+                      setImpactMin(0);
+                      setRelevanceMin(0);
+                      setNoveltyMin(0);
+                      setUseSemanticSearch(false);
+                    }}
+                    className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Clear All Filters
+                  </button>
+                )}
+              {useSemanticSearch && searchTerm && (
+                <button
+                  onClick={() => setUseSemanticSearch(false)}
+                  className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <Search className="h-4 w-4 mr-2" />
+                  Try Standard Search
+                </button>
+              )}
+            </div>
+          </div>
+        ) : cards.length > 0 ? (
+          viewMode === 'list' ? (
+            <VirtualizedList
+              ref={virtualizedListRef}
+              items={cards}
+              renderItem={renderCardItem}
+              getItemKey={(card) => card.id}
+              estimatedSize={180}
+              gap={16}
+              overscan={3}
+              scrollContainerClassName="h-[calc(100vh-280px)]"
+              ariaLabel="Intelligence cards list"
+            />
+          ) : (
+            <div className="h-[calc(100vh-400px)] min-h-[500px]">
+              <VirtualizedGrid
+                ref={virtualizedGridRef}
+                items={cards}
+                getItemKey={(card) => card.id}
+                estimatedRowHeight={280}
+                gap={24}
+                columns={{ sm: 1, md: 2, lg: 3 }}
+                overscan={3}
+                renderItem={(card) => <div className="h-full">{renderCardItem(card)}</div>}
+              />
+            </div>
+          )
+        ) : null}
+
+        {/* Save Search Modal */}
+        <SaveSearchModal
+          isOpen={showSaveSearchModal}
+          onClose={() => setShowSaveSearchModal(false)}
+          onSuccess={handleSaveSearchSuccess}
+          queryConfig={currentQueryConfig}
+        />
+      </div>
+    </>
+  );
+};
+
+export default Discover;
