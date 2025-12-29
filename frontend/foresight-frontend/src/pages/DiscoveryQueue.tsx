@@ -1243,7 +1243,7 @@ const DiscoveryQueue: React.FC = () => {
           <div className="min-w-0 flex-1">
             <h1 className="text-2xl sm:text-3xl font-bold text-brand-dark-blue dark:text-white flex items-center gap-2 sm:gap-3">
               <Sparkles className="h-6 w-6 sm:h-8 sm:w-8 text-brand-blue flex-shrink-0" />
-              <span className="truncate">Discovery Queue</span>
+              <span className="truncate">Discovery Queue [v2]</span>
             </h1>
             <p className="mt-1 sm:mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400">
               Review AI-discovered cards before they're added to the intelligence library.
