@@ -40,10 +40,20 @@ import {
   type DismissReason,
 } from '../lib/discovery-api';
 
-// DEBUG v7: Testing useIsMobile hook
+// DEBUG v8: Testing useScrollRestoration hook
 const DiscoveryQueue: React.FC = () => {
   const { user } = useAuthContext();
   const isMobile = useIsMobile();
+
+  // Memoized options to prevent infinite re-renders
+  const scrollOptions = useMemo(() => ({
+    storageKey: 'discovery-queue',
+    clearAfterRestore: false,
+    debounce: true,
+    debounceDelay: 100,
+  }), []);
+
+  useScrollRestoration(scrollOptions);
 
   if (!user) {
     return <div className="p-8">No user - redirecting...</div>;
@@ -51,8 +61,8 @@ const DiscoveryQueue: React.FC = () => {
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-bold">Discovery Queue [v7-isMobile]</h1>
-      <p className="mt-2">If you see this, useIsMobile works!</p>
+      <h1 className="text-2xl font-bold">Discovery Queue [v8-scrollRestoration]</h1>
+      <p className="mt-2">If you see this, useScrollRestoration works!</p>
       <p className="mt-1 text-gray-600">User: {user.email}</p>
       <p className="mt-1 text-gray-600">isMobile: {String(isMobile)}</p>
       <Link to="/" className="mt-4 inline-block text-blue-600 hover:underline">

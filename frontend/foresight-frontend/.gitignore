@@ -28,3 +28,4 @@ playwright-report/
 playwright/.cache/
 test-results/
 .vercel
+*.backup.tsx
