@@ -1120,8 +1120,28 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
 
 """
                     for i, src in enumerate(source_analyses[:10], 1):
-                        fallback_report += f"### {i}. {src.get('title', 'Untitled')}\n\n"
+                        title = src.get('title', 'Untitled')
+                        url = src.get('url', '')
+                        # Format as clickable link if URL available
+                        if url and url.startswith(('http://', 'https://')):
+                            fallback_report += f"### {i}. [{title}]({url})\n\n"
+                        else:
+                            fallback_report += f"### {i}. {title}\n\n"
                         fallback_report += f"{src.get('summary', 'No summary available.')}\n\n"
+
+                    # Add sources section
+                    fallback_report += "\n---\n\n## Sources Cited\n\n"
+                    for i, src in enumerate(source_analyses[:10], 1):
+                        title = src.get('title', 'Untitled')
+                        url = src.get('url', '')
+                        source_name = src.get('source_name', '')
+                        if url and url.startswith(('http://', 'https://')):
+                            entry = f"{i}. [{title}]({url})"
+                        else:
+                            entry = f"{i}. {title}"
+                        if source_name:
+                            entry += f" — *{source_name}*"
+                        fallback_report += entry + "\n"
 
                     comprehensive_report = fallback_report
                     logger.info(f"Generated fallback report from {len(source_analyses)} source analyses")
@@ -1177,7 +1197,7 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
                 "sources_added": sources_added,
                 "entities_extracted": entities_count,
                 "cost": cost,
-                "detailed_report": comprehensive_report[:25000] if comprehensive_report else None,  # Store full comprehensive report
+                "detailed_report": comprehensive_report[:50000] if comprehensive_report else None,  # Store full comprehensive report with sources
             }
         )
 
@@ -1191,7 +1211,7 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
             cards_created=[],
             entities_extracted=entities_count,
             cost_estimate=cost,
-            report_preview=comprehensive_report[:15000] if comprehensive_report else None  # Comprehensive strategic report
+            report_preview=comprehensive_report[:50000] if comprehensive_report else None  # Full report with sources section
         )
 
     async def execute_workstream_analysis(

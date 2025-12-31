@@ -939,7 +939,7 @@ Respond with JSON:
         response = self.client.chat.completions.create(
             model=get_chat_deployment(),
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=4000,  # Allow for comprehensive report
+            max_tokens=16384,  # Max output for GPT-4o to ensure complete report with sources
             timeout=REQUEST_TIMEOUT * 3  # Extended timeout for long report
         )
 
