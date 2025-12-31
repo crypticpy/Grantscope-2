@@ -2092,6 +2092,128 @@ class ExportService:
         b = int(hex_color[4:6], 16)
         return RGBColor(r, g, b)
 
+    def _add_pptx_header(self, slide, include_logo: bool = True) -> None:
+        """
+        Add professional header to a PowerPoint slide.
+        
+        White background with City of Austin logo and Foresight branding,
+        matching the website daylight mode and PDF exports.
+        
+        Args:
+            slide: PowerPoint slide object
+            include_logo: Whether to include the City of Austin logo
+        """
+        # White header background
+        header_bg = slide.shapes.add_shape(
+            MSO_SHAPE.RECTANGLE,
+            Inches(0), Inches(0),
+            PPTX_SLIDE_WIDTH, Inches(1.1)
+        )
+        header_bg.fill.solid()
+        header_bg.fill.fore_color.rgb = RGBColor(255, 255, 255)
+        header_bg.line.fill.background()
+        
+        # Blue accent line below header
+        accent_line = slide.shapes.add_shape(
+            MSO_SHAPE.RECTANGLE,
+            Inches(0), Inches(1.08),
+            PPTX_SLIDE_WIDTH, Inches(0.03)
+        )
+        accent_line.fill.solid()
+        accent_line.fill.fore_color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
+        accent_line.line.fill.background()
+        
+        # City of Austin logo (if available)
+        logo_right_edge = PPTX_MARGIN
+        if include_logo and COA_LOGO_PATH and Path(COA_LOGO_PATH).exists():
+            try:
+                logo = slide.shapes.add_picture(
+                    COA_LOGO_PATH,
+                    PPTX_MARGIN, Inches(0.25),
+                    height=Inches(0.6)
+                )
+                logo_right_edge = logo.left + logo.width + Inches(0.2)
+            except Exception as e:
+                logger.warning(f"Failed to add logo to PPTX slide: {e}")
+        
+        # FORESIGHT branding text - primary blue
+        brand_box = slide.shapes.add_textbox(
+            logo_right_edge, Inches(0.2),
+            Inches(3), Inches(0.5)
+        )
+        brand_frame = brand_box.text_frame
+        brand_para = brand_frame.paragraphs[0]
+        brand_para.text = "FORESIGHT"
+        brand_para.font.size = Pt(18)
+        brand_para.font.bold = True
+        brand_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
+        
+        # Subtitle - gray
+        subtitle_box = slide.shapes.add_textbox(
+            logo_right_edge, Inches(0.55),
+            Inches(3), Inches(0.4)
+        )
+        subtitle_frame = subtitle_box.text_frame
+        subtitle_para = subtitle_frame.paragraphs[0]
+        subtitle_para.text = "Strategic Intelligence Platform"
+        subtitle_para.font.size = Pt(10)
+        subtitle_para.font.color.rgb = RGBColor(128, 128, 128)
+        
+        # Date on right side - black
+        date_box = slide.shapes.add_textbox(
+            PPTX_SLIDE_WIDTH - Inches(2.5), Inches(0.4),
+            Inches(2), Inches(0.4)
+        )
+        date_frame = date_box.text_frame
+        date_para = date_frame.paragraphs[0]
+        date_para.text = datetime.now().strftime("%B %d, %Y")
+        date_para.font.size = Pt(11)
+        date_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
+        date_para.alignment = PP_ALIGN.RIGHT
+
+    def _add_pptx_footer(self, slide, include_ai_disclosure: bool = True) -> None:
+        """
+        Add professional footer to a PowerPoint slide.
+        
+        Args:
+            slide: PowerPoint slide object
+            include_ai_disclosure: Whether to include AI technology disclosure
+        """
+        # Footer background
+        footer_bg = slide.shapes.add_shape(
+            MSO_SHAPE.RECTANGLE,
+            Inches(0), PPTX_SLIDE_HEIGHT - Inches(0.6),
+            PPTX_SLIDE_WIDTH, Inches(0.6)
+        )
+        footer_bg.fill.solid()
+        footer_bg.fill.fore_color.rgb = RGBColor(248, 249, 250)  # Light gray
+        footer_bg.line.fill.background()
+        
+        # AI disclosure text
+        if include_ai_disclosure:
+            disclosure_box = slide.shapes.add_textbox(
+                PPTX_MARGIN, PPTX_SLIDE_HEIGHT - Inches(0.5),
+                PPTX_SLIDE_WIDTH - Inches(2), Inches(0.4)
+            )
+            disclosure_frame = disclosure_box.text_frame
+            disclosure_para = disclosure_frame.paragraphs[0]
+            disclosure_para.text = "AI Technologies: Anthropic Claude, OpenAI GPT-4o, GPT Researcher, Exa AI, Firecrawl, Tavily"
+            disclosure_para.font.size = Pt(8)
+            disclosure_para.font.color.rgb = RGBColor(100, 100, 100)
+        
+        # City of Austin notice
+        notice_box = slide.shapes.add_textbox(
+            PPTX_SLIDE_WIDTH - Inches(3), PPTX_SLIDE_HEIGHT - Inches(0.5),
+            Inches(2.5), Inches(0.4)
+        )
+        notice_frame = notice_box.text_frame
+        notice_para = notice_frame.paragraphs[0]
+        notice_para.text = "City of Austin Internal Document"
+        notice_para.font.size = Pt(8)
+        notice_para.font.italic = True
+        notice_para.font.color.rgb = RGBColor(128, 128, 128)
+        notice_para.alignment = PP_ALIGN.RIGHT
+
     def _add_title_slide(
         self,
         prs: Presentation,
@@ -2099,45 +2221,49 @@ class ExportService:
         subtitle: Optional[str] = None
     ) -> None:
         """
-        Add a title slide to the presentation.
+        Add a professional title slide to the presentation.
+        
+        Features white header with logo, clean typography, and AI disclosure footer.
 
         Args:
             prs: Presentation object
             title: Main title text
             subtitle: Optional subtitle text
         """
-        # Use blank layout for custom styling
-        slide_layout = prs.slide_layouts[6]
+        slide_layout = prs.slide_layouts[6]  # Blank layout
         slide = prs.slides.add_slide(slide_layout)
 
-        # Add background color shape
+        # White background
         background = slide.shapes.add_shape(
             MSO_SHAPE.RECTANGLE,
             Inches(0), Inches(0),
             PPTX_SLIDE_WIDTH, PPTX_SLIDE_HEIGHT
         )
         background.fill.solid()
-        background.fill.fore_color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
+        background.fill.fore_color.rgb = RGBColor(255, 255, 255)
         background.line.fill.background()
+        
+        # Add professional header
+        self._add_pptx_header(slide)
 
-        # Add title text box
+        # Main title - centered, primary blue
         title_box = slide.shapes.add_textbox(
-            PPTX_MARGIN, Inches(2.5),
+            PPTX_MARGIN, Inches(2.8),
             PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(1.5)
         )
         title_frame = title_box.text_frame
         title_frame.word_wrap = True
         title_para = title_frame.paragraphs[0]
-        title_para.text = title[:80]  # Truncate long titles
+        title_para.text = title[:80]
         title_para.font.size = PPTX_TITLE_FONT_SIZE
         title_para.font.bold = True
-        title_para.font.color.rgb = RGBColor(255, 255, 255)
+        title_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
         title_para.alignment = PP_ALIGN.CENTER
 
-        # Add subtitle if provided
+        # Subtitle if provided - gray
         if subtitle:
             subtitle_box = slide.shapes.add_textbox(
-                PPTX_MARGIN, Inches(4.2),
+                PPTX_MARGIN, Inches(4.3),
                 PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(1)
             )
             subtitle_frame = subtitle_box.text_frame
@@ -2145,20 +2271,11 @@ class ExportService:
             subtitle_para = subtitle_frame.paragraphs[0]
             subtitle_para.text = subtitle[:150]
             subtitle_para.font.size = PPTX_SUBTITLE_FONT_SIZE
-            subtitle_para.font.color.rgb = RGBColor(200, 200, 200)
+            subtitle_para.font.color.rgb = RGBColor(100, 100, 100)
             subtitle_para.alignment = PP_ALIGN.CENTER
 
-        # Add Foresight branding footer
-        footer_box = slide.shapes.add_textbox(
-            PPTX_MARGIN, PPTX_SLIDE_HEIGHT - Inches(0.8),
-            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.4)
-        )
-        footer_frame = footer_box.text_frame
-        footer_para = footer_frame.paragraphs[0]
-        footer_para.text = f"Foresight Intelligence Platform • {datetime.now().strftime('%B %d, %Y')}"
-        footer_para.font.size = PPTX_SMALL_FONT_SIZE
-        footer_para.font.color.rgb = RGBColor(180, 180, 180)
-        footer_para.alignment = PP_ALIGN.CENTER
+        # Add professional footer with AI disclosure
+        self._add_pptx_footer(slide)
 
     def _add_content_slide(
         self,
@@ -2169,6 +2286,8 @@ class ExportService:
     ) -> None:
         """
         Add a content slide with text and optional chart.
+        
+        Uses professional white header with logo and footer with AI disclosure.
 
         Args:
             prs: Presentation object
@@ -2179,27 +2298,21 @@ class ExportService:
         slide_layout = prs.slide_layouts[6]  # Blank layout
         slide = prs.slides.add_slide(slide_layout)
 
-        # Add title bar
-        title_bar = slide.shapes.add_shape(
-            MSO_SHAPE.RECTANGLE,
-            Inches(0), Inches(0),
-            PPTX_SLIDE_WIDTH, Inches(1.2)
-        )
-        title_bar.fill.solid()
-        title_bar.fill.fore_color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
-        title_bar.line.fill.background()
+        # Add professional header and footer
+        self._add_pptx_header(slide)
+        self._add_pptx_footer(slide)
 
-        # Add title text
+        # Slide title - below header, primary blue
         title_box = slide.shapes.add_textbox(
-            PPTX_MARGIN, Inches(0.3),
-            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.8)
+            PPTX_MARGIN, Inches(1.25),
+            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.6)
         )
         title_frame = title_box.text_frame
         title_para = title_frame.paragraphs[0]
         title_para.text = title[:60]
-        title_para.font.size = Pt(32)
+        title_para.font.size = Pt(28)
         title_para.font.bold = True
-        title_para.font.color.rgb = RGBColor(255, 255, 255)
+        title_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
 
         # Determine layout based on whether chart is included
         if chart_path:
@@ -2209,11 +2322,11 @@ class ExportService:
             content_width = PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN)
             chart_left = None
 
-        # Add content items
-        content_top = Inches(1.6)
+        # Add content items - adjusted for header/footer
+        content_top = Inches(1.95)
         content_box = slide.shapes.add_textbox(
             PPTX_MARGIN, content_top,
-            content_width, Inches(5.5)
+            content_width, Inches(4.5)  # Reduced height to account for footer
         )
         content_frame = content_box.text_frame
         content_frame.word_wrap = True
@@ -2240,13 +2353,13 @@ class ExportService:
             run_value.font.size = PPTX_BODY_FONT_SIZE
             run_value.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
 
-        # Add chart if provided
+        # Add chart if provided - adjusted for header/footer
         if chart_path and Path(chart_path).exists():
             try:
                 slide.shapes.add_picture(
                     chart_path,
-                    chart_left, Inches(1.8),
-                    width=PPTX_CHART_WIDTH, height=PPTX_CHART_HEIGHT
+                    chart_left, Inches(2.0),
+                    width=PPTX_CHART_WIDTH, height=Inches(4.0)
                 )
             except Exception as e:
                 logger.warning(f"Failed to add chart to slide: {e}")
@@ -2259,6 +2372,8 @@ class ExportService:
     ) -> None:
         """
         Add a slide showing all scores with optional chart.
+        
+        Uses professional white header and footer.
 
         Args:
             prs: Presentation object
@@ -2268,44 +2383,38 @@ class ExportService:
         slide_layout = prs.slide_layouts[6]  # Blank layout
         slide = prs.slides.add_slide(slide_layout)
 
-        # Add title bar
-        title_bar = slide.shapes.add_shape(
-            MSO_SHAPE.RECTANGLE,
-            Inches(0), Inches(0),
-            PPTX_SLIDE_WIDTH, Inches(1.2)
-        )
-        title_bar.fill.solid()
-        title_bar.fill.fore_color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["secondary"])
-        title_bar.line.fill.background()
+        # Add professional header and footer
+        self._add_pptx_header(slide)
+        self._add_pptx_footer(slide)
 
-        # Add title
+        # Slide title - below header
         title_box = slide.shapes.add_textbox(
-            PPTX_MARGIN, Inches(0.3),
-            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.8)
+            PPTX_MARGIN, Inches(1.25),
+            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.6)
         )
         title_frame = title_box.text_frame
         title_para = title_frame.paragraphs[0]
         title_para.text = "Score Analysis"
-        title_para.font.size = Pt(32)
+        title_para.font.size = Pt(28)
         title_para.font.bold = True
-        title_para.font.color.rgb = RGBColor(255, 255, 255)
+        title_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
 
-        # Add chart if available
+        # Add chart if available - adjusted for header/footer
         if chart_path and Path(chart_path).exists():
             try:
                 slide.shapes.add_picture(
                     chart_path,
-                    Inches(0.5), Inches(1.5),
-                    width=Inches(6), height=Inches(5)
+                    Inches(0.5), Inches(2.0),
+                    width=Inches(5.5), height=Inches(4.0)
                 )
             except Exception as e:
                 logger.warning(f"Failed to add score chart: {e}")
 
-        # Add score details on the right side
+        # Add score details on the right side - adjusted positions
         scores = card_data.get_all_scores()
         scores_box = slide.shapes.add_textbox(
-            Inches(7), Inches(1.8),
-            Inches(5.5), Inches(5)
+            Inches(6.5), Inches(2.0),
+            Inches(5.5), Inches(4.0)
         )
         scores_frame = scores_box.text_frame
         scores_frame.word_wrap = True
@@ -2342,6 +2451,8 @@ class ExportService:
     ) -> None:
         """
         Add a slide for long-form description text.
+        
+        Uses professional white header and footer.
 
         Args:
             prs: Presentation object
@@ -2354,37 +2465,31 @@ class ExportService:
         slide_layout = prs.slide_layouts[6]  # Blank layout
         slide = prs.slides.add_slide(slide_layout)
 
-        # Add title bar
-        title_bar = slide.shapes.add_shape(
-            MSO_SHAPE.RECTANGLE,
-            Inches(0), Inches(0),
-            PPTX_SLIDE_WIDTH, Inches(1.2)
-        )
-        title_bar.fill.solid()
-        title_bar.fill.fore_color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
-        title_bar.line.fill.background()
+        # Add professional header and footer
+        self._add_pptx_header(slide)
+        self._add_pptx_footer(slide)
 
-        # Add title
+        # Slide title - below header
         title_box = slide.shapes.add_textbox(
-            PPTX_MARGIN, Inches(0.3),
-            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.8)
+            PPTX_MARGIN, Inches(1.25),
+            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.6)
         )
         title_frame = title_box.text_frame
         title_para = title_frame.paragraphs[0]
         title_para.text = title
-        title_para.font.size = Pt(32)
+        title_para.font.size = Pt(28)
         title_para.font.bold = True
-        title_para.font.color.rgb = RGBColor(255, 255, 255)
+        title_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
 
         # Add description text - truncate if too long for slide
-        max_chars = 2000  # Reasonable limit for one slide
+        max_chars = 1800  # Adjusted for header/footer space
         display_text = description[:max_chars]
         if len(description) > max_chars:
             display_text += "..."
 
         desc_box = slide.shapes.add_textbox(
-            PPTX_MARGIN, Inches(1.6),
-            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(5.5)
+            PPTX_MARGIN, Inches(1.95),
+            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(4.5)
         )
         desc_frame = desc_box.text_frame
         desc_frame.word_wrap = True
@@ -2588,45 +2693,40 @@ class ExportService:
                     slide_layout = prs.slide_layouts[6]
                     slide = prs.slides.add_slide(slide_layout)
 
-                    # Title bar
-                    title_bar = slide.shapes.add_shape(
-                        MSO_SHAPE.RECTANGLE,
-                        Inches(0), Inches(0),
-                        PPTX_SLIDE_WIDTH, Inches(1.2)
-                    )
-                    title_bar.fill.solid()
-                    title_bar.fill.fore_color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["accent"])
-                    title_bar.line.fill.background()
+                    # Add professional header and footer
+                    self._add_pptx_header(slide)
+                    self._add_pptx_footer(slide)
 
+                    # Slide title - below header
                     title_box = slide.shapes.add_textbox(
-                        PPTX_MARGIN, Inches(0.3),
-                        PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.8)
+                        PPTX_MARGIN, Inches(1.25),
+                        PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.6)
                     )
                     title_frame = title_box.text_frame
                     title_para = title_frame.paragraphs[0]
                     title_para.text = "Distribution Analysis"
-                    title_para.font.size = Pt(32)
+                    title_para.font.size = Pt(28)
                     title_para.font.bold = True
-                    title_para.font.color.rgb = RGBColor(255, 255, 255)
+                    title_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
 
-                    # Add pillar chart on left
+                    # Add pillar chart on left - adjusted for header/footer
                     if pillar_chart_path and Path(pillar_chart_path).exists():
                         try:
                             slide.shapes.add_picture(
                                 pillar_chart_path,
-                                Inches(0.3), Inches(1.5),
-                                width=Inches(6), height=Inches(5)
+                                Inches(0.3), Inches(2.0),
+                                width=Inches(5.5), height=Inches(4.0)
                             )
                         except Exception as e:
                             logger.warning(f"Failed to add pillar chart: {e}")
 
-                    # Add horizon chart on right
+                    # Add horizon chart on right - adjusted for header/footer
                     if horizon_chart_path and Path(horizon_chart_path).exists():
                         try:
                             slide.shapes.add_picture(
                                 horizon_chart_path,
-                                Inches(7), Inches(1.5),
-                                width=Inches(5.5), height=Inches(4.5)
+                                Inches(6.5), Inches(2.0),
+                                width=Inches(5.5), height=Inches(4.0)
                             )
                         except Exception as e:
                             logger.warning(f"Failed to add horizon chart: {e}")
@@ -2638,8 +2738,12 @@ class ExportService:
                     slide_layout = prs.slide_layouts[6]
                     slide = prs.slides.add_slide(slide_layout)
 
+                    # Add professional header and footer
+                    self._add_pptx_header(slide)
+                    self._add_pptx_footer(slide)
+
                     msg_box = slide.shapes.add_textbox(
-                        Inches(2), Inches(3),
+                        Inches(2), Inches(3.5),
                         Inches(9), Inches(2)
                     )
                     msg_frame = msg_box.text_frame
@@ -3140,38 +3244,32 @@ class ExportService:
                 slide_layout = prs.slide_layouts[6]  # Blank layout
                 slide = prs.slides.add_slide(slide_layout)
 
-                # Title bar
-                title_bar = slide.shapes.add_shape(
-                    MSO_SHAPE.RECTANGLE,
-                    Inches(0), Inches(0),
-                    PPTX_SLIDE_WIDTH, Inches(1.2)
-                )
-                title_bar.fill.solid()
-                title_bar.fill.fore_color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["secondary"])
-                title_bar.line.fill.background()
+                # Add professional header and footer
+                self._add_pptx_header(slide)
+                self._add_pptx_footer(slide)
 
-                # Title
+                # Slide title - below header
                 title_box = slide.shapes.add_textbox(
-                    PPTX_MARGIN, Inches(0.3),
-                    PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.8)
+                    PPTX_MARGIN, Inches(1.25),
+                    PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.6)
                 )
                 title_frame = title_box.text_frame
                 title_para = title_frame.paragraphs[0]
                 title_para.text = "Executive Summary"
-                title_para.font.size = Pt(32)
+                title_para.font.size = Pt(28)
                 title_para.font.bold = True
-                title_para.font.color.rgb = RGBColor(255, 255, 255)
+                title_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
 
-                # Summary content
+                # Summary content - adjusted for header/footer
                 summary_box = slide.shapes.add_textbox(
-                    PPTX_MARGIN, Inches(1.6),
-                    PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(5.5)
+                    PPTX_MARGIN, Inches(1.95),
+                    PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(4.5)
                 )
                 summary_frame = summary_box.text_frame
                 summary_frame.word_wrap = True
                 summary_para = summary_frame.paragraphs[0]
                 # Truncate if too long for slide
-                summary_text = executive_summary[:1500] if len(executive_summary) > 1500 else executive_summary
+                summary_text = executive_summary[:1300] if len(executive_summary) > 1300 else executive_summary
                 summary_para.text = summary_text
                 summary_para.font.size = PPTX_BODY_FONT_SIZE
                 summary_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
