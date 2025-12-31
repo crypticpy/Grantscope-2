@@ -4241,26 +4241,34 @@ async def get_workstream_research_status(
     if not wsc_response.data:
         return WorkstreamResearchStatusResponse(tasks=[])
 
-    card_ids = [item["card_id"] for item in wsc_response.data]
+    card_ids = [item["card_id"] for item in wsc_response.data if item.get("card_id")]
+    
+    # If no valid card_ids, return empty response
+    if not card_ids:
+        return WorkstreamResearchStatusResponse(tasks=[])
 
     # Get research tasks for these cards that are:
     # - Currently active (queued or processing)
     # - Recently completed/failed (within last hour for feedback)
-    one_hour_ago = (datetime.now() - timedelta(hours=1)).isoformat()
+    try:
+        one_hour_ago = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
 
-    # Query active tasks
-    active_tasks = supabase.table("research_tasks").select(
-        "id, card_id, task_type, status, started_at, completed_at"
-    ).in_("card_id", card_ids).in_(
-        "status", ["queued", "processing"]
-    ).execute()
+        # Query active tasks
+        active_tasks = supabase.table("research_tasks").select(
+            "id, card_id, task_type, status, started_at, completed_at"
+        ).in_("card_id", card_ids).in_(
+            "status", ["queued", "processing"]
+        ).execute()
 
-    # Query recently completed tasks
-    recent_tasks = supabase.table("research_tasks").select(
-        "id, card_id, task_type, status, started_at, completed_at"
-    ).in_("card_id", card_ids).in_(
-        "status", ["completed", "failed"]
-    ).gte("completed_at", one_hour_ago).execute()
+        # Query recently completed tasks
+        recent_tasks = supabase.table("research_tasks").select(
+            "id, card_id, task_type, status, started_at, completed_at"
+        ).in_("card_id", card_ids).in_(
+            "status", ["completed", "failed"]
+        ).gte("completed_at", one_hour_ago).execute()
+    except Exception as e:
+        logger.warning(f"Error querying research tasks: {e}")
+        return WorkstreamResearchStatusResponse(tasks=[])
 
     # Combine and format results
     all_tasks = (active_tasks.data or []) + (recent_tasks.data or [])
