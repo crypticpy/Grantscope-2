@@ -4188,6 +4188,34 @@ async def trigger_card_quick_update(
     return ResearchTask(**task)
 
 
+@app.post("/api/v1/me/workstreams/{workstream_id}/cards/{card_id}/check-updates", response_model=ResearchTask)
+async def trigger_card_check_updates(
+    workstream_id: str,
+    card_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Check for updates on a watched card.
+
+    This is an alias for quick-update, used by the kanban board's "Check for Updates"
+    action on cards in the Watching column. Creates a research task with task_type='quick_update'.
+
+    Args:
+        workstream_id: UUID of the workstream
+        card_id: UUID of the workstream card (junction table ID)
+        current_user: Authenticated user (injected)
+
+    Returns:
+        ResearchTask with the created task details
+
+    Raises:
+        HTTPException 404: Workstream or card not found
+        HTTPException 403: Not authorized
+    """
+    # Delegate to the quick-update implementation
+    return await trigger_card_quick_update(workstream_id, card_id, current_user)
+
+
 class WorkstreamResearchStatus(BaseModel):
     """Research status for a card in a workstream."""
     card_id: str = Field(..., description="UUID of the underlying card")
