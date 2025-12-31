@@ -4162,6 +4162,591 @@ The City of Austin is committed to transparent and responsible use of AI technol
     # Portfolio Export (Bulk Brief Export)
     # =========================================================================
 
+    def _extract_key_takeaways(self, brief_markdown: str) -> List[str]:
+        """
+        Extract key takeaways from brief markdown content.
+        
+        Looks for sections like "Key Takeaways", "Key Findings", "Key Implications",
+        "What This Means", bullet points, or numbered lists.
+        """
+        import re
+        takeaways = []
+        
+        # Try to find key sections
+        key_section_patterns = [
+            r'(?:##?\s*)?(?:Key\s+)?(?:Takeaways?|Findings?|Implications?|Insights?)[\s:]*\n((?:[-•*]\s*.+\n?)+)',
+            r'(?:##?\s*)?What\s+This\s+Means[^:]*:?\s*\n((?:[-•*]\s*.+\n?)+)',
+            r'(?:##?\s*)?Strategic\s+(?:Implications?|Considerations?)[\s:]*\n((?:[-•*]\s*.+\n?)+)',
+        ]
+        
+        for pattern in key_section_patterns:
+            matches = re.findall(pattern, brief_markdown, re.IGNORECASE | re.MULTILINE)
+            for match in matches:
+                bullets = re.findall(r'[-•*]\s*(.+?)(?:\n|$)', match)
+                takeaways.extend([b.strip() for b in bullets if len(b.strip()) > 20])
+        
+        # If no structured takeaways found, extract from summary section
+        if not takeaways:
+            summary_match = re.search(
+                r'(?:##?\s*)?(?:Executive\s+)?Summary[\s:]*\n(.+?)(?:\n##|\n\n\n|$)',
+                brief_markdown,
+                re.IGNORECASE | re.DOTALL
+            )
+            if summary_match:
+                summary = summary_match.group(1)
+                sentences = re.split(r'(?<=[.!?])\s+', summary)
+                takeaways = [s.strip() for s in sentences[:3] if len(s.strip()) > 30]
+        
+        return takeaways[:5]  # Limit to 5 takeaways
+    
+    def _extract_city_examples(self, brief_markdown: str) -> List[Dict[str, str]]:
+        """
+        Extract examples of other cities, projects, or implementations from brief content.
+        
+        Returns list of dicts with 'city', 'project', and 'detail' keys.
+        """
+        import re
+        examples = []
+        
+        # Common city/organization patterns
+        city_patterns = [
+            # "City of X has implemented/launched/deployed..."
+            r'(?:City\s+of\s+|The\s+)?([\w\s]+?)(?:\s+has|\s+is|\s+launched|\s+implemented|\s+deployed|\s+piloted|\s+tested)\s+(.+?)(?:\.|,\s+(?:which|resulting|leading))',
+            # "In X, they have..."
+            r'In\s+([\w\s,]+?),\s+(?:they|the\s+city|officials|government)\s+(?:have|has)\s+(.+?)(?:\.|,)',
+            # "X's program/initiative/project..."
+            r"([\w\s]+?)'s\s+([\w\s]+?(?:program|initiative|project|pilot|system))\s+(.+?)(?:\.|,)",
+            # "programs like X in Y"
+            r'(?:programs?|initiatives?|projects?)\s+(?:like|such\s+as)\s+(.+?)\s+in\s+([\w\s]+?)(?:\.|,|$)',
+        ]
+        
+        for pattern in city_patterns:
+            matches = re.findall(pattern, brief_markdown, re.IGNORECASE)
+            for match in matches:
+                if len(match) >= 2:
+                    city = match[0].strip() if match[0] else ""
+                    detail = match[1].strip() if len(match) > 1 else ""
+                    project = match[2].strip() if len(match) > 2 else ""
+                    
+                    # Filter out generic terms
+                    skip_terms = ['the', 'this', 'that', 'these', 'those', 'austin', 'texas']
+                    if city.lower() not in skip_terms and len(city) > 2:
+                        examples.append({
+                            'city': city,
+                            'project': project,
+                            'detail': detail[:150] if detail else ""
+                        })
+        
+        # Deduplicate by city name
+        seen_cities = set()
+        unique_examples = []
+        for ex in examples:
+            city_lower = ex['city'].lower()
+            if city_lower not in seen_cities:
+                seen_cities.add(city_lower)
+                unique_examples.append(ex)
+        
+        return unique_examples[:4]  # Limit to 4 examples
+    
+    def _generate_portfolio_comparison_chart(
+        self,
+        briefs: List,  # List of PortfolioBrief
+        dpi: int = CHART_DPI
+    ) -> Optional[str]:
+        """
+        Generate a comparison chart showing all cards' scores.
+        
+        Creates a grouped bar chart comparing impact/relevance/velocity
+        across all portfolio cards.
+        """
+        try:
+            # Filter briefs with valid scores
+            valid_briefs = [
+                b for b in briefs 
+                if b.impact_score is not None or b.relevance_score is not None
+            ]
+            
+            if not valid_briefs:
+                return None
+            
+            fig, ax = plt.subplots(figsize=(10, 6))
+            
+            # Prepare data
+            names = [b.card_name[:25] + '...' if len(b.card_name) > 25 else b.card_name for b in valid_briefs]
+            impacts = [b.impact_score or 0 for b in valid_briefs]
+            relevances = [b.relevance_score or 0 for b in valid_briefs]
+            velocities = [b.velocity_score or 0 for b in valid_briefs]
+            
+            x = np.arange(len(names))
+            width = 0.25
+            
+            # Create bars
+            bars1 = ax.bar(x - width, impacts, width, label='Impact', color=COA_BRAND_COLORS["logo_blue"])
+            bars2 = ax.bar(x, relevances, width, label='Relevance', color=COA_BRAND_COLORS["logo_green"])
+            bars3 = ax.bar(x + width, velocities, width, label='Velocity', color=COA_BRAND_COLORS["dark_blue"])
+            
+            # Customize chart
+            ax.set_ylabel('Score (0-100)', fontsize=11)
+            ax.set_title('Portfolio Score Comparison', fontsize=14, fontweight='bold', color=COA_BRAND_COLORS["dark_blue"])
+            ax.set_xticks(x)
+            ax.set_xticklabels(names, rotation=45, ha='right', fontsize=9)
+            ax.legend(loc='upper right')
+            ax.set_ylim(0, 110)
+            
+            # Style
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.yaxis.grid(True, linestyle='--', alpha=0.3)
+            
+            plt.tight_layout()
+            
+            # Save
+            temp_file = tempfile.NamedTemporaryFile(
+                suffix='.png',
+                delete=False,
+                prefix='foresight_portfolio_comparison_'
+            )
+            plt.savefig(temp_file.name, dpi=dpi, bbox_inches='tight', facecolor='white')
+            
+            return temp_file.name
+            
+        except Exception as e:
+            logger.error(f"Error generating portfolio comparison chart: {e}")
+            return None
+        finally:
+            plt.close('all')
+    
+    def _generate_priority_matrix_chart(
+        self,
+        briefs: List,  # List of PortfolioBrief  
+        synthesis,  # PortfolioSynthesisData
+        dpi: int = CHART_DPI
+    ) -> Optional[str]:
+        """
+        Generate a visual 2x2 priority matrix chart.
+        
+        Places cards in quadrants based on synthesis priority_matrix data.
+        """
+        try:
+            matrix = synthesis.priority_matrix if synthesis.priority_matrix else {}
+            urgent = set(matrix.get("high_impact_urgent", []))
+            strategic = set(matrix.get("high_impact_strategic", []))
+            monitor = set(matrix.get("monitor", []))
+            
+            fig, ax = plt.subplots(figsize=(10, 8))
+            
+            # Draw quadrant backgrounds
+            ax.fill([0, 50, 50, 0], [50, 50, 100, 100], color='#FEE2E2', alpha=0.5)  # Urgent - top left
+            ax.fill([50, 100, 100, 50], [50, 50, 100, 100], color='#FEF3C7', alpha=0.5)  # Strategic - top right
+            ax.fill([0, 50, 50, 0], [0, 0, 50, 50], color='#DBEAFE', alpha=0.5)  # Monitor - bottom left
+            ax.fill([50, 100, 100, 50], [0, 0, 50, 50], color='#D1FAE5', alpha=0.5)  # Low priority - bottom right
+            
+            # Quadrant labels
+            ax.text(25, 95, '🔴 URGENT ACTION', ha='center', va='top', fontsize=12, fontweight='bold', color='#DC2626')
+            ax.text(75, 95, '🟡 STRATEGIC PLANNING', ha='center', va='top', fontsize=12, fontweight='bold', color='#D97706')
+            ax.text(25, 5, '🔵 MONITOR', ha='center', va='bottom', fontsize=12, fontweight='bold', color='#2563EB')
+            ax.text(75, 5, '🟢 EVALUATE', ha='center', va='bottom', fontsize=12, fontweight='bold', color='#059669')
+            
+            # Place cards
+            for i, brief in enumerate(briefs):
+                name = brief.card_name
+                # Determine quadrant based on synthesis
+                if name in urgent:
+                    x = 10 + (i % 3) * 12
+                    y = 70 + (i // 3) * 8
+                elif name in strategic:
+                    x = 60 + (i % 3) * 12
+                    y = 70 + (i // 3) * 8
+                elif name in monitor:
+                    x = 10 + (i % 3) * 12
+                    y = 25 + (i // 3) * 8
+                else:
+                    x = 60 + (i % 3) * 12
+                    y = 25 + (i // 3) * 8
+                
+                # Get pillar color
+                pillar_def = PILLAR_DEFINITIONS.get(brief.pillar_id.upper() if brief.pillar_id else "", {})
+                pillar_color = pillar_def.get("color", COA_BRAND_COLORS["logo_blue"])
+                
+                # Draw card marker
+                ax.scatter(x, y, s=200, c=pillar_color, edgecolors='white', linewidth=2, zorder=5)
+                
+                # Truncate name
+                short_name = name[:18] + '..' if len(name) > 18 else name
+                ax.annotate(short_name, (x, y), xytext=(0, -15), textcoords='offset points',
+                           ha='center', fontsize=8, color=COA_BRAND_COLORS["dark_blue"])
+            
+            # Draw quadrant lines
+            ax.axhline(y=50, color='gray', linewidth=2, linestyle='-', alpha=0.5)
+            ax.axvline(x=50, color='gray', linewidth=2, linestyle='-', alpha=0.5)
+            
+            # Axis labels
+            ax.set_xlabel('← Lower Urgency          Higher Urgency →', fontsize=11, color='gray')
+            ax.set_ylabel('← Lower Impact          Higher Impact →', fontsize=11, color='gray')
+            ax.set_title('Strategic Priority Matrix', fontsize=14, fontweight='bold', color=COA_BRAND_COLORS["dark_blue"], pad=20)
+            
+            ax.set_xlim(0, 100)
+            ax.set_ylim(0, 100)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            
+            for spine in ax.spines.values():
+                spine.set_visible(False)
+            
+            plt.tight_layout()
+            
+            temp_file = tempfile.NamedTemporaryFile(
+                suffix='.png',
+                delete=False,
+                prefix='foresight_priority_matrix_'
+            )
+            plt.savefig(temp_file.name, dpi=dpi, bbox_inches='tight', facecolor='white')
+            
+            return temp_file.name
+            
+        except Exception as e:
+            logger.error(f"Error generating priority matrix chart: {e}")
+            return None
+        finally:
+            plt.close('all')
+    
+    def _add_portfolio_dashboard_slide(
+        self,
+        prs: Presentation,
+        briefs: List,  # List of PortfolioBrief
+        comparison_chart_path: Optional[str],
+        pillar_chart_path: Optional[str]
+    ) -> None:
+        """Add a visual dashboard slide with charts and key metrics."""
+        slide_layout = prs.slide_layouts[6]
+        slide = prs.slides.add_slide(slide_layout)
+        
+        self._add_pptx_header(slide)
+        self._add_pptx_footer(slide)
+        
+        # Title
+        title_box = slide.shapes.add_textbox(
+            PPTX_MARGIN, Inches(1.25),
+            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.5)
+        )
+        title_frame = title_box.text_frame
+        title_para = title_frame.paragraphs[0]
+        title_para.text = "Portfolio Dashboard"
+        title_para.font.size = Pt(28)
+        title_para.font.bold = True
+        title_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
+        
+        # Key metrics row
+        metrics_y = Inches(1.85)
+        metric_width = Inches(2.2)
+        metric_height = Inches(0.9)
+        
+        # Calculate metrics
+        total_cards = len(briefs)
+        avg_impact = sum(b.impact_score or 0 for b in briefs) // max(total_cards, 1)
+        pillars_covered = len(set(b.pillar_id for b in briefs if b.pillar_id))
+        horizons = set(b.horizon for b in briefs if b.horizon)
+        
+        metrics = [
+            (str(total_cards), "Strategic Trends"),
+            (f"{avg_impact}/100", "Avg Impact Score") if avg_impact > 0 else None,
+            (str(pillars_covered), "Pillars Covered"),
+            (", ".join(sorted(horizons)) if horizons else "Mixed", "Time Horizons"),
+        ]
+        metrics = [m for m in metrics if m]  # Remove None
+        
+        for i, (value, label) in enumerate(metrics):
+            x = PPTX_MARGIN + (i * (metric_width + Inches(0.15)))
+            
+            # Metric box
+            metric_box = slide.shapes.add_shape(
+                MSO_SHAPE.ROUNDED_RECTANGLE, x, metrics_y, metric_width, metric_height
+            )
+            metric_box.fill.solid()
+            metric_box.fill.fore_color.rgb = self._hex_to_rgb(COA_BRAND_COLORS["light_blue"])
+            metric_box.line.fill.background()
+            
+            # Value
+            value_box = slide.shapes.add_textbox(x, metrics_y + Inches(0.1), metric_width, Inches(0.45))
+            value_frame = value_box.text_frame
+            value_para = value_frame.paragraphs[0]
+            value_para.text = value
+            value_para.font.size = Pt(24)
+            value_para.font.bold = True
+            value_para.font.color.rgb = self._hex_to_rgb(COA_BRAND_COLORS["logo_blue"])
+            value_para.alignment = PP_ALIGN.CENTER
+            
+            # Label
+            label_box = slide.shapes.add_textbox(x, metrics_y + Inches(0.5), metric_width, Inches(0.35))
+            label_frame = label_box.text_frame
+            label_para = label_frame.paragraphs[0]
+            label_para.text = label
+            label_para.font.size = Pt(11)
+            label_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
+            label_para.alignment = PP_ALIGN.CENTER
+        
+        # Charts row
+        chart_y = Inches(3.0)
+        chart_height = Inches(3.3)
+        
+        if comparison_chart_path:
+            try:
+                slide.shapes.add_picture(
+                    comparison_chart_path,
+                    PPTX_MARGIN, chart_y,
+                    width=Inches(4.5), height=chart_height
+                )
+            except Exception as e:
+                logger.warning(f"Failed to add comparison chart: {e}")
+        
+        if pillar_chart_path:
+            try:
+                slide.shapes.add_picture(
+                    pillar_chart_path,
+                    Inches(5.0), chart_y,
+                    width=Inches(4.2), height=chart_height
+                )
+            except Exception as e:
+                logger.warning(f"Failed to add pillar chart: {e}")
+    
+    def _add_card_deep_dive_slides(
+        self,
+        prs: Presentation,
+        brief,  # PortfolioBrief
+        index: int,
+        chart_path: Optional[str] = None
+    ) -> None:
+        """
+        Add 2-3 slides for a single card with detailed insights.
+        
+        Slide 1: Overview with pillar, horizon, scores (if available)
+        Slide 2: Key takeaways and city examples (if found)
+        """
+        pillar_def = PILLAR_DEFINITIONS.get(brief.pillar_id.upper() if brief.pillar_id else "", {})
+        pillar_name = pillar_def.get("name", brief.pillar_id or "Unknown")
+        pillar_icon = pillar_def.get("icon", "🏛️")
+        pillar_color = pillar_def.get("color", COA_BRAND_COLORS["logo_blue"])
+        
+        horizon_def = HORIZON_DEFINITIONS.get(brief.horizon.upper() if brief.horizon else "", {})
+        horizon_name = horizon_def.get("name", brief.horizon or "Unknown")
+        
+        stage_def = STAGE_DEFINITIONS.get(brief.stage_id.upper() if brief.stage_id else "", {})
+        stage_name = stage_def.get("name", brief.stage_id or "Unknown")
+        
+        # ===== SLIDE 1: Overview =====
+        slide_layout = prs.slide_layouts[6]
+        slide1 = prs.slides.add_slide(slide_layout)
+        
+        self._add_pptx_header(slide1)
+        self._add_pptx_footer(slide1)
+        
+        # Title with index
+        title_box = slide1.shapes.add_textbox(
+            PPTX_MARGIN, Inches(1.25),
+            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.6)
+        )
+        title_frame = title_box.text_frame
+        title_para = title_frame.paragraphs[0]
+        card_title = f"{index}. {brief.card_name}"
+        title_para.text = card_title[:55] if len(card_title) > 55 else card_title
+        title_para.font.size = Pt(26)
+        title_para.font.bold = True
+        title_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
+        
+        # Classification badges row
+        badges_y = Inches(1.9)
+        badge_height = Inches(0.4)
+        
+        # Pillar badge
+        pillar_badge = slide1.shapes.add_shape(
+            MSO_SHAPE.ROUNDED_RECTANGLE, PPTX_MARGIN, badges_y, Inches(2.5), badge_height
+        )
+        pillar_badge.fill.solid()
+        pillar_badge.fill.fore_color.rgb = self._hex_to_rgb(pillar_color)
+        pillar_badge.line.fill.background()
+        
+        pillar_text = slide1.shapes.add_textbox(PPTX_MARGIN, badges_y, Inches(2.5), badge_height)
+        pf = pillar_text.text_frame
+        pp = pf.paragraphs[0]
+        pp.text = f"{pillar_icon} {pillar_name}"
+        pp.font.size = Pt(14)
+        pp.font.bold = True
+        pp.font.color.rgb = RGBColor(255, 255, 255)
+        pp.alignment = PP_ALIGN.CENTER
+        pf.paragraphs[0].space_before = Pt(8)
+        
+        # Horizon badge
+        horizon_badge = slide1.shapes.add_shape(
+            MSO_SHAPE.ROUNDED_RECTANGLE, Inches(3.0), badges_y, Inches(2.0), badge_height
+        )
+        horizon_badge.fill.solid()
+        horizon_badge.fill.fore_color.rgb = self._hex_to_rgb(COA_BRAND_COLORS["dark_blue"])
+        horizon_badge.line.fill.background()
+        
+        horizon_text = slide1.shapes.add_textbox(Inches(3.0), badges_y, Inches(2.0), badge_height)
+        hf = horizon_text.text_frame
+        hp = hf.paragraphs[0]
+        hp.text = f"⏱️ {horizon_name}"
+        hp.font.size = Pt(14)
+        hp.font.bold = True
+        hp.font.color.rgb = RGBColor(255, 255, 255)
+        hp.alignment = PP_ALIGN.CENTER
+        hf.paragraphs[0].space_before = Pt(8)
+        
+        # Stage badge
+        stage_badge = slide1.shapes.add_shape(
+            MSO_SHAPE.ROUNDED_RECTANGLE, Inches(5.3), badges_y, Inches(2.2), badge_height
+        )
+        stage_badge.fill.solid()
+        stage_badge.fill.fore_color.rgb = self._hex_to_rgb(COA_BRAND_COLORS["logo_green"])
+        stage_badge.line.fill.background()
+        
+        stage_text = slide1.shapes.add_textbox(Inches(5.3), badges_y, Inches(2.2), badge_height)
+        sf = stage_text.text_frame
+        sp = sf.paragraphs[0]
+        sp.text = f"📊 {stage_name}"
+        sp.font.size = Pt(14)
+        sp.font.bold = True
+        sp.font.color.rgb = RGBColor(255, 255, 255)
+        sp.alignment = PP_ALIGN.CENTER
+        sf.paragraphs[0].space_before = Pt(8)
+        
+        # Summary content
+        summary_y = Inches(2.5)
+        summary_height = Inches(2.2)
+        
+        # If we have a chart, put it on the right
+        if chart_path:
+            summary_width = Inches(4.8)
+            summary_box = slide1.shapes.add_textbox(
+                PPTX_MARGIN, summary_y, summary_width, summary_height
+            )
+            
+            # Add chart
+            try:
+                slide1.shapes.add_picture(
+                    chart_path,
+                    Inches(5.3), summary_y,
+                    width=Inches(4.0), height=Inches(2.8)
+                )
+            except Exception as e:
+                logger.warning(f"Failed to add score chart for {brief.card_name}: {e}")
+        else:
+            summary_width = PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN)
+            summary_box = slide1.shapes.add_textbox(
+                PPTX_MARGIN, summary_y, summary_width, summary_height
+            )
+        
+        summary_frame = summary_box.text_frame
+        summary_frame.word_wrap = True
+        
+        # Add scores if available
+        scores_line = []
+        if brief.impact_score and brief.impact_score > 0:
+            scores_line.append(f"Impact: {brief.impact_score}/100")
+        if brief.relevance_score and brief.relevance_score > 0:
+            scores_line.append(f"Relevance: {brief.relevance_score}/100")
+        if brief.velocity_score and brief.velocity_score > 0:
+            scores_line.append(f"Velocity: {brief.velocity_score}/100")
+        
+        if scores_line:
+            scores_para = summary_frame.paragraphs[0]
+            scores_para.text = " | ".join(scores_line)
+            scores_para.font.size = Pt(12)
+            scores_para.font.bold = True
+            scores_para.font.color.rgb = self._hex_to_rgb(COA_BRAND_COLORS["logo_blue"])
+            scores_para.space_after = Pt(12)
+            
+            summary_para = summary_frame.add_paragraph()
+        else:
+            summary_para = summary_frame.paragraphs[0]
+        
+        summary_text = brief.brief_summary or "Executive summary not available."
+        summary_para.text = summary_text[:600] if len(summary_text) > 600 else summary_text
+        summary_para.font.size = Pt(14)
+        summary_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
+        summary_para.space_before = Pt(6)
+        
+        # ===== SLIDE 2: Key Takeaways & Examples =====
+        takeaways = self._extract_key_takeaways(brief.brief_content_markdown)
+        city_examples = self._extract_city_examples(brief.brief_content_markdown)
+        
+        # Only add this slide if we have content
+        if takeaways or city_examples:
+            slide2 = prs.slides.add_slide(slide_layout)
+            
+            self._add_pptx_header(slide2)
+            self._add_pptx_footer(slide2)
+            
+            # Title
+            title_box2 = slide2.shapes.add_textbox(
+                PPTX_MARGIN, Inches(1.25),
+                PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.5)
+            )
+            title_frame2 = title_box2.text_frame
+            title_para2 = title_frame2.paragraphs[0]
+            title_para2.text = f"{brief.card_name[:40]} - Key Insights"
+            title_para2.font.size = Pt(24)
+            title_para2.font.bold = True
+            title_para2.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
+            
+            content_y = Inches(1.85)
+            
+            # Key Takeaways section
+            if takeaways:
+                takeaways_box = slide2.shapes.add_textbox(
+                    PPTX_MARGIN, content_y,
+                    Inches(4.5), Inches(4.0)
+                )
+                tf = takeaways_box.text_frame
+                tf.word_wrap = True
+                
+                # Section header
+                header_para = tf.paragraphs[0]
+                header_para.text = "📌 Key Takeaways"
+                header_para.font.size = Pt(16)
+                header_para.font.bold = True
+                header_para.font.color.rgb = self._hex_to_rgb(COA_BRAND_COLORS["logo_blue"])
+                header_para.space_after = Pt(8)
+                
+                for takeaway in takeaways:
+                    bullet_para = tf.add_paragraph()
+                    bullet_text = takeaway[:200] if len(takeaway) > 200 else takeaway
+                    bullet_para.text = f"• {bullet_text}"
+                    bullet_para.font.size = Pt(12)
+                    bullet_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
+                    bullet_para.space_before = Pt(6)
+            
+            # City Examples section
+            if city_examples:
+                examples_x = Inches(5.0) if takeaways else PPTX_MARGIN
+                examples_width = Inches(4.2) if takeaways else PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN)
+                
+                examples_box = slide2.shapes.add_textbox(
+                    examples_x, content_y,
+                    examples_width, Inches(4.0)
+                )
+                ef = examples_box.text_frame
+                ef.word_wrap = True
+                
+                # Section header
+                ex_header = ef.paragraphs[0]
+                ex_header.text = "🌆 Examples from Other Cities"
+                ex_header.font.size = Pt(16)
+                ex_header.font.bold = True
+                ex_header.font.color.rgb = self._hex_to_rgb(COA_BRAND_COLORS["logo_green"])
+                ex_header.space_after = Pt(8)
+                
+                for example in city_examples:
+                    city_para = ef.add_paragraph()
+                    city_text = f"• {example['city']}"
+                    if example.get('detail'):
+                        city_text += f": {example['detail']}"
+                    city_para.text = city_text[:180] if len(city_text) > 180 else city_text
+                    city_para.font.size = Pt(12)
+                    city_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
+                    city_para.space_before = Pt(6)
+
     async def generate_portfolio_pptx_local(
         self,
         workstream_name: str,
@@ -4171,8 +4756,18 @@ The City of Austin is committed to transparent and responsible use of AI technol
         """
         Generate a local portfolio PPTX presentation.
         
-        Fallback when Gamma is unavailable. Creates a multi-card portfolio
-        deck with executive summary, priority matrix, and per-card sections.
+        Creates a professional multi-card portfolio deck with:
+        - Title slide with branding
+        - Portfolio dashboard with metrics and charts
+        - Executive overview synthesis
+        - Visual priority matrix (2x2)
+        - Per-card deep dives (2-3 slides each) with:
+          - Classification badges and scores (when available)
+          - Key takeaways extracted from brief
+          - City/project examples cited in research
+        - Cross-cutting themes
+        - Recommended actions
+        - AI disclosure
         
         Args:
             workstream_name: Name of the workstream for title
@@ -4193,112 +4788,183 @@ The City of Austin is committed to transparent and responsible use of AI technol
         prs.slide_width = PPTX_SLIDE_WIDTH
         prs.slide_height = PPTX_SLIDE_HEIGHT
         
-        # Get pillar icons for title
-        pillar_icons = []
-        for brief in briefs:
-            pillar_def = PILLAR_DEFINITIONS.get(brief.pillar_id.upper() if brief.pillar_id else "", {})
-            icon = pillar_def.get("icon", "🏛️")
-            if icon not in pillar_icons:
-                pillar_icons.append(icon)
+        temp_files_to_cleanup = []
         
-        # 1. Title slide
-        title_subtitle = f"{' '.join(pillar_icons)} | {len(briefs)} Strategic Trends\n{datetime.now().strftime('%B %Y')}"
-        self._add_title_slide(prs, workstream_name, title_subtitle)
-        
-        # 2. Executive Overview slide
-        overview_content = synthesis.executive_overview if synthesis.executive_overview else "Portfolio synthesis in progress..."
-        self._add_smart_content_slide(
-            prs,
-            title="Executive Overview",
-            content=overview_content,
-            max_chars=1200
-        )
-        
-        # 3. Strategic Priorities (Priority Matrix)
-        matrix = synthesis.priority_matrix if synthesis.priority_matrix else {}
-        urgent = matrix.get("high_impact_urgent", [])
-        strategic = matrix.get("high_impact_strategic", [])
-        monitor = matrix.get("monitor", [])
-        
-        priority_content = "**🔴 High Impact - Urgent Action**\n"
-        priority_content += "\n".join(f"• {item}" for item in urgent) if urgent else "• None identified"
-        priority_content += "\n\n**🟡 High Impact - Strategic Planning**\n"
-        priority_content += "\n".join(f"• {item}" for item in strategic) if strategic else "• None identified"
-        priority_content += "\n\n**🟢 Monitor & Evaluate**\n"
-        priority_content += "\n".join(f"• {item}" for item in monitor) if monitor else "• None identified"
-        
-        self._add_smart_content_slide(
-            prs,
-            title="Strategic Priorities",
-            content=priority_content,
-            max_chars=1500
-        )
-        
-        # 4. Per-card sections
-        for i, brief in enumerate(briefs, 1):
-            pillar_def = PILLAR_DEFINITIONS.get(brief.pillar_id.upper() if brief.pillar_id else "", {})
-            pillar_name = pillar_def.get("name", brief.pillar_id or "Unknown")
-            pillar_icon = pillar_def.get("icon", "🏛️")
+        try:
+            # Get pillar icons for title
+            pillar_icons = []
+            pillar_counts = {}
+            for brief in briefs:
+                pillar_def = PILLAR_DEFINITIONS.get(brief.pillar_id.upper() if brief.pillar_id else "", {})
+                icon = pillar_def.get("icon", "🏛️")
+                pillar_name = pillar_def.get("name", brief.pillar_id or "Other")
+                if icon not in pillar_icons:
+                    pillar_icons.append(icon)
+                pillar_counts[pillar_name] = pillar_counts.get(pillar_name, 0) + 1
             
-            horizon_name = brief.horizon or "H2"
+            # ===== 1. TITLE SLIDE =====
+            title_subtitle = f"{' '.join(pillar_icons)} | {len(briefs)} Strategic Trends\n{datetime.now().strftime('%B %Y')}"
+            self._add_title_slide(prs, workstream_name, title_subtitle)
             
-            # Card overview slide
-            card_content = f"{pillar_icon} **{pillar_name}** | **{horizon_name}**\n\n"
-            card_content += f"**Impact**: {brief.impact_score}/100 | **Relevance**: {brief.relevance_score}/100\n\n"
-            card_content += brief.brief_summary or "No summary available"
+            # ===== 2. PORTFOLIO DASHBOARD =====
+            # Generate charts
+            comparison_chart_path = self._generate_portfolio_comparison_chart(briefs)
+            if comparison_chart_path:
+                temp_files_to_cleanup.append(comparison_chart_path)
+            
+            pillar_chart_path = None
+            if pillar_counts:
+                pillar_chart_path = self.generate_pillar_distribution_chart(pillar_counts, "Distribution by Pillar")
+                if pillar_chart_path:
+                    temp_files_to_cleanup.append(pillar_chart_path)
+            
+            self._add_portfolio_dashboard_slide(prs, briefs, comparison_chart_path, pillar_chart_path)
+            
+            # ===== 3. EXECUTIVE OVERVIEW =====
+            overview_content = synthesis.executive_overview if synthesis.executive_overview else "Portfolio synthesis in progress..."
+            self._add_smart_content_slide(
+                prs,
+                title="Executive Overview",
+                content=overview_content,
+                max_chars=1400
+            )
+            
+            # ===== 4. VISUAL PRIORITY MATRIX =====
+            matrix_chart_path = self._generate_priority_matrix_chart(briefs, synthesis)
+            if matrix_chart_path:
+                temp_files_to_cleanup.append(matrix_chart_path)
+                
+                # Add matrix slide
+                slide_layout = prs.slide_layouts[6]
+                matrix_slide = prs.slides.add_slide(slide_layout)
+                self._add_pptx_header(matrix_slide)
+                self._add_pptx_footer(matrix_slide)
+                
+                title_box = matrix_slide.shapes.add_textbox(
+                    PPTX_MARGIN, Inches(1.25),
+                    PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.5)
+                )
+                title_frame = title_box.text_frame
+                title_para = title_frame.paragraphs[0]
+                title_para.text = "Strategic Priority Matrix"
+                title_para.font.size = Pt(28)
+                title_para.font.bold = True
+                title_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
+                
+                try:
+                    matrix_slide.shapes.add_picture(
+                        matrix_chart_path,
+                        Inches(0.8), Inches(1.9),
+                        width=Inches(8.4), height=Inches(5.0)
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to add priority matrix chart: {e}")
+            else:
+                # Fallback to text-based priority slide
+                matrix = synthesis.priority_matrix if synthesis.priority_matrix else {}
+                urgent = matrix.get("high_impact_urgent", [])
+                strategic = matrix.get("high_impact_strategic", [])
+                monitor = matrix.get("monitor", [])
+                
+                priority_content = "🔴 **High Impact - Urgent Action**\n"
+                priority_content += "\n".join(f"• {item}" for item in urgent) if urgent else "• None identified"
+                priority_content += "\n\n🟡 **High Impact - Strategic Planning**\n"
+                priority_content += "\n".join(f"• {item}" for item in strategic) if strategic else "• None identified"
+                priority_content += "\n\n🟢 **Monitor & Evaluate**\n"
+                priority_content += "\n".join(f"• {item}" for item in monitor) if monitor else "• None identified"
+                
+                self._add_smart_content_slide(
+                    prs,
+                    title="Strategic Priorities",
+                    content=priority_content,
+                    max_chars=1500
+                )
+            
+            # ===== 5. PER-CARD DEEP DIVES =====
+            for i, brief in enumerate(briefs, 1):
+                # Generate score chart for this card if scores exist
+                card_chart_path = None
+                has_scores = (
+                    (brief.impact_score and brief.impact_score > 0) or
+                    (brief.relevance_score and brief.relevance_score > 0) or
+                    (brief.velocity_score and brief.velocity_score > 0)
+                )
+                
+                if has_scores:
+                    # Create a simple CardExportData-like object for chart generation
+                    scores = {
+                        'Impact': brief.impact_score or 0,
+                        'Relevance': brief.relevance_score or 0,
+                        'Velocity': brief.velocity_score or 0,
+                    }
+                    # Filter out zeros
+                    valid_scores = {k: v for k, v in scores.items() if v > 0}
+                    if valid_scores:
+                        card_chart_path = self._generate_radar_chart(
+                            valid_scores,
+                            brief.card_name,
+                            CHART_DPI
+                        )
+                        if card_chart_path:
+                            temp_files_to_cleanup.append(card_chart_path)
+                
+                self._add_card_deep_dive_slides(prs, brief, i, card_chart_path)
+            
+            # ===== 6. CROSS-CUTTING THEMES =====
+            themes_content = "**Common Patterns Across Trends**\n"
+            themes_content += "\n".join(f"• {theme}" for theme in (synthesis.key_themes or [])) or "• Analysis in progress"
+            themes_content += "\n\n**Strategic Connections**\n"
+            themes_content += "\n".join(f"• {insight}" for insight in (synthesis.cross_cutting_insights or [])) or "• Analysis in progress"
             
             self._add_smart_content_slide(
                 prs,
-                title=f"{i}. {brief.card_name}",
-                content=card_content,
-                max_chars=1000
+                title="Cross-Cutting Themes",
+                content=themes_content,
+                max_chars=1400
             )
-        
-        # 5. Cross-Cutting Themes
-        themes_content = "**Common Patterns**\n"
-        themes_content += "\n".join(f"• {theme}" for theme in (synthesis.key_themes or [])) or "• Analysis in progress"
-        themes_content += "\n\n**Strategic Connections**\n"
-        themes_content += "\n".join(f"• {insight}" for insight in (synthesis.cross_cutting_insights or [])) or "• Analysis in progress"
-        
-        self._add_smart_content_slide(
-            prs,
-            title="Cross-Cutting Themes",
-            content=themes_content,
-            max_chars=1200
-        )
-        
-        # 6. Recommended Actions
-        actions_content = ""
-        for action in (synthesis.recommended_actions or [])[:5]:
-            action_text = action.get("action", "")
-            owner = action.get("owner", "TBD")
-            timeline = action.get("timeline", "TBD")
-            actions_content += f"**{action_text}**\n  Owner: {owner} | Timeline: {timeline}\n\n"
-        
-        if not actions_content:
-            actions_content = "Recommended actions to be determined based on leadership review."
-        
-        self._add_smart_content_slide(
-            prs,
-            title="Recommended Next Steps",
-            content=actions_content,
-            max_chars=1200
-        )
-        
-        # 7. AI Disclosure
-        self._add_ai_disclosure_slide(prs)
-        
-        # Save to temp file
-        temp_file = tempfile.NamedTemporaryFile(
-            suffix='.pptx',
-            delete=False,
-            prefix='foresight_portfolio_local_'
-        )
-        prs.save(temp_file.name)
-        temp_file.close()
-        
-        logger.info(f"Generated local portfolio PPTX: {len(briefs)} cards")
-        return temp_file.name
+            
+            # ===== 7. RECOMMENDED ACTIONS =====
+            actions_content = ""
+            for action in (synthesis.recommended_actions or [])[:6]:
+                action_text = action.get("action", "")
+                owner = action.get("owner", "TBD")
+                timeline = action.get("timeline", "TBD")
+                related_cards = action.get("cards", [])
+                
+                actions_content += f"✓ **{action_text}**\n"
+                actions_content += f"   Owner: {owner} | Timeline: {timeline}"
+                if related_cards:
+                    actions_content += f" | Related: {', '.join(related_cards[:2])}"
+                actions_content += "\n\n"
+            
+            if not actions_content:
+                actions_content = "Recommended actions to be determined based on leadership review."
+            
+            self._add_smart_content_slide(
+                prs,
+                title="Recommended Next Steps",
+                content=actions_content,
+                max_chars=1400
+            )
+            
+            # ===== 8. AI DISCLOSURE =====
+            self._add_ai_disclosure_slide(prs)
+            
+            # Save to temp file
+            temp_file = tempfile.NamedTemporaryFile(
+                suffix='.pptx',
+                delete=False,
+                prefix='foresight_portfolio_local_'
+            )
+            prs.save(temp_file.name)
+            temp_file.close()
+            
+            logger.info(f"Generated enhanced local portfolio PPTX: {len(briefs)} cards, {len(prs.slides)} slides")
+            return temp_file.name
+            
+        finally:
+            # Clean up temp chart files
+            self.cleanup_temp_files(temp_files_to_cleanup)
 
     async def generate_portfolio_pdf(
         self,
