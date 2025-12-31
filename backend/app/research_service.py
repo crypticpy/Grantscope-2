@@ -1066,12 +1066,14 @@ class ResearchService:
         # Step 7: Generate COMPREHENSIVE strategic intelligence report
         comprehensive_report = None
         try:
-            # Collect source analyses for report generation
+            # Collect source analyses for report generation (including URLs for citations)
             source_analyses = []
             for p in processed:
                 if p.analysis:
                     source_analyses.append({
                         "title": p.raw.title,
+                        "url": p.raw.url,  # Include URL for source citations
+                        "source_name": p.raw.source_name,  # Include publication/source name
                         "summary": p.analysis.summary,
                         "key_excerpts": p.analysis.key_excerpts,
                         "relevance": p.analysis.relevance

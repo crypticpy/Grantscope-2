@@ -437,9 +437,6 @@ Create a COMPREHENSIVE strategic intelligence report with the following sections
 - Signals to watch for
 - Potential disruptions or game-changers
 
-## SOURCES & METHODOLOGY
-(Brief summary of research sources and approach)
-
 ---
 
 Important guidelines:
@@ -449,6 +446,8 @@ Important guidelines:
 - Note UNCERTAINTIES and knowledge gaps
 - Keep the report between 1500-2500 words
 - Use markdown formatting for readability
+- When citing findings from the analyzed sources, reference them by their title in the text
+- DO NOT include a Sources & Methodology section - this will be appended automatically
 """
 
 ENTITY_EXTRACTION_PROMPT = """Extract key entities from this research content for building a knowledge graph.
@@ -889,10 +888,22 @@ Respond with JSON:
         Returns:
             Comprehensive markdown-formatted strategic report
         """
-        # Format source insights
+        # Format source insights with URLs for citation
         source_insights = ""
         for i, src in enumerate(source_analyses[:10], 1):
-            source_insights += f"\n{i}. **{src.get('title', 'Untitled')[:80]}**\n"
+            title = src.get('title', 'Untitled')[:80]
+            url = src.get('url', '')
+            source_name = src.get('source_name', '')
+            
+            # Format title as clickable link if URL available
+            if url:
+                source_insights += f"\n{i}. **[{title}]({url})**"
+            else:
+                source_insights += f"\n{i}. **{title}**"
+            
+            if source_name:
+                source_insights += f" *({source_name})*"
+            source_insights += "\n"
             source_insights += f"   Summary: {src.get('summary', 'No summary')[:300]}\n"
             if src.get('key_excerpts'):
                 source_insights += f"   Key insight: {src.get('key_excerpts', [''])[0][:200]}\n"
@@ -934,7 +945,10 @@ Respond with JSON:
 
         report = response.choices[0].message.content
 
-        # Add metadata header
+        # Build formatted sources section with clickable links
+        sources_section = self._build_sources_section(source_analyses)
+
+        # Add metadata header and append sources section
         report_with_header = f"""# Deep Research Report: {card_name}
 
 **Generated:** {__import__('datetime').datetime.now().strftime('%B %d, %Y at %I:%M %p')}
@@ -944,7 +958,75 @@ Respond with JSON:
 ---
 
 {report}
+
+---
+
+{sources_section}
 """
 
         logger.info(f"Generated comprehensive report ({len(report_with_header)} chars) for: {card_name}")
         return report_with_header
+
+    def _build_sources_section(self, source_analyses: List[Dict[str, Any]]) -> str:
+        """
+        Build a formatted sources section with clickable links.
+        
+        Args:
+            source_analyses: List of source analysis dicts with url, title, source_name
+            
+        Returns:
+            Markdown-formatted sources section
+        """
+        if not source_analyses:
+            return "## Sources Cited\n\nNo sources available."
+        
+        # Deduplicate sources by URL
+        seen_urls = set()
+        unique_sources = []
+        for src in source_analyses:
+            url = src.get('url', '')
+            if url and url not in seen_urls:
+                seen_urls.add(url)
+                unique_sources.append(src)
+            elif not url:
+                # Include sources without URLs but mark them
+                unique_sources.append(src)
+        
+        # Build the section
+        lines = ["## Sources Cited", ""]
+        
+        for i, src in enumerate(unique_sources, 1):
+            title = src.get('title', 'Untitled')
+            url = src.get('url', '')
+            source_name = src.get('source_name', '')
+            
+            # Clean up title (remove excessive length, normalize whitespace)
+            title = ' '.join(title.split())[:100]
+            
+            # Format as numbered list with clickable links
+            if url:
+                # Validate URL format (basic check)
+                if url.startswith(('http://', 'https://')):
+                    entry = f"{i}. [{title}]({url})"
+                else:
+                    entry = f"{i}. {title} ({url})"
+            else:
+                entry = f"{i}. {title}"
+            
+            # Add source/publication name if available
+            if source_name:
+                entry += f" — *{source_name}*"
+            
+            lines.append(entry)
+        
+        # Add methodology note
+        lines.extend([
+            "",
+            "---",
+            "",
+            "**Research Methodology:** This report was generated using GPT Researcher with Firecrawl for source discovery, "
+            "supplemented by Exa AI for additional high-quality sources. Sources were filtered for relevance to municipal "
+            "government applications and analyzed using AI-powered classification and summarization."
+        ])
+        
+        return "\n".join(lines)
