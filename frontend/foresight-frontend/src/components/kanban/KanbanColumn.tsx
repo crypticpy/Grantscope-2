@@ -195,6 +195,7 @@ export const KanbanColumn = memo(function KanbanColumn({
 
   return (
     <div
+      ref={setNodeRef}
       className={cn(
         // Base column styles
         'flex flex-col',
@@ -203,7 +204,9 @@ export const KanbanColumn = memo(function KanbanColumn({
         'rounded-xl',
         'border border-gray-200 dark:border-gray-800',
         // Transition for hover/over states
-        'transition-all duration-200'
+        'transition-all duration-200',
+        // Drop target highlight - applied to entire column
+        isOver && 'ring-2 ring-brand-blue/50 border-brand-blue/50'
       )}
     >
       {/* Column Header */}
@@ -274,14 +277,11 @@ export const KanbanColumn = memo(function KanbanColumn({
         </p>
       </div>
 
-      {/* Card List - Droppable Area */}
+      {/* Card List - Scrollable Area */}
       <div
-        ref={setNodeRef}
         className={cn(
           'flex-1 p-3 overflow-y-auto',
           'min-h-32 max-h-[calc(100vh-280px)]',
-          // Drop target highlight
-          isOver && 'ring-2 ring-inset ring-brand-blue/50 bg-brand-blue/5',
           'transition-all duration-150'
         )}
       >

@@ -27,7 +27,7 @@ const WorkstreamKanban = lazy(() => import('./pages/WorkstreamKanban'));
 
 // Standalone pages
 const Settings = lazy(() => import('./pages/Settings'));
-const Analytics = lazy(() => import('./pages/Analytics'));
+const Analytics = lazy(() => import('./pages/AnalyticsV2'));
 
 // Supabase configuration
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
