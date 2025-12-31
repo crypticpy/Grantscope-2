@@ -219,7 +219,8 @@ class GammaService:
                         status=GammaStatus.FAILED
                     )
                 
-                if response.status_code != 200:
+                # Gamma returns 201 Created for successful generation start
+                if response.status_code not in (200, 201):
                     error_data = response.json() if response.text else {}
                     return GammaGenerationResult(
                         success=False,
@@ -291,14 +292,9 @@ class GammaService:
                         logger.info(f"Gamma generation completed: {generation_id}")
                         
                         # Extract file URLs if available
-                        pptx_url = None
-                        pdf_url = None
-                        
-                        # Check for export URLs in response
-                        if "pptxUrl" in data:
-                            pptx_url = data["pptxUrl"]
-                        if "pdfUrl" in data:
-                            pdf_url = data["pdfUrl"]
+                        # Gamma returns exportUrl for the PPTX file
+                        pptx_url = data.get("exportUrl") or data.get("pptxUrl")
+                        pdf_url = data.get("pdfUrl")
                         
                         credits_info = data.get("credits", {})
                         
