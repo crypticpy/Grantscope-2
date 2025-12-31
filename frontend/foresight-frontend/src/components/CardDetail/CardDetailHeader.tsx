@@ -78,17 +78,12 @@ export const CardDetailHeader: React.FC<CardDetailHeaderProps> = ({
         {backLinkText}
       </Link>
 
-      {/* Hero Section Container */}
-      <div className="bg-gradient-to-br from-gray-50 to-white dark:from-gray-800/60 dark:to-gray-900/40 rounded-xl border border-gray-200/80 dark:border-gray-700/60 p-6 sm:p-8 mb-6">
-        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
+      {/* Hero Section Container - optimized for quick scanning */}
+      <div className="bg-gradient-to-br from-gray-50 via-white to-gray-50/50 dark:from-gray-800/70 dark:via-gray-800/50 dark:to-gray-900/40 rounded-2xl border border-gray-200 dark:border-gray-700/70 shadow-sm p-5 sm:p-6 lg:p-8 mb-6">
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5 lg:gap-8">
           <div className="flex-1 min-w-0">
-            {/* Title */}
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white break-words mb-4 leading-tight">
-              {card.name}
-            </h1>
-
-            {/* Primary Classification Badges */}
-            <div className="flex items-center gap-2 sm:gap-3 flex-wrap mb-5">
+            {/* Primary Classification Badges - TOP for quick scanning */}
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap mb-4">
               <PillarBadge
                 pillarId={card.pillar_id}
                 goalId={card.goal_id}
@@ -109,13 +104,18 @@ export const CardDetailHeader: React.FC<CardDetailHeaderProps> = ({
               )}
             </div>
 
-            {/* Summary */}
-            <p className="text-base sm:text-lg lg:text-xl text-gray-700 dark:text-gray-200 mb-6 break-words leading-relaxed max-w-4xl">
+            {/* Title - prominent for quick identification */}
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white break-words mb-4 leading-tight tracking-tight">
+              {card.name}
+            </h1>
+
+            {/* Summary - the "elevator pitch" */}
+            <p className="text-base sm:text-lg lg:text-xl text-gray-700 dark:text-gray-200 mb-5 break-words leading-relaxed max-w-4xl">
               {card.summary}
             </p>
 
-            {/* Quick Info Row - Stage, Anchor, Created Date */}
-            <div className="flex items-center flex-wrap gap-3 sm:gap-4">
+            {/* Secondary Info Row - Stage, Anchor, Created Date */}
+            <div className="flex items-center flex-wrap gap-3 sm:gap-4 pt-3 border-t border-gray-200/60 dark:border-gray-700/50">
               {stageNumber && (
                 <StageBadge
                   stage={stageNumber}
@@ -131,7 +131,7 @@ export const CardDetailHeader: React.FC<CardDetailHeaderProps> = ({
                   abbreviated
                 />
               )}
-              <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
+              <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
                 Created: {new Date(card.created_at).toLocaleDateString()}
               </span>
             </div>
@@ -139,7 +139,7 @@ export const CardDetailHeader: React.FC<CardDetailHeaderProps> = ({
 
           {/* Action Buttons Area - receives children (e.g., CardActionButtons) */}
           {children && (
-            <div className="flex items-center gap-2 sm:gap-3 overflow-x-auto pb-2 lg:pb-0 lg:overflow-visible lg:flex-wrap lg:justify-end -mx-4 px-4 sm:mx-0 sm:px-0 lg:pt-1">
+            <div className="flex items-center gap-2 sm:gap-3 overflow-x-auto pb-2 lg:pb-0 lg:overflow-visible lg:flex-wrap lg:justify-end -mx-4 px-4 sm:mx-0 sm:px-0 lg:pt-0 lg:shrink-0">
               {children}
             </div>
           )}
