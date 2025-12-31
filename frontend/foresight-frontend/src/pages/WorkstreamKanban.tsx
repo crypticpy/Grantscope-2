@@ -49,13 +49,14 @@ import {
   useBriefGeneration,
 } from '../components/kanban/actions';
 import { BriefPreviewModal } from '../components/kanban/BriefPreviewModal';
+import { ExportProgressModal } from '../components/ExportProgressModal';
+import { useExportWithProgress } from '../hooks/useExportWithProgress';
 import {
   fetchWorkstreamCards,
   updateWorkstreamCard,
   removeCardFromWorkstream,
   triggerDeepDive,
   autoPopulateWorkstream,
-  exportBrief,
   fetchResearchStatus,
   type WorkstreamResearchStatus,
 } from '../lib/workstream-api';
@@ -465,6 +466,15 @@ const WorkstreamKanban: React.FC = () => {
     },
     onError: (_, error) => showToast('error', `Brief generation failed: ${error.message}`),
   });
+
+  // Export with progress modal hook
+  const {
+    state: exportState,
+    exportBrief: exportBriefWithProgress,
+    closeModal: closeExportModal,
+    retryExport,
+    downloadExport,
+  } = useExportWithProgress(getAuthToken);
 
   // ============================================================================
   // Data Loading
@@ -990,55 +1000,48 @@ const WorkstreamKanban: React.FC = () => {
 
   /**
    * Handle export from brief modal.
-   * Exports the executive brief content (not the original card) as PDF or PowerPoint.
+   * Uses progress modal for PPTX (Gamma-powered), direct download for PDF.
    */
   const handleBriefExport = useCallback(
     async (format: 'pdf' | 'pptx') => {
       if (briefModalCard && id) {
-        try {
-          const token = await getAuthToken();
-          if (!token) {
-            showToast('error', 'Authentication required');
-            return;
-          }
-          await exportBrief(token, id, briefModalCard.card.id, format);
-          showToast('success', `Brief exported as ${format.toUpperCase()}`);
-        } catch (error) {
-          console.error('Brief export failed:', error);
-          showToast(
-            'error',
-            error instanceof Error ? error.message : 'Failed to export brief'
-          );
-        }
+        // Get card name for the progress modal
+        const cardName = briefModalCard.card.name || 'Executive Brief';
+        
+        // Use progress modal for exports (especially PPTX which uses Gamma)
+        await exportBriefWithProgress(
+          id,
+          briefModalCard.card.id,
+          format,
+          cardName
+        );
       }
     },
-    [briefModalCard, id, getAuthToken, showToast]
+    [briefModalCard, id, exportBriefWithProgress]
   );
 
   /**
    * Handle brief export from card actions menu in Brief column.
-   * Exports the executive brief content (not the original card) as PDF or PowerPoint.
+   * Uses progress modal for PPTX (Gamma-powered), direct download for PDF.
    */
   const handleBriefExportFromCard = useCallback(
     async (cardId: string, format: 'pdf' | 'pptx') => {
       if (!id) return;
-      try {
-        const token = await getAuthToken();
-        if (!token) {
-          showToast('error', 'Authentication required');
-          return;
+      
+      // Find the card to get its name
+      let cardName = 'Executive Brief';
+      for (const columnCards of Object.values(cards)) {
+        const card = columnCards.find((c) => c.card.id === cardId);
+        if (card) {
+          cardName = card.card.name || cardName;
+          break;
         }
-        await exportBrief(token, id, cardId, format);
-        showToast('success', `Brief exported as ${format.toUpperCase()}`);
-      } catch (error) {
-        console.error('Brief export failed:', error);
-        showToast(
-          'error',
-          error instanceof Error ? error.message : 'Failed to export brief'
-        );
       }
+      
+      // Use progress modal for exports
+      await exportBriefWithProgress(id, cardId, format, cardName);
     },
-    [id, getAuthToken, showToast]
+    [id, cards, exportBriefWithProgress]
   );
 
   /**
@@ -1684,6 +1687,24 @@ const WorkstreamKanban: React.FC = () => {
               ? () => triggerBriefGeneration(briefModalCard.card.id)
               : undefined
           }
+        />
+
+        {/* Export Progress Modal */}
+        <ExportProgressModal
+          isOpen={exportState.showModal}
+          onClose={closeExportModal}
+          status={exportState.status}
+          format={exportState.format || 'pptx'}
+          progress={exportState.progress}
+          statusMessage={exportState.statusMessage}
+          errorMessage={exportState.errorMessage}
+          downloadUrl={exportState.downloadUrl || undefined}
+          filename={exportState.filename || undefined}
+          onDownload={downloadExport}
+          onRetry={retryExport}
+          itemName={exportState.itemName || undefined}
+          isGammaPowered={exportState.isGammaPowered}
+          estimatedTimeSeconds={exportState.estimatedTimeSeconds}
         />
 
         {/* Toast Notifications */}

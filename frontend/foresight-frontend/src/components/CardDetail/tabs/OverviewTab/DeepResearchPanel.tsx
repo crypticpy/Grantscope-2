@@ -7,7 +7,7 @@
  * @module CardDetail/tabs/OverviewTab/DeepResearchPanel
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   Search,
   FileText,

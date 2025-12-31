@@ -172,7 +172,7 @@ function formatFileSize(bytes?: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function getRelativeTime(dateString: string): string {
+function _getRelativeTime(dateString: string): string {
   try {
     const date = new Date(dateString);
     const now = new Date();
@@ -333,13 +333,13 @@ const AssetCard: React.FC<AssetCardProps> = ({
 // =============================================================================
 
 export const AssetsTab: React.FC<AssetsTabProps> = ({
-  cardId,
-  workstreamId,
+  cardId: _cardId,
+  workstreamId: _workstreamId,
   assets,
   isLoading = false,
   error = null,
   onDownload,
-  onRegenerate,
+  onRegenerate: _onRegenerate,
   onViewDetails,
   onRefresh,
 }) => {
