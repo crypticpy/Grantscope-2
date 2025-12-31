@@ -980,6 +980,11 @@ Respond with JSON:
         if not source_analyses:
             return "## Sources Cited\n\nNo sources available."
         
+        # Log source data for debugging
+        logger.info(f"Building sources section from {len(source_analyses)} sources")
+        for i, src in enumerate(source_analyses[:3]):
+            logger.debug(f"Source {i}: title={src.get('title', 'N/A')[:50]}, url={src.get('url', 'N/A')[:50] if src.get('url') else 'None'}")
+        
         # Deduplicate sources by URL
         seen_urls = set()
         unique_sources = []
@@ -996,20 +1001,22 @@ Respond with JSON:
         lines = ["## Sources Cited", ""]
         
         for i, src in enumerate(unique_sources, 1):
-            title = src.get('title', 'Untitled')
-            url = src.get('url', '')
-            source_name = src.get('source_name', '')
+            title = src.get('title') or 'Untitled Source'
+            url = src.get('url') or ''
+            source_name = src.get('source_name') or ''
             
             # Clean up title (remove excessive length, normalize whitespace)
-            title = ' '.join(title.split())[:100]
+            title = ' '.join(str(title).split())[:100] or 'Untitled Source'
+            
+            # Skip completely empty entries
+            if not title and not url:
+                continue
             
             # Format as numbered list with clickable links
-            if url:
-                # Validate URL format (basic check)
-                if url.startswith(('http://', 'https://')):
-                    entry = f"{i}. [{title}]({url})"
-                else:
-                    entry = f"{i}. {title} ({url})"
+            if url and url.startswith(('http://', 'https://')):
+                entry = f"{i}. [{title}]({url})"
+            elif url:
+                entry = f"{i}. {title} ({url})"
             else:
                 entry = f"{i}. {title}"
             
