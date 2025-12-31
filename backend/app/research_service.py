@@ -337,9 +337,32 @@ class ResearchService:
             url = src.get("url", "")
             if url and url not in seen_urls:
                 seen_urls.add(url)
+                
+                # Extract title - GPT Researcher may return empty title for PDFs
+                raw_title = src.get("title", "") or ""
+                
+                # If title is empty or just whitespace, try to extract from URL or content
+                if not raw_title.strip():
+                    # Check if it's a PDF and try to get title from metadata or filename
+                    if url.lower().endswith('.pdf'):
+                        # Extract filename from URL as fallback title
+                        from urllib.parse import urlparse, unquote
+                        path = urlparse(url).path
+                        filename = unquote(path.split('/')[-1])
+                        # Remove .pdf extension and clean up
+                        raw_title = filename.replace('.pdf', '').replace('_', ' ').replace('-', ' ').strip()
+                        logger.debug(f"PDF title extracted from URL: {raw_title}")
+                    
+                    # If still empty, use "Untitled"
+                    if not raw_title.strip():
+                        raw_title = "Untitled"
+                
+                # Log source data for debugging
+                logger.debug(f"Source from GPT Researcher: url={url[:80]}, title={raw_title[:50] if raw_title else 'EMPTY'}, keys={list(src.keys())}")
+                
                 sources.append(RawSource(
                     url=url,
-                    title=src.get("title", "Untitled"),
+                    title=raw_title,
                     content=src.get("content", "") or "",
                     source_name=src.get("source", "") or src.get("domain", ""),
                     relevance=src.get("relevance", src.get("score", 0.7))
@@ -446,18 +469,40 @@ class ResearchService:
                     formats=['markdown']
                 )
 
-                # Extract markdown content from result
+                # Extract markdown content and metadata from result
                 markdown_content = None
+                scraped_title = None
                 if result:
                     if isinstance(result, dict):
                         markdown_content = result.get('markdown') or result.get('content')
+                        # Try to get title from Firecrawl metadata
+                        metadata = result.get('metadata', {})
+                        scraped_title = metadata.get('title') or metadata.get('og:title') or result.get('title')
                     elif hasattr(result, 'markdown'):
                         markdown_content = result.markdown
+                        # Try to get title from object attributes
+                        if hasattr(result, 'metadata') and result.metadata:
+                            scraped_title = getattr(result.metadata, 'title', None) or getattr(result.metadata, 'og:title', None)
+                        elif hasattr(result, 'title'):
+                            scraped_title = result.title
 
                 if markdown_content:
                     source.content = markdown_content[:10000]  # Limit size
                     backfilled_count += 1
                     logger.debug(f"Backfilled content for: {source.url[:50]}...")
+                    
+                # Update title if we got a better one from Firecrawl and current title is generic
+                if scraped_title and scraped_title.strip():
+                    current_title = source.title or ""
+                    is_generic_title = (
+                        not current_title.strip() or 
+                        current_title == "Untitled" or 
+                        current_title.lower() == source.url.lower() or
+                        len(current_title) < 5
+                    )
+                    if is_generic_title:
+                        source.title = scraped_title.strip()[:500]
+                        logger.debug(f"Updated title from Firecrawl: {source.title[:50]}...")
 
             except Exception as e:
                 logger.warning(f"Firecrawl failed for {source.url}: {e}")
