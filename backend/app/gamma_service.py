@@ -82,15 +82,90 @@ COA_COLORS = {
     "black": "#000000",
 }
 
-# Classification data for slide context
+# Classification data for slide context (matches database pillars table)
 PILLAR_NAMES = {
-    "CH": "Community Health & Sustainability",
-    "EW": "Economic & Workforce Development",
-    "HG": "High-Performing Government",
-    "HH": "Homelessness & Housing",
-    "MC": "Mobility & Critical Infrastructure",
-    "PS": "Public Safety",
+    "CH": "Community Health",
+    "MC": "Mobility & Connectivity",
+    "HS": "Housing & Economic Stability",
+    "EC": "Economic Development",
     "ES": "Environmental Sustainability",
+    "CE": "Cultural & Entertainment",
+}
+
+# Extended pillar definitions for backup slides
+PILLAR_DEFINITIONS = {
+    "CH": {
+        "name": "Community Health",
+        "icon": "🏥",
+        "description": "Promoting physical, mental, and social well-being for all Austinites",
+        "focus_areas": [
+            "Health equity and access to services",
+            "Preventive health and early intervention",
+            "Mental health resources and support",
+            "Healthy environments for physical activity",
+            "Public health emergency preparedness"
+        ]
+    },
+    "MC": {
+        "name": "Mobility & Connectivity",
+        "icon": "🚇",
+        "description": "Ensuring accessible, sustainable, and efficient transportation options",
+        "focus_areas": [
+            "Public transit accessibility",
+            "Bike lanes and pedestrian infrastructure",
+            "Traffic management and congestion reduction",
+            "Smart transportation technology",
+            "Regional connectivity"
+        ]
+    },
+    "HS": {
+        "name": "Housing & Economic Stability",
+        "icon": "🏠",
+        "description": "Creating affordable housing and economic opportunities for residents",
+        "focus_areas": [
+            "Affordable housing supply",
+            "Housing quality and safety",
+            "Economic mobility pathways",
+            "Homelessness prevention and solutions",
+            "Workforce housing"
+        ]
+    },
+    "EC": {
+        "name": "Economic Development",
+        "icon": "📈",
+        "description": "Fostering innovation, entrepreneurship, and business growth",
+        "focus_areas": [
+            "Local business development and retention",
+            "Technology innovation ecosystem",
+            "Workforce development programs",
+            "Economic resilience planning",
+            "Small business support"
+        ]
+    },
+    "ES": {
+        "name": "Environmental Sustainability",
+        "icon": "🌱",
+        "description": "Protecting and enhancing Austin's natural environment",
+        "focus_areas": [
+            "Climate action and emissions reduction",
+            "Water and energy conservation",
+            "Green infrastructure development",
+            "Natural resource protection",
+            "Sustainable development practices"
+        ]
+    },
+    "CE": {
+        "name": "Cultural & Entertainment",
+        "icon": "🎭",
+        "description": "Preserving Austin's unique culture and creative economy",
+        "focus_areas": [
+            "Arts and cultural programming",
+            "Creative industry support",
+            "Historic preservation",
+            "Live music and entertainment venues",
+            "Cultural diversity celebration"
+        ]
+    },
 }
 
 HORIZON_NAMES = {
@@ -99,15 +174,150 @@ HORIZON_NAMES = {
     "H3": "Transformative (7-15+ years)",
 }
 
+# Extended horizon definitions for backup slides
+HORIZON_DEFINITIONS = {
+    "H1": {
+        "name": "Mainstream",
+        "timeframe": "0-3 years",
+        "icon": "🎯",
+        "description": "Technologies and trends ready for near-term implementation",
+        "characteristics": [
+            "Proven technology with established vendors",
+            "Clear implementation pathways",
+            "Measurable ROI within budget cycles",
+            "Low technical risk",
+            "Existing municipal precedents"
+        ]
+    },
+    "H2": {
+        "name": "Transitional",
+        "timeframe": "3-7 years",
+        "icon": "🔄",
+        "description": "Emerging opportunities requiring strategic positioning and pilots",
+        "characteristics": [
+            "Technology maturing but not yet mainstream",
+            "Pilot programs proving viability",
+            "Requires strategic investment decisions",
+            "Moderate technical risk",
+            "Early adopter municipalities seeing results"
+        ]
+    },
+    "H3": {
+        "name": "Transformative",
+        "timeframe": "7-15+ years",
+        "icon": "🚀",
+        "description": "Long-term trends requiring monitoring and scenario planning",
+        "characteristics": [
+            "Early-stage or experimental technology",
+            "Significant uncertainty in timeline",
+            "Potential for major disruption",
+            "High technical risk",
+            "Requires ongoing monitoring"
+        ]
+    },
+}
+
 STAGE_NAMES = {
     1: "Concept",
-    2: "Emerging",
-    3: "Prototype",
-    4: "Pilot",
-    5: "Municipal Pilot",
-    6: "Early Adoption",
-    7: "Mainstream",
-    8: "Mature",
+    2: "Exploring",
+    3: "Pilot",
+    4: "Proof of Concept",
+    5: "Implementing",
+    6: "Scaling",
+    7: "Mature",
+    8: "Declining",
+}
+
+# Extended stage definitions for backup slides
+STAGE_DEFINITIONS = {
+    1: {
+        "name": "Concept",
+        "icon": "💡",
+        "description": "Early idea or observation with minimal evidence",
+        "indicators": [
+            "Academic research or theoretical papers",
+            "Initial proof of concept in labs",
+            "No commercial products available",
+            "High uncertainty about viability"
+        ]
+    },
+    2: {
+        "name": "Exploring",
+        "icon": "🔍",
+        "description": "Initial research and experimentation phase",
+        "indicators": [
+            "Startups and research institutions active",
+            "Early patents being filed",
+            "Venture capital showing interest",
+            "Small-scale experiments underway"
+        ]
+    },
+    3: {
+        "name": "Pilot",
+        "icon": "🧪",
+        "description": "Small-scale testing and validation",
+        "indicators": [
+            "Pilot programs in limited settings",
+            "Early performance data available",
+            "Technical feasibility demonstrated",
+            "Identifying implementation challenges"
+        ]
+    },
+    4: {
+        "name": "Proof of Concept",
+        "icon": "✅",
+        "description": "Demonstrated viability with supporting evidence",
+        "indicators": [
+            "Successful pilots with measurable outcomes",
+            "Multiple municipalities testing",
+            "Vendor ecosystem developing",
+            "Business case becoming clear"
+        ]
+    },
+    5: {
+        "name": "Implementing",
+        "icon": "🏗️",
+        "description": "Full-scale deployment underway",
+        "indicators": [
+            "Active implementation projects",
+            "Established vendor relationships",
+            "Documented best practices emerging",
+            "Budget allocations secured"
+        ]
+    },
+    6: {
+        "name": "Scaling",
+        "icon": "📊",
+        "description": "Expanding reach and impact",
+        "indicators": [
+            "Widespread adoption beginning",
+            "Economies of scale realized",
+            "Integration with existing systems",
+            "Proven return on investment"
+        ]
+    },
+    7: {
+        "name": "Mature",
+        "icon": "🏆",
+        "description": "Established and widely adopted",
+        "indicators": [
+            "Industry standard practice",
+            "Commodity pricing available",
+            "Well-understood implementation",
+            "Focus shifts to optimization"
+        ]
+    },
+    8: {
+        "name": "Declining",
+        "icon": "📉",
+        "description": "Losing relevance or being replaced",
+        "indicators": [
+            "Newer alternatives emerging",
+            "Decreasing vendor support",
+            "Migration planning needed",
+            "Legacy system considerations"
+        ]
+    },
 }
 
 
@@ -438,7 +648,11 @@ class GammaService:
         Transform executive brief content into Gamma-optimized input.
         
         Creates structured content with section breaks (\n---\n) for
-        optimal slide generation.
+        optimal slide generation. Includes:
+        - Title slide with visual tag badges
+        - Content slides
+        - AI disclosure slide
+        - Backup/appendix slides explaining each classification tag
         
         Args:
             title: Presentation title
@@ -451,27 +665,42 @@ class GammaService:
         """
         sections = []
         
-        # Slide 1: Title slide
+        # Track which tags are used for backup slides
+        used_pillar = None
+        used_horizon = None
+        used_stage = None
+        
+        # Slide 1: Title slide with visual tag badges
         title_section = f"# {title}\n"
         if classification:
-            tags = []
+            tag_lines = []
             if classification.get("pillar"):
                 pillar = classification["pillar"].upper()
-                pillar_name = PILLAR_NAMES.get(pillar, pillar)
-                tags.append(f"Strategic Pillar: {pillar_name}")
+                pillar_def = PILLAR_DEFINITIONS.get(pillar, {})
+                pillar_name = pillar_def.get("name", PILLAR_NAMES.get(pillar, pillar))
+                pillar_icon = pillar_def.get("icon", "🏛️")
+                tag_lines.append(f"{pillar_icon} **{pillar_name}**")
+                used_pillar = pillar
             if classification.get("horizon"):
                 horizon = classification["horizon"].upper()
-                horizon_name = HORIZON_NAMES.get(horizon, horizon)
-                tags.append(f"Planning Horizon: {horizon_name}")
+                horizon_def = HORIZON_DEFINITIONS.get(horizon, {})
+                horizon_name = horizon_def.get("name", horizon)
+                horizon_icon = horizon_def.get("icon", "📅")
+                tag_lines.append(f"{horizon_icon} **{horizon_name}**")
+                used_horizon = horizon
             if classification.get("stage"):
                 stage_raw = classification["stage"]
                 stage_match = re.search(r'(\d+)', str(stage_raw))
                 if stage_match:
                     stage_num = int(stage_match.group(1))
-                    stage_name = STAGE_NAMES.get(stage_num, f"Stage {stage_num}")
-                    tags.append(f"Maturity Stage: {stage_num} - {stage_name}")
-            if tags:
-                title_section += "\n".join(tags)
+                    stage_def = STAGE_DEFINITIONS.get(stage_num, {})
+                    stage_name = stage_def.get("name", STAGE_NAMES.get(stage_num, f"Stage {stage_num}"))
+                    stage_icon = stage_def.get("icon", "📊")
+                    tag_lines.append(f"{stage_icon} **Maturity Stage {stage_num}: {stage_name}**")
+                    used_stage = stage_num
+            if tag_lines:
+                # Format tags as a visual row with separators
+                title_section += "\n\n" + "  |  ".join(tag_lines)
         title_section += f"\n\nCity of Austin Strategic Intelligence Brief"
         title_section += f"\n{datetime.now().strftime('%B %Y')}"
         sections.append(title_section)
@@ -494,7 +723,7 @@ class GammaService:
                 clean_content = clean_content[:997] + "..."
             sections.append(f"# {section_title}\n\n{clean_content}")
         
-        # Final slide: AI Disclosure
+        # AI Disclosure slide
         ai_disclosure = """# About This Report
 
 This strategic intelligence brief was generated using the FORESIGHT platform, 
@@ -508,6 +737,71 @@ powered by advanced AI technologies:
 The City of Austin is committed to transparent and responsible use of AI 
 technology in public service."""
         sections.append(ai_disclosure)
+        
+        # =========================================================================
+        # BACKUP/APPENDIX SLIDES - Explain each classification tag
+        # =========================================================================
+        
+        # Appendix header slide
+        appendix_header = """# Appendix: Classification Reference
+
+The following slides provide context for the strategic classification tags 
+used in this brief. These definitions help ensure consistent understanding 
+across City departments and leadership."""
+        sections.append(appendix_header)
+        
+        # Pillar backup slide
+        if used_pillar and used_pillar in PILLAR_DEFINITIONS:
+            pillar_def = PILLAR_DEFINITIONS[used_pillar]
+            pillar_slide = f"""# {pillar_def['icon']} Strategic Pillar: {pillar_def['name']}
+
+**Definition:** {pillar_def['description']}
+
+**Focus Areas:**
+"""
+            for area in pillar_def.get('focus_areas', []):
+                pillar_slide += f"- {area}\n"
+            
+            pillar_slide += f"""
+This pillar is one of six strategic focus areas guiding City of Austin 
+planning and investment decisions."""
+            sections.append(pillar_slide)
+        
+        # Horizon backup slide
+        if used_horizon and used_horizon in HORIZON_DEFINITIONS:
+            horizon_def = HORIZON_DEFINITIONS[used_horizon]
+            horizon_slide = f"""# {horizon_def['icon']} Planning Horizon: {horizon_def['name']}
+
+**Timeframe:** {horizon_def['timeframe']}
+
+**Definition:** {horizon_def['description']}
+
+**Characteristics:**
+"""
+            for char in horizon_def.get('characteristics', []):
+                horizon_slide += f"- {char}\n"
+            
+            horizon_slide += f"""
+The planning horizon indicates when this trend is expected to require 
+significant City attention or action."""
+            sections.append(horizon_slide)
+        
+        # Stage backup slide
+        if used_stage and used_stage in STAGE_DEFINITIONS:
+            stage_def = STAGE_DEFINITIONS[used_stage]
+            stage_slide = f"""# {stage_def['icon']} Maturity Stage {used_stage}: {stage_def['name']}
+
+**Definition:** {stage_def['description']}
+
+**Key Indicators:**
+"""
+            for indicator in stage_def.get('indicators', []):
+                stage_slide += f"- {indicator}\n"
+            
+            stage_slide += f"""
+The maturity stage reflects the current development status of this trend 
+and helps inform appropriate City response strategies."""
+            sections.append(stage_slide)
         
         # Join with Gamma's section break marker
         return "\n---\n".join(sections)
@@ -625,6 +919,16 @@ VISUAL DESIGN - USE OFFICIAL CITY OF AUSTIN BRAND COLORS:
 - Generous white space - avoid cluttered slides
 - Use large, readable fonts (minimum 24pt for body text)
 
+TITLE SLIDE CLASSIFICATION TAGS:
+- The title slide includes classification tags (Strategic Pillar, Planning Horizon, Maturity Stage)
+- Render these tags as polished visual badges or pill-shaped labels
+- Each tag should have its emoji/icon displayed prominently alongside the text
+- Use a consistent visual treatment: rounded rectangle backgrounds with subtle shadows
+- Tags should appear in a horizontal row, visually balanced
+- Use Light Blue (#dcf2fd) or Light Green (#dff0e3) as badge backgrounds
+- Tag text should be bold and clearly readable
+- These tags visually link to their corresponding backup/appendix slides
+
 IMAGERY & DATA VISUALIZATION:
 - Generate relevant, high-quality images that illustrate key concepts
 - For statistics or metrics, create clean charts using Logo Blue (#44499C) and Logo Green (#009F4D)
@@ -634,13 +938,24 @@ IMAGERY & DATA VISUALIZATION:
 - Avoid stock photo clichés - prefer conceptual or abstract visuals for technology topics
 - For comparison data, use Logo Green for positive/opportunity and Red (#F83125) for risks/concerns
 
+CHART AXIS LABELING (CRITICAL):
+- ALL charts MUST have clearly labeled axes with descriptive titles
+- X-axis: Include axis title describing what is measured (e.g., "Time Period", "Category", "Year")
+- Y-axis: Include axis title with units (e.g., "Adoption Rate (%)", "Investment ($M)", "Score (0-100)")
+- Use readable font sizes (minimum 14pt for axis labels, 12pt for tick labels)
+- Include data labels on key data points when helpful
+- Ensure axis labels render correctly and are not cut off or overlapping
+- For time series, clearly label the time intervals
+- For categorical charts, ensure all category names are fully visible
+
 SLIDE STRUCTURE:
-- Title slide: Bold, impactful title with strategic framing
+- Title slide: Bold, impactful title with classification tag badges
 - Executive Summary: 3-5 key takeaways as bullet points
 - Content slides: One main idea per slide with supporting points
 - Use "So What?" framing - always connect to municipal implications
 - Include a "Recommended Actions" or "Next Steps" slide
-- Final slide: Key contacts or resources
+- Appendix slides: Definition slides for each classification tag used
+- Final slides explain the classification framework for unfamiliar readers
 
 CONTENT TONE:
 - Authoritative but accessible

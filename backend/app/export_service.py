@@ -70,6 +70,16 @@ from .models.export import (
     get_export_filename,
 )
 
+# Import classification definitions from gamma_service for backup slides
+from .gamma_service import (
+    PILLAR_NAMES,
+    PILLAR_DEFINITIONS,
+    HORIZON_NAMES,
+    HORIZON_DEFINITIONS,
+    STAGE_NAMES,
+    STAGE_DEFINITIONS,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -3730,6 +3740,11 @@ class ExportService:
         Local PowerPoint generation with improved markdown handling.
         
         Used as fallback when Gamma.app is unavailable.
+        Includes:
+        - Title slide with visual classification tag badges
+        - Content slides
+        - AI disclosure slide
+        - Backup/appendix slides explaining each classification tag
         """
         import re
         
@@ -3741,21 +3756,41 @@ class ExportService:
             prs.slide_width = PPTX_SLIDE_WIDTH
             prs.slide_height = PPTX_SLIDE_HEIGHT
 
-            # 1. Title slide with classification
+            # Track which tags are used for backup slides
+            used_pillar = None
+            used_horizon = None
+            used_stage = None
+
+            # 1. Title slide with classification tags (with icons)
             subtitle = f"Strategic Intelligence Brief"
             if classification:
-                tags = []
+                tag_parts = []
                 if classification.get("pillar"):
-                    tags.append(f"Pillar: {classification['pillar'].upper()}")
+                    pillar = classification["pillar"].upper()
+                    pillar_def = PILLAR_DEFINITIONS.get(pillar, {})
+                    pillar_name = pillar_def.get("name", PILLAR_NAMES.get(pillar, pillar))
+                    pillar_icon = pillar_def.get("icon", "")
+                    tag_parts.append(f"{pillar_icon} {pillar_name}")
+                    used_pillar = pillar
                 if classification.get("horizon"):
-                    tags.append(f"Horizon: {classification['horizon'].upper()}")
+                    horizon = classification["horizon"].upper()
+                    horizon_def = HORIZON_DEFINITIONS.get(horizon, {})
+                    horizon_name = horizon_def.get("name", HORIZON_NAMES.get(horizon, horizon))
+                    horizon_icon = horizon_def.get("icon", "")
+                    tag_parts.append(f"{horizon_icon} {horizon_name}")
+                    used_horizon = horizon
                 if classification.get("stage"):
                     stage_raw = classification["stage"]
                     stage_match = re.search(r'(\d+)', str(stage_raw))
                     if stage_match:
-                        tags.append(f"Stage: {stage_match.group(1)}")
-                if tags:
-                    subtitle = " | ".join(tags)
+                        stage_num = int(stage_match.group(1))
+                        stage_def = STAGE_DEFINITIONS.get(stage_num, {})
+                        stage_name = stage_def.get("name", STAGE_NAMES.get(stage_num, f"Stage {stage_num}"))
+                        stage_icon = stage_def.get("icon", "")
+                        tag_parts.append(f"{stage_icon} Stage {stage_num}: {stage_name}")
+                        used_stage = stage_num
+                if tag_parts:
+                    subtitle = "  |  ".join(tag_parts)
             
             if generated_at:
                 subtitle += f"\n{generated_at.strftime('%B %d, %Y')}"
@@ -3791,6 +3826,77 @@ class ExportService:
 
             # 4. AI Disclosure slide
             self._add_ai_disclosure_slide(prs)
+
+            # 5. Backup/Appendix slides - explain each classification tag
+            # Appendix header
+            appendix_content = """The following slides provide context for the strategic classification tags used in this brief.
+
+These definitions help ensure consistent understanding across City departments and leadership."""
+            self._add_smart_content_slide(
+                prs,
+                title="Appendix: Classification Reference",
+                content=appendix_content,
+                max_chars=1000
+            )
+
+            # Pillar backup slide
+            if used_pillar and used_pillar in PILLAR_DEFINITIONS:
+                pillar_def = PILLAR_DEFINITIONS[used_pillar]
+                pillar_content = f"""Definition: {pillar_def['description']}
+
+Focus Areas:
+"""
+                for area in pillar_def.get('focus_areas', []):
+                    pillar_content += f"- {area}\n"
+                pillar_content += """
+This pillar is one of six strategic focus areas guiding City of Austin planning and investment decisions."""
+                
+                self._add_smart_content_slide(
+                    prs,
+                    title=f"{pillar_def.get('icon', '')} Strategic Pillar: {pillar_def['name']}",
+                    content=pillar_content,
+                    max_chars=1500
+                )
+
+            # Horizon backup slide
+            if used_horizon and used_horizon in HORIZON_DEFINITIONS:
+                horizon_def = HORIZON_DEFINITIONS[used_horizon]
+                horizon_content = f"""Timeframe: {horizon_def['timeframe']}
+
+Definition: {horizon_def['description']}
+
+Characteristics:
+"""
+                for char in horizon_def.get('characteristics', []):
+                    horizon_content += f"- {char}\n"
+                horizon_content += """
+The planning horizon indicates when this trend is expected to require significant City attention or action."""
+                
+                self._add_smart_content_slide(
+                    prs,
+                    title=f"{horizon_def.get('icon', '')} Planning Horizon: {horizon_def['name']}",
+                    content=horizon_content,
+                    max_chars=1500
+                )
+
+            # Stage backup slide
+            if used_stage and used_stage in STAGE_DEFINITIONS:
+                stage_def = STAGE_DEFINITIONS[used_stage]
+                stage_content = f"""Definition: {stage_def['description']}
+
+Key Indicators:
+"""
+                for indicator in stage_def.get('indicators', []):
+                    stage_content += f"- {indicator}\n"
+                stage_content += """
+The maturity stage reflects the current development status of this trend and helps inform appropriate City response strategies."""
+                
+                self._add_smart_content_slide(
+                    prs,
+                    title=f"{stage_def.get('icon', '')} Maturity Stage {used_stage}: {stage_def['name']}",
+                    content=stage_content,
+                    max_chars=1500
+                )
 
             # Save presentation
             temp_file = tempfile.NamedTemporaryFile(
