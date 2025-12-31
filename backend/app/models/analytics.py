@@ -214,3 +214,170 @@ class InsightsResponse(BaseModel):
         None,
         description="Message displayed if AI service is unavailable"
     )
+
+
+# ============================================================================
+# Comprehensive Analytics Models
+# ============================================================================
+
+
+class StageDistribution(BaseModel):
+    """Distribution of cards across maturity stages."""
+    stage_id: str = Field(..., description="Stage identifier (1-8)")
+    stage_name: str = Field(..., description="Stage display name")
+    count: int = Field(0, ge=0, description="Number of cards in this stage")
+    percentage: float = Field(0.0, ge=0.0, le=100.0, description="Percentage of total")
+
+
+class HorizonDistribution(BaseModel):
+    """Distribution of cards across time horizons."""
+    horizon: str = Field(..., description="Horizon code (H1, H2, H3)")
+    label: str = Field(..., description="Human-readable horizon label")
+    count: int = Field(0, ge=0, description="Number of cards in this horizon")
+    percentage: float = Field(0.0, ge=0.0, le=100.0, description="Percentage of total")
+
+
+class TrendingTopic(BaseModel):
+    """A trending topic/category based on card activity."""
+    name: str = Field(..., description="Topic or category name")
+    count: int = Field(..., ge=0, description="Number of related items")
+    trend: str = Field("stable", description="Trend direction: up, down, stable")
+    velocity_avg: Optional[float] = Field(None, description="Average velocity score")
+
+
+class SourceStats(BaseModel):
+    """Statistics about discovery sources."""
+    total_sources: int = Field(0, ge=0, description="Total unique sources in system")
+    sources_this_week: int = Field(0, ge=0, description="Sources added this week")
+    sources_by_type: dict = Field(default_factory=dict, description="Count by source type")
+
+
+class DiscoveryStats(BaseModel):
+    """Statistics about the discovery process."""
+    total_discovery_runs: int = Field(0, ge=0, description="Total discovery runs executed")
+    runs_this_week: int = Field(0, ge=0, description="Discovery runs this week")
+    total_searches: int = Field(0, ge=0, description="Total search queries performed")
+    searches_this_week: int = Field(0, ge=0, description="Searches this week")
+    cards_discovered: int = Field(0, ge=0, description="Total cards created via discovery")
+    avg_cards_per_run: float = Field(0.0, ge=0, description="Average cards created per run")
+
+
+class WorkstreamEngagement(BaseModel):
+    """Statistics about workstream usage."""
+    total_workstreams: int = Field(0, ge=0, description="Total workstreams in system")
+    active_workstreams: int = Field(0, ge=0, description="Workstreams with recent activity")
+    unique_cards_in_workstreams: int = Field(0, ge=0, description="Unique cards saved to workstreams")
+    avg_cards_per_workstream: float = Field(0.0, ge=0, description="Average cards per workstream")
+
+
+class FollowStats(BaseModel):
+    """Statistics about card following."""
+    total_follows: int = Field(0, ge=0, description="Total follow relationships")
+    unique_cards_followed: int = Field(0, ge=0, description="Unique cards being followed")
+    unique_users_following: int = Field(0, ge=0, description="Users actively following cards")
+    most_followed_cards: List[dict] = Field(default_factory=list, description="Top followed cards")
+
+
+class SystemWideStats(BaseModel):
+    """
+    Comprehensive system-wide analytics response.
+    
+    Contains all system-level statistics for the analytics dashboard.
+    """
+    # Core card stats
+    total_cards: int = Field(0, ge=0, description="Total cards in system")
+    active_cards: int = Field(0, ge=0, description="Active cards")
+    cards_this_week: int = Field(0, ge=0, description="Cards created this week")
+    cards_this_month: int = Field(0, ge=0, description="Cards created this month")
+    
+    # Distribution stats
+    cards_by_pillar: List[PillarCoverageItem] = Field(default_factory=list)
+    cards_by_stage: List[StageDistribution] = Field(default_factory=list)
+    cards_by_horizon: List[HorizonDistribution] = Field(default_factory=list)
+    
+    # Trending
+    trending_pillars: List[TrendingTopic] = Field(default_factory=list)
+    hot_topics: List[TrendingTopic] = Field(default_factory=list)
+    
+    # Source & discovery
+    source_stats: SourceStats = Field(default_factory=SourceStats)
+    discovery_stats: DiscoveryStats = Field(default_factory=DiscoveryStats)
+    
+    # Engagement
+    workstream_engagement: WorkstreamEngagement = Field(default_factory=WorkstreamEngagement)
+    follow_stats: FollowStats = Field(default_factory=FollowStats)
+    
+    # Metadata
+    generated_at: datetime = Field(default_factory=datetime.now)
+
+
+class UserFollowItem(BaseModel):
+    """A card that the user is following."""
+    card_id: str = Field(..., description="Card UUID")
+    card_name: str = Field(..., description="Card name")
+    pillar_id: Optional[str] = Field(None, description="Pillar code")
+    horizon: Optional[str] = Field(None, description="Time horizon")
+    velocity_score: Optional[int] = Field(None, description="Card velocity score")
+    followed_at: datetime = Field(..., description="When the user followed this card")
+    priority: str = Field("medium", description="User's priority for this card")
+    follower_count: int = Field(1, ge=1, description="Total followers for this card")
+
+
+class PopularCard(BaseModel):
+    """A popular card that others are following."""
+    card_id: str = Field(..., description="Card UUID")
+    card_name: str = Field(..., description="Card name")
+    summary: str = Field(..., description="Card summary")
+    pillar_id: Optional[str] = Field(None, description="Pillar code")
+    horizon: Optional[str] = Field(None, description="Time horizon")
+    velocity_score: Optional[int] = Field(None, description="Card velocity score")
+    follower_count: int = Field(0, ge=0, description="Number of followers")
+    is_followed_by_user: bool = Field(False, description="Whether current user follows this")
+
+
+class UserEngagementComparison(BaseModel):
+    """Comparison of user engagement vs community average."""
+    user_follow_count: int = Field(0, ge=0, description="Cards user is following")
+    avg_community_follows: float = Field(0.0, ge=0, description="Average follows per user")
+    user_workstream_count: int = Field(0, ge=0, description="User's workstream count")
+    avg_community_workstreams: float = Field(0.0, ge=0, description="Average workstreams per user")
+    user_percentile_follows: float = Field(0.0, description="User's percentile for follows")
+    user_percentile_workstreams: float = Field(0.0, description="User's percentile for workstreams")
+
+
+class PillarAffinity(BaseModel):
+    """User's affinity for a pillar based on their follows."""
+    pillar_code: str = Field(..., description="Pillar code")
+    pillar_name: str = Field(..., description="Pillar name")
+    user_count: int = Field(0, ge=0, description="User's follows in this pillar")
+    user_percentage: float = Field(0.0, description="Percentage of user's follows")
+    community_percentage: float = Field(0.0, description="Community average percentage")
+    affinity_score: float = Field(0.0, description="How much more/less than avg")
+
+
+class PersonalStats(BaseModel):
+    """
+    Personal analytics for the current user.
+    
+    Contains user-specific statistics and comparisons to community.
+    """
+    # User's follows
+    following: List[UserFollowItem] = Field(default_factory=list)
+    total_following: int = Field(0, ge=0)
+    
+    # Engagement comparison
+    engagement: UserEngagementComparison = Field(default_factory=UserEngagementComparison)
+    
+    # Pillar preferences
+    pillar_affinity: List[PillarAffinity] = Field(default_factory=list)
+    
+    # Social discovery - what others are following that user isn't
+    popular_not_followed: List[PopularCard] = Field(default_factory=list)
+    recently_popular: List[PopularCard] = Field(default_factory=list)
+    
+    # User activity
+    workstream_count: int = Field(0, ge=0)
+    cards_in_workstreams: int = Field(0, ge=0)
+    
+    # Metadata
+    generated_at: datetime = Field(default_factory=datetime.now)
