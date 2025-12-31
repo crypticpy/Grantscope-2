@@ -903,66 +903,36 @@ and helps inform appropriate City response strategies."""
         Returns:
             Request body dict
         """
-        # Build comprehensive instructions for executive-quality output
-        # Using official City of Austin brand colors
+        # Build concise instructions (max 2000 chars for Gamma API)
+        # Focus on essential styling and structure
         instructions = """
-Create an executive briefing presentation for City of Austin senior leadership (City Manager, Assistant City Managers, Department Directors).
+Executive briefing for City of Austin leadership.
 
-VISUAL DESIGN - USE OFFICIAL CITY OF AUSTIN BRAND COLORS:
-- Primary: Logo Blue (#44499C) for headers, titles, and key accents
-- Secondary: Logo Green (#009F4D) for highlights, callouts, and positive indicators
-- Background: Faded White (#f7f6f5) or pure white for slide backgrounds
-- Dark accents: Dark Blue (#22254E) for emphasis text
-- Supporting: Light Blue (#dcf2fd) and Light Green (#dff0e3) for subtle backgrounds or callout boxes
-- Text: Dark Gray (#636262) or Black (#000000) for body text
-- Clean, modern, professional government aesthetic
-- Generous white space - avoid cluttered slides
-- Use large, readable fonts (minimum 24pt for body text)
+COLORS (Official Brand):
+- Headers: Logo Blue #44499C
+- Highlights: Logo Green #009F4D  
+- Background: White or #f7f6f5
+- Body text: #636262
 
-TITLE SLIDE CLASSIFICATION TAGS:
-- The title slide includes classification tags (Strategic Pillar, Planning Horizon, Maturity Stage)
-- Render these tags as polished visual badges or pill-shaped labels
-- Each tag should have its emoji/icon displayed prominently alongside the text
-- Use a consistent visual treatment: rounded rectangle backgrounds with subtle shadows
-- Tags should appear in a horizontal row, visually balanced
-- Use Light Blue (#dcf2fd) or Light Green (#dff0e3) as badge backgrounds
-- Tag text should be bold and clearly readable
-- These tags visually link to their corresponding backup/appendix slides
+DESIGN:
+- Clean, professional government aesthetic
+- Generous white space, large readable fonts (24pt+ body)
+- Classification tags as polished badge pills on title slide
 
-IMAGERY & DATA VISUALIZATION:
-- Generate relevant, high-quality images that illustrate key concepts
-- For statistics or metrics, create clean charts using Logo Blue (#44499C) and Logo Green (#009F4D)
-- Use bar charts, line graphs, or infographics with the official color palette
-- Use icons to represent key concepts where appropriate
-- Images should feel professional, contemporary, and appropriate for government context
-- Avoid stock photo clichés - prefer conceptual or abstract visuals for technology topics
-- For comparison data, use Logo Green for positive/opportunity and Red (#F83125) for risks/concerns
+CHARTS & IMAGES:
+- Professional images illustrating concepts
+- Charts with Logo Blue #44499C and Logo Green #009F4D
+- ALL charts must have labeled axes with titles and units
+- Use Red #F83125 for risks, Green for opportunities
 
-CHART AXIS LABELING (CRITICAL):
-- ALL charts MUST have clearly labeled axes with descriptive titles
-- X-axis: Include axis title describing what is measured (e.g., "Time Period", "Category", "Year")
-- Y-axis: Include axis title with units (e.g., "Adoption Rate (%)", "Investment ($M)", "Score (0-100)")
-- Use readable font sizes (minimum 14pt for axis labels, 12pt for tick labels)
-- Include data labels on key data points when helpful
-- Ensure axis labels render correctly and are not cut off or overlapping
-- For time series, clearly label the time intervals
-- For categorical charts, ensure all category names are fully visible
+STRUCTURE:
+- Title slide with classification badges
+- Executive Summary: 3-5 bullet takeaways
+- Content slides: one idea per slide
+- Include "Recommended Actions" slide
+- Connect everything to municipal implications
 
-SLIDE STRUCTURE:
-- Title slide: Bold, impactful title with classification tag badges
-- Executive Summary: 3-5 key takeaways as bullet points
-- Content slides: One main idea per slide with supporting points
-- Use "So What?" framing - always connect to municipal implications
-- Include a "Recommended Actions" or "Next Steps" slide
-- Appendix slides: Definition slides for each classification tag used
-- Final slides explain the classification framework for unfamiliar readers
-
-CONTENT TONE:
-- Authoritative but accessible
-- Forward-looking and strategic
-- Action-oriented language
-- Avoid jargon - explain technical concepts simply
-- Focus on decision-relevant information
+TONE: Authoritative, strategic, action-oriented, jargon-free.
 """
         
         request = {
