@@ -115,8 +115,206 @@ interface FormErrors {
 }
 
 // ============================================================================
+// Workstream Templates
+// ============================================================================
+
+interface WorkstreamTemplate {
+  id: string;
+  name: string;
+  description: string;
+  icon: React.ReactNode;
+  color: string;
+  config: {
+    name: string;
+    description: string;
+    pillar_ids: string[];
+    goal_ids: string[];
+    stage_ids: string[];
+    horizon: string;
+    keywords: string[];
+  };
+}
+
+const WORKSTREAM_TEMPLATES: WorkstreamTemplate[] = [
+  {
+    id: 'emerging-tech',
+    name: 'Emerging Technology',
+    description: 'Track early-stage innovations and R&D across all sectors',
+    icon: <Sparkles className="h-5 w-5" />,
+    color: 'purple',
+    config: {
+      name: 'Emerging Technology Watch',
+      description: 'Monitoring early-stage innovations, research breakthroughs, and emerging technologies that could impact city operations in the coming years.',
+      pillar_ids: [],
+      goal_ids: [],
+      stage_ids: ['1', '2', '3'],
+      horizon: 'H3',
+      keywords: ['innovation', 'research', 'emerging', 'breakthrough', 'startup'],
+    },
+  },
+  {
+    id: 'smart-city',
+    name: 'Smart City & Infrastructure',
+    description: 'Focus on mobility, utilities, and city infrastructure tech',
+    icon: <Search className="h-5 w-5" />,
+    color: 'amber',
+    config: {
+      name: 'Smart City & Infrastructure',
+      description: 'Tracking smart city technologies, mobility innovations, and infrastructure modernization relevant to Austin.',
+      pillar_ids: ['MC'],
+      goal_ids: [],
+      stage_ids: ['3', '4', '5', '6'],
+      horizon: 'H2',
+      keywords: ['smart city', 'IoT', 'mobility', 'transit', 'infrastructure', 'utilities'],
+    },
+  },
+  {
+    id: 'leadership-ready',
+    name: 'Leadership Ready',
+    description: 'Mature technologies ready for executive briefings',
+    icon: <AlertCircle className="h-5 w-5" />,
+    color: 'green',
+    config: {
+      name: 'Leadership Ready',
+      description: 'Technologies and trends at sufficient maturity for executive consideration and potential implementation.',
+      pillar_ids: [],
+      goal_ids: [],
+      stage_ids: ['5', '6', '7'],
+      horizon: 'H1',
+      keywords: [],
+    },
+  },
+  {
+    id: 'climate-sustainability',
+    name: 'Climate & Sustainability',
+    description: 'Environmental tech and climate resilience innovations',
+    icon: <Search className="h-5 w-5" />,
+    color: 'green',
+    config: {
+      name: 'Climate & Sustainability',
+      description: 'Monitoring climate technology, sustainability innovations, and environmental resilience solutions.',
+      pillar_ids: ['CH'],
+      goal_ids: ['CH.3', 'CH.4'],
+      stage_ids: [],
+      horizon: 'ALL',
+      keywords: ['climate', 'sustainability', 'renewable', 'resilience', 'green', 'carbon'],
+    },
+  },
+  {
+    id: 'public-safety',
+    name: 'Public Safety Tech',
+    description: 'Safety, emergency response, and community protection',
+    icon: <Search className="h-5 w-5" />,
+    color: 'red',
+    config: {
+      name: 'Public Safety Technology',
+      description: 'Innovations in public safety, emergency response, disaster preparedness, and community protection.',
+      pillar_ids: ['PS'],
+      goal_ids: [],
+      stage_ids: [],
+      horizon: 'ALL',
+      keywords: ['safety', 'emergency', 'disaster', 'response', 'security'],
+    },
+  },
+  {
+    id: 'govtech',
+    name: 'GovTech & Digital Services',
+    description: 'Government technology and citizen service innovations',
+    icon: <Search className="h-5 w-5" />,
+    color: 'indigo',
+    config: {
+      name: 'GovTech & Digital Services',
+      description: 'Digital government innovations, citizen services technology, and public sector modernization.',
+      pillar_ids: ['HG'],
+      goal_ids: ['HG.2'],
+      stage_ids: [],
+      horizon: 'ALL',
+      keywords: ['govtech', 'digital services', 'citizen', 'automation', 'AI', 'data'],
+    },
+  },
+];
+
+// ============================================================================
 // Helper Components
 // ============================================================================
+
+/**
+ * Template color classes
+ */
+function getTemplateColorClasses(color: string): { bg: string; border: string; text: string; hover: string } {
+  const colorMap: Record<string, { bg: string; border: string; text: string; hover: string }> = {
+    purple: {
+      bg: 'bg-purple-50 dark:bg-purple-900/20',
+      border: 'border-purple-200 dark:border-purple-700',
+      text: 'text-purple-700 dark:text-purple-300',
+      hover: 'hover:bg-purple-100 dark:hover:bg-purple-900/40',
+    },
+    amber: {
+      bg: 'bg-amber-50 dark:bg-amber-900/20',
+      border: 'border-amber-200 dark:border-amber-700',
+      text: 'text-amber-700 dark:text-amber-300',
+      hover: 'hover:bg-amber-100 dark:hover:bg-amber-900/40',
+    },
+    green: {
+      bg: 'bg-green-50 dark:bg-green-900/20',
+      border: 'border-green-200 dark:border-green-700',
+      text: 'text-green-700 dark:text-green-300',
+      hover: 'hover:bg-green-100 dark:hover:bg-green-900/40',
+    },
+    red: {
+      bg: 'bg-red-50 dark:bg-red-900/20',
+      border: 'border-red-200 dark:border-red-700',
+      text: 'text-red-700 dark:text-red-300',
+      hover: 'hover:bg-red-100 dark:hover:bg-red-900/40',
+    },
+    indigo: {
+      bg: 'bg-indigo-50 dark:bg-indigo-900/20',
+      border: 'border-indigo-200 dark:border-indigo-700',
+      text: 'text-indigo-700 dark:text-indigo-300',
+      hover: 'hover:bg-indigo-100 dark:hover:bg-indigo-900/40',
+    },
+    blue: {
+      bg: 'bg-blue-50 dark:bg-blue-900/20',
+      border: 'border-blue-200 dark:border-blue-700',
+      text: 'text-blue-700 dark:text-blue-300',
+      hover: 'hover:bg-blue-100 dark:hover:bg-blue-900/40',
+    },
+  };
+  return colorMap[color] || colorMap.blue;
+}
+
+/**
+ * Template card component for quick start
+ */
+function TemplateCard({
+  template,
+  onSelect,
+}: {
+  template: WorkstreamTemplate;
+  onSelect: (template: WorkstreamTemplate) => void;
+}) {
+  const colors = getTemplateColorClasses(template.color);
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(template)}
+      className={cn(
+        'flex flex-col items-start p-3 rounded-lg border text-left transition-all',
+        colors.bg,
+        colors.border,
+        colors.hover,
+        'focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-1 dark:focus:ring-offset-gray-800'
+      )}
+    >
+      <div className={cn('mb-2', colors.text)}>{template.icon}</div>
+      <div className="font-medium text-sm text-gray-900 dark:text-white">{template.name}</div>
+      <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">
+        {template.description}
+      </div>
+    </button>
+  );
+}
 
 /**
  * Section wrapper for form groups
@@ -422,6 +620,22 @@ export function WorkstreamForm({
     }));
   };
 
+  // Apply a template to the form
+  const handleApplyTemplate = useCallback((template: WorkstreamTemplate) => {
+    setFormData((prev) => ({
+      ...prev,
+      name: template.config.name,
+      description: template.config.description,
+      pillar_ids: template.config.pillar_ids,
+      goal_ids: template.config.goal_ids,
+      stage_ids: template.config.stage_ids,
+      horizon: template.config.horizon,
+      keywords: template.config.keywords,
+    }));
+    // Clear any validation errors
+    setErrors({});
+  }, []);
+
   // Helper to get auth token
   const getAuthToken = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -521,6 +735,37 @@ export function WorkstreamForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Quick Start Templates - Only in CREATE mode */}
+      {!isEditMode && (
+        <div className="space-y-3">
+          <div>
+            <h4 className="text-sm font-medium text-gray-900 dark:text-white">Quick Start Templates</h4>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              Choose a template to pre-fill the form, or start from scratch below
+            </p>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {WORKSTREAM_TEMPLATES.map((template) => (
+              <TemplateCard
+                key={template.id}
+                template={template}
+                onSelect={handleApplyTemplate}
+              />
+            ))}
+          </div>
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200 dark:border-gray-700" />
+            </div>
+            <div className="relative flex justify-center text-xs">
+              <span className="bg-white dark:bg-[#2d3166] px-2 text-gray-500 dark:text-gray-400">
+                or customize your own
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Name Field */}
       <div>
         <label

@@ -27,6 +27,8 @@ import {
   Filter,
   CheckCircle2,
   XCircle,
+  Search,
+  X,
 } from 'lucide-react';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
@@ -367,6 +369,10 @@ const WorkstreamKanban: React.FC = () => {
   // Brief preview modal state
   const [briefModalCard, setBriefModalCard] = useState<WorkstreamCard | null>(null);
   const [showBriefModal, setShowBriefModal] = useState(false);
+
+  // Search/filter state for kanban board
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterPillar, setFilterPillar] = useState<string | null>(null);
 
   // ============================================================================
   // Toast Helper Functions
@@ -922,6 +928,76 @@ const WorkstreamKanban: React.FC = () => {
   };
 
   /**
+   * Filter cards based on search query and pillar filter.
+   */
+  const filteredCards = React.useMemo(() => {
+    // If no filters active, return original cards
+    if (!searchQuery.trim() && !filterPillar) {
+      return cards;
+    }
+
+    const filtered: Record<KanbanStatus, WorkstreamCard[]> = {
+      inbox: [],
+      screening: [],
+      research: [],
+      brief: [],
+      watching: [],
+      archived: [],
+    };
+
+    const query = searchQuery.toLowerCase().trim();
+
+    for (const [status, columnCards] of Object.entries(cards)) {
+      filtered[status as KanbanStatus] = columnCards.filter((card) => {
+        // Check pillar filter
+        if (filterPillar && card.card.pillar_id !== filterPillar) {
+          return false;
+        }
+
+        // Check search query
+        if (query) {
+          const cardText = [
+            card.card.name || '',
+            card.card.summary || '',
+            card.notes || '',
+          ].join(' ').toLowerCase();
+
+          if (!cardText.includes(query)) {
+            return false;
+          }
+        }
+
+        return true;
+      });
+    }
+
+    return filtered;
+  }, [cards, searchQuery, filterPillar]);
+
+  /**
+   * Get unique pillars from all cards for filter dropdown.
+   */
+  const availablePillars = React.useMemo(() => {
+    const pillarSet = new Set<string>();
+    for (const columnCards of Object.values(cards)) {
+      for (const card of columnCards) {
+        if (card.card.pillar_id) {
+          pillarSet.add(card.card.pillar_id);
+        }
+      }
+    }
+    return Array.from(pillarSet).sort();
+  }, [cards]);
+
+  /**
+   * Clear all search/filter state.
+   */
+  const clearFilters = useCallback(() => {
+    setSearchQuery('');
+    setFilterPillar(null);
+  }, []);
+
+  /**
    * Refresh cards.
    */
   const handleRefresh = useCallback(async () => {
@@ -1348,6 +1424,69 @@ const WorkstreamKanban: React.FC = () => {
         {/* Stats Bar */}
         <StatsBar cards={cards} />
 
+        {/* Search and Filter Bar */}
+        <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 mb-6">
+          <div className="flex items-center gap-4 flex-wrap">
+            {/* Search Input */}
+            <div className="flex-1 min-w-[200px] relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search cards by name or notes..."
+                className="w-full pl-9 pr-8 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-[#3d4176] text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-brand-blue"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  aria-label="Clear search"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Pillar Filter */}
+            {availablePillars.length > 0 && (
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-gray-400" />
+                <select
+                  value={filterPillar || ''}
+                  onChange={(e) => setFilterPillar(e.target.value || null)}
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-[#3d4176] text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-brand-blue"
+                >
+                  <option value="">All Pillars</option>
+                  {availablePillars.map((pillarId) => (
+                    <option key={pillarId} value={pillarId}>
+                      {pillarId}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Clear Filters Button */}
+            {(searchQuery || filterPillar) && (
+              <button
+                onClick={clearFilters}
+                className="inline-flex items-center gap-1 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
+              >
+                <X className="h-4 w-4" />
+                Clear filters
+              </button>
+            )}
+
+            {/* Filter Results Count */}
+            {(searchQuery || filterPillar) && (
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                Showing {Object.values(filteredCards).flat().length} of {Object.values(cards).flat().length} cards
+              </span>
+            )}
+          </div>
+        </div>
+
         {/* Kanban Board */}
         {cardsLoading && Object.values(cards).every((c) => c.length === 0) ? (
           <div className="flex items-center justify-center py-16">
@@ -1366,7 +1505,7 @@ const WorkstreamKanban: React.FC = () => {
             }}
           >
             <KanbanBoard
-              cards={cards}
+              cards={filteredCards}
               workstreamId={id!}
               onCardMove={handleCardMove}
               onCardClick={handleCardClick}
