@@ -245,13 +245,13 @@ class ProfessionalPDFBuilder:
         """Draw the professional header on each page."""
         canvas_obj.saveState()
         
-        # Header background - subtle gradient effect using rectangle
-        canvas_obj.setFillColor(PDF_COLORS["primary"])
+        # Header background - clean white
+        canvas_obj.setFillColor(rl_colors.white)
         canvas_obj.rect(0, self.page_height - 1.1 * inch, self.page_width, 1.1 * inch, fill=True, stroke=False)
         
-        # Add accent line below header
-        canvas_obj.setStrokeColor(hex_to_rl_color("#2E86AB"))
-        canvas_obj.setLineWidth(3)
+        # Add accent line below header - primary blue for brand consistency
+        canvas_obj.setStrokeColor(PDF_COLORS["primary"])
+        canvas_obj.setLineWidth(2)
         canvas_obj.line(0, self.page_height - 1.1 * inch, self.page_width, self.page_height - 1.1 * inch)
         
         # City of Austin logo (if available and enabled)
@@ -259,37 +259,47 @@ class ProfessionalPDFBuilder:
         if self.include_logo and COA_LOGO_PATH and Path(COA_LOGO_PATH).exists():
             try:
                 # Draw logo on left side of header
-                logo_height = 0.6 * inch
-                logo_width = 1.8 * inch  # Aspect ratio ~3:1 for horizontal logo
+                logo_height = 0.55 * inch
+                logo_width = 1.65 * inch  # Aspect ratio ~3:1 for horizontal logo
                 canvas_obj.drawImage(
                     COA_LOGO_PATH,
                     self.left_margin,
-                    self.page_height - 0.9 * inch,
+                    self.page_height - 0.85 * inch,
                     width=logo_width,
                     height=logo_height,
                     preserveAspectRatio=True,
                     mask='auto'
                 )
-                logo_width += 0.3 * inch  # Add spacing after logo
+                logo_width += 0.25 * inch  # Add spacing after logo
             except Exception as e:
                 logger.warning(f"Failed to add logo to PDF header: {e}")
                 logo_width = 0
         
+        # Vertical separator line after logo
+        if logo_width > 0:
+            canvas_obj.setStrokeColor(hex_to_rl_color("#E0E0E0"))
+            canvas_obj.setLineWidth(1)
+            sep_x = self.left_margin + logo_width + 0.1 * inch
+            canvas_obj.line(sep_x, self.page_height - 0.25 * inch, sep_x, self.page_height - 0.95 * inch)
+            logo_width += 0.25 * inch  # Extra spacing after separator
+        
         # Foresight branding text
         text_x = self.left_margin + logo_width
         
-        # "FORESIGHT" title
-        canvas_obj.setFillColor(rl_colors.white)
+        # "FORESIGHT" title - primary blue to match website
+        canvas_obj.setFillColor(PDF_COLORS["primary"])
         canvas_obj.setFont("Helvetica-Bold", 16)
         canvas_obj.drawString(text_x, self.page_height - 0.45 * inch, "FORESIGHT")
         
-        # "Strategic Intelligence" subtitle
-        canvas_obj.setFont("Helvetica", 10)
-        canvas_obj.drawString(text_x, self.page_height - 0.65 * inch, "Strategic Intelligence Platform")
+        # "Strategic Intelligence Platform" subtitle - gray
+        canvas_obj.setFillColor(rl_colors.gray)
+        canvas_obj.setFont("Helvetica", 9)
+        canvas_obj.drawString(text_x, self.page_height - 0.62 * inch, "Strategic Intelligence Platform")
         
-        # Document title on right side
+        # Document title on right side - black
+        canvas_obj.setFillColor(PDF_COLORS["dark"])
         canvas_obj.setFont("Helvetica-Bold", 11)
-        title_text = self.title[:50] + "..." if len(self.title) > 50 else self.title
+        title_text = self.title[:45] + "..." if len(self.title) > 45 else self.title
         title_width = canvas_obj.stringWidth(title_text, "Helvetica-Bold", 11)
         canvas_obj.drawString(
             self.page_width - self.right_margin - title_width,
@@ -297,13 +307,14 @@ class ProfessionalPDFBuilder:
             title_text
         )
         
-        # Page generation date on right
+        # Page generation date on right - black
+        canvas_obj.setFillColor(PDF_COLORS["dark"])
         canvas_obj.setFont("Helvetica", 9)
         date_text = datetime.now().strftime("%B %d, %Y")
         date_width = canvas_obj.stringWidth(date_text, "Helvetica", 9)
         canvas_obj.drawString(
             self.page_width - self.right_margin - date_width,
-            self.page_height - 0.65 * inch,
+            self.page_height - 0.62 * inch,
             date_text
         )
         
@@ -1302,7 +1313,10 @@ class ExportService:
         include_charts: bool = True
     ) -> str:
         """
-        Generate a PDF export for an intelligence card.
+        Generate a professional PDF export for an intelligence card.
+        
+        Uses the professional PDF builder with City of Austin branding,
+        Foresight header, and AI technology disclosure footer.
 
         Args:
             card_data: CardExportData object containing all card information
@@ -1314,6 +1328,7 @@ class ExportService:
         Raises:
             Exception: If PDF generation fails
         """
+        import re
         temp_files = []
 
         try:
@@ -1321,52 +1336,197 @@ class ExportService:
             pdf_file = tempfile.NamedTemporaryFile(
                 suffix='.pdf',
                 delete=False,
-                prefix='foresight_export_'
+                prefix='foresight_card_export_'
             )
             pdf_path = pdf_file.name
             pdf_file.close()
 
-            # Create PDF document
-            doc = SimpleDocTemplate(
-                pdf_path,
-                pagesize=PDF_PAGE_SIZE,
-                rightMargin=PDF_MARGIN,
-                leftMargin=PDF_MARGIN,
-                topMargin=PDF_MARGIN,
-                bottomMargin=PDF_MARGIN
-            )
-
-            # Get styles
-            styles = self._get_pdf_styles()
+            # Get professional styles
+            styles = get_professional_pdf_styles()
 
             # Build document elements
             elements = []
 
-            # Header with title and badges
-            elements.extend(self._create_pdf_header(card_data, styles))
+            # Document Title
+            elements.append(Paragraph(card_data.name, styles['DocTitle']))
+            
+            # Classification subtitle
+            subtitle_parts = []
+            if card_data.pillar_name or card_data.pillar_id:
+                subtitle_parts.append(f"Pillar: {card_data.pillar_name or card_data.pillar_id}")
+            if card_data.horizon:
+                subtitle_parts.append(f"Horizon: {card_data.horizon}")
+            if card_data.stage_name or card_data.stage_id:
+                subtitle_parts.append(f"Stage: {card_data.stage_name or card_data.stage_id}")
+            if subtitle_parts:
+                elements.append(Paragraph(" | ".join(subtitle_parts), styles['DocSubtitle']))
+            
+            elements.append(Spacer(1, 6))
+            elements.append(HRFlowable(
+                width="100%",
+                thickness=2,
+                color=PDF_COLORS["secondary"],
+                spaceBefore=4,
+                spaceAfter=16
+            ))
 
-            # Summary and description
-            elements.extend(self._create_pdf_summary_section(card_data, styles))
+            # Executive Summary
+            if card_data.summary:
+                elements.append(Paragraph("Executive Summary", styles['SectionHeading']))
+                elements.append(Paragraph(card_data.summary, styles['ExecutiveSummary']))
+                elements.append(Spacer(1, 12))
 
-            # Scores table
-            elements.extend(self._create_pdf_scores_table(card_data, styles))
+            # Detailed Analysis / Description
+            if card_data.description:
+                elements.append(Paragraph("Detailed Analysis", styles['SectionHeading']))
+                # Truncate very long descriptions
+                description = card_data.description
+                if len(description) > 5000:
+                    description = description[:5000] + "... [truncated]"
+                elements.append(Paragraph(description, styles['BodyText']))
+                elements.append(Spacer(1, 12))
+
+            # Scores Section
+            scores = card_data.get_all_scores()
+            valid_scores = {k: v for k, v in scores.items() if v is not None}
+            if valid_scores:
+                elements.append(Paragraph("Score Analysis", styles['SectionHeading']))
+                
+                # Build scores table
+                table_data = [['Metric', 'Score', 'Rating']]
+                for name, score in valid_scores.items():
+                    if score >= 80:
+                        rating = "Excellent"
+                    elif score >= 60:
+                        rating = "Good"
+                    elif score >= 40:
+                        rating = "Fair"
+                    else:
+                        rating = "Low"
+                    table_data.append([name, str(score), rating])
+
+                table = Table(table_data, colWidths=[2 * inch, 1 * inch, 1.2 * inch])
+                table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), PDF_COLORS["primary"]),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), rl_colors.white),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, 0), 10),
+                    ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+                    ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                    ('FONTSIZE', (0, 1), (-1, -1), 10),
+                    ('ALIGN', (1, 1), (-1, -1), 'CENTER'),
+                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [rl_colors.white, hex_to_rl_color("#F8F9FA")]),
+                    ('GRID', (0, 0), (-1, -1), 0.5, hex_to_rl_color("#E0E0E0")),
+                    ('BOX', (0, 0), (-1, -1), 1, PDF_COLORS["primary"]),
+                    ('TOPPADDING', (0, 0), (-1, -1), 8),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ]))
+                elements.append(table)
+                elements.append(Spacer(1, 16))
 
             # Charts (if enabled)
-            if include_charts:
-                chart_elements, chart_files = self._create_pdf_chart_section(card_data, styles)
-                elements.extend(chart_elements)
-                temp_files.extend(chart_files)
+            if include_charts and valid_scores:
+                chart_path = self.generate_score_chart(card_data, chart_type="bar")
+                if chart_path:
+                    temp_files.append(chart_path)
+                    try:
+                        img = RLImage(chart_path, width=5 * inch, height=3.5 * inch)
+                        elements.append(img)
+                        elements.append(Spacer(1, 16))
+                    except Exception as e:
+                        logger.warning(f"Failed to add chart image to PDF: {e}")
 
             # Deep Research Report (if available)
-            elements.extend(self._create_pdf_research_section(card_data, styles))
+            if card_data.deep_research_report:
+                elements.append(PageBreak())
+                elements.append(Paragraph("Strategic Intelligence Report", styles['SectionHeading']))
+                elements.append(Spacer(1, 8))
+                
+                # Parse and render the markdown report
+                report = card_data.deep_research_report
+                if len(report) > 20000:
+                    report = report[:20000] + "\n\n... [Report truncated for PDF export]"
+                
+                lines = report.split('\n')
+                current_paragraph = []
+                
+                for line in lines:
+                    line_stripped = line.strip()
+                    
+                    if not line_stripped:
+                        if current_paragraph:
+                            para_text = ' '.join(current_paragraph)
+                            para_text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', para_text)
+                            para_text = re.sub(r'\*(.+?)\*', r'<i>\1</i>', para_text)
+                            elements.append(Paragraph(para_text, styles['BodyText']))
+                            current_paragraph = []
+                        continue
+                    
+                    if line_stripped.startswith('# '):
+                        if current_paragraph:
+                            elements.append(Paragraph(' '.join(current_paragraph), styles['BodyText']))
+                            current_paragraph = []
+                        elements.append(Spacer(1, 8))
+                        elements.append(Paragraph(line_stripped[2:], styles['SectionHeading']))
+                    elif line_stripped.startswith('## '):
+                        if current_paragraph:
+                            elements.append(Paragraph(' '.join(current_paragraph), styles['BodyText']))
+                            current_paragraph = []
+                        elements.append(Paragraph(line_stripped[3:], styles['SubsectionHeading']))
+                    elif line_stripped.startswith('### '):
+                        if current_paragraph:
+                            elements.append(Paragraph(' '.join(current_paragraph), styles['BodyText']))
+                            current_paragraph = []
+                        elements.append(Paragraph(f"<b>{line_stripped[4:]}</b>", styles['BodyText']))
+                    elif line_stripped.startswith('- ') or line_stripped.startswith('* '):
+                        if current_paragraph:
+                            elements.append(Paragraph(' '.join(current_paragraph), styles['BodyText']))
+                            current_paragraph = []
+                        bullet_text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', line_stripped[2:])
+                        elements.append(Paragraph(f"• {bullet_text}", styles['BulletText']))
+                    elif re.match(r'^\d+\.\s', line_stripped):
+                        if current_paragraph:
+                            elements.append(Paragraph(' '.join(current_paragraph), styles['BodyText']))
+                            current_paragraph = []
+                        elements.append(Paragraph(line_stripped, styles['BulletText']))
+                    elif line_stripped in ['---', '***']:
+                        if current_paragraph:
+                            elements.append(Paragraph(' '.join(current_paragraph), styles['BodyText']))
+                            current_paragraph = []
+                        elements.append(Spacer(1, 6))
+                        elements.append(HRFlowable(width="50%", thickness=1, color=PDF_COLORS["light"]))
+                        elements.append(Spacer(1, 6))
+                    else:
+                        current_paragraph.append(line_stripped)
+                
+                if current_paragraph:
+                    para_text = ' '.join(current_paragraph)
+                    para_text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', para_text)
+                    elements.append(Paragraph(para_text, styles['BodyText']))
 
-            # Footer
-            elements.extend(self._create_pdf_footer(card_data, styles))
+            # Metadata footer
+            elements.append(Spacer(1, 20))
+            elements.append(HRFlowable(width="100%", thickness=1, color=PDF_COLORS["light"]))
+            elements.append(Spacer(1, 6))
+            
+            meta_items = []
+            if card_data.created_at:
+                meta_items.append(f"Created: {card_data.created_at.strftime('%B %d, %Y')}")
+            if card_data.updated_at:
+                meta_items.append(f"Updated: {card_data.updated_at.strftime('%B %d, %Y')}")
+            for item in meta_items:
+                elements.append(Paragraph(item, styles['SmallText']))
 
-            # Build PDF
-            doc.build(elements)
+            # Build PDF using professional builder with header/footer
+            builder = ProfessionalPDFBuilder(
+                filename=pdf_path,
+                title=card_data.name,
+                include_logo=True,
+                include_ai_disclosure=True
+            )
+            builder.build(elements)
 
-            logger.info(f"Generated PDF export for card: {card_data.name}")
+            logger.info(f"Generated professional PDF export for card: {card_data.name}")
             return pdf_path
 
         except Exception as e:
@@ -1415,54 +1575,44 @@ class ExportService:
             pdf_path = pdf_file.name
             pdf_file.close()
 
-            # Create PDF document
-            doc = SimpleDocTemplate(
-                pdf_path,
-                pagesize=PDF_PAGE_SIZE,
-                rightMargin=PDF_MARGIN,
-                leftMargin=PDF_MARGIN,
-                topMargin=PDF_MARGIN,
-                bottomMargin=PDF_MARGIN
-            )
-
-            # Get styles
-            styles = self._get_pdf_styles()
+            # Get professional styles
+            styles = get_professional_pdf_styles()
 
             # Build document elements
             elements = []
 
             # Title page
             workstream_name = workstream.get('name', 'Workstream Report')
-            elements.append(Paragraph(workstream_name, styles['Title']))
+            elements.append(Paragraph(workstream_name, styles['DocTitle']))
             elements.append(Spacer(1, 12))
 
             elements.append(HRFlowable(
                 width="100%",
                 thickness=2,
-                color=PDF_COLORS["primary"],
+                color=PDF_COLORS["secondary"],
                 spaceBefore=6,
                 spaceAfter=12
             ))
 
             # Workstream description
             if workstream.get('description'):
-                elements.append(Paragraph("Overview", styles['Heading1']))
-                elements.append(Paragraph(workstream['description'], styles['Body']))
+                elements.append(Paragraph("Overview", styles['SectionHeading']))
+                elements.append(Paragraph(workstream['description'], styles['BodyText']))
                 elements.append(Spacer(1, 12))
 
             # Summary statistics
-            elements.append(Paragraph("Summary", styles['Heading1']))
+            elements.append(Paragraph("Summary", styles['SectionHeading']))
 
             if not cards:
                 elements.append(Paragraph(
                     "No cards currently match this workstream criteria.",
-                    styles['Body']
+                    styles['BodyText']
                 ))
             else:
                 summary_text = f"This workstream contains <b>{len(cards)}</b> intelligence cards."
                 if len(cards) >= max_cards:
                     summary_text += f" (Showing first {max_cards})"
-                elements.append(Paragraph(summary_text, styles['Body']))
+                elements.append(Paragraph(summary_text, styles['BodyText']))
                 elements.append(Spacer(1, 12))
 
                 # Distribution charts
@@ -1501,7 +1651,7 @@ class ExportService:
 
                 # Cards table summary
                 elements.append(PageBreak())
-                elements.append(Paragraph("Cards Overview", styles['Heading1']))
+                elements.append(Paragraph("Cards Overview", styles['SectionHeading']))
 
                 table_data = [['Name', 'Pillar', 'Horizon', 'Impact']]
                 for card in cards:
@@ -1533,7 +1683,7 @@ class ExportService:
 
                 # Individual card details (paginated)
                 elements.append(PageBreak())
-                elements.append(Paragraph("Card Details", styles['Heading1']))
+                elements.append(Paragraph("Card Details", styles['SectionHeading']))
                 elements.append(Spacer(1, 12))
 
                 for i, card in enumerate(cards):
@@ -1548,7 +1698,7 @@ class ExportService:
                         ))
 
                     # Card mini-header
-                    elements.append(Paragraph(card.name, styles['Heading2']))
+                    elements.append(Paragraph(card.name, styles['SubsectionHeading']))
 
                     # Badges row
                     badge_parts = []
@@ -1559,12 +1709,12 @@ class ExportService:
                     if card.stage_name or card.stage_id:
                         badge_parts.append(f"<b>Stage:</b> {card.stage_name or card.stage_id}")
                     if badge_parts:
-                        elements.append(Paragraph(" | ".join(badge_parts), styles['Small']))
+                        elements.append(Paragraph(" | ".join(badge_parts), styles['SmallText']))
                         elements.append(Spacer(1, 6))
 
                     # Summary
                     if card.summary:
-                        elements.append(Paragraph(card.summary, styles['Body']))
+                        elements.append(Paragraph(card.summary, styles['BodyText']))
 
                     # Key scores
                     key_scores = []
@@ -1577,10 +1727,10 @@ class ExportService:
                     if key_scores:
                         elements.append(Paragraph(
                             "<i>Scores: " + " | ".join(key_scores) + "</i>",
-                            styles['Small']
+                            styles['SmallText']
                         ))
 
-            # Footer
+            # Metadata footer
             elements.append(Spacer(1, 24))
             elements.append(HRFlowable(
                 width="100%",
@@ -1591,16 +1741,18 @@ class ExportService:
             ))
 
             footer_text = f"Export Date: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}"
-            elements.append(Paragraph(footer_text, styles['Small']))
-            elements.append(Paragraph(
-                "Generated by Foresight Intelligence Platform",
-                styles['Small']
-            ))
+            elements.append(Paragraph(footer_text, styles['SmallText']))
 
-            # Build PDF
-            doc.build(elements)
+            # Build PDF using professional builder with header/footer
+            builder = ProfessionalPDFBuilder(
+                filename=pdf_path,
+                title=workstream_name,
+                include_logo=True,
+                include_ai_disclosure=True
+            )
+            builder.build(elements)
 
-            logger.info(f"Generated workstream PDF for: {workstream_name} with {len(cards)} cards")
+            logger.info(f"Generated professional workstream PDF for: {workstream_name} with {len(cards)} cards")
             return pdf_path
 
         except Exception as e:
