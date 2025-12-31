@@ -280,6 +280,9 @@ class CardExportData(BaseModel):
     created_at: Optional[datetime] = Field(None, description="Creation timestamp")
     updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
 
+    # Deep Research
+    deep_research_report: Optional[str] = Field(None, description="Latest deep research report markdown")
+
     def get_score_display(self, score_name: str) -> str:
         """
         Get display value for a score field, returning 'N/A' if null.

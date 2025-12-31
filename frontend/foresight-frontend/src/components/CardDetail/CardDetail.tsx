@@ -32,6 +32,7 @@ import { ResearchStatusBanner } from './ResearchStatusBanner';
 import {
   CardDescription,
   CardClassification,
+  DeepResearchPanel,
   ResearchHistoryPanel,
   ImpactMetricsPanel,
   MaturityScorePanel,
@@ -311,6 +312,11 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = '' }) => {
     }
   }, [card, isResearching, getAuthToken, pollTaskStatus]);
 
+  // Handle deep research request from DeepResearchPanel
+  const handleDeepResearch = useCallback(() => {
+    triggerResearch('deep_research');
+  }, [triggerResearch]);
+
   // Handle related card click
   const handleRelatedCardClick = useCallback((cardId: string, cardSlug: string) => {
     if (cardSlug) navigate(`/cards/${cardSlug}`);
@@ -419,13 +425,26 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = '' }) => {
           <div className="lg:col-span-2 space-y-4 sm:space-y-6">
             <CardDescription description={card.description} />
             <CardClassification card={card} stageHistory={stageHistory} stageHistoryLoading={stageHistoryLoading} />
-            <ScoreTimelineChart data={scoreHistory} title="Score History" height={350} loading={scoreHistoryLoading} error={scoreHistoryError} onRetry={loadScoreHistory} />
-            <ResearchHistoryPanel researchHistory={researchHistory} />
+            {/* Deep Research Panel - Prominent placement */}
+            <DeepResearchPanel
+              researchTasks={researchHistory}
+              onRequestResearch={handleDeepResearch}
+              canRequestResearch={canDeepResearch}
+            />
+            {/* Only show update history if there are non-deep-research tasks */}
+            {researchHistory.some(t => t.task_type !== 'deep_research') && (
+              <ResearchHistoryPanel
+                researchHistory={researchHistory.filter(t => t.task_type !== 'deep_research')}
+                title="Update History"
+              />
+            )}
           </div>
           <div className="space-y-4 sm:space-y-6">
             <ImpactMetricsPanel impactScore={card.impact_score} relevanceScore={card.relevance_score} velocityScore={card.velocity_score} noveltyScore={card.novelty_score} opportunityScore={card.opportunity_score} riskScore={card.risk_score} />
             <MaturityScorePanel maturityScore={card.maturity_score} stageId={card.stage_id} />
             <ActivityStatsPanel sourcesCount={sources.length} timelineCount={timeline.length} notesCount={notes.length} scoreHistory={scoreHistory} scoreHistoryLoading={scoreHistoryLoading} createdAt={card.created_at} updatedAt={card.updated_at} deepResearchAt={card.deep_research_at} />
+            {/* Score History - Compact sidebar widget */}
+            <ScoreTimelineChart data={scoreHistory} title="Score History" height={180} loading={scoreHistoryLoading} error={scoreHistoryError} onRetry={loadScoreHistory} compact />
           </div>
         </div>
       )}

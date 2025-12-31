@@ -650,21 +650,120 @@ class ExportService:
         """
         elements = []
 
-        # Summary
+        # Classification Overview - Always show this prominently
+        elements.append(Paragraph("Classification Overview", styles['Heading1']))
+
+        classification_items = []
+        if card_data.pillar_name or card_data.pillar_id:
+            classification_items.append(f"<b>Strategic Pillar:</b> {card_data.pillar_name or card_data.pillar_id}")
+        if card_data.goal_name or card_data.goal_id:
+            classification_items.append(f"<b>Strategic Goal:</b> {card_data.goal_name or card_data.goal_id}")
+        if card_data.horizon:
+            horizon_desc = {"H1": "Near-term (0-2 years)", "H2": "Mid-term (2-5 years)", "H3": "Long-term (5+ years)"}
+            classification_items.append(f"<b>Time Horizon:</b> {card_data.horizon} - {horizon_desc.get(card_data.horizon, '')}")
+        if card_data.stage_name or card_data.stage_id:
+            classification_items.append(f"<b>Maturity Stage:</b> {card_data.stage_name or card_data.stage_id}")
+
+        if classification_items:
+            for item in classification_items:
+                elements.append(Paragraph(item, styles['Body']))
+            elements.append(Spacer(1, 12))
+
+        # Executive Summary
         if card_data.summary:
-            elements.append(Paragraph("Summary", styles['Heading1']))
+            elements.append(Paragraph("Executive Summary", styles['Heading1']))
             elements.append(Paragraph(card_data.summary, styles['Body']))
             elements.append(Spacer(1, 12))
 
-        # Description
+        # Full Description
         if card_data.description:
-            elements.append(Paragraph("Description", styles['Heading1']))
+            elements.append(Paragraph("Detailed Analysis", styles['Heading1']))
             # Truncate very long descriptions
             description = card_data.description
             if len(description) > 3000:
                 description = description[:3000] + "... [truncated]"
             elements.append(Paragraph(description, styles['Body']))
             elements.append(Spacer(1, 12))
+
+        return elements
+
+    def _create_pdf_research_section(
+        self,
+        card_data: CardExportData,
+        styles: Dict[str, ParagraphStyle]
+    ) -> List[Any]:
+        """
+        Create PDF section for deep research report.
+
+        Args:
+            card_data: Card data containing research report
+            styles: PDF styles dictionary
+
+        Returns:
+            List of flowable elements for the research section
+        """
+        elements = []
+
+        if not card_data.deep_research_report:
+            return elements
+
+        elements.append(PageBreak())
+        elements.append(Paragraph("Strategic Intelligence Report", styles['Title']))
+        elements.append(Spacer(1, 6))
+
+        # Add a note about the report
+        elements.append(Paragraph(
+            "<i>The following strategic intelligence report was generated through deep research analysis, "
+            "synthesizing multiple sources to provide actionable insights for decision-makers.</i>",
+            styles['Small']
+        ))
+        elements.append(Spacer(1, 12))
+
+        elements.append(HRFlowable(
+            width="100%",
+            thickness=1,
+            color=PDF_COLORS["secondary"],
+            spaceBefore=6,
+            spaceAfter=12
+        ))
+
+        # Parse and render the markdown report
+        # Simple markdown-to-PDF conversion for common elements
+        report = card_data.deep_research_report
+
+        # Truncate if extremely long
+        if len(report) > 15000:
+            report = report[:15000] + "\n\n... [Report truncated for PDF export. View full report in the application.]"
+
+        # Process the report line by line
+        lines = report.split('\n')
+        for line in lines:
+            line = line.strip()
+            if not line:
+                elements.append(Spacer(1, 6))
+            elif line.startswith('# '):
+                # Main heading
+                elements.append(Paragraph(line[2:], styles['Heading1']))
+            elif line.startswith('## '):
+                # Section heading
+                elements.append(Paragraph(line[3:], styles['Heading2']))
+            elif line.startswith('### '):
+                # Subsection heading
+                text = f"<b>{line[4:]}</b>"
+                elements.append(Paragraph(text, styles['Body']))
+            elif line.startswith('- ') or line.startswith('* '):
+                # Bullet point
+                text = f"• {line[2:]}"
+                elements.append(Paragraph(text, styles['Body']))
+            elif line.startswith('**') and line.endswith('**'):
+                # Bold text
+                text = f"<b>{line[2:-2]}</b>"
+                elements.append(Paragraph(text, styles['Body']))
+            else:
+                # Regular paragraph
+                # Escape any XML-unsafe characters
+                safe_line = line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                elements.append(Paragraph(safe_line, styles['Body']))
 
         return elements
 
@@ -879,6 +978,9 @@ class ExportService:
                 chart_elements, chart_files = self._create_pdf_chart_section(card_data, styles)
                 elements.extend(chart_elements)
                 temp_files.extend(chart_files)
+
+            # Deep Research Report (if available)
+            elements.extend(self._create_pdf_research_section(card_data, styles))
 
             # Footer
             elements.extend(self._create_pdf_footer(card_data, styles))

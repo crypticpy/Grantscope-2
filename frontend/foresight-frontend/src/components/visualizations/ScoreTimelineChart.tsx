@@ -53,6 +53,8 @@ export interface ScoreTimelineChartProps {
   onRetry?: () => void;
   /** Which score types to show (defaults to all) */
   visibleScores?: ScoreType[];
+  /** Compact mode for sidebar display - hides legend, smaller text */
+  compact?: boolean;
 }
 
 /**
@@ -300,6 +302,7 @@ export function ScoreTimelineChart({
   error = null,
   onRetry,
   visibleScores,
+  compact = false,
 }: ScoreTimelineChartProps) {
   // Determine which scores to display (default: all)
   const activeScores: ScoreType[] = useMemo(() => {
@@ -384,10 +387,13 @@ export function ScoreTimelineChart({
   }
 
   return (
-    <div className={cn('bg-white dark:bg-[#2d3166] rounded-lg shadow p-6', className)}>
+    <div className={cn('bg-white dark:bg-[#2d3166] rounded-lg shadow', compact ? 'p-4' : 'p-6', className)}>
       {title && (
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-          <TrendingUp className="h-5 w-5 text-brand-blue" />
+        <h3 className={cn(
+          'font-semibold text-gray-900 dark:text-white flex items-center gap-2',
+          compact ? 'text-sm mb-2' : 'text-lg mb-4'
+        )}>
+          <TrendingUp className={compact ? 'h-4 w-4 text-brand-blue' : 'h-5 w-5 text-brand-blue'} />
           {title}
         </h3>
       )}
@@ -395,7 +401,7 @@ export function ScoreTimelineChart({
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={chartData}
-            margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+            margin={compact ? { top: 5, right: 5, left: -20, bottom: 0 } : { top: 5, right: 20, left: 0, bottom: 5 }}
           >
             <CartesianGrid
               strokeDasharray="3 3"
@@ -406,21 +412,22 @@ export function ScoreTimelineChart({
             <XAxis
               dataKey="date"
               tickFormatter={formatXAxisTick}
-              tick={{ fontSize: 11 }}
+              tick={{ fontSize: compact ? 9 : 11 }}
               tickLine={{ stroke: 'currentColor' }}
               axisLine={{ stroke: 'currentColor' }}
               className="text-gray-500 dark:text-gray-400"
               interval="preserveStartEnd"
-              minTickGap={50}
+              minTickGap={compact ? 30 : 50}
+              hide={compact}
             />
             <YAxis
               domain={[0, 100]}
-              tick={{ fontSize: 11 }}
+              tick={{ fontSize: compact ? 9 : 11 }}
               tickLine={{ stroke: 'currentColor' }}
               axisLine={{ stroke: 'currentColor' }}
               className="text-gray-500 dark:text-gray-400"
-              tickCount={6}
-              width={40}
+              tickCount={compact ? 3 : 6}
+              width={compact ? 25 : 40}
             />
             <Tooltip
               content={<CustomTooltip visibleScores={activeScores} />}
@@ -430,19 +437,21 @@ export function ScoreTimelineChart({
                 strokeDasharray: '3 3',
               }}
             />
-            <Legend
-              wrapperStyle={{ paddingTop: '20px' }}
-              iconType="circle"
-              iconSize={8}
-              formatter={(value) => {
-                const config = SCORE_CONFIGS.find((c) => c.key === value);
-                return (
-                  <span className="text-xs text-gray-600 dark:text-gray-300">
-                    {config?.name || value}
-                  </span>
-                );
-              }}
-            />
+            {!compact && (
+              <Legend
+                wrapperStyle={{ paddingTop: '20px' }}
+                iconType="circle"
+                iconSize={8}
+                formatter={(value) => {
+                  const config = SCORE_CONFIGS.find((c) => c.key === value);
+                  return (
+                    <span className="text-xs text-gray-600 dark:text-gray-300">
+                      {config?.name || value}
+                    </span>
+                  );
+                }}
+              />
+            )}
             {SCORE_CONFIGS.filter((config) => activeScores.includes(config.key)).map((config) => (
               <Line
                 key={config.key}

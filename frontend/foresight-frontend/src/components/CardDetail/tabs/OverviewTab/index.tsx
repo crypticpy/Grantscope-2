@@ -14,6 +14,7 @@ import React from 'react';
 // Sub-components
 import { CardDescription } from './CardDescription';
 import { CardClassification } from './CardClassification';
+import { DeepResearchPanel } from './DeepResearchPanel';
 import { ResearchHistoryPanel } from './ResearchHistoryPanel';
 import { ImpactMetricsPanel } from './ImpactMetricsPanel';
 import { MaturityScorePanel } from './MaturityScorePanel';
@@ -86,6 +87,16 @@ export interface OverviewTabProps {
   researchHistory: ResearchTask[];
 
   /**
+   * Callback to trigger new deep research
+   */
+  onRequestDeepResearch?: () => void;
+
+  /**
+   * Whether new deep research can be requested (rate limit)
+   */
+  canRequestDeepResearch?: boolean;
+
+  /**
    * Optional custom CSS class name for the container
    */
   className?: string;
@@ -142,14 +153,28 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   stageHistory,
   stageHistoryLoading,
   researchHistory,
+  onRequestDeepResearch,
+  canRequestDeepResearch,
   className = '',
 }) => {
+  // Filter deep research tasks for the prominent panel
+  const deepResearchTasks = researchHistory.filter(
+    (task) => task.task_type === 'deep_research' && task.status === 'completed'
+  );
+
   return (
     <div
       className={`grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 ${className}`}
     >
       {/* Main Content Column */}
       <div className="lg:col-span-2 space-y-4 sm:space-y-6">
+        {/* Deep Research Panel - Prominent placement when reports exist */}
+        <DeepResearchPanel
+          researchTasks={researchHistory}
+          onRequestResearch={onRequestDeepResearch}
+          canRequestResearch={canRequestDeepResearch}
+        />
+
         {/* Description Panel */}
         <CardDescription description={card.description} />
 
@@ -170,8 +195,13 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
           onRetry={onRetryScoreHistory}
         />
 
-        {/* Research History Panel */}
-        <ResearchHistoryPanel researchHistory={researchHistory} />
+        {/* Research History Panel - Shows all research including updates */}
+        {researchHistory.length > deepResearchTasks.length && (
+          <ResearchHistoryPanel
+            researchHistory={researchHistory.filter((t) => t.task_type !== 'deep_research')}
+            title="Update History"
+          />
+        )}
       </div>
 
       {/* Sidebar Column */}
@@ -216,6 +246,9 @@ export type { CardDescriptionProps } from './CardDescription';
 
 export { CardClassification } from './CardClassification';
 export type { CardClassificationProps } from './CardClassification';
+
+export { DeepResearchPanel } from './DeepResearchPanel';
+export type { DeepResearchPanelProps } from './DeepResearchPanel';
 
 export { ResearchHistoryPanel } from './ResearchHistoryPanel';
 export type { ResearchHistoryPanelProps } from './ResearchHistoryPanel';

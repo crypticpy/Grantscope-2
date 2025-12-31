@@ -1834,8 +1834,10 @@ async def export_card(
             detail=f"Invalid export format: {format}. Supported formats: pdf, pptx, csv"
         )
 
-    # Fetch card from database
-    response = supabase.table("cards").select("*").eq("id", card_id).single().execute()
+    # Fetch card from database with joined reference data
+    response = supabase.table("cards").select(
+        "*, pillars(name), goals(name), stages(name)"
+    ).eq("id", card_id).single().execute()
 
     if not response.data:
         raise HTTPException(
@@ -1845,7 +1847,35 @@ async def export_card(
 
     card_data = response.data
 
-    # Create CardExportData from raw data
+    # Extract joined names
+    pillar_name = card_data.get("pillars", {}).get("name") if card_data.get("pillars") else None
+    goal_name = card_data.get("goals", {}).get("name") if card_data.get("goals") else None
+    stage_name = card_data.get("stages", {}).get("name") if card_data.get("stages") else None
+
+    # Fetch latest completed deep research report for this card
+    research_report = None
+    research_reports = []
+    try:
+        research_response = supabase.table("research_tasks").select(
+            "id, task_type, result_summary, completed_at"
+        ).eq("card_id", card_id).eq("status", "completed").eq(
+            "task_type", "deep_research"
+        ).order("completed_at", desc=True).limit(3).execute()
+
+        if research_response.data:
+            for task in research_response.data:
+                if task.get("result_summary", {}).get("report_preview"):
+                    research_reports.append({
+                        "completed_at": task.get("completed_at"),
+                        "report": task["result_summary"]["report_preview"]
+                    })
+            # Use the most recent report as the main one
+            if research_reports:
+                research_report = research_reports[0]["report"]
+    except Exception as e:
+        logger.warning(f"Failed to fetch research reports for export: {e}")
+
+    # Create CardExportData from raw data with enriched names and research
     try:
         export_data = CardExportData(
             id=card_data["id"],
@@ -1854,9 +1884,12 @@ async def export_card(
             summary=card_data.get("summary"),
             description=card_data.get("description"),
             pillar_id=card_data.get("pillar_id"),
+            pillar_name=pillar_name,
             goal_id=card_data.get("goal_id"),
+            goal_name=goal_name,
             anchor_id=card_data.get("anchor_id"),
             stage_id=card_data.get("stage_id"),
+            stage_name=stage_name,
             horizon=card_data.get("horizon"),
             novelty_score=card_data.get("novelty_score"),
             maturity_score=card_data.get("maturity_score"),
@@ -1868,6 +1901,7 @@ async def export_card(
             status=card_data.get("status"),
             created_at=card_data.get("created_at"),
             updated_at=card_data.get("updated_at"),
+            deep_research_report=research_report,
         )
     except Exception as e:
         logger.error(f"Failed to create CardExportData: {str(e)}")

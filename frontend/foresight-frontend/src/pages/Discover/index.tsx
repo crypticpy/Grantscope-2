@@ -115,7 +115,7 @@ const Discover: React.FC = () => {
   const [selectedPillar, setSelectedPillar] = useState('');
   const [selectedStage, setSelectedStage] = useState('');
   const [selectedHorizon, setSelectedHorizon] = useState('');
-  const [sortOption, setSortOption] = useState<SortOption>('newest');
+  const [sortOption, setSortOption] = useState<SortOption>('recently_updated');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [followedCardIds, setFollowedCardIds] = useState<Set<string>>(new Set());
 

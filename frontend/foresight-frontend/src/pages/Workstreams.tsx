@@ -1,11 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, FolderOpen, Pencil, Trash2, AlertTriangle } from 'lucide-react';
+import {
+  Plus,
+  FolderOpen,
+  Pencil,
+  Trash2,
+  AlertTriangle,
+  HelpCircle,
+  X,
+  Kanban,
+  Sparkles,
+  FileText,
+  Filter,
+  ArrowRight,
+  Inbox,
+  Search,
+  ClipboardList,
+  Eye,
+  Archive,
+} from 'lucide-react';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
 import { WorkstreamForm, type Workstream } from '../components/WorkstreamForm';
 import { PillarBadgeGroup } from '../components/PillarBadge';
 import { getGoalByCode } from '../data/taxonomy';
+import { cn } from '../lib/utils';
 
 // ============================================================================
 // Delete Confirmation Modal
@@ -96,6 +115,204 @@ function FormModal({ workstream, onSuccess, onCancel }: FormModalProps) {
             onSuccess={onSuccess}
             onCancel={onCancel}
           />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// Workstream Info Modal
+// ============================================================================
+
+interface WorkstreamInfoModalProps {
+  onClose: () => void;
+}
+
+function WorkstreamInfoModal({ onClose }: WorkstreamInfoModalProps) {
+  // Kanban column data for the visual
+  const kanbanColumns = [
+    { name: 'Inbox', icon: Inbox, color: 'bg-gray-100 dark:bg-gray-700', description: 'New cards awaiting triage' },
+    { name: 'Screening', icon: Filter, color: 'bg-yellow-100 dark:bg-yellow-900/30', description: 'Evaluating relevance' },
+    { name: 'Research', icon: Search, color: 'bg-blue-100 dark:bg-blue-900/30', description: 'Active investigation' },
+    { name: 'Brief', icon: FileText, color: 'bg-purple-100 dark:bg-purple-900/30', description: 'Ready for leadership' },
+    { name: 'Watching', icon: Eye, color: 'bg-green-100 dark:bg-green-900/30', description: 'Monitoring developments' },
+    { name: 'Archived', icon: Archive, color: 'bg-gray-100 dark:bg-gray-600', description: 'Completed or dismissed' },
+  ];
+
+  return (
+    <div className="fixed inset-0 bg-gray-600/50 dark:bg-black/60 flex items-center justify-center p-4 z-50 overflow-y-auto">
+      <div className="bg-white dark:bg-[#2d3166] rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto my-8">
+        {/* Header */}
+        <div className="sticky top-0 bg-gradient-to-r from-brand-blue to-extended-purple p-6 rounded-t-xl">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-white/20 rounded-lg">
+                <Kanban className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-white">What are Workstreams?</h2>
+                <p className="text-white/80 text-sm mt-1">Your personalized research workspace</p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+              aria-label="Close"
+            >
+              <X className="h-5 w-5 text-white" />
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 space-y-8">
+          {/* Introduction */}
+          <div className="bg-brand-light-blue/30 dark:bg-brand-blue/10 rounded-lg p-4 border border-brand-blue/20">
+            <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+              A <strong className="text-brand-dark-blue dark:text-brand-light-blue">Workstream</strong> is 
+              a personalized research workspace that helps you organize and track intelligence cards 
+              relevant to a specific focus area. Think of it as a customized feed combined with a 
+              Kanban board for topics you care about.
+            </p>
+          </div>
+
+          {/* How to Create Section */}
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <Plus className="h-5 w-5 text-brand-blue" />
+              Creating a Workstream
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
+                <h4 className="font-medium text-gray-900 dark:text-white mb-2">1. Define Your Focus</h4>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Give your workstream a name like "Smart Mobility Initiatives" or "Climate Resilience Tech"
+                </p>
+              </div>
+              <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
+                <h4 className="font-medium text-gray-900 dark:text-white mb-2">2. Set Filter Criteria</h4>
+                <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                  <li className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-brand-blue" />
+                    Strategic Pillars & Goals
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-brand-blue" />
+                    Maturity Stages (1-8)
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-brand-blue" />
+                    Time Horizon (H1, H2, H3)
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-brand-blue" />
+                    Keywords
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          {/* Kanban Workflow Section */}
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <ClipboardList className="h-5 w-5 text-brand-blue" />
+              Research Workflow
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Cards in your workstream flow through a Kanban board as you research them:
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+              {kanbanColumns.map((col, idx) => (
+                <div key={col.name} className="relative">
+                  <div className={cn('rounded-lg p-3 text-center', col.color)}>
+                    <col.icon className="h-5 w-5 mx-auto mb-1 text-gray-600 dark:text-gray-300" />
+                    <div className="text-xs font-medium text-gray-900 dark:text-white">{col.name}</div>
+                    <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-1 leading-tight">
+                      {col.description}
+                    </div>
+                  </div>
+                  {idx < kanbanColumns.length - 1 && (
+                    <ArrowRight className="hidden lg:block absolute -right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 z-10" />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Features Section */}
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-brand-blue" />
+              What You Can Do
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+                <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                  <Sparkles className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <h4 className="font-medium text-gray-900 dark:text-white text-sm">Auto-Populate</h4>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    AI finds and adds matching cards to your inbox automatically
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+                <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                  <Search className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                </div>
+                <div>
+                  <h4 className="font-medium text-gray-900 dark:text-white text-sm">Deep Dive Research</h4>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    Trigger comprehensive AI analysis on any card
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+                <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                  <FileText className="h-4 w-4 text-green-600 dark:text-green-400" />
+                </div>
+                <div>
+                  <h4 className="font-medium text-gray-900 dark:text-white text-sm">Executive Briefs</h4>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    Generate leadership-ready summaries with version history
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+                <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
+                  <ClipboardList className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                </div>
+                <div>
+                  <h4 className="font-medium text-gray-900 dark:text-white text-sm">Notes & Reminders</h4>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    Add context-specific notes and set follow-up reminders
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Getting Started CTA */}
+          <div className="bg-gradient-to-r from-brand-blue/10 to-extended-purple/10 rounded-lg p-5 border border-brand-blue/20">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-semibold text-gray-900 dark:text-white">Ready to get started?</h4>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                  Create your first workstream to begin organizing your research.
+                </p>
+              </div>
+              <button
+                onClick={onClose}
+                className="inline-flex items-center px-4 py-2 bg-brand-blue text-white text-sm font-medium rounded-lg hover:bg-brand-dark-blue transition-colors"
+              >
+                Got it
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -293,6 +510,7 @@ const Workstreams: React.FC = () => {
 
   // Modal states
   const [showForm, setShowForm] = useState(false);
+  const [showInfoModal, setShowInfoModal] = useState(false);
   const [editingWorkstream, setEditingWorkstream] = useState<
     Workstream | undefined
   >(undefined);
@@ -380,11 +598,21 @@ const Workstreams: React.FC = () => {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-brand-dark-blue dark:text-white">Workstreams</h1>
-          <p className="mt-2 text-gray-600 dark:text-gray-400">
-            Create custom research streams based on your strategic priorities.
-          </p>
+        <div className="flex items-center gap-3">
+          <div>
+            <h1 className="text-3xl font-bold text-brand-dark-blue dark:text-white">Workstreams</h1>
+            <p className="mt-2 text-gray-600 dark:text-gray-400">
+              Create custom research streams based on your strategic priorities.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowInfoModal(true)}
+            className="p-2 text-gray-400 hover:text-brand-blue hover:bg-brand-light-blue/30 dark:hover:bg-brand-blue/20 rounded-lg transition-colors"
+            aria-label="Learn about Workstreams"
+            title="Learn about Workstreams"
+          >
+            <HelpCircle className="h-5 w-5" />
+          </button>
         </div>
         <button
           onClick={() => {
@@ -452,6 +680,11 @@ const Workstreams: React.FC = () => {
           onCancel={handleDeleteCancel}
           isDeleting={isDeleting}
         />
+      )}
+
+      {/* Workstream Info Modal */}
+      {showInfoModal && (
+        <WorkstreamInfoModal onClose={() => setShowInfoModal(false)} />
       )}
     </div>
   );
