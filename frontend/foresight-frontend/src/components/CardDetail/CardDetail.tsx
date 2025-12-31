@@ -20,7 +20,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Eye, FileText, Calendar, TrendingUp, GitBranch } from 'lucide-react';
+import { Eye, FileText, Calendar, TrendingUp, GitBranch, FolderOpen } from 'lucide-react';
 import { supabase } from '../../App';
 import { useAuthContext } from '../../hooks/useAuthContext';
 import { cn } from '../../lib/utils';
@@ -41,6 +41,7 @@ import {
 import { SourcesTab } from './tabs/SourcesTab';
 import { TimelineTab } from './tabs/TimelineTab';
 import { NotesTab } from './tabs/NotesTab';
+import { AssetsTab } from './AssetsTab';
 
 // Visualization Components
 import { ScoreTimelineChart } from '../visualizations/ScoreTimelineChart';
@@ -55,9 +56,11 @@ import {
   getScoreHistory,
   getStageHistory,
   getRelatedCards,
+  fetchCardAssets,
   type ScoreHistory,
   type StageHistory,
   type RelatedCard,
+  type CardAsset,
 } from '../../lib/discovery-api';
 
 /**
@@ -118,6 +121,11 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = '' }) => {
   const [relatedCards, setRelatedCards] = useState<RelatedCard[]>([]);
   const [relatedCardsLoading, setRelatedCardsLoading] = useState(false);
   const [relatedCardsError, setRelatedCardsError] = useState<string | null>(null);
+
+  // Assets state
+  const [assets, setAssets] = useState<CardAsset[]>([]);
+  const [assetsLoading, setAssetsLoading] = useState(false);
+  const [assetsError, setAssetsError] = useState<string | null>(null);
 
   // Get auth token for API requests
   const getAuthToken = useCallback(async () => {
@@ -208,6 +216,24 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = '' }) => {
       setRelatedCardsError(error instanceof Error ? error.message : 'Failed to load');
     } finally {
       setRelatedCardsLoading(false);
+    }
+  }, [card?.id, getAuthToken]);
+
+  // Load card assets (briefs, research reports, exports)
+  const loadAssets = useCallback(async () => {
+    if (!card?.id) return;
+    setAssetsLoading(true);
+    setAssetsError(null);
+    try {
+      const token = await getAuthToken();
+      if (token) {
+        const response = await fetchCardAssets(token, card.id);
+        setAssets(response.assets);
+      }
+    } catch (error: unknown) {
+      setAssetsError(error instanceof Error ? error.message : 'Failed to load assets');
+    } finally {
+      setAssetsLoading(false);
     }
   }, [card?.id, getAuthToken]);
 
@@ -325,7 +351,7 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = '' }) => {
   // Effects
   useEffect(() => { if (slug) loadCardDetail(); }, [slug, loadCardDetail]);
   useEffect(() => { if (card?.id && user) checkIfFollowing(); }, [card?.id, user, checkIfFollowing]);
-  useEffect(() => { if (card?.id) { loadScoreHistory(); loadStageHistory(); loadRelatedCards(); } }, [card?.id, loadScoreHistory, loadStageHistory, loadRelatedCards]);
+  useEffect(() => { if (card?.id) { loadScoreHistory(); loadStageHistory(); loadRelatedCards(); loadAssets(); } }, [card?.id, loadScoreHistory, loadStageHistory, loadRelatedCards, loadAssets]);
 
   // Computed values
   const canDeepResearch = card && (card.deep_research_count_today ?? 0) < 2;
@@ -337,6 +363,7 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = '' }) => {
     { id: 'timeline' as const, name: 'Timeline', icon: Calendar },
     { id: 'notes' as const, name: 'Notes', icon: TrendingUp },
     { id: 'related' as const, name: 'Related', icon: GitBranch },
+    { id: 'assets' as const, name: 'Assets', icon: FolderOpen },
   ];
 
   // Loading state
@@ -467,6 +494,15 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = '' }) => {
           showMinimap
           showBackground
           title="Related Trends Network"
+        />
+      )}
+      {activeTab === 'assets' && (
+        <AssetsTab
+          cardId={card.id}
+          assets={assets}
+          isLoading={assetsLoading}
+          error={assetsError}
+          onRefresh={loadAssets}
         />
       )}
     </div>

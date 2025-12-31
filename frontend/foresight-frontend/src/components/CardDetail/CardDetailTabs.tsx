@@ -16,7 +16,7 @@
  */
 
 import React, { useCallback, useRef, type KeyboardEvent } from 'react';
-import { Eye, FileText, Calendar, TrendingUp, GitBranch, type LucideIcon } from 'lucide-react';
+import { Eye, FileText, Calendar, TrendingUp, GitBranch, FolderOpen, type LucideIcon } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import type { CardDetailTab } from './types';
 
@@ -41,6 +41,7 @@ export const DEFAULT_TABS: readonly TabDefinition[] = [
   { id: 'timeline', name: 'Timeline', icon: Calendar },
   { id: 'notes', name: 'Notes', icon: TrendingUp },
   { id: 'related', name: 'Related', icon: GitBranch },
+  { id: 'assets', name: 'Assets', icon: FolderOpen },
 ] as const;
 
 /**

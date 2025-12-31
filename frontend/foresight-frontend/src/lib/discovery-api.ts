@@ -918,3 +918,57 @@ export async function compareCards(
     token
   );
 }
+
+// =============================================================================
+// Card Assets API
+// =============================================================================
+
+/**
+ * Asset type enumeration
+ */
+export type AssetType = 'brief' | 'research' | 'pdf_export' | 'pptx_export';
+
+/**
+ * Asset data structure returned from the API
+ */
+export interface CardAsset {
+  id: string;
+  type: AssetType;
+  title: string;
+  created_at: string;
+  version?: number;
+  file_size?: number;
+  download_count?: number;
+  ai_generated: boolean;
+  ai_model?: string;
+  status: 'ready' | 'generating' | 'failed';
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response from the card assets endpoint
+ */
+export interface CardAssetsResponse {
+  card_id: string;
+  assets: CardAsset[];
+  total_count: number;
+}
+
+/**
+ * Fetch all generated assets for a card.
+ * 
+ * Returns briefs, research reports, and exports associated with the card.
+ * 
+ * @param token - Authentication token
+ * @param cardId - Card UUID
+ * @returns CardAssetsResponse with list of assets
+ */
+export async function fetchCardAssets(
+  token: string,
+  cardId: string
+): Promise<CardAssetsResponse> {
+  return apiRequest<CardAssetsResponse>(
+    `/api/v1/cards/${cardId}/assets`,
+    token
+  );
+}

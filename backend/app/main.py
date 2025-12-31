@@ -5003,6 +5003,151 @@ async def export_brief(
         )
 
 
+# =============================================================================
+# Card Assets Endpoint
+# =============================================================================
+
+class CardAsset(BaseModel):
+    """Represents a generated asset (brief, research report, export) for a card."""
+    id: str
+    type: str  # 'brief', 'research', 'pdf_export', 'pptx_export'
+    title: str
+    created_at: str
+    version: Optional[int] = None
+    file_size: Optional[int] = None
+    download_count: Optional[int] = None
+    ai_generated: bool = True
+    ai_model: Optional[str] = None
+    status: str = "ready"  # 'ready', 'generating', 'failed'
+    metadata: Optional[dict] = None
+
+
+class CardAssetsResponse(BaseModel):
+    """Response containing all assets for a card."""
+    card_id: str
+    assets: List[CardAsset]
+    total_count: int
+
+
+@app.get("/api/v1/cards/{card_id}/assets", response_model=CardAssetsResponse)
+async def get_card_assets(
+    card_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get all generated assets for a card.
+    
+    Returns a list of all briefs, research reports, and exports
+    associated with the card across all workstreams.
+    
+    Args:
+        card_id: UUID of the card
+        current_user: Authenticated user (injected)
+    
+    Returns:
+        CardAssetsResponse with list of assets
+    
+    Raises:
+        HTTPException 404: Card not found
+    """
+    try:
+        # Verify card exists
+        card_response = supabase.table("cards").select("id, name").eq("id", card_id).execute()
+        if not card_response.data:
+            raise HTTPException(status_code=404, detail="Card not found")
+        
+        card_name = card_response.data[0].get("name", "Unknown Card")
+        assets = []
+        
+        # 1. Fetch executive briefs for this card
+        briefs_response = supabase.table("executive_briefs").select(
+            "id, version, status, summary, generated_at, model_used, created_at"
+        ).eq("card_id", card_id).order("created_at", desc=True).execute()
+        
+        for brief in briefs_response.data or []:
+            # Map status
+            brief_status = "ready" if brief.get("status") == "completed" else brief.get("status", "ready")
+            if brief_status == "generating":
+                brief_status = "generating"
+            elif brief_status in ("pending", "failed"):
+                brief_status = "failed" if brief_status == "failed" else "ready"
+            
+            title = f"Executive Brief v{brief.get('version', 1)}"
+            if brief.get("summary"):
+                # Truncate summary for title if needed
+                summary_preview = brief["summary"][:50] + "..." if len(brief.get("summary", "")) > 50 else brief.get("summary", "")
+                title = f"Executive Brief v{brief.get('version', 1)}"
+            
+            assets.append(CardAsset(
+                id=brief["id"],
+                type="brief",
+                title=title,
+                created_at=brief.get("generated_at") or brief.get("created_at"),
+                version=brief.get("version", 1),
+                ai_generated=True,
+                ai_model=brief.get("model_used"),
+                status=brief_status,
+                metadata={
+                    "summary_preview": brief.get("summary", "")[:200] if brief.get("summary") else None
+                }
+            ))
+        
+        # 2. Fetch research tasks (deep research reports)
+        research_response = supabase.table("research_tasks").select(
+            "id, task_type, status, result_summary, completed_at, created_at"
+        ).eq("card_id", card_id).order("created_at", desc=True).execute()
+        
+        for task in research_response.data or []:
+            # Only include completed or failed tasks as assets
+            if task.get("status") not in ("completed", "failed"):
+                continue
+            
+            task_type = task.get("task_type", "research")
+            if task_type == "deep_research":
+                asset_type = "research"
+                title = "Strategic Intelligence Report"
+            elif task_type == "update":
+                asset_type = "research"
+                title = "Quick Update Report"
+            else:
+                asset_type = "research"
+                title = f"{task_type.replace('_', ' ').title()} Report"
+            
+            result = task.get("result_summary", {}) or {}
+            
+            assets.append(CardAsset(
+                id=task["id"],
+                type=asset_type,
+                title=title,
+                created_at=task.get("completed_at") or task.get("created_at"),
+                ai_generated=True,
+                status="ready" if task.get("status") == "completed" else "failed",
+                metadata={
+                    "task_type": task_type,
+                    "sources_found": result.get("sources_found"),
+                    "sources_added": result.get("sources_added"),
+                }
+            ))
+        
+        # Sort all assets by created_at descending
+        assets.sort(key=lambda x: x.created_at or "", reverse=True)
+        
+        return CardAssetsResponse(
+            card_id=card_id,
+            assets=assets,
+            total_count=len(assets)
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching card assets: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch card assets: {str(e)}"
+        )
+
+
 # Taxonomy endpoints
 @app.get("/api/v1/taxonomy")
 async def get_taxonomy():

@@ -183,7 +183,7 @@ export interface Note {
 /**
  * Tab identifiers for CardDetail navigation
  */
-export type CardDetailTab = 'overview' | 'sources' | 'timeline' | 'notes' | 'related';
+export type CardDetailTab = 'overview' | 'sources' | 'timeline' | 'notes' | 'related' | 'assets';
 
 /**
  * Score color classes for consistent styling across components
