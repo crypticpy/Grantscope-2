@@ -79,66 +79,84 @@ export const CardDetailHeader: React.FC<CardDetailHeaderProps> = ({
       </Link>
 
       {/* Hero Section Container - optimized for quick scanning */}
-      <div className="bg-gradient-to-br from-gray-50 via-white to-gray-50/50 dark:from-gray-800/70 dark:via-gray-800/50 dark:to-gray-900/40 rounded-2xl border border-gray-200 dark:border-gray-700/70 shadow-sm p-5 sm:p-6 lg:p-8 mb-6">
-        {/* Action Buttons Row - Top right on all screens */}
+      <div className="bg-white dark:bg-gray-800/90 rounded-2xl border border-gray-200 dark:border-gray-700/70 shadow-sm overflow-hidden mb-6">
+        {/* Gradient Header Bar - visual treatment matching research report style */}
+        <div className="bg-gradient-to-r from-brand-blue to-extended-purple h-1.5" />
+        
+        {/* Action Buttons Row - Top with separator */}
         {children && (
-          <div className="flex items-center justify-end gap-2 sm:gap-3 mb-4 flex-wrap">
-            {children}
+          <div className="px-5 sm:px-6 lg:px-8 pt-4 pb-3 border-b border-gray-200 dark:border-gray-700/50">
+            <div className="flex items-center justify-end gap-2 sm:gap-3 flex-wrap">
+              {children}
+            </div>
           </div>
         )}
 
-        {/* Primary Classification Badges - TOP for quick scanning */}
-        <div className="flex items-center gap-2 sm:gap-3 flex-wrap mb-4">
-          <PillarBadge
-            pillarId={card.pillar_id}
-            goalId={card.goal_id}
-            showIcon
-            size="lg"
-          />
-          <HorizonBadge
-            horizon={card.horizon}
-            showIcon
-            size="lg"
-          />
-          {card.top25_relevance && card.top25_relevance.length > 0 && (
-            <Top25Badge
-              priorities={card.top25_relevance}
-              showCount
-              size="lg"
-            />
-          )}
-        </div>
+        {/* Main Content Area */}
+        <div className="p-5 sm:p-6 lg:p-8">
+          {/* Primary Classification Badges - TOP for quick scanning */}
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap mb-4">
+            <div className="transition-transform hover:scale-105">
+              <PillarBadge
+                pillarId={card.pillar_id}
+                goalId={card.goal_id}
+                showIcon
+                size="lg"
+              />
+            </div>
+            <div className="transition-transform hover:scale-105">
+              <HorizonBadge
+                horizon={card.horizon}
+                showIcon
+                size="lg"
+              />
+            </div>
+            {card.top25_relevance && card.top25_relevance.length > 0 && (
+              <div className="transition-transform hover:scale-105">
+                <Top25Badge
+                  priorities={card.top25_relevance}
+                  showCount
+                  size="lg"
+                />
+              </div>
+            )}
+          </div>
 
-        {/* Title - prominent for quick identification, full width */}
-        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white break-words mb-4 leading-tight tracking-tight">
-          {card.name}
-        </h1>
+          {/* Title - prominent for quick identification, full width */}
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white break-words mb-4 leading-tight tracking-tight">
+            {card.name}
+          </h1>
 
-        {/* Summary - the "elevator pitch", full width for better readability */}
-        <p className="text-base sm:text-lg text-gray-700 dark:text-gray-200 mb-5 break-words leading-relaxed">
-          {card.summary}
-        </p>
+          {/* Summary - the "elevator pitch", full width for better readability */}
+          <p className="text-base sm:text-lg text-gray-700 dark:text-gray-200 mb-5 break-words leading-relaxed">
+            {card.summary}
+          </p>
 
-        {/* Secondary Info Row - Stage, Anchor, Created Date */}
-        <div className="flex items-center flex-wrap gap-3 sm:gap-4 pt-3 border-t border-gray-200/60 dark:border-gray-700/50">
-          {stageNumber && (
-            <StageBadge
-              stage={stageNumber}
-              variant="badge"
-              showName
-              size="md"
-            />
-          )}
-          {card.anchor_id && (
-            <AnchorBadge
-              anchor={card.anchor_id}
-              size="md"
-              abbreviated
-            />
-          )}
-          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
-            Created: {new Date(card.created_at).toLocaleDateString()}
-          </span>
+          {/* Secondary Info Row - Stage, Anchor, Created Date */}
+          <div className="flex items-center flex-wrap gap-3 sm:gap-4 pt-3 border-t border-gray-200/60 dark:border-gray-700/50">
+            {stageNumber && (
+              <div className="transition-transform hover:scale-105">
+                <StageBadge
+                  stage={stageNumber}
+                  variant="badge"
+                  showName
+                  size="md"
+                />
+              </div>
+            )}
+            {card.anchor_id && (
+              <div className="transition-transform hover:scale-105">
+                <AnchorBadge
+                  anchor={card.anchor_id}
+                  size="md"
+                  abbreviated
+                />
+              </div>
+            )}
+            <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+              Created: {new Date(card.created_at).toLocaleDateString()}
+            </span>
+          </div>
         </div>
       </div>
     </div>
