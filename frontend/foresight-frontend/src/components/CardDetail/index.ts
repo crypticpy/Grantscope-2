@@ -85,6 +85,12 @@ export type { CardDetailTabsProps, TabDefinition } from './CardDetailTabs';
  */
 export * from './tabs';
 
+/**
+ * Assets tab for viewing generated content history
+ */
+export { AssetsTab } from './AssetsTab';
+export type { AssetsTabProps, Asset, AssetType } from './AssetsTab';
+
 // =============================================================================
 // Type Exports
 // =============================================================================
