@@ -45,12 +45,42 @@ GAMMA_POLL_INTERVAL_SECONDS = 3
 GAMMA_POLL_MAX_ATTEMPTS = 60  # 3 minutes max wait time
 GAMMA_REQUEST_TIMEOUT = 30
 
-# Default branding
+# Default branding - City of Austin logos hosted on Dropbox
 FORESIGHT_BRANDING = "FORESIGHT Strategic Intelligence Platform"
-COA_LOGO_URL = os.getenv(
-    "COA_LOGO_URL",
-    "https://www.austintexas.gov/sites/default/files/files/Branding/COA_Logo_Horizontal_Official_RGB.png"
+COA_LOGO_HORIZONTAL = os.getenv(
+    "COA_LOGO_HORIZONTAL",
+    "https://dl.dropboxusercontent.com/scl/fi/vtmgwhrila35a9gcthuh0/COA-Logo-Horizontal-Official-RGB.png?rlkey=xj2s6muc7r4dkjb3lrn72dywt"
 )
+COA_LOGO_CIRCLE = os.getenv(
+    "COA_LOGO_CIRCLE", 
+    "https://dl.dropboxusercontent.com/scl/fi/s23pczc5japf6w2l5lj7c/COA-Official-Circle.png?rlkey=zijpoik2f5qesjasgr7ii6afy"
+)
+# Backwards compatibility
+COA_LOGO_URL = COA_LOGO_HORIZONTAL
+
+# Official City of Austin Brand Colors
+COA_COLORS = {
+    # Official Palette
+    "logo_blue": "#44499C",      # Primary - headers, titles, accents
+    "logo_green": "#009F4D",     # Secondary - highlights, positive indicators
+    "faded_white": "#f7f6f5",    # Backgrounds
+    # Supporting Palette
+    "compliant_green": "#008743",
+    "dark_blue": "#22254E",      # Emphasis text
+    "dark_green": "#005027",
+    "light_blue": "#dcf2fd",     # Subtle backgrounds
+    "light_green": "#dff0e3",    # Callout boxes
+    # Extended Palette
+    "red": "#F83125",            # Risks, concerns
+    "orange": "#FF8F00",
+    "yellow": "#FFC600",
+    "cyan": "#009CDE",
+    "purple": "#9F3CC9",
+    "light_gray": "#C6C5C4",
+    "brown": "#8F5201",
+    "dark_gray": "#636262",      # Body text
+    "black": "#000000",
+}
 
 # Classification data for slide context
 PILLAR_NAMES = {
@@ -579,23 +609,45 @@ technology in public service."""
         Returns:
             Request body dict
         """
-        # Build additional instructions based on content
+        # Build comprehensive instructions for executive-quality output
+        # Using official City of Austin brand colors
         instructions = """
-Create an executive-quality strategic intelligence presentation for senior city government leadership.
+Create an executive briefing presentation for City of Austin senior leadership (City Manager, Assistant City Managers, Department Directors).
 
-Design requirements:
-- Professional, clean, government-appropriate visual style
-- Use a blue color scheme (#1E3A5F primary, #2E86AB secondary)
-- Include relevant imagery that supports the strategic content
-- Charts and data visualizations where metrics are mentioned
-- Clear hierarchy with concise bullet points
-- Each slide should make one key point clearly
+VISUAL DESIGN - USE OFFICIAL CITY OF AUSTIN BRAND COLORS:
+- Primary: Logo Blue (#44499C) for headers, titles, and key accents
+- Secondary: Logo Green (#009F4D) for highlights, callouts, and positive indicators
+- Background: Faded White (#f7f6f5) or pure white for slide backgrounds
+- Dark accents: Dark Blue (#22254E) for emphasis text
+- Supporting: Light Blue (#dcf2fd) and Light Green (#dff0e3) for subtle backgrounds or callout boxes
+- Text: Dark Gray (#636262) or Black (#000000) for body text
+- Clean, modern, professional government aesthetic
+- Generous white space - avoid cluttered slides
+- Use large, readable fonts (minimum 24pt for body text)
 
-Content guidelines:
-- This is strategic foresight content about emerging trends and technologies
-- Focus on implications for municipal government
-- Highlight actionable insights and decision points
-- Include timeline and urgency information where relevant
+IMAGERY & DATA VISUALIZATION:
+- Generate relevant, high-quality images that illustrate key concepts
+- For statistics or metrics, create clean charts using Logo Blue (#44499C) and Logo Green (#009F4D)
+- Use bar charts, line graphs, or infographics with the official color palette
+- Use icons to represent key concepts where appropriate
+- Images should feel professional, contemporary, and appropriate for government context
+- Avoid stock photo clichés - prefer conceptual or abstract visuals for technology topics
+- For comparison data, use Logo Green for positive/opportunity and Red (#F83125) for risks/concerns
+
+SLIDE STRUCTURE:
+- Title slide: Bold, impactful title with strategic framing
+- Executive Summary: 3-5 key takeaways as bullet points
+- Content slides: One main idea per slide with supporting points
+- Use "So What?" framing - always connect to municipal implications
+- Include a "Recommended Actions" or "Next Steps" slide
+- Final slide: Key contacts or resources
+
+CONTENT TONE:
+- Authoritative but accessible
+- Forward-looking and strategic
+- Action-oriented language
+- Avoid jargon - explain technical concepts simply
+- Focus on decision-relevant information
 """
         
         request = {
@@ -608,16 +660,22 @@ Content guidelines:
             "exportAs": export_format,
             "textOptions": {
                 "amount": "medium",
-                "tone": "professional, authoritative, strategic",
-                "audience": "senior government executives, city leadership, municipal decision-makers",
+                "tone": "professional, authoritative, strategic, clear, action-oriented",
+                "audience": "City Manager, Assistant City Managers, Department Directors, senior municipal executives making strategic decisions",
                 "language": "en"
             },
             "cardOptions": {
                 "dimensions": "16x9",
                 "headerFooter": {
+                    "topRight": {
+                        "type": "image",
+                        "source": "custom",
+                        "src": COA_LOGO_HORIZONTAL,
+                        "size": "md"
+                    },
                     "bottomLeft": {
                         "type": "text",
-                        "value": FORESIGHT_BRANDING
+                        "value": "City of Austin | FORESIGHT Strategic Intelligence"
                     },
                     "bottomRight": {
                         "type": "cardNumber"
@@ -632,25 +690,16 @@ Content guidelines:
             }
         }
         
-        # Configure image options
+        # Configure image options for high-quality visuals
         if include_images:
             request["imageOptions"] = {
                 "source": "aiGenerated",
                 "model": "imagen-4-pro",
-                "style": "professional, clean, photorealistic, corporate, modern"
+                "style": "professional photography, clean modern design, corporate, sophisticated, minimalist, high-quality, suitable for government presentations"
             }
         else:
             request["imageOptions"] = {
                 "source": "noImages"
-            }
-        
-        # Add logo if URL is configured
-        if COA_LOGO_URL:
-            request["cardOptions"]["headerFooter"]["topRight"] = {
-                "type": "image",
-                "source": "custom",
-                "src": COA_LOGO_URL,
-                "size": "sm"
             }
         
         return request

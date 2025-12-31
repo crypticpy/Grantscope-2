@@ -77,27 +77,48 @@ logger = logging.getLogger(__name__)
 # Constants
 # ============================================================================
 
-# Foresight branding colors
-FORESIGHT_COLORS = {
-    "primary": "#1E3A5F",      # Deep blue
-    "secondary": "#2E86AB",    # Lighter blue
-    "accent": "#A23B72",       # Magenta accent
-    "success": "#28A745",      # Green for positive metrics
-    "warning": "#FFC107",      # Yellow for warnings
-    "danger": "#DC3545",       # Red for negative/risk
-    "light": "#F8F9FA",        # Light background
-    "dark": "#343A40",         # Dark text
+# Official City of Austin Brand Colors
+# https://austin.gov/design/brand
+COA_BRAND_COLORS = {
+    # Official Palette
+    "logo_blue": "#44499C",      # Primary - headers, titles, accents
+    "logo_green": "#009F4D",     # Secondary - highlights, positive indicators
+    "faded_white": "#f7f6f5",    # Backgrounds
+    # Supporting Palette
+    "dark_blue": "#22254E",      # Emphasis text
+    "dark_green": "#005027",
+    "light_blue": "#dcf2fd",     # Subtle backgrounds
+    "light_green": "#dff0e3",    # Callout boxes
+    # Extended Palette
+    "red": "#F83125",            # Risks, concerns
+    "orange": "#FF8F00",
+    "yellow": "#FFC600",
+    "cyan": "#009CDE",
+    "dark_gray": "#636262",      # Body text
+    "black": "#000000",
 }
 
-# Score colors for charts
+# Foresight branding colors - mapped to City of Austin brand
+FORESIGHT_COLORS = {
+    "primary": COA_BRAND_COLORS["logo_blue"],      # Official Logo Blue
+    "secondary": COA_BRAND_COLORS["logo_green"],   # Official Logo Green
+    "accent": COA_BRAND_COLORS["cyan"],            # Cyan accent
+    "success": COA_BRAND_COLORS["logo_green"],     # Green for positive metrics
+    "warning": COA_BRAND_COLORS["yellow"],         # Yellow for warnings
+    "danger": COA_BRAND_COLORS["red"],             # Red for negative/risk
+    "light": COA_BRAND_COLORS["faded_white"],      # Light background
+    "dark": COA_BRAND_COLORS["dark_gray"],         # Dark text
+}
+
+# Score colors for charts - using COA brand palette
 SCORE_COLORS = {
-    "Novelty": "#2E86AB",
-    "Maturity": "#28A745",
-    "Impact": "#A23B72",
-    "Relevance": "#FFC107",
-    "Velocity": "#17A2B8",
-    "Risk": "#DC3545",
-    "Opportunity": "#6F42C1",
+    "Novelty": COA_BRAND_COLORS["cyan"],
+    "Maturity": COA_BRAND_COLORS["logo_green"],
+    "Impact": COA_BRAND_COLORS["logo_blue"],
+    "Relevance": COA_BRAND_COLORS["yellow"],
+    "Velocity": COA_BRAND_COLORS["orange"],
+    "Risk": COA_BRAND_COLORS["red"],
+    "Opportunity": COA_BRAND_COLORS["dark_blue"],
 }
 
 # Chart settings
