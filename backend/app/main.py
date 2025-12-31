@@ -4898,9 +4898,21 @@ async def export_brief(
             detail="Brief is not yet complete. Please wait for generation to finish."
         )
 
-    # Fetch card name for the export
-    card_response = supabase.table("cards").select("name").eq("id", card_id).single().execute()
-    card_name = card_response.data["name"] if card_response.data else "Unknown Card"
+    # Fetch card info for the export (including classification)
+    card_response = supabase.table("cards").select(
+        "name, pillar_id, horizon, stage_id"
+    ).eq("id", card_id).single().execute()
+    
+    card_name = "Unknown Card"
+    classification = {}
+    if card_response.data:
+        card_name = card_response.data.get("name", "Unknown Card")
+        # Build classification info for professional PDF
+        classification = {
+            "pillar": card_response.data.get("pillar_id"),
+            "horizon": card_response.data.get("horizon"),
+            "stage": card_response.data.get("stage_id"),
+        }
 
     # Generate export using ExportService
     export_service = ExportService(supabase)
@@ -4916,13 +4928,15 @@ async def export_brief(
                 generated_at = brief["generated_at"]
 
         if format_lower == "pdf":
-            file_path = await export_service.generate_brief_pdf(
+            # Use professional PDF with logo, branding, and AI disclosure
+            file_path = await export_service.generate_professional_brief_pdf(
                 brief_title=card_name,
                 card_name=card_name,
                 executive_summary=brief.get("summary", ""),
                 content_markdown=brief.get("content_markdown", ""),
                 generated_at=generated_at,
-                version=brief.get("version", 1)
+                version=brief.get("version", 1),
+                classification=classification
             )
             content_type = "application/pdf"
             extension = "pdf"

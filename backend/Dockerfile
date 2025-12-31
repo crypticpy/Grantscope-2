@@ -64,6 +64,9 @@ RUN pip install --no-cache-dir --upgrade pip \
 # Note: Using backend/ prefix because Docker context is repo root
 COPY --chown=appuser:appgroup backend/app/ ./app/
 
+# Copy branding assets for PDF exports (City of Austin logo, etc.)
+COPY --chown=appuser:appgroup branding/ ./branding/
+
 # Copy entrypoint (supports web vs worker via FORESIGHT_PROCESS_TYPE)
 COPY --chown=appuser:appgroup backend/entrypoint.sh /app/entrypoint.sh
 RUN chmod 755 /app/entrypoint.sh
