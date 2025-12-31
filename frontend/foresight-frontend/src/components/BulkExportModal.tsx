@@ -12,7 +12,7 @@
  * - City of Austin branded styling
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   X,
   Download,
@@ -25,6 +25,7 @@ import {
   GripVertical,
   ArrowUpDown,
   AlertTriangle,
+  Clock,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import type {
@@ -75,6 +76,11 @@ const COA_COLORS = {
 // Component
 // =============================================================================
 
+// Estimated export time per card (seconds) - AI synthesis + generation
+const ESTIMATED_SECONDS_PER_CARD = 8;
+// Warning threshold (seconds) - show warning if export takes longer
+const LONG_EXPORT_WARNING_THRESHOLD = 60;
+
 export const BulkExportModal: React.FC<BulkExportModalProps> = ({
   isOpen,
   onClose,
@@ -87,6 +93,23 @@ export const BulkExportModal: React.FC<BulkExportModalProps> = ({
 }) => {
   const [selectedFormat, setSelectedFormat] = useState<'pptx' | 'pdf'>('pptx');
   const [cardOrder, setCardOrder] = useState<string[]>([]);
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const [showLongExportWarning, setShowLongExportWarning] = useState(false);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const exportStartRef = useRef<number | null>(null);
+
+  // Format time as mm:ss or ss
+  const formatTime = useCallback((seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (mins > 0) {
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${secs}s`;
+  }, []);
+
+  // Calculate estimated total time
+  const estimatedTotalTime = cardOrder.length * ESTIMATED_SECONDS_PER_CARD;
 
   // Initialize card order from status data
   useEffect(() => {
@@ -99,7 +122,41 @@ export const BulkExportModal: React.FC<BulkExportModalProps> = ({
     }
   }, [statusData]);
 
-  // Close on escape key
+  // Timer for elapsed time during export
+  useEffect(() => {
+    if (isExporting) {
+      // Start timer
+      exportStartRef.current = Date.now();
+      setElapsedTime(0);
+      setShowLongExportWarning(false);
+      
+      timerRef.current = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - (exportStartRef.current || Date.now())) / 1000);
+        setElapsedTime(elapsed);
+        
+        // Show warning if export is taking longer than expected
+        if (elapsed > LONG_EXPORT_WARNING_THRESHOLD && !showLongExportWarning) {
+          setShowLongExportWarning(true);
+        }
+      }, 1000);
+    } else {
+      // Stop timer
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      exportStartRef.current = null;
+    }
+
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [isExporting, showLongExportWarning]);
+
+  // Close on escape key (but not during export)
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen && !isExporting) {
@@ -119,6 +176,15 @@ export const BulkExportModal: React.FC<BulkExportModalProps> = ({
       document.body.style.overflow = '';
     };
   }, [isOpen]);
+
+  // Warn user if they try to close during export
+  const handleClose = useCallback(() => {
+    if (isExporting) {
+      // Could show confirmation dialog, but for now just prevent close
+      return;
+    }
+    onClose();
+  }, [isExporting, onClose]);
 
   const handleExport = useCallback(() => {
     if (cardOrder.length > 0) {
@@ -143,7 +209,7 @@ export const BulkExportModal: React.FC<BulkExportModalProps> = ({
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={!isExporting ? onClose : undefined}
+        onClick={handleClose}
         aria-hidden="true"
       />
 
@@ -308,9 +374,108 @@ export const BulkExportModal: React.FC<BulkExportModalProps> = ({
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
+          {/* Export Progress Indicator */}
+          {isExporting && (
+            <div className="mb-4">
+              <div 
+                className="flex items-center gap-3 p-3 rounded-lg"
+                style={{ backgroundColor: COA_COLORS.lightBlue }}
+              >
+                {/* Animated spinner with progress ring */}
+                <div className="relative flex-shrink-0">
+                  <div 
+                    className="w-10 h-10 rounded-full flex items-center justify-center animate-pulse"
+                    style={{ backgroundColor: `${COA_COLORS.logoBlue}20` }}
+                  >
+                    <Loader2 
+                      className="h-5 w-5 animate-spin" 
+                      style={{ color: COA_COLORS.logoBlue }}
+                    />
+                  </div>
+                  {/* Progress ring */}
+                  {estimatedTotalTime > 0 && (
+                    <svg
+                      className="absolute inset-0 w-full h-full -rotate-90"
+                      viewBox="0 0 40 40"
+                    >
+                      <circle
+                        cx="20"
+                        cy="20"
+                        r="18"
+                        fill="none"
+                        stroke={`${COA_COLORS.logoBlue}30`}
+                        strokeWidth="3"
+                      />
+                      <circle
+                        cx="20"
+                        cy="20"
+                        r="18"
+                        fill="none"
+                        stroke={COA_COLORS.logoBlue}
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        strokeDasharray={`${Math.min((elapsedTime / estimatedTotalTime) * 113, 113)} 113`}
+                        className="transition-all duration-1000"
+                      />
+                    </svg>
+                  )}
+                </div>
+                
+                {/* Status text and timer */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span 
+                      className="text-sm font-medium"
+                      style={{ color: COA_COLORS.darkBlue }}
+                    >
+                      Generating portfolio...
+                    </span>
+                    <span 
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+                      style={{ 
+                        backgroundColor: `${COA_COLORS.logoBlue}15`,
+                        color: COA_COLORS.logoBlue 
+                      }}
+                    >
+                      <Sparkles className="h-3 w-3" />
+                      AI Synthesis
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="flex items-center gap-1 text-xs text-gray-500">
+                      <Clock className="h-3 w-3" />
+                      Elapsed: {formatTime(elapsedTime)}
+                    </span>
+                    {estimatedTotalTime > elapsedTime && (
+                      <span className="text-xs text-gray-400">
+                        Est. ~{formatTime(Math.max(0, estimatedTotalTime - elapsedTime))} remaining
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Long export warning */}
+              {showLongExportWarning && (
+                <div 
+                  className="flex items-center gap-2 mt-2 p-2 rounded-lg text-xs"
+                  style={{ 
+                    backgroundColor: `${COA_COLORS.amber}15`,
+                    color: COA_COLORS.amber 
+                  }}
+                >
+                  <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+                  <span>
+                    Export is taking longer than expected. Please wait while we generate your portfolio.
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+          
           <div className="flex items-center justify-between">
             <div className="text-sm text-gray-500">
-              {cardOrder.length > 0 && (
+              {!isExporting && cardOrder.length > 0 && (
                 <span>
                   {cardOrder.length} card{cardOrder.length !== 1 ? 's' : ''} will
                   be exported
@@ -319,7 +484,7 @@ export const BulkExportModal: React.FC<BulkExportModalProps> = ({
             </div>
             <div className="flex items-center gap-3">
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 disabled={isExporting}
                 className={cn(
                   'px-4 py-2 text-sm font-medium rounded-lg transition-colors',

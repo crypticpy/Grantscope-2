@@ -878,12 +878,13 @@ export async function getBulkBriefStatus(
 /**
  * Export multiple briefs as a single portfolio presentation.
  * Creates an AI-synthesized portfolio combining all selected briefs.
+ * Handles both file downloads and JSON responses.
  *
  * @param token - Bearer authentication token
  * @param workstreamId - UUID of the workstream
  * @param format - Export format ('pptx' or 'pdf')
  * @param cardOrder - Ordered array of card IDs (from Kanban position)
- * @returns URL to the generated portfolio or path to downloaded file
+ * @returns BulkExportResponse with status and optional URL
  */
 export async function exportBulkBriefs(
   token: string,
@@ -915,66 +916,15 @@ export async function exportBulkBriefs(
     throw new Error(`Export failed: ${response.status}`);
   }
 
-  return response.json();
-}
-
-/**
- * Export bulk briefs with file download (for PDF and fallback PPTX).
- * Triggers a file download for locally-generated exports.
- *
- * @param token - Bearer authentication token
- * @param workstreamId - UUID of the workstream
- * @param format - Export format ('pptx' or 'pdf')
- * @param cardOrder - Ordered array of card IDs
- * @returns true if download was triggered successfully
- */
-export async function downloadBulkBriefs(
-  token: string,
-  workstreamId: string,
-  format: 'pptx' | 'pdf',
-  cardOrder: string[]
-): Promise<boolean> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/v1/me/workstreams/${workstreamId}/bulk-brief-export`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        format,
-        card_order: cardOrder,
-      }),
-    }
-  );
-
-  if (!response.ok) {
-    const contentType = response.headers.get('content-type');
-    if (contentType?.includes('application/json')) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.detail || errorData.message || `Export failed: ${response.status}`);
-    }
-    throw new Error(`Export failed: ${response.status}`);
-  }
-
-  // Check if response is a file download or JSON
+  // Check content type to determine response handling
   const contentType = response.headers.get('content-type');
   
+  // If JSON response (unlikely but handle it)
   if (contentType?.includes('application/json')) {
-    // JSON response - could have a pptx_url for Gamma exports
-    const data = await response.json();
-    
-    if (data.pptx_url) {
-      // Open Gamma URL in new tab
-      window.open(data.pptx_url, '_blank');
-      return true;
-    }
-    
-    throw new Error(data.error || 'Export failed');
+    return response.json();
   }
-
-  // File download response
+  
+  // File download response - extract and trigger download
   const blob = await response.blob();
   const contentDisposition = response.headers.get('content-disposition');
   let filename = `portfolio-export.${format}`;
@@ -996,5 +946,11 @@ export async function downloadBulkBriefs(
   document.body.removeChild(link);
   window.URL.revokeObjectURL(downloadUrl);
 
-  return true;
+  // Return success response
+  return {
+    status: 'success',
+    message: 'Portfolio downloaded successfully',
+    format,
+    total_cards: cardOrder.length,
+  };
 }
