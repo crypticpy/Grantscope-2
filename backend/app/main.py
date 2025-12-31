@@ -97,6 +97,20 @@ from app.models.analytics import (
     PillarCoverageResponse,
     InsightItem,
     InsightsResponse,
+    # Comprehensive analytics models
+    StageDistribution,
+    HorizonDistribution,
+    TrendingTopic,
+    SourceStats,
+    DiscoveryStats,
+    WorkstreamEngagement,
+    FollowStats,
+    SystemWideStats,
+    UserFollowItem,
+    PopularCard,
+    UserEngagementComparison,
+    PillarAffinity,
+    PersonalStats,
 )
 
 # History models import for trend visualization
@@ -3827,10 +3841,11 @@ async def update_workstream_card(
     if ws_response.data[0]["user_id"] != current_user["id"]:
         raise HTTPException(status_code=403, detail="Not authorized to update cards in this workstream")
 
-    # Fetch the workstream card
+    # Fetch the workstream card by its junction table ID (card_id param is actually workstream_card.id)
+    # The frontend passes the workstream_card junction table ID, not the underlying card UUID
     wsc_response = supabase.table("workstream_cards").select("*, cards(*)").eq(
         "workstream_id", workstream_id
-    ).eq("card_id", card_id).execute()
+    ).eq("id", card_id).execute()
 
     if not wsc_response.data:
         raise HTTPException(status_code=404, detail="Card not found in this workstream")
@@ -3932,10 +3947,10 @@ async def remove_card_from_workstream(
     if ws_response.data[0]["user_id"] != current_user["id"]:
         raise HTTPException(status_code=403, detail="Not authorized to remove cards from this workstream")
 
-    # Check card exists in workstream
+    # Check card exists in workstream (card_id param is actually workstream_card.id - the junction table ID)
     existing = supabase.table("workstream_cards").select("id").eq(
         "workstream_id", workstream_id
-    ).eq("card_id", card_id).execute()
+    ).eq("id", card_id).execute()
 
     if not existing.data:
         raise HTTPException(status_code=404, detail="Card not found in this workstream")
@@ -3943,7 +3958,7 @@ async def remove_card_from_workstream(
     # Delete the association
     supabase.table("workstream_cards").delete().eq(
         "workstream_id", workstream_id
-    ).eq("card_id", card_id).execute()
+    ).eq("id", card_id).execute()
 
     return {"status": "removed", "message": "Card removed from workstream"}
 
@@ -3983,23 +3998,26 @@ async def trigger_card_deep_dive(
     if ws_response.data[0]["user_id"] != current_user["id"]:
         raise HTTPException(status_code=403, detail="Not authorized to access this workstream")
 
-    # Verify card exists in workstream
-    wsc_response = supabase.table("workstream_cards").select("id").eq(
+    # Verify card exists in workstream (card_id param is actually workstream_card.id - the junction table ID)
+    wsc_response = supabase.table("workstream_cards").select("id, card_id").eq(
         "workstream_id", workstream_id
-    ).eq("card_id", card_id).execute()
+    ).eq("id", card_id).execute()
 
     if not wsc_response.data:
         raise HTTPException(status_code=404, detail="Card not found in this workstream")
 
+    # Get the actual underlying card UUID for research
+    actual_card_id = wsc_response.data[0]["card_id"]
+
     # Check rate limit for deep research
     service = ResearchService(supabase, openai_client)
-    if not await service.check_rate_limit(card_id):
+    if not await service.check_rate_limit(actual_card_id):
         raise HTTPException(status_code=429, detail="Daily deep research limit reached (2 per card)")
 
-    # Create research task
+    # Create research task using the actual underlying card UUID
     task_record = {
         "user_id": current_user["id"],
-        "card_id": card_id,
+        "card_id": actual_card_id,
         "task_type": "deep_research",
         "status": "queued"
     }
@@ -4010,11 +4028,8 @@ async def trigger_card_deep_dive(
         raise HTTPException(status_code=500, detail="Failed to create research task")
 
     task = task_result.data[0]
-    task_id = task["id"]
 
-    # Create task data for background execution
     # Task execution is handled by the background worker (see `app.worker`).
-
     return ResearchTask(**task)
 
 
@@ -5927,6 +5942,641 @@ async def get_trend_velocity(
         )
 
 
+# ============================================================================
+# Comprehensive Analytics Endpoints
+# ============================================================================
+
+# Stage name mapping
+STAGE_NAMES = {
+    "1": "Concept",
+    "2": "Exploring", 
+    "3": "Pilot",
+    "4": "PoC",
+    "5": "Implementing",
+    "6": "Scaling",
+    "7": "Mature",
+    "8": "Declining",
+}
+
+# Horizon labels
+HORIZON_LABELS = {
+    "H1": "Near-term (0-2 years)",
+    "H2": "Mid-term (2-5 years)",
+    "H3": "Long-term (5+ years)",
+}
+
+
+@app.get("/api/v1/analytics/system-stats", response_model=SystemWideStats)
+async def get_system_wide_stats(
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get comprehensive system-wide analytics.
+    
+    Returns aggregated statistics about:
+    - Total cards, sources, and discovery activity
+    - Distribution by pillar, stage, and horizon
+    - Trending topics and hot categories
+    - Workstream and follow engagement metrics
+    """
+    from datetime import timedelta
+    from collections import Counter
+    
+    try:
+        now = datetime.now()
+        one_week_ago = now - timedelta(days=7)
+        one_month_ago = now - timedelta(days=30)
+        
+        # -------------------------------------------------------------------------
+        # Core Card Stats
+        # -------------------------------------------------------------------------
+        
+        # Total cards
+        total_cards_resp = supabase.table("cards").select("id", count="exact").execute()
+        total_cards = total_cards_resp.count or 0
+        
+        # Active cards
+        active_cards_resp = supabase.table("cards").select("id", count="exact").eq("status", "active").execute()
+        active_cards = active_cards_resp.count or 0
+        
+        # Cards this week
+        cards_week_resp = supabase.table("cards").select("id", count="exact").gte(
+            "created_at", one_week_ago.isoformat()
+        ).execute()
+        cards_this_week = cards_week_resp.count or 0
+        
+        # Cards this month
+        cards_month_resp = supabase.table("cards").select("id", count="exact").gte(
+            "created_at", one_month_ago.isoformat()
+        ).execute()
+        cards_this_month = cards_month_resp.count or 0
+        
+        # -------------------------------------------------------------------------
+        # Cards by Pillar
+        # -------------------------------------------------------------------------
+        
+        pillar_resp = supabase.table("cards").select("pillar_id, velocity_score").eq("status", "active").execute()
+        pillar_data = pillar_resp.data or []
+        
+        pillar_counts = Counter()
+        pillar_velocity = {}
+        for card in pillar_data:
+            p = card.get("pillar_id")
+            if p:
+                pillar_counts[p] += 1
+                if p not in pillar_velocity:
+                    pillar_velocity[p] = []
+                if card.get("velocity_score"):
+                    pillar_velocity[p].append(card["velocity_score"])
+        
+        cards_by_pillar = []
+        for code, name in ANALYTICS_PILLAR_DEFINITIONS.items():
+            count = pillar_counts.get(code, 0)
+            pct = (count / active_cards * 100) if active_cards > 0 else 0
+            avg_vel = None
+            if pillar_velocity.get(code):
+                avg_vel = round(sum(pillar_velocity[code]) / len(pillar_velocity[code]), 1)
+            cards_by_pillar.append(PillarCoverageItem(
+                pillar_code=code,
+                pillar_name=name,
+                count=count,
+                percentage=round(pct, 1),
+                avg_velocity=avg_vel
+            ))
+        
+        # -------------------------------------------------------------------------
+        # Cards by Stage
+        # -------------------------------------------------------------------------
+        
+        stage_resp = supabase.table("cards").select("stage_id").eq("status", "active").execute()
+        stage_data = stage_resp.data or []
+        
+        stage_counts = Counter()
+        for card in stage_data:
+            s = card.get("stage_id")
+            if s:
+                # Normalize stage_id (could be "1", "Stage 1", etc.)
+                stage_num = str(s).replace("Stage ", "").strip()
+                stage_counts[stage_num] += 1
+        
+        cards_by_stage = []
+        for stage_id, stage_name in STAGE_NAMES.items():
+            count = stage_counts.get(stage_id, 0)
+            pct = (count / active_cards * 100) if active_cards > 0 else 0
+            cards_by_stage.append(StageDistribution(
+                stage_id=stage_id,
+                stage_name=stage_name,
+                count=count,
+                percentage=round(pct, 1)
+            ))
+        
+        # -------------------------------------------------------------------------
+        # Cards by Horizon
+        # -------------------------------------------------------------------------
+        
+        horizon_resp = supabase.table("cards").select("horizon").eq("status", "active").execute()
+        horizon_data = horizon_resp.data or []
+        
+        horizon_counts = Counter()
+        for card in horizon_data:
+            h = card.get("horizon")
+            if h:
+                horizon_counts[h] += 1
+        
+        cards_by_horizon = []
+        for horizon, label in HORIZON_LABELS.items():
+            count = horizon_counts.get(horizon, 0)
+            pct = (count / active_cards * 100) if active_cards > 0 else 0
+            cards_by_horizon.append(HorizonDistribution(
+                horizon=horizon,
+                label=label,
+                count=count,
+                percentage=round(pct, 1)
+            ))
+        
+        # -------------------------------------------------------------------------
+        # Trending Pillars (based on recent card creation)
+        # -------------------------------------------------------------------------
+        
+        recent_pillar_resp = supabase.table("cards").select("pillar_id, velocity_score").gte(
+            "created_at", one_week_ago.isoformat()
+        ).eq("status", "active").execute()
+        recent_pillar_data = recent_pillar_resp.data or []
+        
+        recent_pillar_counts = Counter()
+        recent_pillar_velocity = {}
+        for card in recent_pillar_data:
+            p = card.get("pillar_id")
+            if p:
+                recent_pillar_counts[p] += 1
+                if p not in recent_pillar_velocity:
+                    recent_pillar_velocity[p] = []
+                if card.get("velocity_score"):
+                    recent_pillar_velocity[p].append(card["velocity_score"])
+        
+        trending_pillars = []
+        for code, count in recent_pillar_counts.most_common(6):
+            name = ANALYTICS_PILLAR_DEFINITIONS.get(code, code)
+            avg_vel = None
+            if recent_pillar_velocity.get(code):
+                avg_vel = round(sum(recent_pillar_velocity[code]) / len(recent_pillar_velocity[code]), 1)
+            # Determine trend by comparing to historical average
+            historical_count = pillar_counts.get(code, 0)
+            weekly_avg = historical_count / 4 if historical_count > 0 else 0  # Rough 4-week avg
+            trend = "stable"
+            if count > weekly_avg * 1.5:
+                trend = "up"
+            elif count < weekly_avg * 0.5:
+                trend = "down"
+            trending_pillars.append(TrendingTopic(
+                name=name,
+                count=count,
+                trend=trend,
+                velocity_avg=avg_vel
+            ))
+        
+        # -------------------------------------------------------------------------
+        # Hot Topics (high velocity cards recently updated)
+        # -------------------------------------------------------------------------
+        
+        hot_cards_resp = supabase.table("cards").select(
+            "name, velocity_score"
+        ).eq("status", "active").gte(
+            "velocity_score", 70
+        ).order("velocity_score", desc=True).limit(5).execute()
+        hot_cards_data = hot_cards_resp.data or []
+        
+        hot_topics = []
+        for card in hot_cards_data:
+            hot_topics.append(TrendingTopic(
+                name=card.get("name", "Unknown"),
+                count=1,
+                trend="up",
+                velocity_avg=card.get("velocity_score")
+            ))
+        
+        # -------------------------------------------------------------------------
+        # Source Statistics
+        # -------------------------------------------------------------------------
+        
+        # Total sources
+        try:
+            sources_resp = supabase.table("sources").select("id, source_type, created_at", count="exact").execute()
+            total_sources = sources_resp.count or 0
+            sources_data = sources_resp.data or []
+            
+            # Sources this week
+            sources_week = sum(1 for s in sources_data if s.get("created_at") and 
+                              datetime.fromisoformat(s["created_at"].replace("Z", "+00:00")).replace(tzinfo=None) > one_week_ago)
+            
+            # Sources by type
+            source_types = Counter()
+            for s in sources_data:
+                st = s.get("source_type") or "unknown"
+                source_types[st] += 1
+            
+            source_stats = SourceStats(
+                total_sources=total_sources,
+                sources_this_week=sources_week,
+                sources_by_type=dict(source_types)
+            )
+        except Exception as e:
+            logger.warning(f"Could not fetch source stats: {e}")
+            source_stats = SourceStats()
+        
+        # -------------------------------------------------------------------------
+        # Discovery Statistics
+        # -------------------------------------------------------------------------
+        
+        try:
+            # Discovery runs
+            discovery_resp = supabase.table("discovery_runs").select(
+                "id, cards_created, started_at, status"
+            ).execute()
+            discovery_data = discovery_resp.data or []
+            
+            total_runs = len(discovery_data)
+            completed_runs = [r for r in discovery_data if r.get("status") == "completed"]
+            runs_week = sum(1 for r in discovery_data if r.get("started_at") and 
+                           datetime.fromisoformat(r["started_at"].replace("Z", "+00:00")).replace(tzinfo=None) > one_week_ago)
+            
+            total_discovered = sum(r.get("cards_created", 0) for r in completed_runs)
+            avg_per_run = total_discovered / len(completed_runs) if completed_runs else 0
+            
+            # Search history count
+            try:
+                search_resp = supabase.table("search_history").select("id, executed_at", count="exact").execute()
+                total_searches = search_resp.count or 0
+                search_data = search_resp.data or []
+                searches_week = sum(1 for s in search_data if s.get("executed_at") and 
+                                   datetime.fromisoformat(s["executed_at"].replace("Z", "+00:00")).replace(tzinfo=None) > one_week_ago)
+            except Exception:
+                total_searches = 0
+                searches_week = 0
+            
+            discovery_stats = DiscoveryStats(
+                total_discovery_runs=total_runs,
+                runs_this_week=runs_week,
+                total_searches=total_searches,
+                searches_this_week=searches_week,
+                cards_discovered=total_discovered,
+                avg_cards_per_run=round(avg_per_run, 1)
+            )
+        except Exception as e:
+            logger.warning(f"Could not fetch discovery stats: {e}")
+            discovery_stats = DiscoveryStats()
+        
+        # -------------------------------------------------------------------------
+        # Workstream Engagement
+        # -------------------------------------------------------------------------
+        
+        try:
+            # Total workstreams
+            ws_resp = supabase.table("workstreams").select("id, updated_at", count="exact").execute()
+            total_workstreams = ws_resp.count or 0
+            ws_data = ws_resp.data or []
+            
+            # Active workstreams (updated in last 30 days)
+            active_workstreams = sum(1 for w in ws_data if w.get("updated_at") and 
+                                    datetime.fromisoformat(w["updated_at"].replace("Z", "+00:00")).replace(tzinfo=None) > one_month_ago)
+            
+            # Unique cards in workstreams
+            ws_cards_resp = supabase.table("workstream_cards").select("card_id").execute()
+            ws_cards_data = ws_cards_resp.data or []
+            unique_cards_in_ws = len(set(c.get("card_id") for c in ws_cards_data if c.get("card_id")))
+            
+            avg_cards_per_ws = len(ws_cards_data) / total_workstreams if total_workstreams > 0 else 0
+            
+            workstream_engagement = WorkstreamEngagement(
+                total_workstreams=total_workstreams,
+                active_workstreams=active_workstreams,
+                unique_cards_in_workstreams=unique_cards_in_ws,
+                avg_cards_per_workstream=round(avg_cards_per_ws, 1)
+            )
+        except Exception as e:
+            logger.warning(f"Could not fetch workstream stats: {e}")
+            workstream_engagement = WorkstreamEngagement()
+        
+        # -------------------------------------------------------------------------
+        # Follow Statistics
+        # -------------------------------------------------------------------------
+        
+        try:
+            # Total follows
+            follows_resp = supabase.table("card_follows").select("card_id, user_id").execute()
+            follows_data = follows_resp.data or []
+            
+            total_follows = len(follows_data)
+            unique_cards_followed = len(set(f.get("card_id") for f in follows_data if f.get("card_id")))
+            unique_users_following = len(set(f.get("user_id") for f in follows_data if f.get("user_id")))
+            
+            # Most followed cards
+            card_follow_counts = Counter(f.get("card_id") for f in follows_data if f.get("card_id"))
+            top_followed = card_follow_counts.most_common(5)
+            
+            # Get card names for top followed
+            most_followed_cards = []
+            if top_followed:
+                top_card_ids = [c[0] for c in top_followed]
+                cards_info = supabase.table("cards").select("id, name").in_("id", top_card_ids).execute()
+                cards_map = {c["id"]: c["name"] for c in (cards_info.data or [])}
+                
+                for card_id, count in top_followed:
+                    most_followed_cards.append({
+                        "card_id": card_id,
+                        "card_name": cards_map.get(card_id, "Unknown"),
+                        "follower_count": count
+                    })
+            
+            follow_stats = FollowStats(
+                total_follows=total_follows,
+                unique_cards_followed=unique_cards_followed,
+                unique_users_following=unique_users_following,
+                most_followed_cards=most_followed_cards
+            )
+        except Exception as e:
+            logger.warning(f"Could not fetch follow stats: {e}")
+            follow_stats = FollowStats()
+        
+        # -------------------------------------------------------------------------
+        # Build Response
+        # -------------------------------------------------------------------------
+        
+        return SystemWideStats(
+            total_cards=total_cards,
+            active_cards=active_cards,
+            cards_this_week=cards_this_week,
+            cards_this_month=cards_this_month,
+            cards_by_pillar=cards_by_pillar,
+            cards_by_stage=cards_by_stage,
+            cards_by_horizon=cards_by_horizon,
+            trending_pillars=trending_pillars,
+            hot_topics=hot_topics,
+            source_stats=source_stats,
+            discovery_stats=discovery_stats,
+            workstream_engagement=workstream_engagement,
+            follow_stats=follow_stats,
+            generated_at=now
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to fetch system-wide stats: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch system-wide stats: {str(e)}"
+        )
+
+
+@app.get("/api/v1/analytics/personal-stats", response_model=PersonalStats)
+async def get_personal_stats(
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get personal analytics for the current user.
+    
+    Returns:
+    - Cards the user is following
+    - Comparison to community engagement
+    - Pillar affinity analysis
+    - Popular cards the user isn't following (social discovery)
+    """
+    from datetime import timedelta
+    from collections import Counter
+    
+    try:
+        user_id = current_user["id"]
+        now = datetime.now()
+        one_week_ago = now - timedelta(days=7)
+        
+        # -------------------------------------------------------------------------
+        # User's Follows
+        # -------------------------------------------------------------------------
+        
+        user_follows_resp = supabase.table("card_follows").select(
+            "card_id, priority, created_at, cards(id, name, pillar_id, horizon, velocity_score)"
+        ).eq("user_id", user_id).execute()
+        user_follows_data = user_follows_resp.data or []
+        
+        # Get follower counts for each card
+        all_follows_resp = supabase.table("card_follows").select("card_id").execute()
+        all_follows_data = all_follows_resp.data or []
+        card_follower_counts = Counter(f.get("card_id") for f in all_follows_data if f.get("card_id"))
+        
+        user_card_ids = set()
+        following = []
+        for f in user_follows_data:
+            card = f.get("cards", {})
+            if not card:
+                continue
+            card_id = card.get("id") or f.get("card_id")
+            user_card_ids.add(card_id)
+            
+            followed_at = f.get("created_at")
+            if followed_at:
+                try:
+                    followed_at = datetime.fromisoformat(followed_at.replace("Z", "+00:00"))
+                except:
+                    followed_at = now
+            else:
+                followed_at = now
+            
+            following.append(UserFollowItem(
+                card_id=card_id,
+                card_name=card.get("name", "Unknown"),
+                pillar_id=card.get("pillar_id"),
+                horizon=card.get("horizon"),
+                velocity_score=card.get("velocity_score"),
+                followed_at=followed_at,
+                priority=f.get("priority", "medium"),
+                follower_count=card_follower_counts.get(card_id, 1)
+            ))
+        
+        total_following = len(following)
+        
+        # -------------------------------------------------------------------------
+        # Engagement Comparison
+        # -------------------------------------------------------------------------
+        
+        # Get all users' follow counts
+        users_resp = supabase.table("users").select("id").execute()
+        all_users = users_resp.data or []
+        total_users = len(all_users)
+        
+        # User follow counts per user
+        user_follow_counts = Counter(f.get("user_id") for f in all_follows_data if f.get("user_id"))
+        all_follow_counts = list(user_follow_counts.values()) or [0]
+        avg_follows = sum(all_follow_counts) / len(all_follow_counts) if all_follow_counts else 0
+        
+        # User workstreams
+        user_ws_resp = supabase.table("workstreams").select("id", count="exact").eq("user_id", user_id).execute()
+        user_workstream_count = user_ws_resp.count or 0
+        
+        # All workstreams per user
+        all_ws_resp = supabase.table("workstreams").select("user_id").execute()
+        ws_per_user = Counter(w.get("user_id") for w in (all_ws_resp.data or []) if w.get("user_id"))
+        all_ws_counts = list(ws_per_user.values()) or [0]
+        avg_workstreams = sum(all_ws_counts) / len(all_ws_counts) if all_ws_counts else 0
+        
+        # Calculate percentiles
+        user_follows_count = user_follow_counts.get(user_id, 0)
+        follows_below = sum(1 for c in all_follow_counts if c < user_follows_count)
+        user_percentile_follows = (follows_below / len(all_follow_counts) * 100) if all_follow_counts else 0
+        
+        ws_below = sum(1 for c in all_ws_counts if c < user_workstream_count)
+        user_percentile_workstreams = (ws_below / len(all_ws_counts) * 100) if all_ws_counts else 0
+        
+        engagement = UserEngagementComparison(
+            user_follow_count=user_follows_count,
+            avg_community_follows=round(avg_follows, 1),
+            user_workstream_count=user_workstream_count,
+            avg_community_workstreams=round(avg_workstreams, 1),
+            user_percentile_follows=round(user_percentile_follows, 1),
+            user_percentile_workstreams=round(user_percentile_workstreams, 1)
+        )
+        
+        # -------------------------------------------------------------------------
+        # Pillar Affinity
+        # -------------------------------------------------------------------------
+        
+        # User's pillar distribution
+        user_pillar_counts = Counter()
+        for f in following:
+            if f.pillar_id:
+                user_pillar_counts[f.pillar_id] += 1
+        
+        # Community pillar distribution from all follows
+        community_pillar_counts = Counter()
+        # Get pillar for all followed cards
+        all_card_ids = list(set(f.get("card_id") for f in all_follows_data if f.get("card_id")))
+        if all_card_ids:
+            cards_pillar_resp = supabase.table("cards").select("id, pillar_id").in_("id", all_card_ids).execute()
+            card_pillars = {c["id"]: c.get("pillar_id") for c in (cards_pillar_resp.data or [])}
+            for f in all_follows_data:
+                card_id = f.get("card_id")
+                pillar = card_pillars.get(card_id)
+                if pillar:
+                    community_pillar_counts[pillar] += 1
+        
+        total_community_follows = sum(community_pillar_counts.values()) or 1
+        
+        pillar_affinity = []
+        for code, name in ANALYTICS_PILLAR_DEFINITIONS.items():
+            user_count = user_pillar_counts.get(code, 0)
+            user_pct = (user_count / total_following * 100) if total_following > 0 else 0
+            community_pct = (community_pillar_counts.get(code, 0) / total_community_follows * 100)
+            affinity = user_pct - community_pct  # Positive = more interested than avg
+            
+            pillar_affinity.append(PillarAffinity(
+                pillar_code=code,
+                pillar_name=name,
+                user_count=user_count,
+                user_percentage=round(user_pct, 1),
+                community_percentage=round(community_pct, 1),
+                affinity_score=round(affinity, 1)
+            ))
+        
+        # Sort by affinity score descending
+        pillar_affinity.sort(key=lambda x: x.affinity_score, reverse=True)
+        
+        # -------------------------------------------------------------------------
+        # Popular Cards Not Followed (Social Discovery)
+        # -------------------------------------------------------------------------
+        
+        # Get most popular cards that user doesn't follow
+        popular_card_ids = [cid for cid, count in card_follower_counts.most_common(20) 
+                           if cid not in user_card_ids and count >= 2][:10]
+        
+        popular_not_followed = []
+        if popular_card_ids:
+            popular_cards_resp = supabase.table("cards").select(
+                "id, name, summary, pillar_id, horizon, velocity_score"
+            ).in_("id", popular_card_ids).eq("status", "active").execute()
+            
+            for card in (popular_cards_resp.data or []):
+                card_id = card.get("id")
+                popular_not_followed.append(PopularCard(
+                    card_id=card_id,
+                    card_name=card.get("name", "Unknown"),
+                    summary=card.get("summary", "")[:200],
+                    pillar_id=card.get("pillar_id"),
+                    horizon=card.get("horizon"),
+                    velocity_score=card.get("velocity_score"),
+                    follower_count=card_follower_counts.get(card_id, 0),
+                    is_followed_by_user=False
+                ))
+        
+        # -------------------------------------------------------------------------
+        # Recently Popular (new follows in last week)
+        # -------------------------------------------------------------------------
+        
+        # This would require timestamp on card_follows - using created_at if available
+        recent_follows_resp = supabase.table("card_follows").select("card_id, created_at").execute()
+        recent_follows_data = recent_follows_resp.data or []
+        
+        recent_card_counts = Counter()
+        for f in recent_follows_data:
+            created_at = f.get("created_at")
+            if created_at:
+                try:
+                    dt = datetime.fromisoformat(created_at.replace("Z", "+00:00")).replace(tzinfo=None)
+                    if dt > one_week_ago:
+                        recent_card_counts[f.get("card_id")] += 1
+                except:
+                    pass
+        
+        recently_popular_ids = [cid for cid, count in recent_card_counts.most_common(10) 
+                                if cid not in user_card_ids and count >= 1][:5]
+        
+        recently_popular = []
+        if recently_popular_ids:
+            recent_cards_resp = supabase.table("cards").select(
+                "id, name, summary, pillar_id, horizon, velocity_score"
+            ).in_("id", recently_popular_ids).eq("status", "active").execute()
+            
+            for card in (recent_cards_resp.data or []):
+                card_id = card.get("id")
+                recently_popular.append(PopularCard(
+                    card_id=card_id,
+                    card_name=card.get("name", "Unknown"),
+                    summary=card.get("summary", "")[:200],
+                    pillar_id=card.get("pillar_id"),
+                    horizon=card.get("horizon"),
+                    velocity_score=card.get("velocity_score"),
+                    follower_count=recent_card_counts.get(card_id, 0),
+                    is_followed_by_user=False
+                ))
+        
+        # -------------------------------------------------------------------------
+        # User Workstream Stats
+        # -------------------------------------------------------------------------
+        
+        user_ws_cards_resp = supabase.table("workstream_cards").select(
+            "card_id, workstreams!inner(user_id)"
+        ).eq("workstreams.user_id", user_id).execute()
+        cards_in_workstreams = len(set(c.get("card_id") for c in (user_ws_cards_resp.data or []) if c.get("card_id")))
+        
+        # -------------------------------------------------------------------------
+        # Build Response
+        # -------------------------------------------------------------------------
+        
+        return PersonalStats(
+            following=following,
+            total_following=total_following,
+            engagement=engagement,
+            pillar_affinity=pillar_affinity,
+            popular_not_followed=popular_not_followed,
+            recently_popular=recently_popular,
+            workstream_count=user_workstream_count,
+            cards_in_workstreams=cards_in_workstreams,
+            generated_at=now
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to fetch personal stats: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch personal stats: {str(e)}"
+        )
 
 
 # Lifecycle management
