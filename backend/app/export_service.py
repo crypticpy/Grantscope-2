@@ -149,6 +149,40 @@ PDF_COLORS = {
 }
 
 # ============================================================================
+# Classification Taxonomy (Pillars, Horizons, Stages)
+# ============================================================================
+
+# Pillar colors matching the frontend
+PILLAR_COLORS = {
+    "CH": {"name": "Community Health & Sustainability", "color": "#22c55e", "bg": "#dcfce7", "icon": "♥"},
+    "EW": {"name": "Economic & Workforce Development", "color": "#3b82f6", "bg": "#dbeafe", "icon": "💼"},
+    "HG": {"name": "High-Performing Government", "color": "#6366f1", "bg": "#e0e7ff", "icon": "🏛"},
+    "HH": {"name": "Homelessness & Housing", "color": "#ec4899", "bg": "#fce7f3", "icon": "🏠"},
+    "MC": {"name": "Mobility & Critical Infrastructure", "color": "#f59e0b", "bg": "#fef3c7", "icon": "🚗"},
+    "PS": {"name": "Public Safety", "color": "#ef4444", "bg": "#fee2e2", "icon": "🛡"},
+    "ES": {"name": "Environmental Sustainability", "color": "#059669", "bg": "#d1fae5", "icon": "🌿"},
+}
+
+# Horizon colors matching the frontend
+HORIZON_COLORS = {
+    "H1": {"name": "Mainstream", "timeframe": "0-3 years", "color": "#22c55e", "bg": "#dcfce7", "description": "Current system, confirms baseline"},
+    "H2": {"name": "Transitional", "timeframe": "3-7 years", "color": "#f59e0b", "bg": "#fef3c7", "description": "Emerging alternatives, pilots"},
+    "H3": {"name": "Transformative", "timeframe": "7-15+ years", "color": "#a855f7", "bg": "#f3e8ff", "description": "Weak signals, novel possibilities"},
+}
+
+# Stage definitions matching the frontend
+STAGE_INFO = {
+    1: {"name": "Concept", "horizon": "H3", "description": "Academic research, theoretical exploration"},
+    2: {"name": "Emerging", "horizon": "H3", "description": "Startups forming, patents filed"},
+    3: {"name": "Prototype", "horizon": "H2", "description": "Working demos exist"},
+    4: {"name": "Pilot", "horizon": "H2", "description": "Real-world testing (private sector)"},
+    5: {"name": "Municipal Pilot", "horizon": "H2", "description": "Government entity testing"},
+    6: {"name": "Early Adoption", "horizon": "H1", "description": "Multiple cities implementing"},
+    7: {"name": "Mainstream", "horizon": "H1", "description": "Widespread adoption"},
+    8: {"name": "Mature", "horizon": "H1", "description": "Established, commoditized"},
+}
+
+# ============================================================================
 # Branding Assets & AI Disclosure
 # ============================================================================
 
@@ -529,7 +563,459 @@ def get_professional_pdf_styles() -> Dict[str, ParagraphStyle]:
             alignment=TA_JUSTIFY,
             fontName='Helvetica',
         ),
+        'NumberedItem': ParagraphStyle(
+            'NumberedItem',
+            parent=styles['Normal'],
+            fontSize=11,
+            textColor=PDF_COLORS["dark"],
+            spaceBefore=6,
+            spaceAfter=4,
+            leftIndent=25,
+            firstLineIndent=-15,
+            leading=14,
+        ),
+        'AppendixTitle': ParagraphStyle(
+            'AppendixTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            textColor=PDF_COLORS["primary"],
+            spaceBefore=24,
+            spaceAfter=16,
+            fontName='Helvetica-Bold',
+        ),
+        'AppendixHeading': ParagraphStyle(
+            'AppendixHeading',
+            parent=styles['Heading2'],
+            fontSize=14,
+            textColor=PDF_COLORS["secondary"],
+            spaceBefore=16,
+            spaceAfter=8,
+            fontName='Helvetica-Bold',
+        ),
+        'AppendixBody': ParagraphStyle(
+            'AppendixBody',
+            parent=styles['Normal'],
+            fontSize=10,
+            textColor=PDF_COLORS["dark"],
+            spaceBefore=2,
+            spaceAfter=4,
+            leading=13,
+        ),
     }
+
+
+# ============================================================================
+# Robust Markdown Parser for AI-Generated Content
+# ============================================================================
+
+class MarkdownToPDFParser:
+    """
+    Robust parser for converting markdown to ReportLab PDF elements.
+    
+    Handles various AI-generated content formats gracefully:
+    - Multiple heading styles (# ## ###, underlines, bold headings)
+    - Bullet points (-, *, •, >, numbered)
+    - Bold/italic formatting (**bold**, *italic*, __bold__, _italic_)
+    - Links [text](url) - extracts text only for PDF
+    - Code blocks (``` and inline `)
+    - Horizontal rules (---, ***, ___)
+    - Edge cases: mixed formatting, incomplete markers, nested lists
+    """
+    
+    def __init__(self, styles: Dict[str, ParagraphStyle]):
+        """Initialize with PDF styles dictionary."""
+        self.styles = styles
+        self.import_re()
+    
+    def import_re(self):
+        """Import regex module."""
+        import re
+        self.re = re
+    
+    def clean_text(self, text: str) -> str:
+        """
+        Clean and sanitize text for PDF rendering.
+        
+        - Escapes XML special characters
+        - Removes problematic unicode
+        - Normalizes whitespace
+        """
+        if not text:
+            return ""
+        
+        # Replace common problematic characters
+        text = text.replace('\u200b', '')  # Zero-width space
+        text = text.replace('\u00a0', ' ')  # Non-breaking space
+        text = text.replace('\r\n', '\n')
+        text = text.replace('\r', '\n')
+        
+        # Normalize multiple spaces
+        text = self.re.sub(r'  +', ' ', text)
+        
+        return text.strip()
+    
+    def escape_xml(self, text: str) -> str:
+        """Escape XML special characters for ReportLab."""
+        if not text:
+            return ""
+        text = text.replace('&', '&amp;')
+        text = text.replace('<', '&lt;')
+        text = text.replace('>', '&gt;')
+        return text
+    
+    def convert_inline_formatting(self, text: str) -> str:
+        """
+        Convert markdown inline formatting to ReportLab XML tags.
+        
+        Handles: **bold**, *italic*, __bold__, _italic_, `code`, [links](url)
+        """
+        if not text:
+            return ""
+        
+        # First escape XML characters
+        text = self.escape_xml(text)
+        
+        # Convert bold: **text** or __text__
+        text = self.re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+        text = self.re.sub(r'__(.+?)__', r'<b>\1</b>', text)
+        
+        # Convert italic: *text* or _text_ (but not within words)
+        # Be careful not to match already-converted bold markers
+        text = self.re.sub(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', r'<i>\1</i>', text)
+        text = self.re.sub(r'(?<!_)_(?!_)(.+?)(?<!_)_(?!_)', r'<i>\1</i>', text)
+        
+        # Convert inline code: `code`
+        text = self.re.sub(r'`([^`]+)`', r'<font face="Courier">\1</font>', text)
+        
+        # Convert links: [text](url) -> just the text
+        text = self.re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
+        
+        # Clean up any leftover asterisks that didn't match patterns
+        # This handles edge cases like "* Urgency:" which isn't meant to be italic
+        
+        return text
+    
+    def is_heading(self, line: str) -> Optional[Tuple[int, str]]:
+        """
+        Check if line is a heading. Returns (level, text) or None.
+        
+        Handles:
+        - # Heading 1
+        - ## Heading 2
+        - ### Heading 3
+        - **HEADING IN BOLD**
+        - HEADING WITH COLON:
+        """
+        line = line.strip()
+        
+        # Markdown headers with #
+        match = self.re.match(r'^(#{1,3})\s+(.+)$', line)
+        if match:
+            level = len(match.group(1))
+            text = match.group(2).strip()
+            # Remove trailing # if present
+            text = self.re.sub(r'\s*#+\s*$', '', text)
+            return (level, text)
+        
+        # All caps section headers (common AI pattern)
+        if self.re.match(r'^[A-Z][A-Z\s&\-]{5,}$', line) and not line.startswith('•'):
+            return (2, line.title())
+        
+        return None
+    
+    def is_bullet_point(self, line: str) -> Optional[str]:
+        """
+        Check if line is a bullet point. Returns the bullet text or None.
+        
+        Handles: -, *, •, >, and numbered lists (1., 2., etc.)
+        """
+        line = line.strip()
+        
+        # Standard bullet markers: - * •
+        match = self.re.match(r'^[\-\*•]\s+(.+)$', line)
+        if match:
+            return match.group(1)
+        
+        # Quote-style bullets: >
+        match = self.re.match(r'^>\s+(.+)$', line)
+        if match:
+            return match.group(1)
+        
+        return None
+    
+    def is_numbered_item(self, line: str) -> Optional[Tuple[str, str]]:
+        """
+        Check if line is a numbered list item.
+        Returns (number, text) or None.
+        """
+        line = line.strip()
+        
+        # Numbered lists: 1. 2. etc or 1) 2) etc
+        match = self.re.match(r'^(\d+)[.\)]\s+(.+)$', line)
+        if match:
+            return (match.group(1), match.group(2))
+        
+        return None
+    
+    def is_horizontal_rule(self, line: str) -> bool:
+        """Check if line is a horizontal rule."""
+        line = line.strip()
+        return bool(self.re.match(r'^[-*_]{3,}$', line))
+    
+    def parse_to_elements(self, markdown_content: str) -> List[Any]:
+        """
+        Parse markdown content to ReportLab flowable elements.
+        
+        This is the main entry point for converting AI-generated markdown
+        into properly formatted PDF elements.
+        """
+        if not markdown_content:
+            return [Paragraph("No content available.", self.styles['BodyText'])]
+        
+        elements = []
+        markdown_content = self.clean_text(markdown_content)
+        lines = markdown_content.split('\n')
+        
+        current_paragraph_lines = []
+        in_code_block = False
+        code_block_content = []
+        
+        def flush_paragraph():
+            """Helper to flush accumulated paragraph lines."""
+            nonlocal current_paragraph_lines
+            if current_paragraph_lines:
+                para_text = ' '.join(current_paragraph_lines)
+                para_text = self.convert_inline_formatting(para_text)
+                if para_text.strip():
+                    elements.append(Paragraph(para_text, self.styles['BodyText']))
+                current_paragraph_lines = []
+        
+        for i, line in enumerate(lines):
+            original_line = line
+            line_stripped = line.strip()
+            
+            # Handle code blocks
+            if line_stripped.startswith('```'):
+                if in_code_block:
+                    # End code block
+                    in_code_block = False
+                    if code_block_content:
+                        code_text = '\n'.join(code_block_content)
+                        code_text = self.escape_xml(code_text)
+                        elements.append(Paragraph(
+                            f'<font face="Courier" size="9">{code_text}</font>',
+                            self.styles['BodyText']
+                        ))
+                        code_block_content = []
+                else:
+                    # Start code block
+                    flush_paragraph()
+                    in_code_block = True
+                continue
+            
+            if in_code_block:
+                code_block_content.append(line)
+                continue
+            
+            # Empty line - flush paragraph
+            if not line_stripped:
+                flush_paragraph()
+                continue
+            
+            # Check for horizontal rule
+            if self.is_horizontal_rule(line_stripped):
+                flush_paragraph()
+                elements.append(Spacer(1, 8))
+                elements.append(HRFlowable(
+                    width="60%",
+                    thickness=1,
+                    color=PDF_COLORS["light"],
+                    spaceBefore=4,
+                    spaceAfter=8
+                ))
+                continue
+            
+            # Check for headings
+            heading = self.is_heading(line_stripped)
+            if heading:
+                flush_paragraph()
+                level, text = heading
+                text = self.convert_inline_formatting(text)
+                
+                if level == 1:
+                    elements.append(Spacer(1, 10))
+                    elements.append(Paragraph(text, self.styles['SectionHeading']))
+                elif level == 2:
+                    elements.append(Paragraph(text, self.styles['SubsectionHeading']))
+                else:
+                    elements.append(Paragraph(f"<b>{text}</b>", self.styles['BodyText']))
+                continue
+            
+            # Check for numbered items
+            numbered = self.is_numbered_item(line_stripped)
+            if numbered:
+                flush_paragraph()
+                num, text = numbered
+                text = self.convert_inline_formatting(text)
+                elements.append(Paragraph(f"<b>{num}.</b> {text}", self.styles['NumberedItem']))
+                continue
+            
+            # Check for bullet points
+            bullet = self.is_bullet_point(line_stripped)
+            if bullet:
+                flush_paragraph()
+                bullet_text = self.convert_inline_formatting(bullet)
+                elements.append(Paragraph(f"• {bullet_text}", self.styles['BulletText']))
+                continue
+            
+            # Regular text - accumulate for paragraph
+            current_paragraph_lines.append(line_stripped)
+        
+        # Flush any remaining content
+        flush_paragraph()
+        
+        if in_code_block and code_block_content:
+            code_text = '\n'.join(code_block_content)
+            code_text = self.escape_xml(code_text)
+            elements.append(Paragraph(
+                f'<font face="Courier" size="9">{code_text}</font>',
+                self.styles['BodyText']
+            ))
+        
+        return elements
+
+
+def create_classification_badges(
+    classification: Dict[str, str],
+    styles: Dict[str, ParagraphStyle]
+) -> List[Any]:
+    """
+    Create visually styled classification badges for PDF.
+    
+    Args:
+        classification: Dict with 'pillar', 'horizon', 'stage' keys
+        styles: PDF styles dictionary
+    
+    Returns:
+        List of ReportLab flowable elements showing colored badges
+    """
+    if not classification:
+        return []
+    
+    elements = []
+    badge_parts = []
+    
+    # Pillar badge
+    pillar_code = classification.get('pillar', '').upper()
+    if pillar_code and pillar_code in PILLAR_COLORS:
+        pillar_info = PILLAR_COLORS[pillar_code]
+        badge_parts.append(f'<font color="{pillar_info["color"]}"><b>{pillar_code}</b></font> {pillar_info["name"]}')
+    elif pillar_code:
+        badge_parts.append(f'<b>Pillar:</b> {pillar_code}')
+    
+    # Horizon badge
+    horizon_code = classification.get('horizon', '').upper()
+    if horizon_code and horizon_code in HORIZON_COLORS:
+        horizon_info = HORIZON_COLORS[horizon_code]
+        badge_parts.append(f'<font color="{horizon_info["color"]}"><b>{horizon_code}</b></font> {horizon_info["name"]} ({horizon_info["timeframe"]})')
+    elif horizon_code:
+        badge_parts.append(f'<b>Horizon:</b> {horizon_code}')
+    
+    # Stage badge
+    stage_raw = classification.get('stage', '')
+    stage_num = None
+    
+    # Parse stage - can be "4", "stage 4", "4_proof", etc.
+    import re
+    stage_match = re.search(r'(\d+)', str(stage_raw))
+    if stage_match:
+        stage_num = int(stage_match.group(1))
+    
+    if stage_num and stage_num in STAGE_INFO:
+        stage_info = STAGE_INFO[stage_num]
+        horizon_for_stage = stage_info["horizon"]
+        stage_color = HORIZON_COLORS.get(horizon_for_stage, {}).get("color", "#6366f1")
+        badge_parts.append(f'<font color="{stage_color}"><b>Stage {stage_num}</b></font> {stage_info["name"]}')
+    elif stage_raw:
+        badge_parts.append(f'<b>Stage:</b> {stage_raw}')
+    
+    if badge_parts:
+        # Create a styled classification line with link hint
+        badge_text = "   |   ".join(badge_parts)
+        elements.append(Paragraph(badge_text, styles.get('MetadataText', styles['SmallText'])))
+        elements.append(Paragraph(
+            '<i><font size="8" color="gray">See Appendix A for classification definitions</font></i>',
+            styles.get('SmallText', styles['BodyText'])
+        ))
+    
+    return elements
+
+
+def create_classification_appendix(styles: Dict[str, ParagraphStyle]) -> List[Any]:
+    """
+    Create an appendix explaining the Foresight classification system.
+    
+    Returns a list of ReportLab flowable elements.
+    """
+    elements = []
+    
+    # Page break before appendix
+    elements.append(PageBreak())
+    
+    # Appendix title
+    elements.append(Paragraph("Appendix A: Classification Framework", styles.get('AppendixTitle', styles['SectionHeading'])))
+    
+    elements.append(Paragraph(
+        "This report uses the City of Austin's Foresight strategic classification framework to categorize emerging trends and technologies.",
+        styles.get('AppendixBody', styles['BodyText'])
+    ))
+    elements.append(Spacer(1, 12))
+    
+    # Pillars section
+    elements.append(Paragraph("Strategic Pillars", styles.get('AppendixHeading', styles['SubsectionHeading'])))
+    elements.append(Paragraph(
+        "Pillars represent the six core areas of Austin's Comprehensive Strategic Plan (CSP):",
+        styles.get('AppendixBody', styles['BodyText'])
+    ))
+    
+    for code, info in PILLAR_COLORS.items():
+        elements.append(Paragraph(
+            f'<font color="{info["color"]}"><b>{code}</b></font> - <b>{info["name"]}</b>',
+            styles.get('AppendixBody', styles['BodyText'])
+        ))
+    
+    elements.append(Spacer(1, 12))
+    
+    # Horizons section
+    elements.append(Paragraph("Planning Horizons", styles.get('AppendixHeading', styles['SubsectionHeading'])))
+    elements.append(Paragraph(
+        "Horizons indicate the expected timeline for impact:",
+        styles.get('AppendixBody', styles['BodyText'])
+    ))
+    
+    for code, info in HORIZON_COLORS.items():
+        elements.append(Paragraph(
+            f'<font color="{info["color"]}"><b>{code}: {info["name"]}</b></font> ({info["timeframe"]}) - {info["description"]}',
+            styles.get('AppendixBody', styles['BodyText'])
+        ))
+    
+    elements.append(Spacer(1, 12))
+    
+    # Stages section
+    elements.append(Paragraph("Maturity Stages", styles.get('AppendixHeading', styles['SubsectionHeading'])))
+    elements.append(Paragraph(
+        "Stages indicate how mature a trend or technology is in its development lifecycle:",
+        styles.get('AppendixBody', styles['BodyText'])
+    ))
+    
+    for stage_num, info in STAGE_INFO.items():
+        horizon_color = HORIZON_COLORS.get(info["horizon"], {}).get("color", "#6366f1")
+        elements.append(Paragraph(
+            f'<font color="{horizon_color}"><b>Stage {stage_num}: {info["name"]}</b></font> ({info["horizon"]}) - {info["description"]}',
+            styles.get('AppendixBody', styles['BodyText'])
+        ))
+    
+    return elements
 
 
 # ============================================================================
@@ -2986,9 +3472,11 @@ class ExportService:
         
         This version includes:
         - City of Austin logo in header
-        - Foresight Strategic Research branding
+        - Foresight Strategic Intelligence Platform branding
         - Professional header/footer on every page
         - Full AI technology disclosure
+        - Colored classification badges with appendix reference
+        - Robust markdown parsing for AI-generated content
         
         Designed for senior city leadership distribution.
 
@@ -3007,8 +3495,6 @@ class ExportService:
         Raises:
             Exception: If PDF generation fails
         """
-        import re
-        
         try:
             # Create temp file for PDF
             pdf_file = tempfile.NamedTemporaryFile(
@@ -3021,6 +3507,9 @@ class ExportService:
 
             # Get professional styles
             styles = get_professional_pdf_styles()
+            
+            # Initialize markdown parser
+            md_parser = MarkdownToPDFParser(styles)
 
             # Build document elements
             elements = []
@@ -3028,19 +3517,12 @@ class ExportService:
             # Document Title
             elements.append(Paragraph(brief_title, styles['DocTitle']))
             
-            # Subtitle with metadata
-            subtitle_parts = []
+            # Classification badges (colored, with appendix reference)
             if classification:
-                if classification.get('pillar'):
-                    subtitle_parts.append(f"Pillar: {classification['pillar']}")
-                if classification.get('horizon'):
-                    subtitle_parts.append(f"Horizon: {classification['horizon']}")
-                if classification.get('stage'):
-                    subtitle_parts.append(f"Stage: {classification['stage']}")
-            if subtitle_parts:
-                elements.append(Paragraph(" | ".join(subtitle_parts), styles['DocSubtitle']))
+                badge_elements = create_classification_badges(classification, styles)
+                elements.extend(badge_elements)
             
-            elements.append(Spacer(1, 6))
+            elements.append(Spacer(1, 8))
             
             # Decorative line
             elements.append(HRFlowable(
@@ -3051,13 +3533,16 @@ class ExportService:
                 spaceAfter=16
             ))
 
-            # Executive Summary Section (highlighted)
+            # Executive Summary Section
             elements.append(Paragraph("Executive Summary", styles['SectionHeading']))
             
             if executive_summary:
-                # Create a highlighted box for executive summary
-                summary_text = executive_summary.replace('\n', '<br/>')
-                elements.append(Paragraph(summary_text, styles['ExecutiveSummary']))
+                # Parse executive summary through the robust parser too
+                summary_clean = md_parser.clean_text(executive_summary)
+                summary_formatted = md_parser.convert_inline_formatting(summary_clean)
+                # Replace newlines with line breaks for the summary
+                summary_formatted = summary_formatted.replace('\n', '<br/>')
+                elements.append(Paragraph(summary_formatted, styles['ExecutiveSummary']))
             else:
                 elements.append(Paragraph("No summary available.", styles['BodyText']))
             
@@ -3067,91 +3552,10 @@ class ExportService:
             elements.append(Paragraph("Strategic Intelligence Report", styles['SectionHeading']))
             elements.append(Spacer(1, 8))
 
-            # Parse and render markdown content
+            # Parse and render markdown content using robust parser
             if content_markdown:
-                lines = content_markdown.split('\n')
-                current_paragraph = []
-                
-                for line in lines:
-                    line_stripped = line.strip()
-                    
-                    # Empty line - flush current paragraph
-                    if not line_stripped:
-                        if current_paragraph:
-                            para_text = ' '.join(current_paragraph)
-                            # Convert markdown formatting
-                            para_text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', para_text)
-                            para_text = re.sub(r'\*(.+?)\*', r'<i>\1</i>', para_text)
-                            # Escape XML characters
-                            para_text = para_text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-                            # Restore our formatting tags
-                            para_text = para_text.replace('&lt;b&gt;', '<b>').replace('&lt;/b&gt;', '</b>')
-                            para_text = para_text.replace('&lt;i&gt;', '<i>').replace('&lt;/i&gt;', '</i>')
-                            elements.append(Paragraph(para_text, styles['BodyText']))
-                            current_paragraph = []
-                        continue
-                    
-                    # Headers
-                    if line_stripped.startswith('# '):
-                        if current_paragraph:
-                            para_text = ' '.join(current_paragraph)
-                            elements.append(Paragraph(para_text, styles['BodyText']))
-                            current_paragraph = []
-                        elements.append(Spacer(1, 8))
-                        elements.append(Paragraph(line_stripped[2:], styles['SectionHeading']))
-                    elif line_stripped.startswith('## '):
-                        if current_paragraph:
-                            para_text = ' '.join(current_paragraph)
-                            elements.append(Paragraph(para_text, styles['BodyText']))
-                            current_paragraph = []
-                        elements.append(Paragraph(line_stripped[3:], styles['SubsectionHeading']))
-                    elif line_stripped.startswith('### '):
-                        if current_paragraph:
-                            para_text = ' '.join(current_paragraph)
-                            elements.append(Paragraph(para_text, styles['BodyText']))
-                            current_paragraph = []
-                        elements.append(Paragraph(f"<b>{line_stripped[4:]}</b>", styles['BodyText']))
-                    # Bullet points
-                    elif line_stripped.startswith('- ') or line_stripped.startswith('* '):
-                        if current_paragraph:
-                            para_text = ' '.join(current_paragraph)
-                            elements.append(Paragraph(para_text, styles['BodyText']))
-                            current_paragraph = []
-                        bullet_text = line_stripped[2:]
-                        # Convert markdown in bullet
-                        bullet_text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', bullet_text)
-                        elements.append(Paragraph(f"• {bullet_text}", styles['BulletText']))
-                    # Numbered lists
-                    elif re.match(r'^\d+\.\s', line_stripped):
-                        if current_paragraph:
-                            para_text = ' '.join(current_paragraph)
-                            elements.append(Paragraph(para_text, styles['BodyText']))
-                            current_paragraph = []
-                        elements.append(Paragraph(line_stripped, styles['BulletText']))
-                    # Horizontal rule
-                    elif line_stripped == '---' or line_stripped == '***':
-                        if current_paragraph:
-                            para_text = ' '.join(current_paragraph)
-                            elements.append(Paragraph(para_text, styles['BodyText']))
-                            current_paragraph = []
-                        elements.append(Spacer(1, 8))
-                        elements.append(HRFlowable(
-                            width="60%",
-                            thickness=1,
-                            color=PDF_COLORS["light"],
-                            spaceBefore=4,
-                            spaceAfter=8
-                        ))
-                    else:
-                        # Regular text - add to current paragraph
-                        current_paragraph.append(line_stripped)
-                
-                # Flush remaining paragraph
-                if current_paragraph:
-                    para_text = ' '.join(current_paragraph)
-                    para_text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', para_text)
-                    para_text = re.sub(r'\*(.+?)\*', r'<i>\1</i>', para_text)
-                    elements.append(Paragraph(para_text, styles['BodyText']))
+                content_elements = md_parser.parse_to_elements(content_markdown)
+                elements.extend(content_elements)
             else:
                 elements.append(Paragraph("No content available.", styles['BodyText']))
 
@@ -3175,6 +3579,11 @@ class ExportService:
             
             for item in meta_items:
                 elements.append(Paragraph(item, styles['SmallText']))
+
+            # Add classification appendix if we have classification data
+            if classification:
+                appendix_elements = create_classification_appendix(styles)
+                elements.extend(appendix_elements)
 
             # Build PDF using professional builder with header/footer
             builder = ProfessionalPDFBuilder(
