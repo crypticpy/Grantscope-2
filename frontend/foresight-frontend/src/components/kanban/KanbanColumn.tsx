@@ -13,7 +13,7 @@
  * - Dark mode support
  */
 
-import React, { memo, useMemo, useState, useRef, useEffect } from 'react';
+import React, { memo, useMemo } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import {
   SortableContext,
@@ -26,8 +26,6 @@ import {
   FileText,
   Eye,
   Archive,
-  Download,
-  ChevronDown,
   Presentation,
   type LucideIcon,
 } from 'lucide-react';

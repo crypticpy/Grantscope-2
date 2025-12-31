@@ -100,6 +100,7 @@ interface FollowStats {
   unique_users_following: number;
   most_followed_cards: Array<{
     card_id: string;
+    card_slug?: string;
     card_name: string;
     follower_count: number;
   }>;
@@ -124,6 +125,7 @@ interface SystemWideStats {
 
 interface UserFollowItem {
   card_id: string;
+  card_slug?: string;
   card_name: string;
   pillar_id: string | null;
   horizon: string | null;
@@ -135,6 +137,7 @@ interface UserFollowItem {
 
 interface PopularCard {
   card_id: string;
+  card_slug?: string;
   card_name: string;
   summary: string;
   pillar_id: string | null;
@@ -551,7 +554,7 @@ const PopularCardsSection: React.FC<{
         {cards.map(card => (
           <Link
             key={card.card_id}
-            to={`/cards/${card.card_id}`}
+            to={`/cards/${card.card_slug || card.card_id}`}
             className="block p-3 bg-gray-50 dark:bg-[#1e2048] rounded-lg hover:bg-gray-100 dark:hover:bg-[#252860] transition-colors"
           >
             <div className="flex items-start justify-between">
@@ -789,7 +792,7 @@ const AnalyticsV2: React.FC = () => {
                 {systemStats.follow_stats.most_followed_cards.map((card, idx) => (
                   <Link
                     key={card.card_id}
-                    to={`/cards/${card.card_id}`}
+                    to={`/cards/${card.card_slug || card.card_id}`}
                     className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-[#1e2048] rounded-lg hover:bg-gray-100 dark:hover:bg-[#252860] transition-colors"
                   >
                     <span className="w-6 h-6 flex items-center justify-center text-sm font-bold text-white bg-amber-500 rounded-full">
@@ -868,7 +871,7 @@ const AnalyticsV2: React.FC = () => {
                   {personalStats.following.slice(0, 10).map(item => (
                     <Link
                       key={item.card_id}
-                      to={`/cards/${item.card_id}`}
+                      to={`/cards/${item.card_slug || item.card_id}`}
                       className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-[#1e2048] transition-colors"
                     >
                       <div className="flex items-center gap-2 min-w-0">

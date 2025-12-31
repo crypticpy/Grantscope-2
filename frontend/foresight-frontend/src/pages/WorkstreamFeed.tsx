@@ -31,7 +31,7 @@ import { PillarBadge, PillarBadgeGroup } from '../components/PillarBadge';
 import { HorizonBadge } from '../components/HorizonBadge';
 import { StageBadge } from '../components/StageBadge';
 import { Top25Badge } from '../components/Top25Badge';
-// Removed unused taxonomy imports
+import { WorkstreamForm } from '../components/WorkstreamForm';
 
 // ============================================================================
 // Types
@@ -267,6 +267,9 @@ const WorkstreamFeed: React.FC = () => {
   // Export state
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [exportLoading, setExportLoading] = useState<'pdf' | 'pptx' | null>(null);
+
+  // Edit modal state
+  const [showEditModal, setShowEditModal] = useState(false);
 
   // Load workstream data
   useEffect(() => {
@@ -509,6 +512,21 @@ const WorkstreamFeed: React.FC = () => {
     }
   };
 
+  /**
+   * Handle edit modal success
+   */
+  const handleEditSuccess = () => {
+    setShowEditModal(false);
+    loadWorkstream();
+  };
+
+  /**
+   * Handle edit modal cancel
+   */
+  const handleEditCancel = () => {
+    setShowEditModal(false);
+  };
+
   // Loading state
   if (loading) {
     return (
@@ -659,13 +677,13 @@ const WorkstreamFeed: React.FC = () => {
               )}
             </div>
 
-            <Link
-              to={`/workstreams/${id}/edit`}
+            <button
+              onClick={() => setShowEditModal(true)}
               className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-[#2d3166] transition-colors"
             >
               <Edit className="h-4 w-4 mr-2" />
-              Edit
-            </Link>
+              Edit Filters
+            </button>
           </div>
         </div>
       </div>
@@ -758,13 +776,13 @@ const WorkstreamFeed: React.FC = () => {
             the filter criteria to broaden your results.
           </p>
           <div className="mt-6">
-            <Link
-              to={`/workstreams/${id}/edit`}
+            <button
+              onClick={() => setShowEditModal(true)}
               className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-brand-dark-blue focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-[#2d3166] transition-colors"
             >
               <Edit className="h-4 w-4 mr-2" />
               Adjust Filters
-            </Link>
+            </button>
           </div>
         </div>
       ) : (
@@ -788,6 +806,29 @@ const WorkstreamFeed: React.FC = () => {
             ))}
           </div>
         </>
+      )}
+
+      {/* Edit Workstream Modal */}
+      {showEditModal && workstream && (
+        <div className="fixed inset-0 bg-gray-600/50 dark:bg-black/60 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
+            <div className="sticky top-0 bg-white dark:bg-[#2d3166] border-b border-gray-200 dark:border-gray-700 px-6 py-4 rounded-t-lg">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                Edit Workstream Filters
+              </h3>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                Adjust the filters to change which cards match this workstream.
+              </p>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <WorkstreamForm
+                workstream={workstream}
+                onSuccess={handleEditSuccess}
+                onCancel={handleEditCancel}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

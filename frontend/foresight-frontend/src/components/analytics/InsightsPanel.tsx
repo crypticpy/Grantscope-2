@@ -156,9 +156,9 @@ const InsightCard: React.FC<{ insight: InsightItem; index: number }> = ({ insigh
           <div className="flex items-start justify-between gap-2 mb-2">
             <div className="flex items-center gap-2 flex-wrap">
               <h4 className="font-medium text-gray-900 dark:text-white truncate">
-                {insight.card_id ? (
+                {insight.card_slug ? (
                   <Link
-                    to={`/cards/${insight.card_id}`}
+                    to={`/cards/${insight.card_slug}`}
                     className="hover:text-brand-blue transition-colors"
                   >
                     {insight.trend_name}

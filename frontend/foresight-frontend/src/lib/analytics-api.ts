@@ -97,6 +97,7 @@ export interface InsightItem {
   insight: string; // AI-generated strategic insight text
   pillar_id?: string; // Associated pillar code
   card_id?: string; // UUID of the associated card
+  card_slug?: string; // URL slug for navigation
   velocity_score?: number; // Velocity score of the trend (0-100)
 }
 

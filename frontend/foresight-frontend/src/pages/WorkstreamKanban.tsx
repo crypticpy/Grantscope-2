@@ -1737,6 +1737,7 @@ const WorkstreamKanban: React.FC = () => {
               onCardMove={handleCardMove}
               onCardClick={handleCardClick}
               cardActions={cardActions}
+              onBulkExport={handleOpenBulkExport}
             />
           </KanbanErrorBoundary>
         )}
@@ -1799,6 +1800,18 @@ const WorkstreamKanban: React.FC = () => {
           itemName={exportState.itemName || undefined}
           isGammaPowered={exportState.isGammaPowered}
           estimatedTimeSeconds={exportState.estimatedTimeSeconds}
+        />
+
+        {/* Bulk Export Modal */}
+        <BulkExportModal
+          isOpen={showBulkExportModal}
+          onClose={handleCloseBulkExport}
+          workstreamName={workstream?.name || 'Workstream'}
+          statusData={bulkExportStatus}
+          isLoading={bulkExportLoading}
+          error={bulkExportError}
+          onExport={handleExecuteBulkExport}
+          isExporting={isBulkExporting}
         />
 
         {/* Toast Notifications */}

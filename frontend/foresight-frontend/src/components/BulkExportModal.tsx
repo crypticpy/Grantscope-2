@@ -271,7 +271,6 @@ export const BulkExportModal: React.FC<BulkExportModalProps> = ({
                         key={card.card_id}
                         card={card}
                         index={index + 1}
-                        isIncluded={cardOrder.includes(card.card_id)}
                       />
                     ))}
                 </div>
@@ -374,10 +373,9 @@ export const BulkExportModal: React.FC<BulkExportModalProps> = ({
 interface CardStatusRowProps {
   card: BulkBriefCardStatus;
   index: number;
-  isIncluded: boolean;
 }
 
-function CardStatusRow({ card, index, isIncluded }: CardStatusRowProps) {
+function CardStatusRow({ card, index }: CardStatusRowProps) {
   const isReady = card.has_brief && card.brief_status === 'completed';
 
   return (
@@ -441,7 +439,6 @@ interface FormatOptionProps {
 }
 
 function FormatOption({
-  format,
   title,
   description,
   icon: Icon,

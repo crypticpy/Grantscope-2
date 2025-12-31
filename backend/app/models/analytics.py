@@ -179,6 +179,10 @@ class InsightItem(BaseModel):
         None,
         description="UUID of the associated card"
     )
+    card_slug: Optional[str] = Field(
+        None,
+        description="URL slug of the associated card for navigation"
+    )
     velocity_score: Optional[int] = Field(
         None,
         ge=0,
@@ -314,6 +318,7 @@ class SystemWideStats(BaseModel):
 class UserFollowItem(BaseModel):
     """A card that the user is following."""
     card_id: str = Field(..., description="Card UUID")
+    card_slug: Optional[str] = Field(None, description="URL slug for navigation")
     card_name: str = Field(..., description="Card name")
     pillar_id: Optional[str] = Field(None, description="Pillar code")
     horizon: Optional[str] = Field(None, description="Time horizon")
@@ -326,6 +331,7 @@ class UserFollowItem(BaseModel):
 class PopularCard(BaseModel):
     """A popular card that others are following."""
     card_id: str = Field(..., description="Card UUID")
+    card_slug: Optional[str] = Field(None, description="URL slug for navigation")
     card_name: str = Field(..., description="Card name")
     summary: str = Field(..., description="Card summary")
     pillar_id: Optional[str] = Field(None, description="Pillar code")

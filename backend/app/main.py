@@ -3295,7 +3295,7 @@ async def get_analytics_insights(
         # Step 1: Fetch top cards (needed for both cache check and generation)
         # -------------------------------------------------------------------------
         query = supabase.table("cards").select(
-            "id, name, summary, pillar_id, horizon, velocity_score, impact_score, relevance_score, novelty_score"
+            "id, name, slug, summary, pillar_id, horizon, velocity_score, impact_score, relevance_score, novelty_score"
         ).eq("status", "active")
 
         if pillar_id:
@@ -3414,6 +3414,7 @@ async def get_analytics_insights(
                         insight=insight_data.get("insight", ""),
                         pillar_id=card.get("pillar_id"),
                         card_id=card.get("id"),
+                        card_slug=card.get("slug"),
                         velocity_score=card.get("velocity_score")
                     ))
 
@@ -3429,6 +3430,7 @@ async def get_analytics_insights(
                     insight=card.get("summary", "No summary available")[:300] if card.get("summary") else "Strategic analysis pending.",
                     pillar_id=card.get("pillar_id"),
                     card_id=card.get("id"),
+                    card_slug=card.get("slug"),
                     velocity_score=card.get("velocity_score")
                 )
                 for card in top_cards
@@ -7060,13 +7062,15 @@ async def get_system_wide_stats(
             most_followed_cards = []
             if top_followed:
                 top_card_ids = [c[0] for c in top_followed]
-                cards_info = supabase.table("cards").select("id, name").in_("id", top_card_ids).execute()
-                cards_map = {c["id"]: c["name"] for c in (cards_info.data or [])}
+                cards_info = supabase.table("cards").select("id, name, slug").in_("id", top_card_ids).execute()
+                cards_map = {c["id"]: {"name": c["name"], "slug": c.get("slug")} for c in (cards_info.data or [])}
                 
                 for card_id, count in top_followed:
+                    card_info = cards_map.get(card_id, {"name": "Unknown", "slug": None})
                     most_followed_cards.append({
                         "card_id": card_id,
-                        "card_name": cards_map.get(card_id, "Unknown"),
+                        "card_slug": card_info.get("slug"),
+                        "card_name": card_info.get("name", "Unknown"),
                         "follower_count": count
                     })
             
@@ -7135,7 +7139,7 @@ async def get_personal_stats(
         # -------------------------------------------------------------------------
         
         user_follows_resp = supabase.table("card_follows").select(
-            "card_id, priority, created_at, cards(id, name, pillar_id, horizon, velocity_score)"
+            "card_id, priority, created_at, cards(id, name, slug, pillar_id, horizon, velocity_score)"
         ).eq("user_id", user_id).execute()
         user_follows_data = user_follows_resp.data or []
         
@@ -7164,6 +7168,7 @@ async def get_personal_stats(
             
             following.append(UserFollowItem(
                 card_id=card_id,
+                card_slug=card.get("slug"),
                 card_name=card.get("name", "Unknown"),
                 pillar_id=card.get("pillar_id"),
                 horizon=card.get("horizon"),
@@ -7271,13 +7276,14 @@ async def get_personal_stats(
         popular_not_followed = []
         if popular_card_ids:
             popular_cards_resp = supabase.table("cards").select(
-                "id, name, summary, pillar_id, horizon, velocity_score"
+                "id, name, slug, summary, pillar_id, horizon, velocity_score"
             ).in_("id", popular_card_ids).eq("status", "active").execute()
             
             for card in (popular_cards_resp.data or []):
                 card_id = card.get("id")
                 popular_not_followed.append(PopularCard(
                     card_id=card_id,
+                    card_slug=card.get("slug"),
                     card_name=card.get("name", "Unknown"),
                     summary=card.get("summary", "")[:200],
                     pillar_id=card.get("pillar_id"),
@@ -7312,13 +7318,14 @@ async def get_personal_stats(
         recently_popular = []
         if recently_popular_ids:
             recent_cards_resp = supabase.table("cards").select(
-                "id, name, summary, pillar_id, horizon, velocity_score"
+                "id, name, slug, summary, pillar_id, horizon, velocity_score"
             ).in_("id", recently_popular_ids).eq("status", "active").execute()
             
             for card in (recent_cards_resp.data or []):
                 card_id = card.get("id")
                 recently_popular.append(PopularCard(
                     card_id=card_id,
+                    card_slug=card.get("slug"),
                     card_name=card.get("name", "Unknown"),
                     summary=card.get("summary", "")[:200],
                     pillar_id=card.get("pillar_id"),

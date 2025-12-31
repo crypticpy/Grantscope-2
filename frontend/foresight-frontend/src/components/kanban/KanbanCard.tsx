@@ -12,11 +12,11 @@
  * - Dark mode support
  */
 
-import React, { memo, useCallback } from 'react';
+import React, { memo } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useNavigate } from 'react-router-dom';
-import { StickyNote, Bell, Sparkles, UserPlus, Heart, Check, X, Loader2, CheckCircle2, AlertCircle, Search } from 'lucide-react';
+import { StickyNote, Bell, Sparkles, UserPlus, Heart, Check, X, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { PillarBadge } from '../PillarBadge';
 import { HorizonBadge } from '../HorizonBadge';
