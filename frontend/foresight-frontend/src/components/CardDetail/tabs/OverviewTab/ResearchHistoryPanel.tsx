@@ -8,9 +8,9 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import ReactMarkdown from 'react-markdown';
 import { Search, ChevronDown, ChevronUp, Copy, Check } from 'lucide-react';
 import { cn } from '../../../../lib/utils';
+import { MarkdownReport } from '../../MarkdownReport';
 import type { ResearchTask } from '../../types';
 
 /**
@@ -213,75 +213,8 @@ export const ResearchHistoryPanel: React.FC<ResearchHistoryPanelProps> = ({
                 </div>
 
                 {/* Markdown report content */}
-                <div className="prose prose-sm dark:prose-invert max-w-none max-h-[60vh] sm:max-h-[400px] overflow-y-auto overflow-x-hidden p-3 bg-gray-50 dark:bg-gray-800 rounded-lg break-words">
-                  <ReactMarkdown
-                    components={{
-                      a: ({ node: _node, ...props }) => (
-                        <a
-                          {...props}
-                          className="text-blue-600 hover:text-blue-800 underline"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        />
-                      ),
-                      h1: ({ node: _node, ...props }) => (
-                        <h1
-                          {...props}
-                          className="text-lg font-bold text-gray-900 dark:text-white mt-3 mb-2"
-                        />
-                      ),
-                      h2: ({ node: _node, ...props }) => (
-                        <h2
-                          {...props}
-                          className="text-base font-semibold text-gray-900 dark:text-white mt-2 mb-1"
-                        />
-                      ),
-                      h3: ({ node: _node, ...props }) => (
-                        <h3
-                          {...props}
-                          className="text-sm font-semibold text-gray-800 dark:text-gray-100 mt-2 mb-1"
-                        />
-                      ),
-                      p: ({ node: _node, ...props }) => (
-                        <p
-                          {...props}
-                          className="text-gray-700 dark:text-gray-300 mb-2 text-sm leading-relaxed"
-                        />
-                      ),
-                      ul: ({ node: _node, ...props }) => (
-                        <ul
-                          {...props}
-                          className="list-disc list-inside mb-2 space-y-0.5"
-                        />
-                      ),
-                      ol: ({ node: _node, ...props }) => (
-                        <ol
-                          {...props}
-                          className="list-decimal list-inside mb-2 space-y-0.5"
-                        />
-                      ),
-                      li: ({ node: _node, ...props }) => (
-                        <li
-                          {...props}
-                          className="text-gray-700 dark:text-gray-300 text-sm"
-                        />
-                      ),
-                      code: ({ node: _node, ...props }) => (
-                        <code
-                          {...props}
-                          className="bg-gray-200 dark:bg-gray-700 px-1 py-0.5 rounded text-xs"
-                        />
-                      ),
-                      blockquote: ({ node: _node, ...props }) => (
-                        <blockquote
-                          {...props}
-                          className="border-l-4 border-blue-500 pl-3 italic text-gray-600 dark:text-gray-400 my-2 text-sm"
-                        />
-                      ),
-                    }}
-                  >
-                    {task.result_summary.report_preview}
-                  </ReactMarkdown>
+                <div className="max-h-[60vh] sm:max-h-[400px] overflow-y-auto overflow-x-hidden p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <MarkdownReport content={task.result_summary.report_preview} />
                 </div>
               </div>
             )}

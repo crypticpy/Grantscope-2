@@ -41,8 +41,8 @@ import {
   ChevronUp,
   FileText,
 } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
 import { cn } from '../../lib/utils';
+import { MarkdownReport } from './MarkdownReport';
 import type { ResearchTask } from './types';
 
 /**
@@ -241,8 +241,8 @@ export const ResearchStatusBanner: React.FC<ResearchStatusBannerProps> = ({
             </div>
 
             {/* Report Content */}
-            <div className="prose prose-sm dark:prose-invert max-w-none max-h-[70vh] sm:max-h-[500px] overflow-y-auto p-3 sm:p-4 bg-gray-50 dark:bg-gray-800 rounded-lg break-words">
-              <ReactMarkdown>{researchTask.result_summary!.report_preview!}</ReactMarkdown>
+            <div className="max-h-[70vh] sm:max-h-[500px] overflow-y-auto p-3 sm:p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <MarkdownReport content={researchTask.result_summary!.report_preview!} />
             </div>
           </div>
         </div>

@@ -9,9 +9,9 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import ReactMarkdown from 'react-markdown';
 import { Calendar, Search, FileText, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '../../../lib/utils';
+import { MarkdownReport } from '../MarkdownReport';
 import type { TimelineEvent } from '../types';
 
 /**
@@ -258,20 +258,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
 
                           {/* Report Content */}
                           <div className="p-4 sm:p-6 bg-white dark:bg-[#1d2156] max-h-[70vh] sm:max-h-[80vh] overflow-y-auto overflow-x-hidden">
-                            <div
-                              className="prose prose-sm dark:prose-invert max-w-none break-words
-                                prose-headings:text-brand-dark-blue dark:prose-headings:text-white
-                                prose-h2:text-base prose-h2:sm:text-lg prose-h2:font-bold prose-h2:border-b prose-h2:border-gray-200 dark:prose-h2:border-gray-700 prose-h2:pb-2 prose-h2:mb-4 prose-h2:mt-6
-                                prose-h3:text-sm prose-h3:sm:text-base prose-h3:font-semibold
-                                prose-strong:text-brand-dark-blue dark:prose-strong:text-brand-light-blue
-                                prose-ul:my-2 prose-li:my-0.5
-                                prose-p:text-gray-700 dark:prose-p:text-gray-300
-                                prose-a:text-brand-blue hover:prose-a:text-brand-dark-blue"
-                            >
-                              <ReactMarkdown>
-                                {event.metadata!.detailed_report!}
-                              </ReactMarkdown>
-                            </div>
+                            <MarkdownReport content={event.metadata!.detailed_report!} />
                           </div>
                         </div>
                       )}

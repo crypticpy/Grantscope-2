@@ -26,9 +26,16 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
 AS $$
+DECLARE
+    v_today DATE := CURRENT_DATE;
 BEGIN
     UPDATE public.cards
-    SET deep_research_count = COALESCE(deep_research_count, 0) + 1
+    SET
+        deep_research_count_today = CASE
+            WHEN deep_research_reset_date = v_today THEN COALESCE(deep_research_count_today, 0) + 1
+            ELSE 1
+        END,
+        deep_research_reset_date = v_today
     WHERE id = p_card_id;
 END;
 $$;
@@ -173,11 +180,13 @@ AS $$
 BEGIN
     UPDATE public.cards
     SET
-        review_status = 'approved',
+        review_status = 'active',
+        status = 'active',
         reviewed_at = NOW(),
-        reviewed_by = p_reviewer_id
+        reviewed_by = p_reviewer_id,
+        updated_at = NOW()
     WHERE id = p_card_id
-    AND review_status = 'pending';
+    AND review_status IN ('discovered', 'pending_review');
 END;
 $$;
 
@@ -199,11 +208,13 @@ BEGIN
     UPDATE public.cards
     SET
         review_status = 'rejected',
-        reviewed_at = NOW(),
-        reviewed_by = p_reviewer_id,
-        rejection_reason = p_reason
+        status = 'archived',
+        rejected_at = NOW(),
+        rejected_by = p_reviewer_id,
+        rejection_reason = p_reason,
+        updated_at = NOW()
     WHERE id = p_card_id
-    AND review_status = 'pending';
+    AND review_status IN ('discovered', 'pending_review');
 END;
 $$;
 
@@ -219,8 +230,11 @@ SET search_path = ''
 AS $$
 BEGIN
     UPDATE public.discovery_blocks
-    SET blocked_count = blocked_count + 1
-    WHERE topic_name = p_topic_name;
+    SET
+        blocked_by_count = blocked_by_count + 1,
+        last_blocked_at = NOW(),
+        updated_at = NOW()
+    WHERE lower(topic_name) = lower(p_topic_name);
 END;
 $$;
 
