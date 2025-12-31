@@ -5023,21 +5023,28 @@ class BulkExportRequest(BaseModel):
         }
 
 
-class BulkExportStatusResponse(BaseModel):
-    """Response for bulk export status check."""
+class BulkBriefCardStatus(BaseModel):
+    """Status of a single card for bulk export."""
     card_id: str
     card_name: str
     has_brief: bool
     brief_status: Optional[str] = None
-    pillar_id: Optional[str] = None
-    horizon: Optional[str] = None
+    position: int = 0
+
+
+class BulkBriefStatusResponse(BaseModel):
+    """Response for bulk brief status check."""
+    total_cards: int
+    cards_with_briefs: int
+    cards_ready: int
+    card_statuses: List[BulkBriefCardStatus]
 
 
 @app.get("/api/v1/me/workstreams/{workstream_id}/bulk-brief-status")
 async def get_bulk_brief_status(
     workstream_id: str,
     current_user: dict = Depends(get_current_user)
-) -> List[BulkExportStatusResponse]:
+) -> BulkBriefStatusResponse:
     """
     Get brief status for all cards in the Brief column.
     
@@ -5049,7 +5056,7 @@ async def get_bulk_brief_status(
         current_user: Authenticated user (injected)
     
     Returns:
-        List of BulkExportStatusResponse with brief status per card
+        BulkBriefStatusResponse with summary counts and per-card status
     """
     # Verify workstream belongs to user
     ws_response = supabase.table("workstreams").select("id, user_id, name").eq("id", workstream_id).execute()
@@ -5063,10 +5070,14 @@ async def get_bulk_brief_status(
         "id, card_id, status, position, cards(id, name, pillar_id, horizon)"
     ).eq("workstream_id", workstream_id).eq("status", "brief").order("position").execute()
     
-    results = []
+    card_statuses = []
+    cards_with_briefs = 0
+    cards_ready = 0
+    
     for wsc in wsc_response.data or []:
         card = wsc.get("cards", {})
         card_id = wsc.get("card_id")
+        position = wsc.get("position", 0)
         
         # Check for completed brief
         brief_response = supabase.table("executive_briefs").select(
@@ -5076,16 +5087,25 @@ async def get_bulk_brief_status(
         has_brief = len(brief_response.data or []) > 0
         brief_status = brief_response.data[0]["status"] if has_brief else None
         
-        results.append(BulkExportStatusResponse(
+        if has_brief:
+            cards_with_briefs += 1
+            if brief_status == "completed":
+                cards_ready += 1
+        
+        card_statuses.append(BulkBriefCardStatus(
             card_id=card_id,
             card_name=card.get("name", "Unknown"),
             has_brief=has_brief,
             brief_status=brief_status,
-            pillar_id=card.get("pillar_id"),
-            horizon=card.get("horizon")
+            position=position
         ))
     
-    return results
+    return BulkBriefStatusResponse(
+        total_cards=len(card_statuses),
+        cards_with_briefs=cards_with_briefs,
+        cards_ready=cards_ready,
+        card_statuses=card_statuses
+    )
 
 
 @app.post("/api/v1/me/workstreams/{workstream_id}/bulk-brief-export")
