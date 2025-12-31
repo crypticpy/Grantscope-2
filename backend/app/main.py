@@ -4975,7 +4975,9 @@ async def export_brief(
                 executive_summary=brief.get("summary", ""),
                 content_markdown=brief.get("content_markdown", ""),
                 generated_at=generated_at,
-                version=brief.get("version", 1)
+                version=brief.get("version", 1),
+                classification=classification,
+                use_gamma=True  # Try Gamma.app first, fallback to local
             )
             content_type = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
             extension = "pptx"

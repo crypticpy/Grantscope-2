@@ -3608,10 +3608,15 @@ class ExportService:
         executive_summary: str,
         content_markdown: str,
         generated_at: Optional[datetime] = None,
-        version: Optional[int] = None
+        version: Optional[int] = None,
+        classification: Optional[Dict[str, str]] = None,
+        use_gamma: bool = True
     ) -> str:
         """
         Generate a PowerPoint presentation for an executive brief.
+        
+        Attempts to use Gamma.app for AI-powered presentation generation.
+        Falls back to local python-pptx generation if Gamma is unavailable.
 
         Args:
             brief_title: Title for the brief (usually card name)
@@ -3620,6 +3625,8 @@ class ExportService:
             content_markdown: Full brief content in markdown format
             generated_at: When the brief was generated
             version: Version number of the brief
+            classification: Optional dict with pillar, horizon, stage info
+            use_gamma: Whether to attempt Gamma API (default True)
 
         Returns:
             Path to the generated PowerPoint file
@@ -3627,20 +3634,110 @@ class ExportService:
         Raises:
             Exception: If PowerPoint generation fails
         """
+        # Try Gamma.app first if enabled
+        if use_gamma:
+            try:
+                from .gamma_service import GammaService
+                
+                gamma = GammaService()
+                if gamma.is_available():
+                    logger.info(f"Attempting Gamma.app presentation generation for: {brief_title}")
+                    
+                    result = await gamma.generate_presentation(
+                        title=brief_title,
+                        executive_summary=executive_summary,
+                        content_markdown=content_markdown,
+                        classification=classification,
+                        num_slides=8,
+                        include_images=True,
+                        export_format="pptx"
+                    )
+                    
+                    if result.success and result.pptx_url:
+                        # Download the PPTX file
+                        pptx_bytes = await gamma.download_export(result.pptx_url)
+                        
+                        if pptx_bytes:
+                            # Save to temp file
+                            temp_file = tempfile.NamedTemporaryFile(
+                                suffix='.pptx',
+                                delete=False,
+                                prefix='foresight_gamma_brief_'
+                            )
+                            temp_file.write(pptx_bytes)
+                            temp_file.close()
+                            
+                            logger.info(f"Gamma presentation generated successfully: {temp_file.name}")
+                            if result.credits_used:
+                                logger.info(f"Gamma credits used: {result.credits_used}, remaining: {result.credits_remaining}")
+                            
+                            return temp_file.name
+                    
+                    # Log why Gamma failed
+                    if result.error_message:
+                        logger.warning(f"Gamma generation failed: {result.error_message}")
+                    else:
+                        logger.warning("Gamma generation completed but no PPTX URL returned")
+                        
+            except ImportError:
+                logger.warning("Gamma service not available, using fallback")
+            except Exception as e:
+                logger.warning(f"Gamma generation error, falling back to local: {e}")
+        
+        # Fallback to local generation with improved markdown handling
+        return await self._generate_brief_pptx_local(
+            brief_title=brief_title,
+            card_name=card_name,
+            executive_summary=executive_summary,
+            content_markdown=content_markdown,
+            generated_at=generated_at,
+            version=version,
+            classification=classification
+        )
+    
+    async def _generate_brief_pptx_local(
+        self,
+        brief_title: str,
+        card_name: str,
+        executive_summary: str,
+        content_markdown: str,
+        generated_at: Optional[datetime] = None,
+        version: Optional[int] = None,
+        classification: Optional[Dict[str, str]] = None
+    ) -> str:
+        """
+        Local PowerPoint generation with improved markdown handling.
+        
+        Used as fallback when Gamma.app is unavailable.
+        """
+        import re
+        
         try:
-            logger.info(f"Generating brief PowerPoint: {brief_title}")
+            logger.info(f"Generating local brief PowerPoint: {brief_title}")
 
             # Create presentation
             prs = Presentation()
             prs.slide_width = PPTX_SLIDE_WIDTH
             prs.slide_height = PPTX_SLIDE_HEIGHT
 
-            # 1. Title slide
-            subtitle = f"Executive Brief for {card_name}"
-            if version and version > 1:
-                subtitle += f" • Version {version}"
+            # 1. Title slide with classification
+            subtitle = f"Strategic Intelligence Brief"
+            if classification:
+                tags = []
+                if classification.get("pillar"):
+                    tags.append(f"Pillar: {classification['pillar'].upper()}")
+                if classification.get("horizon"):
+                    tags.append(f"Horizon: {classification['horizon'].upper()}")
+                if classification.get("stage"):
+                    stage_raw = classification["stage"]
+                    stage_match = re.search(r'(\d+)', str(stage_raw))
+                    if stage_match:
+                        tags.append(f"Stage: {stage_match.group(1)}")
+                if tags:
+                    subtitle = " | ".join(tags)
+            
             if generated_at:
-                subtitle += f" • {generated_at.strftime('%B %d, %Y')}"
+                subtitle += f"\n{generated_at.strftime('%B %d, %Y')}"
 
             self._add_title_slide(
                 prs,
@@ -3650,52 +3747,31 @@ class ExportService:
 
             # 2. Executive Summary slide
             if executive_summary:
-                slide_layout = prs.slide_layouts[6]  # Blank layout
-                slide = prs.slides.add_slide(slide_layout)
-
-                # Add professional header and footer
-                self._add_pptx_header(slide)
-                self._add_pptx_footer(slide)
-
-                # Slide title - below header
-                title_box = slide.shapes.add_textbox(
-                    PPTX_MARGIN, Inches(1.25),
-                    PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.6)
+                clean_summary = self._clean_markdown_for_pptx(executive_summary)
+                self._add_smart_content_slide(
+                    prs,
+                    title="Executive Summary",
+                    content=clean_summary,
+                    max_chars=1200
                 )
-                title_frame = title_box.text_frame
-                title_para = title_frame.paragraphs[0]
-                title_para.text = "Executive Summary"
-                title_para.font.size = Pt(28)
-                title_para.font.bold = True
-                title_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
 
-                # Summary content - adjusted for header/footer
-                summary_box = slide.shapes.add_textbox(
-                    PPTX_MARGIN, Inches(1.95),
-                    PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(4.5)
-                )
-                summary_frame = summary_box.text_frame
-                summary_frame.word_wrap = True
-                summary_para = summary_frame.paragraphs[0]
-                # Truncate if too long for slide
-                summary_text = executive_summary[:1300] if len(executive_summary) > 1300 else executive_summary
-                summary_para.text = summary_text
-                summary_para.font.size = PPTX_BODY_FONT_SIZE
-                summary_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
-                summary_para.line_spacing = 1.4
-
-            # 3. Content slides - parse markdown into sections
+            # 3. Content slides - parse with improved markdown handling
             if content_markdown:
-                sections = self._parse_markdown_sections(content_markdown)
-
-                for section_title, section_content in sections:
-                    self._add_description_slide(
+                sections = self._parse_markdown_sections_improved(content_markdown)
+                
+                for section_title, section_content in sections[:8]:  # Max 8 content slides
+                    clean_content = self._clean_markdown_for_pptx(section_content)
+                    self._add_smart_content_slide(
                         prs,
-                        title=section_title or "Brief Content",
-                        description=section_content
+                        title=section_title,
+                        content=clean_content,
+                        max_chars=1000
                     )
 
-            # Save presentation to temp file
+            # 4. AI Disclosure slide
+            self._add_ai_disclosure_slide(prs)
+
+            # Save presentation
             temp_file = tempfile.NamedTemporaryFile(
                 suffix='.pptx',
                 delete=False,
@@ -3703,59 +3779,254 @@ class ExportService:
             )
             prs.save(temp_file.name)
 
-            logger.info(f"Brief PowerPoint generated successfully: {temp_file.name}")
+            logger.info(f"Local brief PowerPoint generated: {temp_file.name}")
             return temp_file.name
 
         except Exception as e:
-            logger.error(f"Error generating brief PowerPoint: {e}")
+            logger.error(f"Error generating local brief PowerPoint: {e}")
             raise
-
-    def _parse_markdown_sections(
+    
+    def _clean_markdown_for_pptx(self, text: str) -> str:
+        """
+        Clean markdown text for PowerPoint display.
+        
+        Removes markdown artifacts that don't render well in PPTX.
+        """
+        import re
+        
+        if not text:
+            return ""
+        
+        # Remove code blocks
+        text = re.sub(r'```[\s\S]*?```', '', text)
+        text = re.sub(r'`([^`]+)`', r'\1', text)
+        
+        # Convert bold/italic to plain text (PPTX doesn't support inline markdown)
+        text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+        text = re.sub(r'__(.+?)__', r'\1', text)
+        text = re.sub(r'\*(.+?)\*', r'\1', text)
+        text = re.sub(r'_(.+?)_', r'\1', text)
+        
+        # Remove links, keep text
+        text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
+        
+        # Standardize bullet points
+        text = re.sub(r'^[\-\*•]\s+', '• ', text, flags=re.MULTILINE)
+        
+        # Remove horizontal rules
+        text = re.sub(r'^[-*_]{3,}\s*$', '', text, flags=re.MULTILINE)
+        
+        # Remove headers markers (keep text)
+        text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
+        
+        # Clean up excessive whitespace
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        text = re.sub(r'  +', ' ', text)
+        
+        return text.strip()
+    
+    def _parse_markdown_sections_improved(
         self,
         content_markdown: str,
         max_sections: int = 10
     ) -> List[Tuple[str, str]]:
         """
-        Parse markdown content into sections based on headers.
-
-        Args:
-            content_markdown: Markdown content to parse
-            max_sections: Maximum number of sections to return
-
-        Returns:
-            List of (title, content) tuples
+        Improved markdown section parser.
+        
+        Handles:
+        - Multiple header formats (#, ##, ###)
+        - ALL CAPS section headers
+        - Bold section headers (**Section**)
+        - Reasonable content length per section
         """
         import re
-
+        
         sections = []
         current_title = "Overview"
         current_content = []
-
+        
         lines = content_markdown.split('\n')
-
+        
         for line in lines:
-            # Check for headers
-            header_match = re.match(r'^(#{1,3})\s+(.+)$', line)
+            line_stripped = line.strip()
+            
+            # Check for markdown headers
+            header_match = re.match(r'^(#{1,3})\s+(.+)$', line_stripped)
             if header_match:
-                # Save previous section if it has content
                 if current_content:
                     content_text = '\n'.join(current_content).strip()
-                    if content_text:
+                    if content_text and len(content_text) > 30:
                         sections.append((current_title, content_text))
-
-                current_title = header_match.group(2)
+                current_title = header_match.group(2).strip()
+                # Remove any trailing # or **
+                current_title = re.sub(r'\s*#+\s*$', '', current_title)
+                current_title = re.sub(r'^\*\*|\*\*$', '', current_title)
                 current_content = []
-            else:
-                current_content.append(line)
-
+                continue
+            
+            # Check for ALL CAPS headers (common AI pattern)
+            if re.match(r'^[A-Z][A-Z\s&\-]{5,}$', line_stripped) and not line_stripped.startswith('•'):
+                if current_content:
+                    content_text = '\n'.join(current_content).strip()
+                    if content_text and len(content_text) > 30:
+                        sections.append((current_title, content_text))
+                current_title = line_stripped.title()
+                current_content = []
+                continue
+            
+            # Check for bold headers (**Header**)
+            bold_match = re.match(r'^\*\*([^*]+)\*\*:?\s*$', line_stripped)
+            if bold_match:
+                if current_content:
+                    content_text = '\n'.join(current_content).strip()
+                    if content_text and len(content_text) > 30:
+                        sections.append((current_title, content_text))
+                current_title = bold_match.group(1).strip()
+                current_content = []
+                continue
+            
+            current_content.append(line)
+        
         # Don't forget the last section
         if current_content:
             content_text = '\n'.join(current_content).strip()
-            if content_text:
+            if content_text and len(content_text) > 30:
                 sections.append((current_title, content_text))
-
-        # If no sections were found, return all content as one section
+        
+        # If no sections found, create one from all content
         if not sections and content_markdown.strip():
-            sections = [("Brief Content", content_markdown.strip())]
-
+            sections = [("Key Findings", content_markdown.strip())]
+        
         return sections[:max_sections]
+    
+    def _add_smart_content_slide(
+        self,
+        prs: Presentation,
+        title: str,
+        content: str,
+        max_chars: int = 1000
+    ) -> None:
+        """
+        Add a content slide with smart text handling.
+        
+        Handles bullet points, truncation, and proper formatting.
+        """
+        slide_layout = prs.slide_layouts[6]  # Blank layout
+        slide = prs.slides.add_slide(slide_layout)
+        
+        # Add professional header and footer
+        self._add_pptx_header(slide)
+        self._add_pptx_footer(slide)
+        
+        # Slide title
+        title_box = slide.shapes.add_textbox(
+            PPTX_MARGIN, Inches(1.25),
+            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.6)
+        )
+        title_frame = title_box.text_frame
+        title_para = title_frame.paragraphs[0]
+        title_para.text = title[:60] if len(title) > 60 else title
+        title_para.font.size = Pt(28)
+        title_para.font.bold = True
+        title_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
+        
+        # Truncate content if needed
+        if len(content) > max_chars:
+            content = content[:max_chars - 3] + "..."
+        
+        # Content area
+        content_box = slide.shapes.add_textbox(
+            PPTX_MARGIN, Inches(1.95),
+            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(4.5)
+        )
+        content_frame = content_box.text_frame
+        content_frame.word_wrap = True
+        
+        # Parse content into paragraphs/bullets
+        lines = content.split('\n')
+        first_para = True
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            
+            if first_para:
+                para = content_frame.paragraphs[0]
+                first_para = False
+            else:
+                para = content_frame.add_paragraph()
+            
+            # Check if it's a bullet point
+            is_bullet = line.startswith('•') or line.startswith('-') or line.startswith('*')
+            if is_bullet:
+                # Clean bullet marker and add proper bullet
+                line = line.lstrip('•-* ')
+                para.text = f"• {line}"
+                para.level = 0
+            else:
+                para.text = line
+            
+            para.font.size = Pt(16)
+            para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
+            para.space_before = Pt(6)
+            para.space_after = Pt(4)
+    
+    def _add_ai_disclosure_slide(self, prs: Presentation) -> None:
+        """Add an AI technology disclosure slide."""
+        slide_layout = prs.slide_layouts[6]
+        slide = prs.slides.add_slide(slide_layout)
+        
+        self._add_pptx_header(slide)
+        self._add_pptx_footer(slide)
+        
+        # Title
+        title_box = slide.shapes.add_textbox(
+            PPTX_MARGIN, Inches(1.25),
+            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.6)
+        )
+        title_frame = title_box.text_frame
+        title_para = title_frame.paragraphs[0]
+        title_para.text = "About This Report"
+        title_para.font.size = Pt(28)
+        title_para.font.bold = True
+        title_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
+        
+        # Disclosure content
+        disclosure_text = """This strategic intelligence brief was generated using the FORESIGHT platform, powered by advanced AI technologies:
+
+• Anthropic Claude - Strategic analysis and synthesis
+• OpenAI GPT-4o - Classification and scoring
+• GPT Researcher - Autonomous deep research
+• Exa AI - Source discovery and retrieval
+• Firecrawl - Web content extraction
+• Tavily - Real-time research aggregation
+
+The City of Austin is committed to transparent and responsible use of AI technology in public service. All AI-generated content is reviewed for accuracy and relevance."""
+        
+        content_box = slide.shapes.add_textbox(
+            PPTX_MARGIN, Inches(1.95),
+            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(4.5)
+        )
+        content_frame = content_box.text_frame
+        content_frame.word_wrap = True
+        
+        lines = disclosure_text.split('\n')
+        first_para = True
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            
+            if first_para:
+                para = content_frame.paragraphs[0]
+                first_para = False
+            else:
+                para = content_frame.add_paragraph()
+            
+            para.text = line
+            para.font.size = Pt(14)
+            para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
+            para.space_before = Pt(4)
+            para.space_after = Pt(4)
