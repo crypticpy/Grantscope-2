@@ -4157,3 +4157,363 @@ The City of Austin is committed to transparent and responsible use of AI technol
             para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
             para.space_before = Pt(4)
             para.space_after = Pt(4)
+
+    # =========================================================================
+    # Portfolio Export (Bulk Brief Export)
+    # =========================================================================
+
+    async def generate_portfolio_pptx_local(
+        self,
+        workstream_name: str,
+        briefs: List,  # List of PortfolioBrief
+        synthesis  # PortfolioSynthesisData
+    ) -> str:
+        """
+        Generate a local portfolio PPTX presentation.
+        
+        Fallback when Gamma is unavailable. Creates a multi-card portfolio
+        deck with executive summary, priority matrix, and per-card sections.
+        
+        Args:
+            workstream_name: Name of the workstream for title
+            briefs: List of PortfolioBrief objects
+            synthesis: PortfolioSynthesisData with AI-generated overview
+            
+        Returns:
+            Path to the generated PPTX file
+        """
+        from pptx import Presentation
+        from pptx.util import Inches, Pt
+        from pptx.dml.color import RgbColor
+        from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
+        from datetime import datetime
+        import tempfile
+        
+        prs = Presentation()
+        prs.slide_width = PPTX_SLIDE_WIDTH
+        prs.slide_height = PPTX_SLIDE_HEIGHT
+        
+        # Get pillar icons for title
+        pillar_icons = []
+        for brief in briefs:
+            pillar_def = PILLAR_DEFINITIONS.get(brief.pillar_id.upper() if brief.pillar_id else "", {})
+            icon = pillar_def.get("icon", "🏛️")
+            if icon not in pillar_icons:
+                pillar_icons.append(icon)
+        
+        # 1. Title slide
+        title_subtitle = f"{' '.join(pillar_icons)} | {len(briefs)} Strategic Trends\n{datetime.now().strftime('%B %Y')}"
+        self._add_title_slide(prs, workstream_name, title_subtitle)
+        
+        # 2. Executive Overview slide
+        overview_content = synthesis.executive_overview if synthesis.executive_overview else "Portfolio synthesis in progress..."
+        self._add_smart_content_slide(
+            prs,
+            title="Executive Overview",
+            content=overview_content,
+            max_chars=1200
+        )
+        
+        # 3. Strategic Priorities (Priority Matrix)
+        matrix = synthesis.priority_matrix if synthesis.priority_matrix else {}
+        urgent = matrix.get("high_impact_urgent", [])
+        strategic = matrix.get("high_impact_strategic", [])
+        monitor = matrix.get("monitor", [])
+        
+        priority_content = "**🔴 High Impact - Urgent Action**\n"
+        priority_content += "\n".join(f"• {item}" for item in urgent) if urgent else "• None identified"
+        priority_content += "\n\n**🟡 High Impact - Strategic Planning**\n"
+        priority_content += "\n".join(f"• {item}" for item in strategic) if strategic else "• None identified"
+        priority_content += "\n\n**🟢 Monitor & Evaluate**\n"
+        priority_content += "\n".join(f"• {item}" for item in monitor) if monitor else "• None identified"
+        
+        self._add_smart_content_slide(
+            prs,
+            title="Strategic Priorities",
+            content=priority_content,
+            max_chars=1500
+        )
+        
+        # 4. Per-card sections
+        for i, brief in enumerate(briefs, 1):
+            pillar_def = PILLAR_DEFINITIONS.get(brief.pillar_id.upper() if brief.pillar_id else "", {})
+            pillar_name = pillar_def.get("name", brief.pillar_id or "Unknown")
+            pillar_icon = pillar_def.get("icon", "🏛️")
+            
+            horizon_name = brief.horizon or "H2"
+            
+            # Card overview slide
+            card_content = f"{pillar_icon} **{pillar_name}** | **{horizon_name}**\n\n"
+            card_content += f"**Impact**: {brief.impact_score}/100 | **Relevance**: {brief.relevance_score}/100\n\n"
+            card_content += brief.brief_summary or "No summary available"
+            
+            self._add_smart_content_slide(
+                prs,
+                title=f"{i}. {brief.card_name}",
+                content=card_content,
+                max_chars=1000
+            )
+        
+        # 5. Cross-Cutting Themes
+        themes_content = "**Common Patterns**\n"
+        themes_content += "\n".join(f"• {theme}" for theme in (synthesis.key_themes or [])) or "• Analysis in progress"
+        themes_content += "\n\n**Strategic Connections**\n"
+        themes_content += "\n".join(f"• {insight}" for insight in (synthesis.cross_cutting_insights or [])) or "• Analysis in progress"
+        
+        self._add_smart_content_slide(
+            prs,
+            title="Cross-Cutting Themes",
+            content=themes_content,
+            max_chars=1200
+        )
+        
+        # 6. Recommended Actions
+        actions_content = ""
+        for action in (synthesis.recommended_actions or [])[:5]:
+            action_text = action.get("action", "")
+            owner = action.get("owner", "TBD")
+            timeline = action.get("timeline", "TBD")
+            actions_content += f"**{action_text}**\n  Owner: {owner} | Timeline: {timeline}\n\n"
+        
+        if not actions_content:
+            actions_content = "Recommended actions to be determined based on leadership review."
+        
+        self._add_smart_content_slide(
+            prs,
+            title="Recommended Next Steps",
+            content=actions_content,
+            max_chars=1200
+        )
+        
+        # 7. AI Disclosure
+        self._add_ai_disclosure_slide(prs)
+        
+        # Save to temp file
+        temp_file = tempfile.NamedTemporaryFile(
+            suffix='.pptx',
+            delete=False,
+            prefix='foresight_portfolio_local_'
+        )
+        prs.save(temp_file.name)
+        temp_file.close()
+        
+        logger.info(f"Generated local portfolio PPTX: {len(briefs)} cards")
+        return temp_file.name
+
+    async def generate_portfolio_pdf(
+        self,
+        workstream_name: str,
+        briefs: List,  # List of PortfolioBrief
+        synthesis  # PortfolioSynthesisData
+    ) -> str:
+        """
+        Generate a detailed portfolio PDF document.
+        
+        PDF version includes MORE detail than PPTX since readers can
+        absorb more information. Same structure but expanded content.
+        
+        Args:
+            workstream_name: Name of the workstream for title
+            briefs: List of PortfolioBrief objects
+            synthesis: PortfolioSynthesisData with AI-generated overview
+            
+        Returns:
+            Path to the generated PDF file
+        """
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.colors import HexColor
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Table, TableStyle
+        from reportlab.lib.units import inch
+        from datetime import datetime
+        import tempfile
+        
+        # Create temp file
+        temp_file = tempfile.NamedTemporaryFile(
+            suffix='.pdf',
+            delete=False,
+            prefix='foresight_portfolio_'
+        )
+        
+        doc = SimpleDocTemplate(
+            temp_file.name,
+            pagesize=letter,
+            rightMargin=72,
+            leftMargin=72,
+            topMargin=72,
+            bottomMargin=72
+        )
+        
+        styles = getSampleStyleSheet()
+        
+        # Custom styles
+        title_style = ParagraphStyle(
+            'PortfolioTitle',
+            parent=styles['Heading1'],
+            fontSize=24,
+            textColor=HexColor(COA_BRAND_COLORS["logo_blue"]),
+            spaceAfter=12,
+            alignment=1  # Center
+        )
+        
+        subtitle_style = ParagraphStyle(
+            'PortfolioSubtitle',
+            parent=styles['Normal'],
+            fontSize=14,
+            textColor=HexColor(COA_BRAND_COLORS["dark_gray"]),
+            spaceAfter=24,
+            alignment=1
+        )
+        
+        section_style = ParagraphStyle(
+            'SectionTitle',
+            parent=styles['Heading2'],
+            fontSize=16,
+            textColor=HexColor(COA_BRAND_COLORS["logo_blue"]),
+            spaceBefore=18,
+            spaceAfter=12
+        )
+        
+        card_title_style = ParagraphStyle(
+            'CardTitle',
+            parent=styles['Heading3'],
+            fontSize=14,
+            textColor=HexColor(COA_BRAND_COLORS["dark_blue"]),
+            spaceBefore=12,
+            spaceAfter=6
+        )
+        
+        body_style = ParagraphStyle(
+            'BodyText',
+            parent=styles['Normal'],
+            fontSize=11,
+            textColor=HexColor(COA_BRAND_COLORS["dark_gray"]),
+            spaceAfter=8,
+            leading=14
+        )
+        
+        elements = []
+        
+        # Title page
+        elements.append(Spacer(1, inch * 2))
+        elements.append(Paragraph(workstream_name, title_style))
+        elements.append(Paragraph("Strategic Intelligence Portfolio", subtitle_style))
+        elements.append(Paragraph(f"{len(briefs)} Strategic Trends | {datetime.now().strftime('%B %Y')}", subtitle_style))
+        elements.append(Paragraph("City of Austin | FORESIGHT Platform", subtitle_style))
+        elements.append(PageBreak())
+        
+        # Executive Overview
+        elements.append(Paragraph("Executive Overview", section_style))
+        overview_text = synthesis.executive_overview if synthesis.executive_overview else "Portfolio analysis in progress."
+        # Split into paragraphs for better formatting
+        for para in overview_text.split('\n\n'):
+            if para.strip():
+                elements.append(Paragraph(para.strip(), body_style))
+        elements.append(Spacer(1, 12))
+        
+        # Key Themes
+        elements.append(Paragraph("Key Themes", section_style))
+        for theme in (synthesis.key_themes or []):
+            elements.append(Paragraph(f"• {theme}", body_style))
+        elements.append(Spacer(1, 12))
+        
+        # Strategic Priorities
+        elements.append(Paragraph("Strategic Priorities", section_style))
+        matrix = synthesis.priority_matrix if synthesis.priority_matrix else {}
+        
+        urgent = matrix.get("high_impact_urgent", [])
+        if urgent:
+            elements.append(Paragraph("<b>High Impact - Urgent Action:</b>", body_style))
+            for item in urgent:
+                elements.append(Paragraph(f"  • {item}", body_style))
+        
+        strategic = matrix.get("high_impact_strategic", [])
+        if strategic:
+            elements.append(Paragraph("<b>High Impact - Strategic Planning:</b>", body_style))
+            for item in strategic:
+                elements.append(Paragraph(f"  • {item}", body_style))
+        
+        monitor = matrix.get("monitor", [])
+        if monitor:
+            elements.append(Paragraph("<b>Monitor & Evaluate:</b>", body_style))
+            for item in monitor:
+                elements.append(Paragraph(f"  • {item}", body_style))
+        
+        elements.append(PageBreak())
+        
+        # Per-card detailed sections (PDF gets FULL content)
+        elements.append(Paragraph("Trend Analysis", section_style))
+        
+        for i, brief in enumerate(briefs, 1):
+            pillar_def = PILLAR_DEFINITIONS.get(brief.pillar_id.upper() if brief.pillar_id else "", {})
+            pillar_name = pillar_def.get("name", brief.pillar_id or "Unknown")
+            horizon_name = brief.horizon or "H2"
+            
+            elements.append(Paragraph(f"{i}. {brief.card_name}", card_title_style))
+            elements.append(Paragraph(
+                f"<b>Pillar:</b> {pillar_name} | <b>Horizon:</b> {horizon_name} | "
+                f"<b>Impact:</b> {brief.impact_score}/100 | <b>Relevance:</b> {brief.relevance_score}/100",
+                body_style
+            ))
+            
+            # Summary
+            if brief.brief_summary:
+                elements.append(Paragraph(f"<b>Summary:</b> {brief.brief_summary}", body_style))
+            
+            # Full brief content (PDF gets expanded detail)
+            if brief.brief_content_markdown:
+                # Clean up markdown for PDF
+                content = brief.brief_content_markdown
+                # Remove markdown headers, keep content
+                import re
+                content = re.sub(r'^#+\s+', '', content, flags=re.MULTILINE)
+                content = re.sub(r'\*\*([^*]+)\*\*', r'<b>\1</b>', content)
+                content = re.sub(r'\*([^*]+)\*', r'<i>\1</i>', content)
+                
+                # Truncate if very long
+                if len(content) > 2000:
+                    content = content[:2000] + "..."
+                
+                for para in content.split('\n\n')[:5]:  # First 5 paragraphs
+                    if para.strip():
+                        elements.append(Paragraph(para.strip(), body_style))
+            
+            elements.append(Spacer(1, 12))
+        
+        elements.append(PageBreak())
+        
+        # Cross-Cutting Insights
+        elements.append(Paragraph("Cross-Cutting Insights", section_style))
+        for insight in (synthesis.cross_cutting_insights or []):
+            elements.append(Paragraph(f"• {insight}", body_style))
+        elements.append(Spacer(1, 12))
+        
+        # Recommended Actions
+        elements.append(Paragraph("Recommended Actions", section_style))
+        for action in (synthesis.recommended_actions or []):
+            action_text = action.get("action", "")
+            owner = action.get("owner", "TBD")
+            timeline = action.get("timeline", "TBD")
+            cards = ", ".join(action.get("cards", []))
+            
+            elements.append(Paragraph(f"<b>{action_text}</b>", body_style))
+            elements.append(Paragraph(f"  Owner: {owner} | Timeline: {timeline}", body_style))
+            if cards:
+                elements.append(Paragraph(f"  Related Trends: {cards}", body_style))
+            elements.append(Spacer(1, 6))
+        
+        # AI Disclosure
+        elements.append(PageBreak())
+        elements.append(Paragraph("About This Portfolio", section_style))
+        disclosure = """This strategic intelligence portfolio was generated using the FORESIGHT platform, 
+        powered by advanced AI technologies including Anthropic Claude, OpenAI GPT-4, GPT Researcher, 
+        and Gamma.app. The City of Austin is committed to transparent and responsible use of AI 
+        technology in public service. All AI-generated content is reviewed for accuracy and relevance."""
+        elements.append(Paragraph(disclosure, body_style))
+        
+        # Build PDF
+        doc.build(elements)
+        temp_file.close()
+        
+        logger.info(f"Generated portfolio PDF: {len(briefs)} cards")
+        return temp_file.name

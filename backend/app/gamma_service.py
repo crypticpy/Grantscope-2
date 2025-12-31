@@ -1077,3 +1077,458 @@ async def generate_gamma_presentation(
         num_slides=num_slides,
         include_images=include_images
     )
+
+
+# =============================================================================
+# Portfolio/Bulk Export Support
+# =============================================================================
+
+@dataclass
+class PortfolioCard:
+    """Card data for portfolio presentation."""
+    card_id: str
+    card_name: str
+    pillar_id: str
+    horizon: str
+    stage_id: str
+    brief_summary: str
+    brief_content: str  # Truncated for slides
+    impact_score: int
+    relevance_score: int
+
+
+@dataclass
+class PortfolioSynthesisData:
+    """Pre-computed synthesis data for portfolio."""
+    executive_overview: str
+    key_themes: List[str]
+    priority_matrix: Dict[str, Any]
+    cross_cutting_insights: List[str]
+    recommended_actions: List[Dict[str, str]]
+
+
+def calculate_slides_per_card(card_count: int) -> int:
+    """
+    Calculate optimal slides per card based on total card count.
+    
+    Keeps total under 55 slides (buffer for Gamma's 60 limit).
+    
+    Args:
+        card_count: Number of cards in portfolio
+        
+    Returns:
+        Slides to allocate per card (2-4)
+    """
+    # Fixed slides: title(1) + overview(1) + priority(1) + themes(1) + actions(1) + disclosure(1) = 6
+    fixed_slides = 6
+    max_total = 55
+    available_for_cards = max_total - fixed_slides
+    
+    if card_count <= 3:
+        return 4  # Detailed treatment
+    elif card_count <= 7:
+        return 3  # Standard portfolio
+    elif card_count <= 15:
+        return 2  # Condensed
+    else:
+        return 2  # Cap at 2, warn user if >15 cards
+
+
+class GammaPortfolioService:
+    """
+    Generates portfolio presentations via Gamma API.
+    
+    Different from single-brief generation - uses portfolio-specific
+    prompts and multi-card structure.
+    """
+    
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key or GAMMA_API_KEY
+        self.enabled = GAMMA_API_ENABLED and bool(self.api_key)
+    
+    def is_available(self) -> bool:
+        return self.enabled
+    
+    async def generate_portfolio_presentation(
+        self,
+        workstream_name: str,
+        cards: List[PortfolioCard],
+        synthesis: PortfolioSynthesisData,
+        include_images: bool = True,
+        export_format: str = "pptx"
+    ) -> GammaGenerationResult:
+        """
+        Generate a portfolio presentation from multiple briefs.
+        
+        Args:
+            workstream_name: Name of the workstream
+            cards: List of PortfolioCard objects in display order
+            synthesis: Pre-computed portfolio synthesis from AI
+            include_images: Whether to generate AI images
+            export_format: Export format ("pptx" or "pdf")
+            
+        Returns:
+            GammaGenerationResult with presentation URL
+        """
+        if not self.enabled:
+            return GammaGenerationResult(
+                success=False,
+                error_message="Gamma API not configured",
+                status=GammaStatus.FAILED
+            )
+        
+        if not cards:
+            return GammaGenerationResult(
+                success=False,
+                error_message="No cards provided for portfolio",
+                status=GammaStatus.FAILED
+            )
+        
+        try:
+            # Build portfolio content
+            portfolio_content = self._build_portfolio_content(
+                workstream_name=workstream_name,
+                cards=cards,
+                synthesis=synthesis
+            )
+            
+            # Calculate slide count
+            slides_per_card = calculate_slides_per_card(len(cards))
+            total_slides = 6 + (len(cards) * slides_per_card)  # 6 fixed + per-card
+            
+            # Build request
+            request_body = self._build_portfolio_request(
+                input_text=portfolio_content,
+                num_cards=min(total_slides, 55),
+                include_images=include_images,
+                export_format=export_format,
+                card_count=len(cards)
+            )
+            
+            logger.info(f"Generating portfolio presentation: {workstream_name} ({len(cards)} cards, ~{total_slides} slides)")
+            
+            # Submit to Gamma
+            async with httpx.AsyncClient(timeout=GAMMA_REQUEST_TIMEOUT) as client:
+                response = await client.post(
+                    f"{GAMMA_API_BASE_URL}/generations",
+                    json=request_body,
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-API-KEY": self.api_key
+                    }
+                )
+                
+                if response.status_code == 401:
+                    return GammaGenerationResult(
+                        success=False,
+                        error_message="Invalid Gamma API key",
+                        status=GammaStatus.FAILED
+                    )
+                
+                if response.status_code == 403:
+                    return GammaGenerationResult(
+                        success=False,
+                        error_message="Gamma API credits exhausted",
+                        status=GammaStatus.FAILED
+                    )
+                
+                if response.status_code not in (200, 201):
+                    error_data = response.json() if response.text else {}
+                    return GammaGenerationResult(
+                        success=False,
+                        error_message=f"Gamma API error: {error_data.get('message', response.status_code)}",
+                        status=GammaStatus.FAILED
+                    )
+                
+                data = response.json()
+                generation_id = data.get("generationId")
+                
+                if not generation_id:
+                    return GammaGenerationResult(
+                        success=False,
+                        error_message="No generation ID returned",
+                        status=GammaStatus.FAILED
+                    )
+                
+                logger.info(f"Gamma portfolio generation started: {generation_id}")
+            
+            # Poll for completion (reuse existing polling logic)
+            gamma_service = GammaService(self.api_key)
+            result = await gamma_service._poll_generation_status(generation_id)
+            return result
+            
+        except Exception as e:
+            logger.error(f"Portfolio generation error: {e}")
+            return GammaGenerationResult(
+                success=False,
+                error_message=str(e),
+                status=GammaStatus.FAILED
+            )
+    
+    def _build_portfolio_content(
+        self,
+        workstream_name: str,
+        cards: List[PortfolioCard],
+        synthesis: PortfolioSynthesisData
+    ) -> str:
+        """
+        Build Gamma-optimized content for portfolio presentation.
+        
+        Structure:
+        1. Title slide
+        2. Executive overview
+        3. Priority matrix
+        4. Per-card sections (2-3 slides each)
+        5. Cross-cutting themes
+        6. Recommended actions
+        7. AI disclosure
+        """
+        sections = []
+        
+        # 1. Title slide
+        pillar_icons = []
+        for card in cards:
+            pillar_def = PILLAR_DEFINITIONS.get(card.pillar_id.upper(), {})
+            icon = pillar_def.get("icon", "🏛️")
+            if icon not in pillar_icons:
+                pillar_icons.append(icon)
+        
+        title_section = f"""# {workstream_name}
+
+**Strategic Intelligence Portfolio**
+
+{' '.join(pillar_icons)} | {len(cards)} Strategic Trends
+
+City of Austin | FORESIGHT Platform
+{datetime.now().strftime('%B %Y')}"""
+        sections.append(title_section)
+        
+        # 2. Executive overview
+        overview_section = f"""# Executive Overview
+
+{synthesis.executive_overview}"""
+        sections.append(overview_section)
+        
+        # 3. Priority matrix
+        matrix = synthesis.priority_matrix
+        urgent = matrix.get("high_impact_urgent", [])
+        strategic = matrix.get("high_impact_strategic", [])
+        monitor = matrix.get("monitor", [])
+        
+        priority_section = f"""# Strategic Priorities
+
+**🔴 High Impact - Urgent Action**
+{chr(10).join(f'- {item}' for item in urgent) if urgent else '- None identified'}
+
+**🟡 High Impact - Strategic Planning**
+{chr(10).join(f'- {item}' for item in strategic) if strategic else '- None identified'}
+
+**🟢 Monitor & Evaluate**
+{chr(10).join(f'- {item}' for item in monitor) if monitor else '- None identified'}
+
+*{matrix.get('rationale', '')}*"""
+        sections.append(priority_section)
+        
+        # 4. Per-card sections
+        slides_per_card = calculate_slides_per_card(len(cards))
+        
+        for i, card in enumerate(cards, 1):
+            pillar_def = PILLAR_DEFINITIONS.get(card.pillar_id.upper(), {})
+            pillar_name = pillar_def.get("name", card.pillar_id)
+            pillar_icon = pillar_def.get("icon", "🏛️")
+            
+            horizon_def = HORIZON_DEFINITIONS.get(card.horizon.upper() if card.horizon else "H2", {})
+            horizon_name = horizon_def.get("name", card.horizon)
+            horizon_icon = horizon_def.get("icon", "📅")
+            
+            # Card context slide
+            context_section = f"""# {i}. {card.card_name}
+
+{pillar_icon} **{pillar_name}** | {horizon_icon} **{horizon_name}**
+
+**Impact Score**: {card.impact_score}/100 | **Relevance**: {card.relevance_score}/100
+
+{card.brief_summary}"""
+            sections.append(context_section)
+            
+            # Key insights slide (if we have room)
+            if slides_per_card >= 3:
+                # Extract first ~500 chars of content for key insight
+                content_preview = card.brief_content[:500] if card.brief_content else ""
+                if content_preview:
+                    insight_section = f"""# {card.card_name}: Key Insights
+
+{content_preview}..."""
+                    sections.append(insight_section)
+        
+        # 5. Cross-cutting themes
+        themes_content = "\n".join(f"- {theme}" for theme in synthesis.key_themes)
+        insights_content = "\n".join(f"- {insight}" for insight in synthesis.cross_cutting_insights)
+        
+        themes_section = f"""# Cross-Cutting Themes
+
+**Common Patterns**
+{themes_content}
+
+**Strategic Connections**
+{insights_content}"""
+        sections.append(themes_section)
+        
+        # 6. Recommended actions
+        actions_content = []
+        for action in synthesis.recommended_actions[:5]:  # Top 5 actions
+            action_text = action.get("action", "")
+            owner = action.get("owner", "TBD")
+            timeline = action.get("timeline", "TBD")
+            actions_content.append(f"**{action_text}**\n  - Owner: {owner} | Timeline: {timeline}")
+        
+        actions_section = f"""# Recommended Next Steps
+
+{chr(10).join(actions_content)}
+
+*Actions prioritized by strategic impact and resource requirements.*"""
+        sections.append(actions_section)
+        
+        # 7. AI disclosure
+        disclosure_section = """# About This Portfolio
+
+This strategic intelligence portfolio was generated using the FORESIGHT platform:
+
+- **AI Analysis**: Anthropic Claude & OpenAI GPT-4
+- **Presentation**: Gamma.app AI
+- **Research**: GPT Researcher with Exa AI
+
+The City of Austin is committed to transparent and responsible use of AI in public service.
+
+*Individual brief details available in the FORESIGHT platform.*"""
+        sections.append(disclosure_section)
+        
+        return "\n---\n".join(sections)
+    
+    def _build_portfolio_request(
+        self,
+        input_text: str,
+        num_cards: int,
+        include_images: bool,
+        export_format: str,
+        card_count: int
+    ) -> Dict[str, Any]:
+        """Build Gamma API request for portfolio presentation."""
+        
+        # Portfolio-specific instructions (different from single brief)
+        instructions = f"""
+Executive portfolio deck for City of Austin leadership.
+This presentation covers {card_count} strategic trends - treat as a COMPARATIVE OVERVIEW.
+
+PORTFOLIO STRUCTURE:
+- Title slide with workstream name and trend count
+- Executive Overview: synthesize ALL cards together (already provided)
+- Priority Matrix: visual categorization of trends
+- Per-card sections: 2-3 slides each with context and key insight
+- Cross-cutting themes connecting multiple trends
+- Recommended next steps with ownership
+- AI disclosure
+
+VISUAL DESIGN (City of Austin Brand):
+- Headers: Logo Blue #44499C
+- Highlights: Logo Green #009F4D
+- Backgrounds: White or #f7f6f5
+- Risks: Red #F83125
+- Clean, scannable, executive-ready
+
+CONTENT APPROACH:
+- Decision-oriented: "Should Austin invest in X?"
+- Comparative: Show how trends relate
+- Scannable: One key point per slide
+- Action-focused: Clear recommendations
+
+Each card section should be visually distinct but maintain portfolio cohesion.
+Use classification badges consistently across all card slides.
+"""
+        
+        request = {
+            "inputText": input_text,
+            "textMode": "condense",
+            "format": "presentation",
+            "numCards": num_cards,
+            "cardSplit": "inputTextBreaks",  # Respect our section breaks
+            "additionalInstructions": instructions.strip(),
+            "exportAs": export_format,
+            "textOptions": {
+                "amount": "medium",
+                "tone": "professional, executive, strategic, comparative, decision-oriented",
+                "audience": "City Manager, Mayor, Council Members, Department Directors - senior leadership making portfolio investment decisions",
+                "language": "en"
+            },
+            "cardOptions": {
+                "dimensions": "16x9",
+                "headerFooter": {
+                    "topRight": {
+                        "type": "image",
+                        "source": "custom",
+                        "src": COA_LOGO_HORIZONTAL,
+                        "size": "md"
+                    },
+                    "bottomLeft": {
+                        "type": "text",
+                        "value": "City of Austin | FORESIGHT Portfolio"
+                    },
+                    "bottomRight": {
+                        "type": "cardNumber"
+                    },
+                    "hideFromFirstCard": True,
+                    "hideFromLastCard": False
+                }
+            },
+            "sharingOptions": {
+                "workspaceAccess": "view",
+                "externalAccess": "noAccess"
+            }
+        }
+        
+        # Add theme if configured
+        if GAMMA_THEME_ID:
+            request["themeId"] = GAMMA_THEME_ID
+        
+        # Add folder if configured
+        if GAMMA_FOLDER_ID:
+            request["folderIds"] = [GAMMA_FOLDER_ID]
+        
+        # Image options
+        if include_images:
+            request["imageOptions"] = {
+                "source": "aiGenerated",
+                "model": "imagen-4-pro",
+                "style": "professional corporate photography, government executive presentation, clean modern design, blue and green accents, strategic planning visuals, urban civic imagery"
+            }
+        else:
+            request["imageOptions"] = {"source": "noImages"}
+        
+        return request
+
+
+async def generate_portfolio_presentation(
+    workstream_name: str,
+    cards: List[PortfolioCard],
+    synthesis: PortfolioSynthesisData,
+    include_images: bool = True
+) -> GammaGenerationResult:
+    """
+    Convenience function to generate a portfolio presentation.
+    
+    Args:
+        workstream_name: Workstream name for title
+        cards: List of PortfolioCard objects
+        synthesis: Pre-computed synthesis data
+        include_images: Whether to include AI images
+        
+    Returns:
+        GammaGenerationResult
+    """
+    service = GammaPortfolioService()
+    return await service.generate_portfolio_presentation(
+        workstream_name=workstream_name,
+        cards=cards,
+        synthesis=synthesis,
+        include_images=include_images
+    )

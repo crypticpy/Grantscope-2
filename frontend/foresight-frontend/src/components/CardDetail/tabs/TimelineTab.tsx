@@ -160,7 +160,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                       {event.title}
                     </h3>
                     {isDeepResearch && (
-                      <span className="inline-flex items-center px-2 sm:px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gradient-to-r from-brand-blue to-extended-purple text-white shadow-sm w-fit">
+                      <span className="inline-flex items-center px-2 sm:px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gradient-to-r from-brand-blue to-brand-green text-white shadow-sm w-fit">
                         Strategic Intelligence Report
                       </span>
                     )}
@@ -241,8 +241,8 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                           id={`timeline-report-${event.id}`}
                           className="mt-4 rounded-xl border-2 border-brand-blue/20 overflow-hidden"
                         >
-                          {/* Report Header */}
-                          <div className="bg-gradient-to-r from-brand-blue to-extended-purple p-3 sm:p-4">
+                          {/* Report Header - Austin brand colors */}
+                          <div className="bg-gradient-to-r from-brand-blue to-brand-green p-3 sm:p-4">
                             <div className="flex items-center gap-2 sm:gap-3 text-white">
                               <FileText className="h-5 w-5 sm:h-6 sm:w-6 flex-shrink-0" />
                               <div className="min-w-0">

@@ -55,6 +55,8 @@ export interface KanbanBoardProps {
   onCardClick?: OnCardClickCallback;
   /** Optional card action callbacks */
   cardActions?: CardActionCallbacks;
+  /** Optional callback for bulk export (passed to Brief column) */
+  onBulkExport?: () => void;
   /** Optional additional class names */
   className?: string;
 }
@@ -108,6 +110,7 @@ export function KanbanBoard({
   onCardMove,
   onCardClick,
   cardActions,
+  onBulkExport,
   className,
 }: KanbanBoardProps) {
   // Track the currently dragged card for the overlay
@@ -262,6 +265,7 @@ export function KanbanBoard({
             workstreamId={workstreamId}
             onCardClick={onCardClick}
             cardActions={cardActions}
+            onBulkExport={column.id === 'brief' ? onBulkExport : undefined}
           />
         ))}
       </div>

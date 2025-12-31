@@ -209,7 +209,7 @@ const Dashboard: React.FC = () => {
         <div className="mb-8">
           <Link
             to="/discover/queue"
-            className="block bg-gradient-to-r from-brand-blue/10 to-extended-purple/10 dark:from-brand-blue/20 dark:to-extended-purple/20 border border-brand-blue/20 dark:border-brand-blue/30 rounded-lg p-4 hover:from-brand-blue/15 hover:to-extended-purple/15 dark:hover:from-brand-blue/25 dark:hover:to-extended-purple/25 transition-all group"
+            className="block bg-gradient-to-r from-brand-blue/10 to-brand-green/10 dark:from-brand-blue/20 dark:to-brand-green/20 border border-brand-blue/20 dark:border-brand-blue/30 rounded-lg p-4 hover:from-brand-blue/15 hover:to-brand-green/15 dark:hover:from-brand-blue/25 dark:hover:to-brand-green/25 transition-all group"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">

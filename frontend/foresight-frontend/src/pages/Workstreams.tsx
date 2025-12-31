@@ -143,8 +143,8 @@ function WorkstreamInfoModal({ onClose }: WorkstreamInfoModalProps) {
   return (
     <div className="fixed inset-0 bg-gray-600/50 dark:bg-black/60 flex items-center justify-center p-4 z-50 overflow-y-auto">
       <div className="bg-white dark:bg-[#2d3166] rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto my-8">
-        {/* Header */}
-        <div className="sticky top-0 bg-gradient-to-r from-brand-blue to-extended-purple p-6 rounded-t-xl">
+        {/* Header - Austin brand colors */}
+        <div className="sticky top-0 bg-gradient-to-r from-brand-blue to-brand-green p-6 rounded-t-xl">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-white/20 rounded-lg">
@@ -296,7 +296,7 @@ function WorkstreamInfoModal({ onClose }: WorkstreamInfoModalProps) {
           </div>
 
           {/* Getting Started CTA */}
-          <div className="bg-gradient-to-r from-brand-blue/10 to-extended-purple/10 rounded-lg p-5 border border-brand-blue/20">
+          <div className="bg-gradient-to-r from-brand-blue/10 to-brand-green/10 rounded-lg p-5 border border-brand-blue/20">
             <div className="flex items-center justify-between">
               <div>
                 <h4 className="font-semibold text-gray-900 dark:text-white">Ready to get started?</h4>

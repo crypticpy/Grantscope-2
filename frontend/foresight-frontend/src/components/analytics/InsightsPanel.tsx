@@ -146,8 +146,8 @@ const InsightCard: React.FC<{ insight: InsightItem; index: number }> = ({ insigh
   return (
     <div className="bg-white dark:bg-[#2d3166] rounded-lg p-4 border border-gray-100 dark:border-gray-700 transition-all duration-200 hover:shadow-md hover:border-brand-blue/30">
       <div className="flex items-start gap-3">
-        {/* Rank indicator */}
-        <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-brand-blue to-extended-purple flex items-center justify-center text-white font-semibold text-sm">
+        {/* Rank indicator - Austin brand colors */}
+        <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-brand-blue to-brand-green flex items-center justify-center text-white font-semibold text-sm">
           {index + 1}
         </div>
 

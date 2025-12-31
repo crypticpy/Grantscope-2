@@ -50,6 +50,7 @@ import {
 } from '../components/kanban/actions';
 import { BriefPreviewModal } from '../components/kanban/BriefPreviewModal';
 import { ExportProgressModal } from '../components/ExportProgressModal';
+import { BulkExportModal } from '../components/BulkExportModal';
 import { useExportWithProgress } from '../hooks/useExportWithProgress';
 import {
   fetchWorkstreamCards,
@@ -58,7 +59,10 @@ import {
   triggerDeepDive,
   autoPopulateWorkstream,
   fetchResearchStatus,
+  getBulkBriefStatus,
+  exportBulkBriefs,
   type WorkstreamResearchStatus,
+  type BulkBriefStatusResponse,
 } from '../lib/workstream-api';
 import { PillarBadgeGroup } from '../components/PillarBadge';
 import { HorizonBadge } from '../components/HorizonBadge';
@@ -372,6 +376,13 @@ const WorkstreamKanban: React.FC = () => {
   // Brief preview modal state
   const [briefModalCard, setBriefModalCard] = useState<WorkstreamCard | null>(null);
   const [showBriefModal, setShowBriefModal] = useState(false);
+
+  // Bulk export modal state
+  const [showBulkExportModal, setShowBulkExportModal] = useState(false);
+  const [bulkExportStatus, setBulkExportStatus] = useState<BulkBriefStatusResponse | null>(null);
+  const [bulkExportLoading, setBulkExportLoading] = useState(false);
+  const [bulkExportError, setBulkExportError] = useState<string | null>(null);
+  const [isBulkExporting, setIsBulkExporting] = useState(false);
 
   // Search/filter state for kanban board
   const [searchQuery, setSearchQuery] = useState('');
@@ -1042,6 +1053,89 @@ const WorkstreamKanban: React.FC = () => {
       await exportBriefWithProgress(id, cardId, format, cardName);
     },
     [id, cards, exportBriefWithProgress]
+  );
+
+  // ============================================================================
+  // Bulk Export Handlers
+  // ============================================================================
+
+  /**
+   * Open the bulk export modal and fetch brief status.
+   */
+  const handleOpenBulkExport = useCallback(async () => {
+    if (!id) return;
+
+    setShowBulkExportModal(true);
+    setBulkExportLoading(true);
+    setBulkExportError(null);
+
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        setBulkExportError('Authentication required');
+        return;
+      }
+
+      const status = await getBulkBriefStatus(token, id);
+      setBulkExportStatus(status);
+    } catch (err) {
+      console.error('Error fetching bulk brief status:', err);
+      setBulkExportError(err instanceof Error ? err.message : 'Failed to load brief status');
+    } finally {
+      setBulkExportLoading(false);
+    }
+  }, [id, getAuthToken]);
+
+  /**
+   * Close the bulk export modal and reset state.
+   */
+  const handleCloseBulkExport = useCallback(() => {
+    if (isBulkExporting) return; // Prevent closing during export
+    setShowBulkExportModal(false);
+    setBulkExportStatus(null);
+    setBulkExportError(null);
+  }, [isBulkExporting]);
+
+  /**
+   * Execute the bulk export.
+   */
+  const handleExecuteBulkExport = useCallback(
+    async (format: 'pptx' | 'pdf', cardOrder: string[]) => {
+      if (!id) return;
+
+      setIsBulkExporting(true);
+
+      try {
+        const token = await getAuthToken();
+        if (!token) {
+          showToast('error', 'Authentication required');
+          return;
+        }
+
+        showToast('info', `Generating ${format.toUpperCase()} portfolio...`);
+
+        const result = await exportBulkBriefs(token, id, format, cardOrder);
+
+        if (result.status === 'success' || result.status === 'completed') {
+          // Handle Gamma URL for PPTX
+          if (result.pptx_url) {
+            window.open(result.pptx_url, '_blank');
+            showToast('success', 'Portfolio presentation opened in new tab');
+          } else {
+            showToast('success', 'Portfolio export completed');
+          }
+          setShowBulkExportModal(false);
+        } else if (result.error) {
+          showToast('error', result.error);
+        }
+      } catch (err) {
+        console.error('Bulk export error:', err);
+        showToast('error', err instanceof Error ? err.message : 'Export failed');
+      } finally {
+        setIsBulkExporting(false);
+      }
+    },
+    [id, getAuthToken, showToast]
   );
 
   /**

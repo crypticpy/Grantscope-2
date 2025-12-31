@@ -245,6 +245,54 @@ export interface BriefVersionsResponse {
 }
 
 // ============================================================================
+// Bulk Brief Export Types
+// ============================================================================
+
+/**
+ * Status of cards for bulk export.
+ */
+export interface BulkBriefCardStatus {
+  card_id: string;
+  card_name: string;
+  has_brief: boolean;
+  brief_status: string | null;
+  position: number;
+}
+
+/**
+ * Response for bulk brief status check.
+ */
+export interface BulkBriefStatusResponse {
+  total_cards: number;
+  cards_with_briefs: number;
+  cards_ready: number;
+  card_statuses: BulkBriefCardStatus[];
+}
+
+/**
+ * Request for bulk brief export.
+ */
+export interface BulkExportRequest {
+  format: 'pptx' | 'pdf';
+  card_order: string[];
+}
+
+/**
+ * Response for bulk brief export initiation.
+ */
+export interface BulkExportResponse {
+  status: string;
+  message: string;
+  portfolio_id?: string;
+  total_cards?: number;
+  format?: string;
+  pptx_url?: string;
+  pdf_path?: string;
+  error?: string;
+  using_fallback?: boolean;
+}
+
+// ============================================================================
 // Helper Functions
 // ============================================================================
 
@@ -803,4 +851,150 @@ export async function exportBrief(
     console.error('Brief export failed:', error);
     throw error;
   }
+}
+
+// ============================================================================
+// Bulk Brief Export Functions
+// ============================================================================
+
+/**
+ * Get the status of all cards in the Brief column for bulk export.
+ * Returns information about which cards have completed briefs.
+ *
+ * @param token - Bearer authentication token
+ * @param workstreamId - UUID of the workstream
+ * @returns Status of all cards in the Brief column
+ */
+export async function getBulkBriefStatus(
+  token: string,
+  workstreamId: string
+): Promise<BulkBriefStatusResponse> {
+  return apiRequest<BulkBriefStatusResponse>(
+    `/api/v1/me/workstreams/${workstreamId}/bulk-brief-status`,
+    token
+  );
+}
+
+/**
+ * Export multiple briefs as a single portfolio presentation.
+ * Creates an AI-synthesized portfolio combining all selected briefs.
+ *
+ * @param token - Bearer authentication token
+ * @param workstreamId - UUID of the workstream
+ * @param format - Export format ('pptx' or 'pdf')
+ * @param cardOrder - Ordered array of card IDs (from Kanban position)
+ * @returns URL to the generated portfolio or path to downloaded file
+ */
+export async function exportBulkBriefs(
+  token: string,
+  workstreamId: string,
+  format: 'pptx' | 'pdf',
+  cardOrder: string[]
+): Promise<BulkExportResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/me/workstreams/${workstreamId}/bulk-brief-export`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        format,
+        card_order: cardOrder,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const contentType = response.headers.get('content-type');
+    if (contentType?.includes('application/json')) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || errorData.message || `Export failed: ${response.status}`);
+    }
+    throw new Error(`Export failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Export bulk briefs with file download (for PDF and fallback PPTX).
+ * Triggers a file download for locally-generated exports.
+ *
+ * @param token - Bearer authentication token
+ * @param workstreamId - UUID of the workstream
+ * @param format - Export format ('pptx' or 'pdf')
+ * @param cardOrder - Ordered array of card IDs
+ * @returns true if download was triggered successfully
+ */
+export async function downloadBulkBriefs(
+  token: string,
+  workstreamId: string,
+  format: 'pptx' | 'pdf',
+  cardOrder: string[]
+): Promise<boolean> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/me/workstreams/${workstreamId}/bulk-brief-export`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        format,
+        card_order: cardOrder,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const contentType = response.headers.get('content-type');
+    if (contentType?.includes('application/json')) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || errorData.message || `Export failed: ${response.status}`);
+    }
+    throw new Error(`Export failed: ${response.status}`);
+  }
+
+  // Check if response is a file download or JSON
+  const contentType = response.headers.get('content-type');
+  
+  if (contentType?.includes('application/json')) {
+    // JSON response - could have a pptx_url for Gamma exports
+    const data = await response.json();
+    
+    if (data.pptx_url) {
+      // Open Gamma URL in new tab
+      window.open(data.pptx_url, '_blank');
+      return true;
+    }
+    
+    throw new Error(data.error || 'Export failed');
+  }
+
+  // File download response
+  const blob = await response.blob();
+  const contentDisposition = response.headers.get('content-disposition');
+  let filename = `portfolio-export.${format}`;
+
+  if (contentDisposition) {
+    const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+    if (filenameMatch && filenameMatch[1]) {
+      filename = filenameMatch[1].replace(/['"]/g, '');
+    }
+  }
+
+  // Trigger download
+  const downloadUrl = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = downloadUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(downloadUrl);
+
+  return true;
 }

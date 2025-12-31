@@ -13,7 +13,7 @@
  * - Dark mode support
  */
 
-import React, { memo, useMemo } from 'react';
+import React, { memo, useMemo, useState, useRef, useEffect } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import {
   SortableContext,
@@ -26,6 +26,9 @@ import {
   FileText,
   Eye,
   Archive,
+  Download,
+  ChevronDown,
+  Presentation,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -58,6 +61,8 @@ export interface KanbanColumnProps {
   onCardClick?: OnCardClickCallback;
   /** Optional card action callbacks */
   cardActions?: CardActionCallbacks;
+  /** Optional callback for bulk export (Brief column only) */
+  onBulkExport?: () => void;
 }
 
 // =============================================================================
@@ -167,6 +172,7 @@ export const KanbanColumn = memo(function KanbanColumn({
   workstreamId,
   onCardClick,
   cardActions,
+  onBulkExport,
 }: KanbanColumnProps) {
   // Configure droppable behavior
   const { setNodeRef, isOver } = useDroppable({
@@ -226,6 +232,37 @@ export const KanbanColumn = memo(function KanbanColumn({
             </h3>
           </div>
           <div className="flex items-center gap-2">
+            {/* Bulk Export Button - Brief column only */}
+            {id === 'brief' && onBulkExport && cards.length > 0 && (
+              <Tooltip
+                content={
+                  <div className="max-w-[200px]">
+                    <p className="font-medium">Export Portfolio</p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      Combine all briefs into a single presentation
+                    </p>
+                  </div>
+                }
+                side="bottom"
+              >
+                <button
+                  onClick={onBulkExport}
+                  className={cn(
+                    'inline-flex items-center gap-1 px-2 py-1',
+                    'text-xs font-medium rounded-md',
+                    'bg-[#44499C]/10 text-[#44499C]',
+                    'hover:bg-[#44499C]/20',
+                    'dark:bg-[#44499C]/20 dark:text-[#9b9edb]',
+                    'dark:hover:bg-[#44499C]/30',
+                    'transition-colors'
+                  )}
+                  aria-label="Export all briefs as portfolio"
+                >
+                  <Presentation className="h-3.5 w-3.5" />
+                  <span>Export All</span>
+                </button>
+              </Tooltip>
+            )}
             {/* Primary Action Indicator - shows available action for this column */}
             {columnDef?.primaryAction && (
               <Tooltip

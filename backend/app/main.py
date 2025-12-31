@@ -5004,6 +5004,327 @@ async def export_brief(
 
 
 # =============================================================================
+# Bulk Brief Export (Portfolio)
+# =============================================================================
+
+class BulkExportRequest(BaseModel):
+    """Request body for bulk brief export."""
+    format: str = "pptx"  # "pptx" or "pdf"
+    card_order: List[str]  # Ordered list of card IDs (from Kanban position)
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "format": "pptx",
+                "card_order": ["uuid-1", "uuid-2", "uuid-3"]
+            }
+        }
+
+
+class BulkExportStatusResponse(BaseModel):
+    """Response for bulk export status check."""
+    card_id: str
+    card_name: str
+    has_brief: bool
+    brief_status: Optional[str] = None
+    pillar_id: Optional[str] = None
+    horizon: Optional[str] = None
+
+
+@app.get("/api/v1/me/workstreams/{workstream_id}/bulk-brief-status")
+async def get_bulk_brief_status(
+    workstream_id: str,
+    current_user: dict = Depends(get_current_user)
+) -> List[BulkExportStatusResponse]:
+    """
+    Get brief status for all cards in the Brief column.
+    
+    Used by the frontend to show which cards have completed briefs
+    before initiating a bulk export.
+    
+    Args:
+        workstream_id: UUID of the workstream
+        current_user: Authenticated user (injected)
+    
+    Returns:
+        List of BulkExportStatusResponse with brief status per card
+    """
+    # Verify workstream belongs to user
+    ws_response = supabase.table("workstreams").select("id, user_id, name").eq("id", workstream_id).execute()
+    if not ws_response.data:
+        raise HTTPException(status_code=404, detail="Workstream not found")
+    if ws_response.data[0]["user_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    # Get all cards in brief column
+    wsc_response = supabase.table("workstream_cards").select(
+        "id, card_id, status, position, cards(id, name, pillar_id, horizon)"
+    ).eq("workstream_id", workstream_id).eq("status", "brief").order("position").execute()
+    
+    results = []
+    for wsc in wsc_response.data or []:
+        card = wsc.get("cards", {})
+        card_id = wsc.get("card_id")
+        
+        # Check for completed brief
+        brief_response = supabase.table("executive_briefs").select(
+            "id, status"
+        ).eq("workstream_card_id", wsc["id"]).eq("status", "completed").limit(1).execute()
+        
+        has_brief = len(brief_response.data or []) > 0
+        brief_status = brief_response.data[0]["status"] if has_brief else None
+        
+        results.append(BulkExportStatusResponse(
+            card_id=card_id,
+            card_name=card.get("name", "Unknown"),
+            has_brief=has_brief,
+            brief_status=brief_status,
+            pillar_id=card.get("pillar_id"),
+            horizon=card.get("horizon")
+        ))
+    
+    return results
+
+
+@app.post("/api/v1/me/workstreams/{workstream_id}/bulk-brief-export")
+async def bulk_brief_export(
+    workstream_id: str,
+    request: BulkExportRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Export multiple briefs as a single portfolio presentation.
+    
+    Generates an AI-synthesized portfolio deck combining briefs from
+    multiple cards in the Brief column. Uses Gamma.app for PPTX with
+    fallback to local generation.
+    
+    Args:
+        workstream_id: UUID of the workstream
+        request: BulkExportRequest with format and card order
+        current_user: Authenticated user (injected)
+    
+    Returns:
+        FileResponse with the exported portfolio document
+    
+    Raises:
+        HTTPException 400: Invalid format, no cards, or >15 cards
+        HTTPException 403: Not authorized
+        HTTPException 404: Workstream not found
+    """
+    from .brief_service import ExecutiveBriefService, PortfolioBrief
+    from .gamma_service import (
+        GammaPortfolioService, 
+        PortfolioCard, 
+        PortfolioSynthesisData,
+        calculate_slides_per_card
+    )
+    
+    # Validate format
+    format_lower = request.format.lower()
+    if format_lower not in ("pdf", "pptx"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid format: {request.format}. Supported: pdf, pptx"
+        )
+    
+    # Validate card count
+    if not request.card_order:
+        raise HTTPException(status_code=400, detail="No cards provided for export")
+    
+    if len(request.card_order) > 15:
+        raise HTTPException(
+            status_code=400, 
+            detail="Maximum 15 cards per portfolio. Archive some cards or create separate workstreams."
+        )
+    
+    # Verify workstream belongs to user
+    ws_response = supabase.table("workstreams").select("id, user_id, name").eq("id", workstream_id).execute()
+    if not ws_response.data:
+        raise HTTPException(status_code=404, detail="Workstream not found")
+    if ws_response.data[0]["user_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    workstream_name = ws_response.data[0].get("name", "Strategic Portfolio")
+    
+    # Fetch briefs in the specified order
+    brief_service = ExecutiveBriefService(supabase, openai_client)
+    portfolio_briefs = []
+    skipped_cards = []
+    
+    for card_id in request.card_order:
+        # Get workstream_card record
+        wsc_response = supabase.table("workstream_cards").select("id").eq(
+            "workstream_id", workstream_id
+        ).eq("card_id", card_id).execute()
+        
+        if not wsc_response.data:
+            skipped_cards.append(card_id)
+            continue
+        
+        workstream_card_id = wsc_response.data[0]["id"]
+        
+        # Get latest completed brief
+        brief = await brief_service.get_latest_completed_brief(workstream_card_id)
+        if not brief:
+            skipped_cards.append(card_id)
+            continue
+        
+        # Get card data
+        card_response = supabase.table("cards").select(
+            "id, name, pillar_id, horizon, stage_id, impact_score, relevance_score, velocity_score"
+        ).eq("id", card_id).execute()
+        
+        if not card_response.data:
+            skipped_cards.append(card_id)
+            continue
+        
+        card_data = card_response.data[0]
+        
+        portfolio_briefs.append(PortfolioBrief(
+            card_id=card_id,
+            card_name=card_data.get("name", "Unknown"),
+            pillar_id=card_data.get("pillar_id", ""),
+            horizon=card_data.get("horizon", ""),
+            stage_id=card_data.get("stage_id", ""),
+            brief_summary=brief.get("summary", ""),
+            brief_content_markdown=brief.get("content_markdown", ""),
+            impact_score=card_data.get("impact_score", 50),
+            relevance_score=card_data.get("relevance_score", 50),
+            velocity_score=card_data.get("velocity_score", 50)
+        ))
+    
+    if not portfolio_briefs:
+        raise HTTPException(
+            status_code=400,
+            detail="No completed briefs found for the specified cards. Generate briefs first."
+        )
+    
+    logger.info(f"Generating portfolio export: {len(portfolio_briefs)} briefs, format={format_lower}")
+    if skipped_cards:
+        logger.warning(f"Skipped {len(skipped_cards)} cards without completed briefs")
+    
+    try:
+        # Step 1: Generate AI synthesis
+        logger.info("Generating portfolio synthesis...")
+        synthesis = await brief_service.synthesize_portfolio(
+            briefs=portfolio_briefs,
+            workstream_name=workstream_name
+        )
+        
+        # Convert to Gamma format
+        gamma_cards = [
+            PortfolioCard(
+                card_id=b.card_id,
+                card_name=b.card_name,
+                pillar_id=b.pillar_id,
+                horizon=b.horizon,
+                stage_id=b.stage_id,
+                brief_summary=b.brief_summary,
+                brief_content=b.brief_content_markdown[:1500],  # Truncate for slides
+                impact_score=b.impact_score,
+                relevance_score=b.relevance_score
+            )
+            for b in portfolio_briefs
+        ]
+        
+        synthesis_data = PortfolioSynthesisData(
+            executive_overview=synthesis.executive_overview,
+            key_themes=synthesis.key_themes,
+            priority_matrix=synthesis.priority_matrix,
+            cross_cutting_insights=synthesis.cross_cutting_insights,
+            recommended_actions=synthesis.recommended_actions
+        )
+        
+        # Step 2: Generate presentation
+        if format_lower == "pptx":
+            # Try Gamma first
+            gamma_service = GammaPortfolioService()
+            
+            if gamma_service.is_available():
+                logger.info("Generating portfolio via Gamma...")
+                result = await gamma_service.generate_portfolio_presentation(
+                    workstream_name=workstream_name,
+                    cards=gamma_cards,
+                    synthesis=synthesis_data,
+                    include_images=True,
+                    export_format="pptx"
+                )
+                
+                if result.success and result.pptx_url:
+                    # Download from Gamma
+                    from .gamma_service import GammaService
+                    gamma_dl = GammaService()
+                    pptx_bytes = await gamma_dl.download_export(result.pptx_url)
+                    
+                    if pptx_bytes:
+                        import tempfile
+                        temp_file = tempfile.NamedTemporaryFile(
+                            suffix='.pptx',
+                            delete=False,
+                            prefix='foresight_portfolio_'
+                        )
+                        temp_file.write(pptx_bytes)
+                        temp_file.close()
+                        
+                        safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in workstream_name)[:40]
+                        filename = f"Portfolio_{safe_name}.pptx"
+                        
+                        logger.info(f"Portfolio generated via Gamma: {len(portfolio_briefs)} cards")
+                        
+                        return FileResponse(
+                            path=temp_file.name,
+                            filename=filename,
+                            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                        )
+                
+                logger.warning(f"Gamma portfolio failed: {result.error_message}, falling back to local")
+            
+            # Fallback to local PPTX generation
+            logger.info("Generating portfolio locally (fallback)...")
+            export_service = ExportService(supabase)
+            file_path = await export_service.generate_portfolio_pptx_local(
+                workstream_name=workstream_name,
+                briefs=portfolio_briefs,
+                synthesis=synthesis_data
+            )
+            
+            safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in workstream_name)[:40]
+            filename = f"Portfolio_{safe_name}.pptx"
+            
+            return FileResponse(
+                path=file_path,
+                filename=filename,
+                media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            )
+        
+        else:
+            # PDF generation - expanded detail format
+            export_service = ExportService(supabase)
+            file_path = await export_service.generate_portfolio_pdf(
+                workstream_name=workstream_name,
+                briefs=portfolio_briefs,
+                synthesis=synthesis_data
+            )
+            
+            safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in workstream_name)[:40]
+            filename = f"Portfolio_{safe_name}.pdf"
+            
+            return FileResponse(
+                path=file_path,
+                filename=filename,
+                media_type="application/pdf"
+            )
+    
+    except Exception as e:
+        logger.error(f"Portfolio export failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate portfolio: {str(e)}"
+        )
+
+
+# =============================================================================
 # Card Assets Endpoint
 # =============================================================================
 

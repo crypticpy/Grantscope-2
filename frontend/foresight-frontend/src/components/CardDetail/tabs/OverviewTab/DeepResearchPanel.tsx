@@ -207,8 +207,8 @@ export const DeepResearchPanel: React.FC<DeepResearchPanelProps> = ({
         className
       )}
     >
-      {/* Header with gradient */}
-      <div className="bg-gradient-to-r from-brand-blue to-extended-purple p-4 sm:p-5">
+      {/* Header with gradient - Austin brand colors */}
+      <div className="bg-gradient-to-r from-brand-blue to-brand-green p-4 sm:p-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-white/20">

@@ -406,7 +406,7 @@ const HotTopics: React.FC<{ topics: TrendingTopic[]; title: string }> = ({ topic
             className="flex items-center justify-between p-3 bg-gray-50 dark:bg-[#1e2048] rounded-lg"
           >
             <div className="flex items-center gap-3">
-              <span className="w-6 h-6 flex items-center justify-center text-sm font-bold text-white bg-gradient-to-br from-brand-blue to-extended-purple rounded-full">
+              <span className="w-6 h-6 flex items-center justify-center text-sm font-bold text-white bg-gradient-to-br from-brand-blue to-brand-green rounded-full">
                 {idx + 1}
               </span>
               <div>
