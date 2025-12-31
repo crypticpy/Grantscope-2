@@ -40,10 +40,20 @@ GAMMA_API_BASE_URL = "https://public-api.gamma.app/v1.0"
 GAMMA_API_KEY = os.getenv("GAMMA_API_KEY")
 GAMMA_API_ENABLED = os.getenv("GAMMA_API_ENABLED", "true").lower() == "true"
 
+# Optional: Gamma theme and folder IDs (configure in Railway env vars)
+# To find these: use GET /themes and GET /folders endpoints, or copy from Gamma app URL
+GAMMA_THEME_ID = os.getenv("GAMMA_THEME_ID")  # e.g., "abc123def456"
+GAMMA_FOLDER_ID = os.getenv("GAMMA_FOLDER_ID")  # e.g., "xyz789folder"
+
 # Polling configuration
 GAMMA_POLL_INTERVAL_SECONDS = 3
 GAMMA_POLL_MAX_ATTEMPTS = 60  # 3 minutes max wait time
 GAMMA_REQUEST_TIMEOUT = 30
+
+# Slide count configuration - enough for comprehensive briefs
+GAMMA_MIN_SLIDES = 10  # Minimum slides for brief structure
+GAMMA_MAX_SLIDES = 15  # Maximum for detailed briefs
+GAMMA_DEFAULT_SLIDES = 12  # Default - covers all sections well
 
 # Default branding - City of Austin logos hosted on Dropbox
 FORESIGHT_BRANDING = "FORESIGHT Strategic Intelligence Platform"
@@ -903,50 +913,77 @@ and helps inform appropriate City response strategies."""
         Returns:
             Request body dict
         """
-        # Build concise instructions (max 2000 chars for Gamma API)
-        # Focus on essential styling and structure
+        # Build comprehensive instructions (max 2000 chars for Gamma API)
+        # Using full character budget for detailed styling guidance
         instructions = """
-Executive briefing for City of Austin leadership.
+Executive strategic intelligence briefing for City of Austin senior leadership.
 
-COLORS (Official Brand):
-- Headers: Logo Blue #44499C
-- Highlights: Logo Green #009F4D  
-- Background: White or #f7f6f5
-- Body text: #636262
+OFFICIAL CITY OF AUSTIN BRAND COLORS (MUST USE):
+- Primary headers/titles: Logo Blue #44499C
+- Highlights/callouts/positive: Logo Green #009F4D
+- Backgrounds: Faded White #f7f6f5 or pure white
+- Emphasis text: Dark Blue #22254E
+- Body text: Dark Gray #636262
+- Subtle backgrounds: Light Blue #dcf2fd, Light Green #dff0e3
+- Risk/negative indicators: Red #F83125
+- Opportunity indicators: Logo Green #009F4D
 
-DESIGN:
-- Clean, professional government aesthetic
-- Generous white space, large readable fonts (24pt+ body)
-- Classification tags as polished badge pills on title slide
+VISUAL DESIGN REQUIREMENTS:
+- Clean, modern, professional government aesthetic
+- Generous white space - avoid cluttered slides
+- Large readable fonts: 28pt+ for headers, 24pt+ for body
+- Classification tags as polished pill-shaped badges on title slide
+- Consistent visual hierarchy throughout
 
-CHARTS & IMAGES:
-- Professional images illustrating concepts
-- Charts with Logo Blue #44499C and Logo Green #009F4D
-- ALL charts must have labeled axes with titles and units
-- Use Red #F83125 for risks, Green for opportunities
+DATA VISUALIZATION:
+- Charts use Logo Blue #44499C and Logo Green #009F4D as primary colors
+- ALL charts MUST have clearly labeled axes with descriptive titles and units
+- Include data labels on key points
+- Use Red #F83125 for risks/concerns, Green #009F4D for opportunities
 
-STRUCTURE:
-- Title slide with classification badges
-- Executive Summary: 3-5 bullet takeaways
-- Content slides: one idea per slide
-- Include "Recommended Actions" slide
-- Connect everything to municipal implications
+PRESENTATION STRUCTURE:
+1. Title slide with bold title and classification badge pills
+2. Executive Summary: 3-5 key strategic takeaways
+3. Background/Context slide
+4. Key Findings (2-3 slides, one main idea per slide)
+5. Strategic Implications for Austin
+6. Opportunities & Risks analysis
+7. Recommended Actions / Next Steps
+8. Appendix: Classification definitions
 
-TONE: Authoritative, strategic, action-oriented, jargon-free.
+CONTENT APPROACH:
+- "So What?" framing - connect everything to municipal impact
+- Authoritative but accessible language
+- Action-oriented recommendations
+- Avoid jargon - explain technical concepts simply
 """
+        
+        # Determine optimal slide count based on content length
+        content_length = len(input_text)
+        if content_length > 8000:
+            optimal_slides = GAMMA_MAX_SLIDES
+        elif content_length > 4000:
+            optimal_slides = GAMMA_DEFAULT_SLIDES
+        else:
+            optimal_slides = GAMMA_MIN_SLIDES
+        
+        # Use provided num_cards or calculated optimal
+        final_num_cards = max(num_cards, optimal_slides)
         
         request = {
             "inputText": input_text,
             "textMode": "condense",
             "format": "presentation",
-            "numCards": num_cards,
-            "cardSplit": "inputTextBreaks",
+            "numCards": final_num_cards,
+            "cardSplit": "auto",  # Let Gamma intelligently split based on numCards
             "additionalInstructions": instructions.strip(),
             "exportAs": export_format,
             "textOptions": {
-                "amount": "medium",
-                "tone": "professional, authoritative, strategic, clear, action-oriented",
-                "audience": "City Manager, Assistant City Managers, Department Directors, senior municipal executives making strategic decisions",
+                "amount": "detailed",  # More detailed content for executive briefs
+                # tone: max 500 chars - using full budget for precise guidance
+                "tone": "professional, authoritative, strategic, confident, clear, action-oriented, forward-looking, executive-level, decisive, informed",
+                # audience: max 500 chars - detailed audience description
+                "audience": "City Manager, Assistant City Managers, Department Directors, Division Managers, and senior municipal executives responsible for strategic planning, policy decisions, budget allocation, and long-term city initiatives. Decision-makers who need actionable intelligence.",
                 "language": "en"
             },
             "cardOptions": {
@@ -975,12 +1012,22 @@ TONE: Authoritative, strategic, action-oriented, jargon-free.
             }
         }
         
+        # Add theme if configured (for consistent branding across all presentations)
+        if GAMMA_THEME_ID:
+            request["themeId"] = GAMMA_THEME_ID
+        
+        # Add folder if configured (organize all FORESIGHT briefs together)
+        if GAMMA_FOLDER_ID:
+            request["folderIds"] = [GAMMA_FOLDER_ID]
+        
         # Configure image options for high-quality visuals
+        # imageOptions.style: max 500 chars - detailed visual style guidance
         if include_images:
             request["imageOptions"] = {
                 "source": "aiGenerated",
                 "model": "imagen-4-pro",
-                "style": "professional photography, clean modern design, corporate, sophisticated, minimalist, high-quality, suitable for government presentations"
+                # style: max 500 chars - using full budget for precise visual direction
+                "style": "professional photography, clean modern corporate design, sophisticated minimalist aesthetic, high-quality editorial imagery, suitable for government executive presentations, contemporary urban planning visuals, technology and innovation themes, civic infrastructure, blue and green color accents matching City of Austin brand"
             }
         else:
             request["imageOptions"] = {
