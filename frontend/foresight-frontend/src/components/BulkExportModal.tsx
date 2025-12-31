@@ -264,7 +264,8 @@ export const BulkExportModal: React.FC<BulkExportModalProps> = ({
                   </div>
                 </div>
                 <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {statusData?.card_statuses
+                  {(statusData?.card_statuses ?? [])
+                    .slice()
                     .sort((a, b) => a.position - b.position)
                     .map((card, index) => (
                       <CardStatusRow
