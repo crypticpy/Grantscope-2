@@ -62,6 +62,23 @@ export interface EmbeddedCard {
 }
 
 /**
+ * Research status for a card in the workstream.
+ * Tracks active or recently completed research tasks.
+ */
+export interface CardResearchStatus {
+  /** Current research task status (queued, processing, completed, failed) */
+  status: 'queued' | 'processing' | 'completed' | 'failed' | null;
+  /** Task type (quick_update, deep_research) */
+  task_type?: 'quick_update' | 'deep_research';
+  /** ID of the research task for polling */
+  task_id?: string;
+  /** When research started */
+  started_at?: string;
+  /** When research completed */
+  completed_at?: string;
+}
+
+/**
  * A card within a workstream kanban board.
  * Represents the junction between a workstream and a research card,
  * including workflow-specific metadata like status and position.
@@ -83,6 +100,8 @@ export interface WorkstreamCard {
   reminder_at: string | null;
   /** How the card was added to the workstream */
   added_from: AddedFrom;
+  /** Active research status for this card (populated from separate tracking) */
+  research_status?: CardResearchStatus;
   /** When the card was added to the workstream */
   added_at: string;
   /** Last update timestamp */

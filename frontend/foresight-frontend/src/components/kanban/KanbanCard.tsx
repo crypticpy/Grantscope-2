@@ -16,7 +16,7 @@ import React, { memo, useCallback } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useNavigate } from 'react-router-dom';
-import { StickyNote, Bell, GripVertical, Sparkles, UserPlus, Heart, Check, X } from 'lucide-react';
+import { StickyNote, Bell, Sparkles, UserPlus, Heart, Check, X, Loader2, CheckCircle2, AlertCircle, Search } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { PillarBadge } from '../PillarBadge';
 import { HorizonBadge } from '../HorizonBadge';
@@ -231,6 +231,8 @@ export const KanbanCard = memo(function KanbanCard({
     <div
       ref={setNodeRef}
       style={style}
+      {...attributes}
+      {...listeners}
       className={cn(
         // Base card styles
         'group relative bg-white dark:bg-[#2d3166] rounded-lg shadow-sm',
@@ -243,14 +245,14 @@ export const KanbanCard = memo(function KanbanCard({
         // Drag states
         isDragging && 'opacity-50 shadow-lg ring-2 ring-brand-blue/50',
         isDragOverlay && 'shadow-xl scale-105 rotate-2 cursor-grabbing',
-        // Touch optimization
-        'touch-none'
+        // Touch optimization and cursor
+        'touch-none cursor-grab active:cursor-grabbing'
       )}
     >
-      {/* Top-right actions: Drag Handle + Card Actions */}
+      {/* Top-right actions: Card Actions Menu */}
       <div
         className={cn(
-          'absolute top-2 right-2 flex items-center gap-0.5',
+          'absolute top-2 right-2 flex items-center gap-0.5 z-10',
           'opacity-0 group-hover:opacity-100 transition-opacity',
           isDragOverlay && 'opacity-100'
         )}
@@ -272,21 +274,6 @@ export const KanbanCard = memo(function KanbanCard({
             onGenerateBrief={cardActions.onGenerateBrief}
           />
         )}
-
-        {/* Drag Handle */}
-        <div
-          {...attributes}
-          {...listeners}
-          className={cn(
-            'p-1 rounded',
-            'text-gray-400 dark:text-gray-500',
-            'hover:bg-gray-100 dark:hover:bg-gray-700',
-            'cursor-grab active:cursor-grabbing'
-          )}
-          aria-label="Drag to reorder"
-        >
-          <GripVertical className="h-4 w-4" />
-        </div>
       </div>
 
       {/* Card Content - Clickable Area */}
@@ -333,6 +320,51 @@ export const KanbanCard = memo(function KanbanCard({
               size="sm"
               showCount
             />
+          </div>
+        )}
+
+        {/* Research Status Indicator */}
+        {card.research_status && card.research_status.status && (
+          <div
+            className={cn(
+              'flex items-center gap-2 mt-2 pt-2 border-t border-gray-100 dark:border-gray-700',
+              // Pulse animation for active research
+              (card.research_status.status === 'queued' || card.research_status.status === 'processing') &&
+                'animate-pulse'
+            )}
+          >
+            {(card.research_status.status === 'queued' || card.research_status.status === 'processing') && (
+              <div className="flex items-center gap-1.5 text-purple-600 dark:text-purple-400">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span className="text-xs font-medium">
+                  {card.research_status.task_type === 'deep_research' ? 'Deep Dive' : 'Updating'}...
+                </span>
+              </div>
+            )}
+            {card.research_status.status === 'completed' && (
+              <Tooltip
+                content="Research complete - click to view results"
+                side="top"
+                disabled={isDragOverlay}
+              >
+                <div className="flex items-center gap-1.5 text-green-600 dark:text-green-400 cursor-pointer hover:text-green-700 dark:hover:text-green-300 transition-colors">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <span className="text-xs font-medium">Research Ready</span>
+                </div>
+              </Tooltip>
+            )}
+            {card.research_status.status === 'failed' && (
+              <Tooltip
+                content="Research failed - try again"
+                side="top"
+                disabled={isDragOverlay}
+              >
+                <div className="flex items-center gap-1.5 text-red-600 dark:text-red-400">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  <span className="text-xs font-medium">Failed</span>
+                </div>
+              </Tooltip>
+            )}
           </div>
         )}
 

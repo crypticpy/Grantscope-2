@@ -38,12 +38,11 @@ CREATE TABLE IF NOT EXISTS cached_insights (
 -- INDEXES
 -- ============================================================================
 
--- Fast lookup by cache key
+-- Fast lookup by cache key (no partial index - filter at query time)
 CREATE INDEX IF NOT EXISTS idx_cached_insights_lookup
-    ON cached_insights(pillar_filter, insight_limit, cache_date)
-    WHERE expires_at > NOW();
+    ON cached_insights(pillar_filter, insight_limit, cache_date);
 
--- Clean up expired entries
+-- Index for finding and cleaning expired entries
 CREATE INDEX IF NOT EXISTS idx_cached_insights_expires
     ON cached_insights(expires_at);
 

@@ -3117,14 +3117,14 @@ async def get_processing_metrics(
 # Analytics Endpoints
 # ============================================================================
 
-# Pillar definitions for analytics (matches VALID_PILLAR_CODES)
+# Pillar definitions for analytics (matches database pillars table)
 ANALYTICS_PILLAR_DEFINITIONS = {
-    "CH": "Community Health & Sustainability",
-    "EW": "Economic & Workforce Development",
-    "HG": "High-Performing Government",
-    "HH": "Homelessness & Housing",
-    "MC": "Mobility & Critical Infrastructure",
-    "PS": "Public Safety"
+    "CH": "Community Health",
+    "MC": "Mobility & Connectivity",
+    "HS": "Housing & Economic Stability",
+    "EC": "Economic Development",
+    "ES": "Environmental Sustainability",
+    "CE": "Cultural & Entertainment"
 }
 
 
@@ -3257,10 +3257,21 @@ Respond with JSON:
 Keep each insight concise (2-3 sentences) and actionable. Focus on municipal relevance."""
 
 
+def _compute_card_data_hash(cards: list) -> str:
+    """Compute a hash of card data to detect changes for cache invalidation."""
+    import hashlib
+    data_str = "|".join([
+        f"{c.get('id', '')}:{c.get('velocity_score', 0)}:{c.get('impact_score', 0)}"
+        for c in sorted(cards, key=lambda x: x.get('id', ''))
+    ])
+    return hashlib.md5(data_str.encode()).hexdigest()
+
+
 @app.get("/api/v1/analytics/insights", response_model=InsightsResponse)
 async def get_analytics_insights(
     pillar_id: Optional[str] = Query(None, pattern=r"^[A-Z]{2}$", description="Filter by pillar code"),
     limit: int = Query(5, ge=1, le=10, description="Number of insights to generate"),
+    force_refresh: bool = Query(False, description="Force regeneration, bypassing cache"),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -3268,31 +3279,39 @@ async def get_analytics_insights(
 
     Returns insights for the highest-scoring active cards, optionally filtered by pillar.
     Uses OpenAI to generate strategic insights based on trend data.
+    
+    Implements 24-hour caching to avoid redundant API calls:
+    - Cache key: pillar_id + limit + date
+    - Cache invalidated: when top card scores change significantly
+    - Force refresh: use force_refresh=true to bypass cache
 
     If AI service is unavailable, returns an error message with empty insights list.
     """
+    import json
+    from datetime import date as date_type, timedelta
+    
     try:
-        # Build query for top emerging trends
+        # -------------------------------------------------------------------------
+        # Step 1: Fetch top cards (needed for both cache check and generation)
+        # -------------------------------------------------------------------------
         query = supabase.table("cards").select(
             "id, name, summary, pillar_id, horizon, velocity_score, impact_score, relevance_score, novelty_score"
         ).eq("status", "active")
 
-        # Apply pillar filter if provided
         if pillar_id:
             query = query.eq("pillar_id", pillar_id)
 
-        # Order by combined score (velocity + impact + relevance)
-        # Fetch more than needed to ensure we have enough after filtering nulls
         response = query.order("velocity_score", desc=True).limit(limit * 2).execute()
 
         if not response.data:
             return InsightsResponse(
                 insights=[],
                 generated_at=datetime.now(),
-                ai_available=True
+                ai_available=True,
+                period_analyzed="No active cards found"
             )
 
-        # Filter cards with valid scores and calculate combined score
+        # Calculate combined scores and sort
         cards_with_scores = []
         for card in response.data:
             velocity = card.get("velocity_score") or 0
@@ -3300,13 +3319,8 @@ async def get_analytics_insights(
             relevance = card.get("relevance_score") or 0
             novelty = card.get("novelty_score") or 0
             combined_score = (velocity + impact + relevance + novelty) / 4
+            cards_with_scores.append({**card, "combined_score": combined_score})
 
-            cards_with_scores.append({
-                **card,
-                "combined_score": combined_score
-            })
-
-        # Sort by combined score and take top N
         cards_with_scores.sort(key=lambda x: x["combined_score"], reverse=True)
         top_cards = cards_with_scores[:limit]
 
@@ -3317,7 +3331,56 @@ async def get_analytics_insights(
                 ai_available=True
             )
 
-        # Format trends data for the prompt
+        # Compute hash for cache validation
+        current_hash = _compute_card_data_hash(top_cards)
+        top_card_ids = [c["id"] for c in top_cards]
+
+        # -------------------------------------------------------------------------
+        # Step 2: Check cache (unless force_refresh)
+        # -------------------------------------------------------------------------
+        if not force_refresh:
+            try:
+                cache_response = supabase.table("cached_insights").select(
+                    "insights_json, generated_at, card_data_hash"
+                ).eq(
+                    "pillar_filter", pillar_id
+                ).eq(
+                    "insight_limit", limit
+                ).eq(
+                    "cache_date", date_type.today().isoformat()
+                ).gt(
+                    "expires_at", datetime.now().isoformat()
+                ).limit(1).execute()
+
+                if cache_response.data:
+                    cached = cache_response.data[0]
+                    # Validate cache - check if underlying data changed
+                    if cached.get("card_data_hash") == current_hash:
+                        logger.info(f"Serving cached insights for pillar={pillar_id}, limit={limit}")
+                        cached_json = cached["insights_json"]
+                        
+                        # Reconstruct response from cached JSON
+                        cached_insights = [
+                            InsightItem(**item) for item in cached_json.get("insights", [])
+                        ]
+                        return InsightsResponse(
+                            insights=cached_insights,
+                            generated_at=datetime.fromisoformat(cached["generated_at"].replace("Z", "+00:00")),
+                            ai_available=cached_json.get("ai_available", True),
+                            period_analyzed=cached_json.get("period_analyzed"),
+                            fallback_message=cached_json.get("fallback_message")
+                        )
+                    else:
+                        logger.info("Cache invalidated - card data changed")
+            except Exception as cache_err:
+                # Cache check failed - proceed to generate
+                logger.warning(f"Cache lookup failed: {cache_err}")
+
+        # -------------------------------------------------------------------------
+        # Step 3: Generate new insights via AI
+        # -------------------------------------------------------------------------
+        start_time = datetime.now()
+        
         trends_data = "\n".join([
             f"- {card['name']}: {card.get('summary', 'No summary available')[:200]} "
             f"(Pillar: {card.get('pillar_id', 'N/A')}, Horizon: {card.get('horizon', 'N/A')}, "
@@ -3325,8 +3388,11 @@ async def get_analytics_insights(
             for card in top_cards
         ])
 
+        ai_available = True
+        fallback_message = None
+        insights = []
+
         try:
-            # Generate insights using Azure OpenAI
             prompt = INSIGHTS_GENERATION_PROMPT.format(trends_data=trends_data)
 
             ai_response = openai_client.chat.completions.create(
@@ -3337,11 +3403,8 @@ async def get_analytics_insights(
                 timeout=30
             )
 
-            import json
             result = json.loads(ai_response.choices[0].message.content)
 
-            # Build response with card metadata
-            insights = []
             for i, insight_data in enumerate(result.get("insights", [])):
                 if i < len(top_cards):
                     card = top_cards[i]
@@ -3354,18 +3417,12 @@ async def get_analytics_insights(
                         velocity_score=card.get("velocity_score")
                     ))
 
-            return InsightsResponse(
-                insights=insights,
-                generated_at=datetime.now(),
-                ai_available=True
-            )
-
         except Exception as ai_error:
-            # AI service failed - return fallback with error message
             logger.warning(f"AI insights generation failed: {str(ai_error)}")
+            ai_available = False
+            fallback_message = "AI insights temporarily unavailable. Showing trend summaries instead."
 
-            # Return basic insights without AI generation
-            fallback_insights = [
+            insights = [
                 InsightItem(
                     trend_name=card["name"],
                     score=card["combined_score"],
@@ -3377,12 +3434,46 @@ async def get_analytics_insights(
                 for card in top_cards
             ]
 
-            return InsightsResponse(
-                insights=fallback_insights,
-                generated_at=datetime.now(),
-                ai_available=False,
-                fallback_message="Insights temporarily unavailable. Showing trend summaries instead."
-            )
+        generation_time_ms = int((datetime.now() - start_time).total_seconds() * 1000)
+        generated_at = datetime.now()
+        period_analyzed = f"Top {len(top_cards)} trending cards" + (f" in {pillar_id}" if pillar_id else "")
+
+        # -------------------------------------------------------------------------
+        # Step 4: Store in cache
+        # -------------------------------------------------------------------------
+        try:
+            cache_json = {
+                "insights": [i.dict() for i in insights],
+                "ai_available": ai_available,
+                "period_analyzed": period_analyzed,
+                "fallback_message": fallback_message
+            }
+            
+            # Upsert cache entry
+            supabase.table("cached_insights").upsert({
+                "pillar_filter": pillar_id,
+                "insight_limit": limit,
+                "cache_date": date_type.today().isoformat(),
+                "insights_json": cache_json,
+                "top_card_ids": top_card_ids,
+                "card_data_hash": current_hash,
+                "ai_model_used": get_chat_mini_deployment() if ai_available else None,
+                "generation_time_ms": generation_time_ms,
+                "generated_at": generated_at.isoformat(),
+                "expires_at": (generated_at + timedelta(hours=24)).isoformat()
+            }, on_conflict="pillar_filter,insight_limit,cache_date").execute()
+            
+            logger.info(f"Cached insights for pillar={pillar_id}, limit={limit}, took {generation_time_ms}ms")
+        except Exception as cache_err:
+            logger.warning(f"Failed to cache insights: {cache_err}")
+
+        return InsightsResponse(
+            insights=insights,
+            generated_at=generated_at,
+            ai_available=ai_available,
+            period_analyzed=period_analyzed,
+            fallback_message=fallback_message
+        )
 
     except Exception as e:
         logger.error(f"Analytics insights endpoint failed: {str(e)}")
@@ -4031,6 +4122,178 @@ async def trigger_card_deep_dive(
 
     # Task execution is handled by the background worker (see `app.worker`).
     return ResearchTask(**task)
+
+
+@app.post("/api/v1/me/workstreams/{workstream_id}/cards/{card_id}/quick-update", response_model=ResearchTask)
+async def trigger_card_quick_update(
+    workstream_id: str,
+    card_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Trigger a quick 5-source update for a card in the workstream.
+
+    Creates a research task with task_type='quick_update' for the specified card.
+    This is a lighter-weight research update compared to deep_research.
+    The research runs asynchronously; poll GET /research/{task_id} for status.
+
+    Args:
+        workstream_id: UUID of the workstream
+        card_id: UUID of the workstream card (junction table ID)
+        current_user: Authenticated user (injected)
+
+    Returns:
+        ResearchTask with the created task details
+
+    Raises:
+        HTTPException 404: Workstream or card not found
+        HTTPException 403: Not authorized
+    """
+    # Verify workstream belongs to user
+    ws_response = supabase.table("workstreams").select("id, user_id").eq("id", workstream_id).execute()
+    if not ws_response.data:
+        raise HTTPException(status_code=404, detail="Workstream not found")
+
+    if ws_response.data[0]["user_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Not authorized to access this workstream")
+
+    # Verify card exists in workstream (card_id param is actually workstream_card.id - the junction table ID)
+    wsc_response = supabase.table("workstream_cards").select("id, card_id").eq(
+        "workstream_id", workstream_id
+    ).eq("id", card_id).execute()
+
+    if not wsc_response.data:
+        raise HTTPException(status_code=404, detail="Card not found in this workstream")
+
+    # Get the actual underlying card UUID for research
+    actual_card_id = wsc_response.data[0]["card_id"]
+
+    # Create research task using the actual underlying card UUID
+    # task_type='quick_update' signals the worker to do a lighter 5-source update
+    task_record = {
+        "user_id": current_user["id"],
+        "card_id": actual_card_id,
+        "task_type": "quick_update",
+        "status": "queued"
+    }
+
+    task_result = supabase.table("research_tasks").insert(task_record).execute()
+
+    if not task_result.data:
+        raise HTTPException(status_code=500, detail="Failed to create research task")
+
+    task = task_result.data[0]
+
+    # Task execution is handled by the background worker (see `app.worker`).
+    return ResearchTask(**task)
+
+
+class WorkstreamResearchStatus(BaseModel):
+    """Research status for a card in a workstream."""
+    card_id: str = Field(..., description="UUID of the underlying card")
+    task_id: str = Field(..., description="UUID of the research task")
+    task_type: str = Field(..., description="Type of research (quick_update, deep_research)")
+    status: str = Field(..., description="Task status (queued, processing, completed, failed)")
+    started_at: Optional[datetime] = Field(None, description="When research started")
+    completed_at: Optional[datetime] = Field(None, description="When research completed")
+
+
+class WorkstreamResearchStatusResponse(BaseModel):
+    """Response containing active research tasks for a workstream's cards."""
+    tasks: List[WorkstreamResearchStatus] = Field(default=[], description="Active research tasks")
+
+
+@app.get("/api/v1/me/workstreams/{workstream_id}/research-status", response_model=WorkstreamResearchStatusResponse)
+async def get_workstream_research_status(
+    workstream_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get active research tasks for cards in a workstream.
+
+    Returns all research tasks (queued, processing) and recently completed tasks (last hour)
+    for cards that are in the specified workstream. Used to show research progress indicators.
+
+    Args:
+        workstream_id: UUID of the workstream
+        current_user: Authenticated user (injected)
+
+    Returns:
+        WorkstreamResearchStatusResponse with list of active tasks
+
+    Raises:
+        HTTPException 404: Workstream not found
+        HTTPException 403: Not authorized
+    """
+    # Verify workstream belongs to user
+    ws_response = supabase.table("workstreams").select("id, user_id").eq("id", workstream_id).execute()
+    if not ws_response.data:
+        raise HTTPException(status_code=404, detail="Workstream not found")
+
+    if ws_response.data[0]["user_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Not authorized to access this workstream")
+
+    # Get all card_ids in this workstream
+    wsc_response = supabase.table("workstream_cards").select("card_id").eq(
+        "workstream_id", workstream_id
+    ).execute()
+
+    if not wsc_response.data:
+        return WorkstreamResearchStatusResponse(tasks=[])
+
+    card_ids = [item["card_id"] for item in wsc_response.data]
+
+    # Get research tasks for these cards that are:
+    # - Currently active (queued or processing)
+    # - Recently completed/failed (within last hour for feedback)
+    one_hour_ago = (datetime.now() - timedelta(hours=1)).isoformat()
+
+    # Query active tasks
+    active_tasks = supabase.table("research_tasks").select(
+        "id, card_id, task_type, status, started_at, completed_at"
+    ).in_("card_id", card_ids).in_(
+        "status", ["queued", "processing"]
+    ).execute()
+
+    # Query recently completed tasks
+    recent_tasks = supabase.table("research_tasks").select(
+        "id, card_id, task_type, status, started_at, completed_at"
+    ).in_("card_id", card_ids).in_(
+        "status", ["completed", "failed"]
+    ).gte("completed_at", one_hour_ago).execute()
+
+    # Combine and format results
+    all_tasks = (active_tasks.data or []) + (recent_tasks.data or [])
+
+    # Deduplicate by card_id, keeping the most recent task per card
+    task_by_card: Dict[str, dict] = {}
+    for task in all_tasks:
+        card_id = task["card_id"]
+        if card_id not in task_by_card:
+            task_by_card[card_id] = task
+        else:
+            # Keep the more recent task (prefer active over completed)
+            existing = task_by_card[card_id]
+            if task["status"] in ["queued", "processing"]:
+                task_by_card[card_id] = task
+            elif existing["status"] not in ["queued", "processing"]:
+                # Both are completed/failed - keep most recent by completed_at
+                if task.get("completed_at", "") > existing.get("completed_at", ""):
+                    task_by_card[card_id] = task
+
+    result_tasks = [
+        WorkstreamResearchStatus(
+            card_id=t["card_id"],
+            task_id=t["id"],
+            task_type=t["task_type"],
+            status=t["status"],
+            started_at=t.get("started_at"),
+            completed_at=t.get("completed_at")
+        )
+        for t in task_by_card.values()
+    ]
+
+    return WorkstreamResearchStatusResponse(tasks=result_tasks)
 
 
 class FilterPreviewRequest(BaseModel):
@@ -6055,8 +6318,9 @@ async def get_system_wide_stats(
         for card in stage_data:
             s = card.get("stage_id")
             if s:
-                # Normalize stage_id (could be "1", "Stage 1", etc.)
-                stage_num = str(s).replace("Stage ", "").strip()
+                # Normalize stage_id - extract number from formats like "4_proof", "5_implementing"
+                stage_str = str(s)
+                stage_num = stage_str.split("_")[0] if "_" in stage_str else stage_str.replace("Stage ", "").strip()
                 stage_counts[stage_num] += 1
         
         cards_by_stage = []

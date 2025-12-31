@@ -7,7 +7,7 @@
  * @module CardDetail/tabs/OverviewTab/DeepResearchPanel
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   Search,
   FileText,
@@ -20,6 +20,59 @@ import {
 import { cn } from '../../../../lib/utils';
 import { MarkdownReport } from '../../MarkdownReport';
 import type { ResearchTask } from '../../types';
+
+/**
+ * Extract a clean text preview from markdown content.
+ * Removes markdown syntax and returns plain text suitable for preview.
+ */
+function extractMarkdownPreview(markdown: string, maxLength: number = 300): string {
+  if (!markdown) return '';
+  
+  // Remove markdown headers (# ## ### etc)
+  let text = markdown.replace(/^#{1,6}\s+/gm, '');
+  
+  // Remove bold/italic markers
+  text = text.replace(/\*\*(.+?)\*\*/g, '$1');
+  text = text.replace(/\*(.+?)\*/g, '$1');
+  text = text.replace(/__(.+?)__/g, '$1');
+  text = text.replace(/_(.+?)_/g, '$1');
+  
+  // Remove links but keep text
+  text = text.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+  
+  // Remove horizontal rules
+  text = text.replace(/^[-*_]{3,}$/gm, '');
+  
+  // Remove bullet points and list markers
+  text = text.replace(/^[\s]*[-*+]\s+/gm, '');
+  text = text.replace(/^[\s]*\d+\.\s+/gm, '');
+  
+  // Remove code blocks
+  text = text.replace(/```[\s\S]*?```/g, '');
+  text = text.replace(/`([^`]+)`/g, '$1');
+  
+  // Remove blockquotes
+  text = text.replace(/^>\s+/gm, '');
+  
+  // Collapse multiple newlines and spaces
+  text = text.replace(/\n{2,}/g, ' ');
+  text = text.replace(/\s{2,}/g, ' ');
+  
+  // Trim and limit length
+  text = text.trim();
+  
+  if (text.length > maxLength) {
+    // Cut at word boundary
+    text = text.slice(0, maxLength);
+    const lastSpace = text.lastIndexOf(' ');
+    if (lastSpace > maxLength * 0.8) {
+      text = text.slice(0, lastSpace);
+    }
+    text += '...';
+  }
+  
+  return text;
+}
 
 /**
  * Props for the DeepResearchPanel component
@@ -228,8 +281,8 @@ export const DeepResearchPanel: React.FC<DeepResearchPanelProps> = ({
           </div>
         ) : (
           <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-            <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3">
-              {latestReport.result_summary?.report_preview?.slice(0, 300)}...
+            <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+              {extractMarkdownPreview(latestReport.result_summary?.report_preview || '', 350)}
             </p>
             <div className="mt-3 flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
               {latestReport.result_summary?.sources_found && (

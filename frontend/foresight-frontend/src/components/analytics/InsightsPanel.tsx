@@ -216,10 +216,13 @@ const InsightsPanel: React.FC<InsightsPanelProps> = ({
   if (loading) {
     return (
       <div className="bg-gray-50 dark:bg-[#1e2048] rounded-lg p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Sparkles className="h-5 w-5 text-brand-blue" />
+        <div className="flex items-center gap-2 mb-2">
+          <Sparkles className="h-5 w-5 text-brand-blue animate-pulse" />
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
         </div>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+          Analyzing top trends and generating strategic insights...
+        </p>
         <InsightSkeleton />
       </div>
     );
@@ -246,7 +249,7 @@ const InsightsPanel: React.FC<InsightsPanelProps> = ({
   return (
     <div className="bg-gray-50 dark:bg-[#1e2048] rounded-lg p-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <Sparkles className="h-5 w-5 text-brand-blue" />
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
@@ -257,19 +260,18 @@ const InsightsPanel: React.FC<InsightsPanelProps> = ({
           </span>
         )}
       </div>
+      
+      {/* Explanatory blurb */}
+      <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+        AI analyzes the highest-scoring trends to surface strategic implications for city leadership.
+        {data?.period_analyzed && ` Based on ${data.period_analyzed.toLowerCase()}.`}
+      </p>
 
       {/* AI unavailable fallback */}
       {!aiAvailable && (
         <div className="mb-4">
           <AIUnavailableFallback message={fallbackMessage} />
         </div>
-      )}
-
-      {/* Period analyzed info */}
-      {data?.period_analyzed && (
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          Analysis period: {data.period_analyzed}
-        </p>
       )}
 
       {/* Insights list or empty state */}

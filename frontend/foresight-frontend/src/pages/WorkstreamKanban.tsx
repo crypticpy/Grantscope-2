@@ -56,6 +56,8 @@ import {
   triggerDeepDive,
   autoPopulateWorkstream,
   exportBrief,
+  fetchResearchStatus,
+  type WorkstreamResearchStatus,
 } from '../lib/workstream-api';
 import { PillarBadgeGroup } from '../components/PillarBadge';
 import { HorizonBadge } from '../components/HorizonBadge';
@@ -374,6 +376,10 @@ const WorkstreamKanban: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterPillar, setFilterPillar] = useState<string | null>(null);
 
+  // Research status tracking
+  const [researchStatuses, setResearchStatuses] = useState<Map<string, WorkstreamResearchStatus>>(new Map());
+  const researchPollRef = useRef<NodeJS.Timeout | null>(null);
+
   // ============================================================================
   // Toast Helper Functions
   // ============================================================================
@@ -414,8 +420,15 @@ const WorkstreamKanban: React.FC = () => {
   // Column-Specific Action Hooks
   // ============================================================================
 
+  // Use a ref to hold startResearchPolling to avoid circular dependencies
+  const startResearchPollingRef = useRef<() => void>(() => {});
+
   const { triggerQuickUpdate } = useQuickUpdate(getAuthToken, id || '', {
-    onSuccess: () => showToast('success', 'Quick update started'),
+    onSuccess: () => {
+      showToast('success', 'Quick update started');
+      // Start polling for research status updates
+      startResearchPollingRef.current();
+    },
     onError: (_, error) => showToast('error', error.message),
   });
 
@@ -560,6 +573,120 @@ const WorkstreamKanban: React.FC = () => {
     loadAndAutoPopulate();
   }, [workstream, id, loadCards, getAuthToken, showToast]);
 
+  /**
+   * Fetch and update research status for cards in this workstream.
+   * Called on initial load and periodically while there are active tasks.
+   */
+  const fetchAndUpdateResearchStatus = useCallback(async () => {
+    if (!id) return;
+
+    const token = await getAuthToken();
+    if (!token) return;
+
+    try {
+      const { tasks } = await fetchResearchStatus(token, id);
+      
+      // Build a map of card_id -> research status
+      const statusMap = new Map<string, WorkstreamResearchStatus>();
+      for (const task of tasks) {
+        statusMap.set(task.card_id, task);
+      }
+      
+      setResearchStatuses(statusMap);
+      
+      // If there are any active tasks (queued or processing), keep polling
+      const hasActiveTasks = tasks.some(
+        t => t.status === 'queued' || t.status === 'processing'
+      );
+      
+      return hasActiveTasks;
+    } catch (err) {
+      console.error('Error fetching research status:', err);
+      return false;
+    }
+  }, [id, getAuthToken]);
+
+  /**
+   * Start polling for research status updates.
+   */
+  const startResearchPolling = useCallback(() => {
+    // Clear any existing interval
+    if (researchPollRef.current) {
+      clearInterval(researchPollRef.current);
+    }
+
+    // Poll every 5 seconds while there are active tasks
+    const poll = async () => {
+      const hasActiveTasks = await fetchAndUpdateResearchStatus();
+      if (!hasActiveTasks && researchPollRef.current) {
+        clearInterval(researchPollRef.current);
+        researchPollRef.current = null;
+      }
+    };
+
+    // Initial fetch
+    poll();
+
+    // Start interval
+    researchPollRef.current = setInterval(poll, 5000);
+  }, [fetchAndUpdateResearchStatus]);
+
+  // Keep the ref updated with the latest startResearchPolling function
+  useEffect(() => {
+    startResearchPollingRef.current = startResearchPolling;
+  }, [startResearchPolling]);
+
+  /**
+   * Fetch research status after cards are loaded.
+   */
+  useEffect(() => {
+    if (workstream && id && Object.values(cards).flat().length > 0) {
+      startResearchPolling();
+    }
+
+    return () => {
+      if (researchPollRef.current) {
+        clearInterval(researchPollRef.current);
+      }
+    };
+  }, [workstream, id, cards, startResearchPolling]);
+
+  /**
+   * Merge research statuses into cards for rendering.
+   * Creates enriched cards with research_status field populated.
+   */
+  const cardsWithResearchStatus = useMemo(() => {
+    const enriched: Record<KanbanStatus, WorkstreamCard[]> = {
+      inbox: [],
+      screening: [],
+      research: [],
+      brief: [],
+      watching: [],
+      archived: [],
+    };
+
+    for (const [status, columnCards] of Object.entries(cards)) {
+      enriched[status as KanbanStatus] = columnCards.map((card) => {
+        const researchStatus = researchStatuses.get(card.card_id);
+        if (researchStatus) {
+          return {
+            ...card,
+            research_status: {
+              status: researchStatus.status,
+              task_type: researchStatus.task_type,
+              task_id: researchStatus.task_id,
+              started_at: researchStatus.started_at,
+              completed_at: researchStatus.completed_at,
+            },
+          };
+        }
+        return card;
+      });
+    }
+
+    return enriched;
+  }, [cards, researchStatuses]);
+
   // ============================================================================
   // Event Handlers
   // ============================================================================
@@ -694,6 +821,8 @@ const WorkstreamKanban: React.FC = () => {
       try {
         await triggerDeepDive(token, id, cardId);
         showToast('success', 'Deep dive analysis started');
+        // Start polling for research status updates
+        startResearchPollingRef.current();
       } catch (err) {
         console.error('Error triggering deep dive:', err);
         showToast('error', 'Failed to start deep dive analysis');
@@ -929,11 +1058,12 @@ const WorkstreamKanban: React.FC = () => {
 
   /**
    * Filter cards based on search query and pillar filter.
+   * Uses cardsWithResearchStatus to include research indicators.
    */
   const filteredCards = React.useMemo(() => {
-    // If no filters active, return original cards
+    // If no filters active, return cards with research status
     if (!searchQuery.trim() && !filterPillar) {
-      return cards;
+      return cardsWithResearchStatus;
     }
 
     const filtered: Record<KanbanStatus, WorkstreamCard[]> = {
@@ -947,7 +1077,7 @@ const WorkstreamKanban: React.FC = () => {
 
     const query = searchQuery.toLowerCase().trim();
 
-    for (const [status, columnCards] of Object.entries(cards)) {
+    for (const [status, columnCards] of Object.entries(cardsWithResearchStatus)) {
       filtered[status as KanbanStatus] = columnCards.filter((card) => {
         // Check pillar filter
         if (filterPillar && card.card.pillar_id !== filterPillar) {
@@ -972,7 +1102,7 @@ const WorkstreamKanban: React.FC = () => {
     }
 
     return filtered;
-  }, [cards, searchQuery, filterPillar]);
+  }, [cardsWithResearchStatus, searchQuery, filterPillar]);
 
   /**
    * Get unique pillars from all cards for filter dropdown.
