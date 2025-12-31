@@ -12,17 +12,19 @@
  * - Dark mode support
  */
 
-import React, { memo } from 'react';
+import React, { memo, useCallback } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useNavigate } from 'react-router-dom';
-import { StickyNote, Bell, GripVertical } from 'lucide-react';
+import { StickyNote, Bell, GripVertical, Sparkles, UserPlus, Heart, Check, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { PillarBadge } from '../PillarBadge';
 import { HorizonBadge } from '../HorizonBadge';
 import { StageBadge } from '../StageBadge';
 import { Top25Badge } from '../Top25Badge';
+import { Tooltip } from '../ui/Tooltip';
 import { CardActions } from './CardActions';
+import { getPillarByCode } from '../../data/taxonomy';
 import type {
   WorkstreamCard as WorkstreamCardType,
   CardActionCallbacks,
@@ -75,6 +77,74 @@ function parseStageNumber(stageId: number | string): number | null {
   }
   const match = String(stageId).match(/^(\d+)/);
   return match ? parseInt(match[1], 10) : null;
+}
+
+/**
+ * AddedFromTooltipContent - Explains why the card was added to the workstream
+ */
+function AddedFromTooltipContent({
+  addedFrom,
+  card,
+}: {
+  addedFrom: 'auto' | 'manual' | 'follow';
+  card: WorkstreamCardType['card'];
+}) {
+  const pillar = getPillarByCode(card.pillar_id);
+
+  if (addedFrom === 'auto') {
+    return (
+      <div className="space-y-2 min-w-[180px] max-w-[240px]">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-blue-500" />
+          <span className="font-medium text-gray-900 dark:text-gray-100">Auto-matched</span>
+        </div>
+        <p className="text-xs text-gray-600 dark:text-gray-400">
+          This card was automatically added because it matched your workstream filters:
+        </p>
+        <div className="space-y-1 text-xs">
+          {pillar && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-gray-500 dark:text-gray-400">Pillar:</span>
+              <span className="text-gray-700 dark:text-gray-300">{pillar.name}</span>
+            </div>
+          )}
+          {card.horizon && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-gray-500 dark:text-gray-400">Horizon:</span>
+              <span className="text-gray-700 dark:text-gray-300">{card.horizon}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (addedFrom === 'manual') {
+    return (
+      <div className="space-y-2 min-w-[140px]">
+        <div className="flex items-center gap-2">
+          <UserPlus className="h-4 w-4 text-gray-500" />
+          <span className="font-medium text-gray-900 dark:text-gray-100">Manually added</span>
+        </div>
+        <p className="text-xs text-gray-600 dark:text-gray-400">
+          You added this card to your workstream.
+        </p>
+      </div>
+    );
+  }
+
+  // 'follow'
+  return (
+    <div className="space-y-2 min-w-[140px]">
+      <div className="flex items-center gap-2">
+        <Heart className="h-4 w-4 text-pink-500" />
+        <span className="font-medium text-gray-900 dark:text-gray-100">From followed card</span>
+      </div>
+      <p className="text-xs text-gray-600 dark:text-gray-400">
+        Added because you followed this card.
+      </p>
+    </div>
+  );
 }
 
 // =============================================================================
@@ -290,18 +360,59 @@ export const KanbanCard = memo(function KanbanCard({
             </div>
           )}
 
-          {/* Added From Badge - subtle indicator */}
-          <span
-            className={cn(
-              'ml-auto text-[10px] uppercase tracking-wide font-medium px-1.5 py-0.5 rounded',
-              card.added_from === 'auto' && 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400',
-              card.added_from === 'manual' && 'bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
-              card.added_from === 'follow' && 'bg-pink-50 text-pink-600 dark:bg-pink-900/30 dark:text-pink-400'
-            )}
+          {/* Added From Badge - with tooltip explaining why */}
+          <Tooltip
+            content={
+              <AddedFromTooltipContent
+                addedFrom={card.added_from as 'auto' | 'manual' | 'follow'}
+                card={embeddedCard}
+              />
+            }
+            side="top"
+            align="end"
+            contentClassName="p-2"
+            disabled={isDragOverlay}
           >
-            {card.added_from}
-          </span>
+            <span
+              className={cn(
+                'ml-auto text-[10px] uppercase tracking-wide font-medium px-1.5 py-0.5 rounded cursor-help',
+                card.added_from === 'auto' && 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400',
+                card.added_from === 'manual' && 'bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
+                card.added_from === 'follow' && 'bg-pink-50 text-pink-600 dark:bg-pink-900/30 dark:text-pink-400'
+              )}
+            >
+              {card.added_from}
+            </span>
+          </Tooltip>
         </div>
+
+        {/* Quick Actions for Inbox Cards */}
+        {columnId === 'inbox' && cardActions?.onMoveToColumn && !isDragOverlay && (
+          <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                cardActions.onMoveToColumn?.(card.id, 'screening');
+              }}
+              className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-medium text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/40 rounded-md transition-colors"
+              title="Move to Screening"
+            >
+              <Check className="h-3.5 w-3.5" />
+              Accept
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                cardActions.onMoveToColumn?.(card.id, 'archived');
+              }}
+              className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-md transition-colors"
+              title="Move to Archived"
+            >
+              <X className="h-3.5 w-3.5" />
+              Dismiss
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

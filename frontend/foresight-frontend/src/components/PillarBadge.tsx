@@ -98,6 +98,39 @@ function getPillarColorClasses(pillar: Pillar): {
 
 
 /**
+ * Get extended description for each pillar with strategic context
+ */
+function getPillarExtendedInfo(code: string): { focus: string; keyDepartments: string[] } {
+  const infoMap: Record<string, { focus: string; keyDepartments: string[] }> = {
+    CH: {
+      focus: 'Focuses on public health equity, park access, climate action, emergency preparedness, and animal welfare to build a healthier, more resilient Austin.',
+      keyDepartments: ['Austin Public Health', 'Parks & Recreation', 'Office of Sustainability', 'Homeland Security & Emergency Mgmt'],
+    },
+    EW: {
+      focus: 'Drives economic mobility through workforce development, small business support, and preserving Austin\'s creative and cultural economy.',
+      keyDepartments: ['Economic Development', 'Workforce Solutions', 'Small Business Program', 'Cultural Arts Division'],
+    },
+    HG: {
+      focus: 'Ensures fiscal responsibility, modernizes technology and data capabilities, builds a diverse workforce, and strengthens community engagement.',
+      keyDepartments: ['Financial Services', 'Communications & Technology Mgmt', 'Human Resources', 'Communications & Public Info'],
+    },
+    HH: {
+      focus: 'Creates complete communities with accessible services, expands affordable housing, and reduces homelessness through coordinated care.',
+      keyDepartments: ['Housing & Planning', 'Homeless Services', 'Neighborhood Housing', 'Austin Housing Finance Corp'],
+    },
+    MC: {
+      focus: 'Prioritizes transportation safety, invests in transit expansion including Project Connect, and maintains resilient utility infrastructure.',
+      keyDepartments: ['Austin Transportation', 'Capital Metro', 'Austin Energy', 'Austin Water', 'Building Services'],
+    },
+    PS: {
+      focus: 'Builds community trust, ensures equitable public safety services, and prepares for disasters through cross-sector partnerships.',
+      keyDepartments: ['Austin Police', 'Austin Fire', 'EMS', 'Municipal Court', 'Office of Police Oversight'],
+    },
+  };
+  return infoMap[code] || { focus: '', keyDepartments: [] };
+}
+
+/**
  * Tooltip content component for pillar
  */
 function PillarTooltipContent({
@@ -111,19 +144,20 @@ function PillarTooltipContent({
 }) {
   const Icon = pillarIcons[pillar.icon];
   const colors = getPillarColorClasses(pillar);
+  const extendedInfo = getPillarExtendedInfo(pillar.code);
 
   return (
-    <div className="space-y-3 min-w-[200px] max-w-[280px]">
+    <div className="space-y-3 min-w-[240px] max-w-[320px]">
       {/* Header */}
       <div className="flex items-start gap-2">
         {Icon && (
           <div
             className={cn(
-              'p-1.5 rounded-md',
+              'p-2 rounded-lg',
               colors.bg
             )}
           >
-            <Icon className={cn('h-4 w-4', colors.text)} />
+            <Icon className={cn('h-5 w-5', colors.text)} />
           </div>
         )}
         <div>
@@ -131,23 +165,42 @@ function PillarTooltipContent({
             {pillar.name}
           </div>
           <div className="text-xs font-mono text-gray-500 dark:text-gray-400">
-            {pillar.code}
+            City Strategic Plan Pillar {pillar.code}
           </div>
         </div>
       </div>
 
-      {/* Description */}
+      {/* Extended Description */}
       <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed">
-        {pillar.description}
+        {extendedInfo.focus || pillar.description}
       </p>
+
+      {/* Key Departments */}
+      {extendedInfo.keyDepartments.length > 0 && (
+        <div className={cn('rounded-md p-2', colors.bg)}>
+          <div className="text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+            Key Departments
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {extendedInfo.keyDepartments.map((dept) => (
+              <span
+                key={dept}
+                className="text-[10px] px-1.5 py-0.5 rounded bg-white/60 dark:bg-gray-800/60 text-gray-700 dark:text-gray-300"
+              >
+                {dept}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Goals */}
       {goals.length > 0 && (
         <div>
           <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">
-            Goals
+            Strategic Goals ({goals.length})
           </div>
-          <ul className="space-y-1">
+          <ul className="space-y-1 max-h-32 overflow-y-auto">
             {goals.map((goal) => (
               <li
                 key={goal.code}
@@ -174,6 +227,11 @@ function PillarTooltipContent({
           </ul>
         </div>
       )}
+
+      {/* Footer hint */}
+      <div className="text-[10px] text-gray-400 dark:text-gray-500 pt-1 border-t border-gray-200 dark:border-gray-700">
+        Part of Austin's Comprehensive Strategic Plan
+      </div>
     </div>
   );
 }

@@ -13,8 +13,8 @@
  * - Active toggle
  */
 
-import React, { useState, useEffect, useCallback, KeyboardEvent } from 'react';
-import { X, Plus, Loader2, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useCallback, KeyboardEvent, useRef } from 'react';
+import { X, Plus, Loader2, AlertCircle, Sparkles, Search } from 'lucide-react';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
 import { cn } from '../lib/utils';
@@ -25,6 +25,49 @@ import {
   horizons,
   getGoalsByPillar,
 } from '../data/taxonomy';
+
+// ============================================================================
+// Filter Preview Types & API
+// ============================================================================
+
+interface FilterPreviewResult {
+  estimated_count: number;
+  sample_cards: Array<{ id: string; name: string; pillar_id?: string; horizon?: string }>;
+}
+
+async function fetchFilterPreview(
+  token: string,
+  filters: {
+    pillar_ids: string[];
+    goal_ids: string[];
+    stage_ids: string[];
+    horizon: string;
+    keywords: string[];
+  }
+): Promise<FilterPreviewResult> {
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+  const response = await fetch(`${API_BASE_URL}/api/v1/cards/filter-preview`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      pillar_ids: filters.pillar_ids,
+      goal_ids: filters.goal_ids,
+      stage_ids: filters.stage_ids,
+      horizon: filters.horizon === 'ALL' ? null : filters.horizon,
+      keywords: filters.keywords,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch filter preview');
+  }
+
+  return response.json();
+}
 
 // ============================================================================
 // Types
@@ -198,10 +241,66 @@ export function WorkstreamForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [keywordInput, setKeywordInput] = useState('');
 
+  // Filter preview state
+  const [preview, setPreview] = useState<FilterPreviewResult | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const previewDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Derived state: available goals based on selected pillars
   const availableGoals = formData.pillar_ids.flatMap((pillarCode) =>
     getGoalsByPillar(pillarCode)
   );
+
+  // Check if any filters are set
+  const hasFilters =
+    formData.pillar_ids.length > 0 ||
+    formData.goal_ids.length > 0 ||
+    formData.stage_ids.length > 0 ||
+    formData.horizon !== 'ALL' ||
+    formData.keywords.length > 0;
+
+  // Fetch filter preview when filters change
+  useEffect(() => {
+    // Clear previous timeout
+    if (previewDebounceRef.current) {
+      clearTimeout(previewDebounceRef.current);
+    }
+
+    // Don't fetch if no filters
+    if (!hasFilters) {
+      setPreview(null);
+      return;
+    }
+
+    // Debounce the preview fetch
+    previewDebounceRef.current = setTimeout(async () => {
+      setPreviewLoading(true);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) return;
+
+        const result = await fetchFilterPreview(session.access_token, {
+          pillar_ids: formData.pillar_ids,
+          goal_ids: formData.goal_ids,
+          stage_ids: formData.stage_ids,
+          horizon: formData.horizon,
+          keywords: formData.keywords,
+        });
+        setPreview(result);
+      } catch (error) {
+        console.error('Failed to fetch filter preview:', error);
+        setPreview(null);
+      } finally {
+        setPreviewLoading(false);
+      }
+    }, 500); // 500ms debounce
+
+    return () => {
+      if (previewDebounceRef.current) {
+        clearTimeout(previewDebounceRef.current);
+      }
+    };
+  }, [formData.pillar_ids, formData.goal_ids, formData.stage_ids, formData.horizon, formData.keywords, hasFilters]);
 
   // When pillars change, filter out goals that are no longer valid
   useEffect(() => {
@@ -687,6 +786,90 @@ export function WorkstreamForm({
             label="Analyze Now"
             description="Immediately run AI research to find matching cards and discover new technologies based on your keywords"
           />
+        </div>
+      )}
+
+      {/* Filter Preview - Match Count */}
+      {hasFilters && (
+        <div className={cn(
+          'rounded-lg p-4 border transition-all',
+          preview && preview.estimated_count > 0
+            ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700'
+            : preview && preview.estimated_count === 0
+            ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700'
+            : 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700'
+        )}>
+          <div className="flex items-center gap-3">
+            {previewLoading ? (
+              <>
+                <Loader2 className="h-5 w-5 text-gray-400 animate-spin" />
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  Searching for matching cards...
+                </span>
+              </>
+            ) : preview ? (
+              <>
+                {preview.estimated_count > 0 ? (
+                  <Search className="h-5 w-5 text-green-600 dark:text-green-400" />
+                ) : (
+                  <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                )}
+                <div className="flex-1">
+                  <div className="flex items-baseline gap-2">
+                    <span className={cn(
+                      'text-2xl font-bold',
+                      preview.estimated_count > 0
+                        ? 'text-green-700 dark:text-green-300'
+                        : 'text-amber-700 dark:text-amber-300'
+                    )}>
+                      ~{preview.estimated_count}
+                    </span>
+                    <span className={cn(
+                      'text-sm',
+                      preview.estimated_count > 0
+                        ? 'text-green-600 dark:text-green-400'
+                        : 'text-amber-600 dark:text-amber-400'
+                    )}>
+                      {preview.estimated_count === 1 ? 'card matches' : 'cards match'} these filters
+                    </span>
+                  </div>
+                  {preview.sample_cards.length > 0 && (
+                    <div className="mt-2">
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Sample matches:</div>
+                      <div className="flex flex-wrap gap-1">
+                        {preview.sample_cards.slice(0, 3).map((card) => (
+                          <span
+                            key={card.id}
+                            className="text-xs px-2 py-0.5 rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-600 truncate max-w-[200px]"
+                            title={card.name}
+                          >
+                            {card.name}
+                          </span>
+                        ))}
+                        {preview.estimated_count > 3 && (
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            +{preview.estimated_count - 3} more
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {preview.estimated_count === 0 && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                      Try broadening your filters or adding different keywords
+                    </p>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-5 w-5 text-gray-400" />
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  Add filters to see matching cards
+                </span>
+              </>
+            )}
+          </div>
         </div>
       )}
 

@@ -4018,6 +4018,97 @@ async def trigger_card_deep_dive(
     return ResearchTask(**task)
 
 
+class FilterPreviewRequest(BaseModel):
+    """Request model for filter preview (estimate matching cards)."""
+    pillar_ids: List[str] = Field(default=[], description="List of pillar codes to filter by")
+    goal_ids: List[str] = Field(default=[], description="List of goal codes to filter by")
+    stage_ids: List[str] = Field(default=[], description="List of stage numbers to filter by")
+    horizon: Optional[str] = Field(default=None, description="Horizon filter (H1, H2, H3, or ALL)")
+    keywords: List[str] = Field(default=[], description="Keywords to match in card content")
+
+
+class FilterPreviewResponse(BaseModel):
+    """Response model for filter preview."""
+    estimated_count: int = Field(..., description="Estimated number of matching cards")
+    sample_cards: List[dict] = Field(default=[], description="Sample of matching cards (up to 5)")
+
+
+@app.post("/api/v1/cards/filter-preview", response_model=FilterPreviewResponse)
+async def preview_filter_count(
+    filters: FilterPreviewRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Preview how many cards match the given filter criteria.
+
+    This is a lightweight endpoint for showing estimated matches while
+    creating/editing workstreams. Does not modify any data.
+
+    Args:
+        filters: Filter criteria (pillars, goals, stages, horizon, keywords)
+        current_user: Authenticated user (injected)
+
+    Returns:
+        FilterPreviewResponse with estimated count and sample cards
+    """
+    # Build base query for active cards
+    query = supabase.table("cards").select("id, name, pillar_id, horizon, stage_id").eq("status", "active")
+
+    # Apply filters
+    if filters.pillar_ids:
+        query = query.in_("pillar_id", filters.pillar_ids)
+
+    if filters.goal_ids:
+        query = query.in_("goal_id", filters.goal_ids)
+
+    if filters.horizon and filters.horizon != "ALL":
+        query = query.eq("horizon", filters.horizon)
+
+    # Fetch cards (limit to reasonable amount for performance)
+    response = query.order("created_at", desc=True).limit(500).execute()
+    cards = response.data or []
+
+    # Apply stage filtering client-side
+    if filters.stage_ids:
+        filtered_by_stage = []
+        for card in cards:
+            card_stage_id = card.get("stage_id") or ""
+            stage_num = card_stage_id.split("_")[0] if "_" in card_stage_id else card_stage_id
+            if stage_num in filters.stage_ids:
+                filtered_by_stage.append(card)
+        cards = filtered_by_stage
+
+    # Apply keyword filtering (need to fetch full text for this)
+    if filters.keywords:
+        # Fetch full card data for keyword matching
+        if cards:
+            card_ids = [c["id"] for c in cards]
+            full_response = supabase.table("cards").select("id, name, summary, description, pillar_id, horizon, stage_id").in_("id", card_ids).execute()
+            full_cards = full_response.data or []
+
+            filtered_cards = []
+            for card in full_cards:
+                card_text = " ".join([
+                    (card.get("name") or "").lower(),
+                    (card.get("summary") or "").lower(),
+                    (card.get("description") or "").lower()
+                ])
+                if any(keyword.lower() in card_text for keyword in filters.keywords):
+                    filtered_cards.append(card)
+            cards = filtered_cards
+
+    # Build response
+    sample_cards = [
+        {"id": c["id"], "name": c["name"], "pillar_id": c.get("pillar_id"), "horizon": c.get("horizon")}
+        for c in cards[:5]
+    ]
+
+    return FilterPreviewResponse(
+        estimated_count=len(cards),
+        sample_cards=sample_cards
+    )
+
+
 @app.post("/api/v1/me/workstreams/{workstream_id}/auto-populate", response_model=AutoPopulateResponse)
 async def auto_populate_workstream(
     workstream_id: str,
