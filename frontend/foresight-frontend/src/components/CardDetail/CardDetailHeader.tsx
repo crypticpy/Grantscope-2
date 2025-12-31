@@ -72,75 +72,78 @@ export const CardDetailHeader: React.FC<CardDetailHeaderProps> = ({
       {/* Back Navigation Link */}
       <Link
         to={backLink}
-        className="inline-flex items-center text-sm text-gray-500 dark:text-gray-400 hover:text-brand-blue mb-4 transition-colors"
+        className="inline-flex items-center text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-brand-blue dark:hover:text-brand-blue mb-6 transition-colors"
       >
-        <ArrowLeft className="h-4 w-4 mr-1" />
+        <ArrowLeft className="h-4 w-4 mr-1.5" />
         {backLinkText}
       </Link>
 
-      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-        <div className="flex-1 min-w-0">
-          {/* Title and Primary Badges */}
-          <div className="flex flex-col sm:flex-row sm:items-center flex-wrap gap-3 mb-4">
-            <h1 className="text-2xl sm:text-3xl font-bold text-brand-dark-blue dark:text-white break-words">
+      {/* Hero Section Container */}
+      <div className="bg-gradient-to-br from-gray-50 to-white dark:from-gray-800/60 dark:to-gray-900/40 rounded-xl border border-gray-200/80 dark:border-gray-700/60 p-6 sm:p-8 mb-6">
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
+          <div className="flex-1 min-w-0">
+            {/* Title */}
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white break-words mb-4 leading-tight">
               {card.name}
             </h1>
-            <div className="flex items-center gap-2 flex-wrap">
+
+            {/* Primary Classification Badges */}
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap mb-5">
               <PillarBadge
                 pillarId={card.pillar_id}
                 goalId={card.goal_id}
                 showIcon
-                size="md"
+                size="lg"
               />
               <HorizonBadge
                 horizon={card.horizon}
                 showIcon
-                size="md"
+                size="lg"
               />
               {card.top25_relevance && card.top25_relevance.length > 0 && (
                 <Top25Badge
                   priorities={card.top25_relevance}
                   showCount
-                  size="md"
+                  size="lg"
                 />
               )}
             </div>
+
+            {/* Summary */}
+            <p className="text-base sm:text-lg lg:text-xl text-gray-700 dark:text-gray-200 mb-6 break-words leading-relaxed max-w-4xl">
+              {card.summary}
+            </p>
+
+            {/* Quick Info Row - Stage, Anchor, Created Date */}
+            <div className="flex items-center flex-wrap gap-3 sm:gap-4">
+              {stageNumber && (
+                <StageBadge
+                  stage={stageNumber}
+                  variant="badge"
+                  showName
+                  size="md"
+                />
+              )}
+              {card.anchor_id && (
+                <AnchorBadge
+                  anchor={card.anchor_id}
+                  size="md"
+                  abbreviated
+                />
+              )}
+              <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                Created: {new Date(card.created_at).toLocaleDateString()}
+              </span>
+            </div>
           </div>
 
-          {/* Summary */}
-          <p className="text-base sm:text-lg text-gray-600 dark:text-gray-300 mb-4 break-words">
-            {card.summary}
-          </p>
-
-          {/* Quick Info Row */}
-          <div className="flex items-center flex-wrap gap-2 sm:gap-4 text-sm">
-            {stageNumber && (
-              <StageBadge
-                stage={stageNumber}
-                variant="badge"
-                showName
-                size="sm"
-              />
-            )}
-            {card.anchor_id && (
-              <AnchorBadge
-                anchor={card.anchor_id}
-                size="sm"
-                abbreviated
-              />
-            )}
-            <span className="text-gray-500">
-              Created: {new Date(card.created_at).toLocaleDateString()}
-            </span>
-          </div>
+          {/* Action Buttons Area - receives children (e.g., CardActionButtons) */}
+          {children && (
+            <div className="flex items-center gap-2 sm:gap-3 overflow-x-auto pb-2 lg:pb-0 lg:overflow-visible lg:flex-wrap lg:justify-end -mx-4 px-4 sm:mx-0 sm:px-0 lg:pt-1">
+              {children}
+            </div>
+          )}
         </div>
-
-        {/* Action Buttons Area - receives children (e.g., CardActionButtons) */}
-        {children && (
-          <div className="flex items-center gap-2 sm:gap-3 overflow-x-auto pb-2 lg:pb-0 lg:overflow-visible lg:flex-wrap lg:justify-end -mx-4 px-4 sm:mx-0 sm:px-0">
-            {children}
-          </div>
-        )}
       </div>
     </div>
   );
