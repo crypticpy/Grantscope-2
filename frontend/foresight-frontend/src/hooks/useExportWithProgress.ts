@@ -4,9 +4,12 @@
  * Manages export operations with real-time progress tracking.
  * Supports both regular exports and Gamma-powered AI exports
  * with status polling and download handling.
+ * 
+ * Includes proper cleanup to prevent state updates after unmount
+ * and handles race conditions during async operations.
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import type { ExportStatus, ExportFormat } from '../components/ExportProgressModal';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -71,6 +74,8 @@ export function useExportWithProgress(
   getToken: () => Promise<string | null>
 ): UseExportWithProgressReturn {
   const [state, setState] = useState<ExportState>(initialState);
+  
+  // Refs to track active operations and prevent memory leaks
   const lastExportRef = useRef<{
     type: 'brief' | 'card';
     workstreamId?: string;
@@ -79,29 +84,81 @@ export function useExportWithProgress(
     itemName?: string;
     version?: number;
   } | null>(null);
+  
+  // Track if component is mounted to prevent state updates after unmount
+  const isMountedRef = useRef(true);
+  
+  // Track active abort controller for cancellation
+  const abortControllerRef = useRef<AbortController | null>(null);
+  
+  // Track active interval for cleanup
+  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Track current export ID to detect stale updates
+  const exportIdRef = useRef<number>(0);
 
-  /**
-   * Update state partially
-   */
-  const updateState = useCallback((updates: Partial<ExportState>) => {
-    setState((prev) => ({ ...prev, ...updates }));
+  // Cleanup on unmount
+  useEffect(() => {
+    isMountedRef.current = true;
+    
+    return () => {
+      isMountedRef.current = false;
+      
+      // Cleanup any active interval
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
+      
+      // Abort any active request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    };
   }, []);
 
   /**
-   * Reset state
+   * Update state partially - only if mounted
+   */
+  const updateState = useCallback((updates: Partial<ExportState>) => {
+    if (isMountedRef.current) {
+      setState((prev) => ({ ...prev, ...updates }));
+    }
+  }, []);
+
+  /**
+   * Reset state - only if mounted
    */
   const resetState = useCallback(() => {
-    setState(initialState);
+    if (isMountedRef.current) {
+      setState(initialState);
+    }
+  }, []);
+  
+  /**
+   * Cleanup active export resources
+   */
+  const cleanupExport = useCallback(() => {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
   }, []);
 
   /**
    * Close the modal
    */
   const closeModal = useCallback(() => {
+    cleanupExport();
     updateState({ showModal: false });
     // Reset after animation
     setTimeout(resetState, 300);
-  }, [updateState, resetState]);
+  }, [cleanupExport, updateState, resetState]);
 
   /**
    * Handle successful export - trigger download
@@ -135,6 +192,15 @@ export function useExportWithProgress(
       itemName?: string,
       version?: number
     ) => {
+      // Cleanup any previous export in progress
+      cleanupExport();
+      
+      // Generate a unique ID for this export to detect stale updates
+      const currentExportId = ++exportIdRef.current;
+      
+      // Helper to check if this export is still current
+      const isCurrentExport = () => exportIdRef.current === currentExportId && isMountedRef.current;
+      
       // Store for retry
       lastExportRef.current = {
         type: 'brief',
@@ -168,6 +234,12 @@ export function useExportWithProgress(
         if (!token) {
           throw new Error('Authentication required');
         }
+        
+        // Check if still current after async token fetch
+        if (!isCurrentExport()) {
+          console.log('[Export] Aborted: export superseded during token fetch');
+          return;
+        }
 
         // Update status to generating
         updateState({
@@ -183,11 +255,22 @@ export function useExportWithProgress(
           ? `${API_BASE_URL}/api/v1/me/workstreams/${workstreamId}/cards/${cardId}/brief/export/${format}?version=${version}`
           : `${API_BASE_URL}/api/v1/me/workstreams/${workstreamId}/cards/${cardId}/brief/export/${format}`;
 
+        // Create abort controller for this request
+        const abortController = new AbortController();
+        abortControllerRef.current = abortController;
+
         // Simulate progress while waiting
-        let progressInterval: NodeJS.Timeout | null = null;
         if (isGamma) {
           let currentProgress = 10;
-          progressInterval = setInterval(() => {
+          progressIntervalRef.current = setInterval(() => {
+            // Stop updating if this export is no longer current
+            if (!isCurrentExport()) {
+              if (progressIntervalRef.current) {
+                clearInterval(progressIntervalRef.current);
+                progressIntervalRef.current = null;
+              }
+              return;
+            }
             currentProgress = Math.min(currentProgress + 5, 85);
             updateState({
               progress: currentProgress,
@@ -203,17 +286,25 @@ export function useExportWithProgress(
           }, POLL_INTERVAL);
         }
 
-        // Make the request
+        // Make the request with abort signal
         const response = await fetch(url, {
           method: 'GET',
           headers: {
             Authorization: `Bearer ${token}`,
           },
+          signal: abortController.signal,
         });
 
         // Clear progress interval
-        if (progressInterval) {
-          clearInterval(progressInterval);
+        if (progressIntervalRef.current) {
+          clearInterval(progressIntervalRef.current);
+          progressIntervalRef.current = null;
+        }
+        
+        // Check if still current after fetch
+        if (!isCurrentExport()) {
+          console.log('[Export] Aborted: export superseded during fetch');
+          return;
         }
 
         if (!response.ok) {
@@ -235,6 +326,12 @@ export function useExportWithProgress(
 
         // Get the blob
         const blob = await response.blob();
+        
+        // Final check before completing
+        if (!isCurrentExport()) {
+          console.log('[Export] Aborted: export superseded during blob processing');
+          return;
+        }
 
         // Extract filename from Content-Disposition header
         const contentDisposition = response.headers.get('content-disposition');
@@ -261,17 +358,26 @@ export function useExportWithProgress(
           filename,
         });
       } catch (error) {
-        updateState({
-          isExporting: false,
-          status: 'error',
-          progress: 0,
-          statusMessage: 'Export failed',
-          errorMessage:
-            error instanceof Error ? error.message : 'An unexpected error occurred',
-        });
+        // Don't show error if it was an intentional abort
+        if (error instanceof Error && error.name === 'AbortError') {
+          console.log('[Export] Request aborted');
+          return;
+        }
+        
+        // Only update state if this export is still current
+        if (isMountedRef.current && exportIdRef.current === currentExportId) {
+          updateState({
+            isExporting: false,
+            status: 'error',
+            progress: 0,
+            statusMessage: 'Export failed',
+            errorMessage:
+              error instanceof Error ? error.message : 'An unexpected error occurred',
+          });
+        }
       }
     },
-    [getToken, updateState]
+    [getToken, updateState, cleanupExport]
   );
 
   /**
@@ -279,6 +385,15 @@ export function useExportWithProgress(
    */
   const exportCard = useCallback(
     async (cardId: string, format: ExportFormat, itemName?: string) => {
+      // Cleanup any previous export in progress
+      cleanupExport();
+      
+      // Generate a unique ID for this export to detect stale updates
+      const currentExportId = ++exportIdRef.current;
+      
+      // Helper to check if this export is still current
+      const isCurrentExport = () => exportIdRef.current === currentExportId && isMountedRef.current;
+      
       // Store for retry
       lastExportRef.current = {
         type: 'card',
@@ -307,12 +422,22 @@ export function useExportWithProgress(
         if (!token) {
           throw new Error('Authentication required');
         }
+        
+        // Check if still current after async token fetch
+        if (!isCurrentExport()) {
+          console.log('[Export] Aborted: card export superseded during token fetch');
+          return;
+        }
 
         updateState({
           status: 'generating',
           progress: 30,
           statusMessage: 'Generating export...',
         });
+
+        // Create abort controller for this request
+        const abortController = new AbortController();
+        abortControllerRef.current = abortController;
 
         const response = await fetch(
           `${API_BASE_URL}/api/v1/cards/${cardId}/export/${format}`,
@@ -321,8 +446,15 @@ export function useExportWithProgress(
             headers: {
               Authorization: `Bearer ${token}`,
             },
+            signal: abortController.signal,
           }
         );
+        
+        // Check if still current after fetch
+        if (!isCurrentExport()) {
+          console.log('[Export] Aborted: card export superseded during fetch');
+          return;
+        }
 
         if (!response.ok) {
           const contentType = response.headers.get('content-type');
@@ -341,6 +473,12 @@ export function useExportWithProgress(
         });
 
         const blob = await response.blob();
+        
+        // Final check before completing
+        if (!isCurrentExport()) {
+          console.log('[Export] Aborted: card export superseded during blob processing');
+          return;
+        }
 
         const contentDisposition = response.headers.get('content-disposition');
         let filename = `card-export.${format}`;
@@ -364,17 +502,26 @@ export function useExportWithProgress(
           filename,
         });
       } catch (error) {
-        updateState({
-          isExporting: false,
-          status: 'error',
-          progress: 0,
-          statusMessage: 'Export failed',
-          errorMessage:
-            error instanceof Error ? error.message : 'An unexpected error occurred',
-        });
+        // Don't show error if it was an intentional abort
+        if (error instanceof Error && error.name === 'AbortError') {
+          console.log('[Export] Card request aborted');
+          return;
+        }
+        
+        // Only update state if this export is still current
+        if (isMountedRef.current && exportIdRef.current === currentExportId) {
+          updateState({
+            isExporting: false,
+            status: 'error',
+            progress: 0,
+            statusMessage: 'Export failed',
+            errorMessage:
+              error instanceof Error ? error.message : 'An unexpected error occurred',
+          });
+        }
       }
     },
-    [getToken, updateState]
+    [getToken, updateState, cleanupExport]
   );
 
   /**

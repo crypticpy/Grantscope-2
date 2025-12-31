@@ -7,10 +7,18 @@ import App from './App.tsx'
 // Handle chunk load failures by auto-reloading the page once
 // This fixes issues when a new deployment changes chunk hashes
 // and users have a cached HTML file referencing old chunks
+// IMPORTANT: Don't reload during exports to prevent data loss
 window.addEventListener('error', (event) => {
   const target = event.target as HTMLElement | null;
   // Check if it's a script load error
   if (target?.tagName === 'SCRIPT') {
+    // Don't reload if we're in the middle of an export (check for export modal)
+    const isExportInProgress = document.querySelector('[role="dialog"][aria-labelledby="export-modal-title"]');
+    if (isExportInProgress) {
+      console.warn('Script load error detected but export in progress, skipping reload');
+      return;
+    }
+    
     const reloadKey = 'chunk-reload-attempted';
     const hasReloaded = sessionStorage.getItem(reloadKey);
     
@@ -23,15 +31,29 @@ window.addEventListener('error', (event) => {
 }, true);
 
 // Handle unhandled promise rejections for dynamic imports
+// IMPORTANT: Only reload for actual chunk/module load failures, NOT regular API errors
 window.addEventListener('unhandledrejection', (event) => {
   const error = event.reason;
-  const isChunkError = 
-    error?.message?.includes('Failed to fetch dynamically imported module') ||
-    error?.message?.includes('Failed to load module script') ||
-    error?.message?.includes('Loading chunk') ||
-    error?.message?.includes('Loading CSS chunk');
+  const errorMessage = error?.message || '';
   
-  if (isChunkError) {
+  // Only treat as chunk error if it's specifically about module/chunk loading
+  // AND it's not a regular network request (which would have different error patterns)
+  const isChunkError = (
+    errorMessage.includes('Failed to fetch dynamically imported module') ||
+    errorMessage.includes('Failed to load module script') ||
+    errorMessage.includes('Loading chunk') ||
+    errorMessage.includes('Loading CSS chunk')
+  ) && (
+    // Additional check: chunk errors typically include file paths with .js or .mjs
+    errorMessage.includes('.js') ||
+    errorMessage.includes('.mjs') ||
+    errorMessage.includes('.css')
+  );
+  
+  // Don't reload if we're in the middle of an export (check for export modal)
+  const isExportInProgress = document.querySelector('[role="dialog"][aria-labelledby="export-modal-title"]');
+  
+  if (isChunkError && !isExportInProgress) {
     const reloadKey = 'chunk-reload-attempted';
     const hasReloaded = sessionStorage.getItem(reloadKey);
     

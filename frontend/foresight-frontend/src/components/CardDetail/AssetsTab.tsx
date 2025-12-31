@@ -15,7 +15,7 @@
  * - Dark mode support
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   FileText,
   Presentation,
