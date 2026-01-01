@@ -4779,7 +4779,6 @@ The City of Austin is committed to transparent and responsible use of AI technol
         """
         from pptx import Presentation
         from pptx.util import Inches, Pt
-        from pptx.dml.color import RgbColor
         from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
         from datetime import datetime
         import tempfile
