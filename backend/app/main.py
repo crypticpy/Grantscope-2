@@ -4711,6 +4711,8 @@ async def start_workstream_scan(
             message=f"Scan started for '{workstream['name']}'. New cards will be added to your inbox."
         )
     
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions as-is
     except Exception as e:
         logger.error(f"Failed to create workstream scan: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to start scan: {str(e)}")
