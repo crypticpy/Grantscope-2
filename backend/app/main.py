@@ -4745,31 +4745,39 @@ async def get_workstream_scan_status(
         raise HTTPException(status_code=403, detail="Not authorized")
     
     # Get scan
-    query = supabase.table("workstream_scans").select("*").eq("workstream_id", workstream_id)
-    
-    if scan_id:
-        query = query.eq("id", scan_id)
-    else:
-        query = query.order("created_at", desc=True).limit(1)
-    
-    result = query.execute()
+    try:
+        query = supabase.table("workstream_scans").select("*").eq("workstream_id", workstream_id)
+        
+        if scan_id:
+            query = query.eq("id", scan_id)
+        else:
+            query = query.order("created_at", desc=True).limit(1)
+        
+        result = query.execute()
+    except Exception as e:
+        logger.error(f"Error querying workstream_scans: {e}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
     
     if not result.data:
         raise HTTPException(status_code=404, detail="No scans found for this workstream")
     
     scan = result.data[0]
     
-    return WorkstreamScanStatusResponse(
-        scan_id=scan["id"],
-        workstream_id=scan["workstream_id"],
-        status=scan["status"],
-        config=scan.get("config"),
-        results=scan.get("results"),
-        started_at=scan.get("started_at"),
-        completed_at=scan.get("completed_at"),
-        error_message=scan.get("error_message"),
-        created_at=scan["created_at"],
-    )
+    try:
+        return WorkstreamScanStatusResponse(
+            scan_id=scan["id"],
+            workstream_id=scan["workstream_id"],
+            status=scan["status"],
+            config=scan.get("config"),
+            results=scan.get("results"),
+            started_at=scan.get("started_at"),
+            completed_at=scan.get("completed_at"),
+            error_message=scan.get("error_message"),
+            created_at=scan.get("created_at", ""),
+        )
+    except Exception as e:
+        logger.error(f"Error building scan status response: {e}, scan data: {scan}")
+        raise HTTPException(status_code=500, detail=f"Response error: {str(e)}")
 
 
 @app.get("/api/v1/me/workstreams/{workstream_id}/scan/history", response_model=WorkstreamScanHistoryResponse)
