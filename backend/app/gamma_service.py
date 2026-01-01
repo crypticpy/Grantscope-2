@@ -1611,7 +1611,7 @@ Create a presentation that a City Manager would proudly share with Council."""
         
         request = {
             "inputText": input_text,
-            "textMode": "preserve",  # Preserve our carefully structured content
+            "textMode": "condense",  # Let Gamma optimize content for slides
             "format": "presentation",
             "numCards": num_cards,
             "cardSplit": "inputTextBreaks",  # Respect our section breaks
@@ -1653,12 +1653,10 @@ Create a presentation that a City Manager would proudly share with Council."""
             }
         }
         
-        # Add theme - use Oasis for clean professional look, or custom COA theme if configured
+        # Add theme if configured (theme IDs are UUIDs from Gamma workspace)
         if GAMMA_THEME_ID:
             request["themeId"] = GAMMA_THEME_ID
-        else:
-            # Default to Oasis theme for professional government presentations
-            request["themeId"] = "Oasis"
+        # If no theme configured, Gamma will use its default theme
         
         # Add folder if configured
         if GAMMA_FOLDER_ID:
