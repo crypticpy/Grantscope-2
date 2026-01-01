@@ -367,18 +367,16 @@ class WorkstreamScanService:
         """Fetch news articles."""
         sources = []
         try:
-            for query in queries[:3]:
-                articles = await fetch_news_articles(query, max_results=limit // 3)
-                for article in articles:
-                    sources.append(RawSource(
-                        url=article.url,
-                        title=article.title,
-                        content=article.content or article.description or "",
-                        source_name=article.source or "News",
-                        published_at=article.published_at,
-                    ))
-                if len(sources) >= limit:
-                    break
+            # fetch_news_articles expects topics as a list
+            articles = await fetch_news_articles(topics=queries[:3], max_articles=limit)
+            for article in articles:
+                sources.append(RawSource(
+                    url=article.url,
+                    title=article.title,
+                    content=article.content or article.description or "",
+                    source_name=article.source or "News",
+                    published_at=article.published_at,
+                ))
         except Exception as e:
             logger.warning(f"News fetch error: {e}")
         return sources[:limit]
@@ -387,18 +385,16 @@ class WorkstreamScanService:
         """Fetch tech blog articles."""
         sources = []
         try:
-            for query in queries[:3]:
-                articles = await fetch_tech_blog_articles(query, max_results=limit // 3)
-                for article in articles:
-                    sources.append(RawSource(
-                        url=article.url,
-                        title=article.title,
-                        content=article.content or article.summary or "",
-                        source_name=article.source or "Tech Blog",
-                        published_at=article.published_at,
-                    ))
-                if len(sources) >= limit:
-                    break
+            # fetch_tech_blog_articles expects topics as a list
+            articles = await fetch_tech_blog_articles(topics=queries[:3], max_articles=limit)
+            for article in articles:
+                sources.append(RawSource(
+                    url=article.url,
+                    title=article.title,
+                    content=article.content or article.summary or "",
+                    source_name=article.source or "Tech Blog",
+                    published_at=article.published_at,
+                ))
         except Exception as e:
             logger.warning(f"Tech blog fetch error: {e}")
         return sources[:limit]
@@ -408,8 +404,9 @@ class WorkstreamScanService:
         sources = []
         try:
             for query in queries[:2]:
-                papers = await fetch_academic_papers(query, max_results=limit // 2)
-                for paper in papers:
+                result = await fetch_academic_papers(query=query, max_results=limit // 2)
+                # fetch_academic_papers returns AcademicFetchResult, access .papers
+                for paper in result.papers:
                     raw = convert_academic_to_raw(paper)
                     sources.append(raw)
                 if len(sources) >= limit:
