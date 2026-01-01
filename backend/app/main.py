@@ -4590,10 +4590,10 @@ class WorkstreamScanStatusResponse(BaseModel):
     status: str
     config: Optional[Dict[str, Any]] = None
     results: Optional[Dict[str, Any]] = None
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
     error_message: Optional[str] = None
-    created_at: datetime
+    created_at: str
 
 
 class WorkstreamScanHistoryResponse(BaseModel):
