@@ -341,16 +341,15 @@ class ForesightWorker:
 
     async def _process_one_workstream_scan(self) -> bool:
         """Process one queued workstream scan job."""
-        scans = (
-            supabase.table("workstream_scans")
-            .select("id,workstream_id,user_id,config,status")
-            .eq("status", "queued")
-            .order("created_at", desc=False)
-            .limit(1)
-            .execute()
-            .data
-            or []
-        )
+        try:
+            result = supabase.table("workstream_scans").select("id,workstream_id,user_id,config,status").eq("status", "queued").order("created_at", desc=False).limit(1).execute()
+            scans = result.data or []
+            if scans:
+                logger.info(f"Found {len(scans)} queued workstream scan(s): {[s['id'] for s in scans]}")
+        except Exception as e:
+            logger.error(f"Error querying workstream_scans: {e}")
+            return False
+        
         if not scans:
             return False
 
@@ -371,6 +370,13 @@ class ForesightWorker:
             return False
 
         config = scan.get("config") or {}
+        # Parse config if it's a JSON string (Supabase behavior)
+        if isinstance(config, str):
+            import json
+            try:
+                config = json.loads(config)
+            except json.JSONDecodeError:
+                config = {}
 
         logger.info(
             "Processing workstream scan",
