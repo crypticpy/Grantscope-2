@@ -365,7 +365,7 @@ const WorkstreamKanban: React.FC = () => {
 
   // Workstream scan state
   const [scanning, setScanning] = useState(false);
-  const [scanStatus, setScanStatus] = useState<WorkstreamScanStatusResponse | null>(null);
+  const [_scanStatus, setScanStatus] = useState<WorkstreamScanStatusResponse | null>(null);
   const scanPollRef = useRef<NodeJS.Timeout | null>(null);
 
   // Error state
@@ -1300,10 +1300,40 @@ const WorkstreamKanban: React.FC = () => {
       });
       showToast('info', response.message);
 
+      // Track polling attempts for timeout (10 min max = 200 polls at 3s each)
+      const MAX_POLL_ATTEMPTS = 200;
+      let pollAttempts = 0;
+      const scanId = response.scan_id;
+
       // Start polling for scan completion
       const pollScanStatus = async () => {
+        pollAttempts++;
+
+        // Timeout after max attempts
+        if (pollAttempts > MAX_POLL_ATTEMPTS) {
+          setScanning(false);
+          showToast('error', 'Scan timed out. Check back later for results.');
+          if (scanPollRef.current) {
+            clearInterval(scanPollRef.current);
+            scanPollRef.current = null;
+          }
+          return;
+        }
+
         try {
-          const status = await getWorkstreamScanStatus(token, id, response.scan_id);
+          // Re-fetch token on each poll to handle expiration
+          const freshToken = await getAuthToken();
+          if (!freshToken) {
+            setScanning(false);
+            showToast('error', 'Session expired. Please refresh the page.');
+            if (scanPollRef.current) {
+              clearInterval(scanPollRef.current);
+              scanPollRef.current = null;
+            }
+            return;
+          }
+
+          const status = await getWorkstreamScanStatus(freshToken, id, scanId);
           setScanStatus(status);
 
           if (status.status === 'completed') {
@@ -1333,6 +1363,7 @@ const WorkstreamKanban: React.FC = () => {
           }
         } catch (err) {
           console.error('Error polling scan status:', err);
+          // Don't stop polling on transient errors, but log them
         }
       };
 
@@ -1346,6 +1377,8 @@ const WorkstreamKanban: React.FC = () => {
       const message = err instanceof Error ? err.message : 'Failed to start scan';
       if (message.includes('Rate limit')) {
         showToast('error', 'Scan limit reached (2 per day). Try again tomorrow.');
+      } else if (message.includes('already in progress')) {
+        showToast('error', 'A scan is already running. Please wait for it to complete.');
       } else if (message.includes('keywords or pillars')) {
         showToast('error', 'Add keywords or pillars to this workstream to enable scanning.');
       } else {

@@ -4616,6 +4616,7 @@ async def start_workstream_scan(
     the global pool and auto-added to the workstream inbox.
     
     Rate limited to 2 scans per workstream per day.
+    Only one scan can be active (queued/running) per workstream at a time.
     
     Args:
         workstream_id: UUID of the workstream
@@ -4627,9 +4628,16 @@ async def start_workstream_scan(
     Raises:
         HTTPException 404: Workstream not found
         HTTPException 403: Not authorized
+        HTTPException 409: Scan already in progress
         HTTPException 429: Rate limit exceeded (2 scans/day)
     """
     user_id = current_user["id"]
+    
+    # Validate UUID format
+    try:
+        uuid.UUID(workstream_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid workstream ID format")
     
     # Verify workstream belongs to user
     ws_response = supabase.table("workstreams").select(
@@ -4643,20 +4651,6 @@ async def start_workstream_scan(
     if workstream["user_id"] != user_id:
         raise HTTPException(status_code=403, detail="Not authorized to access this workstream")
     
-    # Check rate limit: 2 scans per workstream per day
-    rate_check = supabase.table("workstream_scans").select("id").eq(
-        "workstream_id", workstream_id
-    ).gte(
-        "created_at", (datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)).isoformat()
-    ).execute()
-    
-    scans_today = len(rate_check.data) if rate_check.data else 0
-    if scans_today >= 2:
-        raise HTTPException(
-            status_code=429,
-            detail="Rate limit exceeded: Maximum 2 scans per workstream per day. Try again tomorrow."
-        )
-    
     # Validate workstream has keywords or pillars to scan
     keywords = workstream.get("keywords") or []
     pillar_ids = workstream.get("pillar_ids") or []
@@ -4667,8 +4661,7 @@ async def start_workstream_scan(
             detail="Workstream needs keywords or pillars configured for scanning. Edit the workstream to add search criteria."
         )
     
-    # Create scan record
-    scan_id = str(uuid.uuid4())
+    # Build config for the scan
     config = {
         "workstream_id": workstream_id,
         "user_id": user_id,
@@ -4678,17 +4671,36 @@ async def start_workstream_scan(
     }
     
     try:
-        result = supabase.table("workstream_scans").insert({
-            "id": scan_id,
-            "workstream_id": workstream_id,
-            "user_id": user_id,
-            "status": "queued",
-            "config": config,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }).execute()
+        # Use atomic database function for rate limit + concurrency check
+        import json
+        result = supabase.rpc(
+            "create_workstream_scan_atomic",
+            {
+                "p_workstream_id": workstream_id,
+                "p_user_id": user_id,
+                "p_config": json.dumps(config),
+            }
+        ).execute()
         
-        if not result.data:
-            raise HTTPException(status_code=500, detail="Failed to create scan job")
+        scan_id = result.data
+        
+        if not scan_id:
+            # Determine which check failed for better error message
+            active_check = supabase.rpc(
+                "has_active_workstream_scan",
+                {"p_workstream_id": workstream_id}
+            ).execute()
+            
+            if active_check.data:
+                raise HTTPException(
+                    status_code=409,
+                    detail="A scan is already in progress for this workstream. Please wait for it to complete."
+                )
+            else:
+                raise HTTPException(
+                    status_code=429,
+                    detail="Rate limit exceeded: Maximum 2 scans per workstream per day. Try again tomorrow."
+                )
         
         logger.info(f"Created workstream scan {scan_id} for workstream {workstream_id}")
         

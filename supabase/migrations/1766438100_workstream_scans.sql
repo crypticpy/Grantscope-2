@@ -9,7 +9,7 @@
 CREATE TABLE IF NOT EXISTS workstream_scans (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workstream_id UUID NOT NULL REFERENCES workstreams(id) ON DELETE CASCADE,
-    user_id UUID NOT NULL,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     
     -- Job status
     status TEXT NOT NULL DEFAULT 'queued' 
@@ -86,6 +86,8 @@ CREATE POLICY "Service role full access to workstream_scans"
 -- Helper function: Check rate limit (2 scans per workstream per day)
 -- ============================================================================
 
+-- Atomic rate limit check (2 scans per workstream per day)
+-- Returns TRUE if under limit, FALSE if limit reached
 CREATE OR REPLACE FUNCTION check_workstream_scan_rate_limit(
     p_workstream_id UUID
 ) RETURNS BOOLEAN AS $$
@@ -101,7 +103,72 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Check if workstream has an active (queued or running) scan
+-- Returns TRUE if there's an active scan, FALSE otherwise
+CREATE OR REPLACE FUNCTION has_active_workstream_scan(
+    p_workstream_id UUID
+) RETURNS BOOLEAN AS $$
+DECLARE
+    active_count INTEGER;
+BEGIN
+    SELECT COUNT(*) INTO active_count
+    FROM workstream_scans
+    WHERE workstream_id = p_workstream_id
+      AND status IN ('queued', 'running');
+    
+    RETURN active_count > 0;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Atomic scan creation with rate limit and concurrency checks
+-- Returns the new scan ID if successful, NULL if blocked
+CREATE OR REPLACE FUNCTION create_workstream_scan_atomic(
+    p_workstream_id UUID,
+    p_user_id UUID,
+    p_config JSONB
+) RETURNS UUID AS $$
+DECLARE
+    new_scan_id UUID;
+    daily_count INTEGER;
+    active_count INTEGER;
+BEGIN
+    -- Lock the workstream row to prevent race conditions
+    PERFORM id FROM workstreams WHERE id = p_workstream_id FOR UPDATE;
+    
+    -- Check for active scans
+    SELECT COUNT(*) INTO active_count
+    FROM workstream_scans
+    WHERE workstream_id = p_workstream_id
+      AND status IN ('queued', 'running');
+    
+    IF active_count > 0 THEN
+        RETURN NULL;  -- Already has active scan
+    END IF;
+    
+    -- Check daily rate limit
+    SELECT COUNT(*) INTO daily_count
+    FROM workstream_scans
+    WHERE workstream_id = p_workstream_id
+      AND created_at > NOW() - INTERVAL '24 hours';
+    
+    IF daily_count >= 2 THEN
+        RETURN NULL;  -- Rate limit exceeded
+    END IF;
+    
+    -- Create the scan
+    INSERT INTO workstream_scans (workstream_id, user_id, status, config, created_at)
+    VALUES (p_workstream_id, p_user_id, 'queued', p_config, NOW())
+    RETURNING id INTO new_scan_id;
+    
+    RETURN new_scan_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 COMMENT ON TABLE workstream_scans IS 
     'Tracks workstream-specific targeted discovery scans';
 COMMENT ON FUNCTION check_workstream_scan_rate_limit IS 
     'Returns TRUE if workstream has fewer than 2 scans in last 24 hours';
+COMMENT ON FUNCTION has_active_workstream_scan IS 
+    'Returns TRUE if workstream has a queued or running scan';
+COMMENT ON FUNCTION create_workstream_scan_atomic IS 
+    'Atomically creates a scan with rate limit and concurrency checks. Returns NULL if blocked.';

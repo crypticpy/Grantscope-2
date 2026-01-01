@@ -49,63 +49,13 @@ from .source_fetchers import (
 
 logger = logging.getLogger(__name__)
 
-
-# Pillar code to name mapping for query generation
-PILLAR_NAMES = {
-    "CH": "Community Health",
-    "MC": "Mobility Infrastructure", 
-    "HS": "Housing Stability",
-    "EC": "Economic Development",
-    "ES": "Environmental Sustainability",
-    "CE": "Cultural Entertainment",
-}
-
-# Stage number to ID mapping
-STAGE_NUMBER_TO_ID = {
-    1: "1_concept",
-    2: "2_exploring",
-    3: "3_pilot",
-    4: "4_proof",
-    5: "5_implementing",
-    6: "6_scaling",
-    7: "7_mature",
-    8: "8_declining",
-}
-
-# Pillar code mapping for database compatibility
-PILLAR_CODE_MAP = {
-    "CH": "CH",
-    "MC": "MC",
-    "EW": "EC",
-    "HG": "EC",
-    "HH": "HS",
-    "PS": "CH",
-    "ES": "ES",
-    "CE": "CE",
-}
-
-
-def convert_pillar_id(ai_pillar: str) -> Optional[str]:
-    """Convert AI pillar code to database pillar ID."""
-    if not ai_pillar:
-        return None
-    return PILLAR_CODE_MAP.get(ai_pillar, ai_pillar)
-
-
-def convert_goal_id(ai_goal: str) -> str:
-    """Convert AI goal format (CH.1) to database format (CH-01)."""
-    if not ai_goal or '.' not in ai_goal:
-        return ai_goal
-    parts = ai_goal.split('.')
-    if len(parts) != 2:
-        return ai_goal
-    pillar = parts[0]
-    try:
-        number = int(parts[1])
-        mapped_pillar = PILLAR_CODE_MAP.get(pillar, pillar)
-        return f"{mapped_pillar}-{number:02d}"
-    except ValueError:
-        return ai_goal
+# Import shared taxonomy constants
+from .taxonomy import (
+    PILLAR_NAMES,
+    STAGE_NUMBER_TO_ID,
+    convert_pillar_id,
+    convert_goal_id,
+)
 
 
 @dataclass
