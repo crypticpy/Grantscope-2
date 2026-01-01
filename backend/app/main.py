@@ -4671,18 +4671,33 @@ async def start_workstream_scan(
     }
     
     try:
-        # Use atomic database function for rate limit + concurrency check
         import json
-        result = supabase.rpc(
-            "create_workstream_scan_atomic",
-            {
-                "p_workstream_id": workstream_id,
-                "p_user_id": user_id,
-                "p_config": json.dumps(config),
-            }
-        ).execute()
+        import os
         
-        scan_id = result.data
+        # Check if rate limiting is disabled (for testing)
+        skip_rate_limit = os.getenv("DISABLE_SCAN_RATE_LIMIT", "").lower() in ("true", "1", "yes")
+        
+        if skip_rate_limit:
+            # Direct insert without rate limit check
+            scan_record = {
+                "workstream_id": workstream_id,
+                "user_id": user_id,
+                "status": "queued",
+                "config": config,
+            }
+            result = supabase.table("workstream_scans").insert(scan_record).execute()
+            scan_id = result.data[0]["id"] if result.data else None
+        else:
+            # Use atomic database function for rate limit + concurrency check
+            result = supabase.rpc(
+                "create_workstream_scan_atomic",
+                {
+                    "p_workstream_id": workstream_id,
+                    "p_user_id": user_id,
+                    "p_config": json.dumps(config),
+                }
+            ).execute()
+            scan_id = result.data
         
         if not scan_id:
             # Determine which check failed for better error message
