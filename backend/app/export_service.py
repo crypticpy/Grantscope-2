@@ -4820,7 +4820,17 @@ The City of Austin is committed to transparent and responsible use of AI technol
             
             self._add_portfolio_dashboard_slide(prs, briefs, comparison_chart_path, pillar_chart_path)
             
-            # ===== 3. EXECUTIVE OVERVIEW =====
+            # ===== 3. WHY THIS MATTERS NOW =====
+            urgency = getattr(synthesis, 'urgency_statement', '') or f"These {len(briefs)} trends represent critical opportunities and challenges. Early action positions Austin as a leader; delay risks falling behind peer cities."
+            urgency_content = f"{urgency}\n\n**The Window of Opportunity**\n\nCities that move first on emerging trends gain competitive advantage in talent attraction, federal funding, and citizen satisfaction."
+            self._add_smart_content_slide(
+                prs,
+                title="Why This Matters Now",
+                content=urgency_content,
+                max_chars=1200
+            )
+            
+            # ===== 4. EXECUTIVE OVERVIEW =====
             overview_content = synthesis.executive_overview if synthesis.executive_overview else "Portfolio synthesis in progress..."
             self._add_smart_content_slide(
                 prs,
@@ -4829,7 +4839,7 @@ The City of Austin is committed to transparent and responsible use of AI technol
                 max_chars=1400
             )
             
-            # ===== 4. VISUAL PRIORITY MATRIX =====
+            # ===== 5. VISUAL PRIORITY MATRIX =====
             matrix_chart_path = self._generate_priority_matrix_chart(briefs, synthesis)
             if matrix_chart_path:
                 temp_files_to_cleanup.append(matrix_chart_path)
@@ -4880,7 +4890,32 @@ The City of Austin is committed to transparent and responsible use of AI technol
                     max_chars=1500
                 )
             
-            # ===== 5. PER-CARD DEEP DIVES =====
+            # ===== 6. IMPLEMENTATION GUIDANCE =====
+            impl = getattr(synthesis, 'implementation_guidance', {}) or {}
+            impl_lines = []
+            if impl.get("pilot_now"):
+                impl_lines.append(f"🚀 **Ready to Pilot**: {', '.join(impl['pilot_now'])}")
+            if impl.get("investigate_further"):
+                impl_lines.append(f"🔍 **Investigate Further**: {', '.join(impl['investigate_further'])}")
+            if impl.get("meet_with_vendors"):
+                impl_lines.append(f"🤝 **Meet with Vendors**: {', '.join(impl['meet_with_vendors'])}")
+            if impl.get("policy_review"):
+                impl_lines.append(f"📋 **Policy Review Needed**: {', '.join(impl['policy_review'])}")
+            if impl.get("staff_training"):
+                impl_lines.append(f"👥 **Staff Training Focus**: {', '.join(impl['staff_training'])}")
+            if impl.get("budget_planning"):
+                impl_lines.append(f"💰 **Budget Planning**: {', '.join(impl['budget_planning'])}")
+            
+            if impl_lines:
+                impl_content = "What should Austin DO with each trend?\n\n" + "\n".join(impl_lines)
+                self._add_smart_content_slide(
+                    prs,
+                    title="Implementation Guidance",
+                    content=impl_content,
+                    max_chars=1400
+                )
+            
+            # ===== 7. PER-CARD DEEP DIVES =====
             for i, brief in enumerate(briefs, 1):
                 # Generate score chart for this card if scores exist
                 card_chart_path = None
@@ -4910,7 +4945,7 @@ The City of Austin is committed to transparent and responsible use of AI technol
                 
                 self._add_card_deep_dive_slides(prs, brief, i, card_chart_path)
             
-            # ===== 6. CROSS-CUTTING THEMES =====
+            # ===== 8. CROSS-CUTTING THEMES =====
             themes_content = "**Common Patterns Across Trends**\n"
             themes_content += "\n".join(f"• {theme}" for theme in (synthesis.key_themes or [])) or "• Analysis in progress"
             themes_content += "\n\n**Strategic Connections**\n"
@@ -4923,31 +4958,58 @@ The City of Austin is committed to transparent and responsible use of AI technol
                 max_chars=1400
             )
             
-            # ===== 7. RECOMMENDED ACTIONS =====
-            actions_content = ""
-            for action in (synthesis.recommended_actions or [])[:6]:
-                action_text = action.get("action", "")
-                owner = action.get("owner", "TBD")
-                timeline = action.get("timeline", "TBD")
-                related_cards = action.get("cards", [])
+            # ===== 9. 90-DAY ACTION PLAN =====
+            ninety_day = getattr(synthesis, 'ninety_day_actions', []) or []
+            if ninety_day:
+                actions_content = "What Austin should do in the next 90 days:\n\n"
+                for action in ninety_day[:5]:
+                    action_text = action.get("action", "")
+                    owner = action.get("owner", "TBD")
+                    by_when = action.get("by_when", "90 days")
+                    metric = action.get("success_metric", "")
+                    actions_content += f"✓ **{action_text}**\n"
+                    actions_content += f"   Owner: {owner} | By: {by_when}"
+                    if metric:
+                        actions_content += f"\n   Success: {metric}"
+                    actions_content += "\n\n"
+            else:
+                # Fall back to recommended_actions
+                actions_content = ""
+                for action in (synthesis.recommended_actions or [])[:6]:
+                    action_text = action.get("action", "")
+                    owner = action.get("owner", "TBD")
+                    timeline = action.get("timeline", "TBD")
+                    related_cards = action.get("cards", [])
+                    
+                    actions_content += f"✓ **{action_text}**\n"
+                    actions_content += f"   Owner: {owner} | Timeline: {timeline}"
+                    if related_cards:
+                        actions_content += f" | Related: {', '.join(related_cards[:2])}"
+                    actions_content += "\n\n"
                 
-                actions_content += f"✓ **{action_text}**\n"
-                actions_content += f"   Owner: {owner} | Timeline: {timeline}"
-                if related_cards:
-                    actions_content += f" | Related: {', '.join(related_cards[:2])}"
-                actions_content += "\n\n"
-            
-            if not actions_content:
-                actions_content = "Recommended actions to be determined based on leadership review."
+                if not actions_content:
+                    actions_content = "Action plan to be developed based on leadership priorities."
             
             self._add_smart_content_slide(
                 prs,
-                title="Recommended Next Steps",
+                title="90-Day Action Plan",
                 content=actions_content,
                 max_chars=1400
             )
             
-            # ===== 8. AI DISCLOSURE =====
+            # ===== 10. RISKS & OPPORTUNITIES =====
+            risk_text = getattr(synthesis, 'risk_summary', '') or "Delayed action on these trends could result in Austin falling behind peer cities, missing federal funding windows, and losing competitive advantage."
+            opp_text = getattr(synthesis, 'opportunity_summary', '') or "Early action positions Austin as a national leader, attracts innovation investment, and delivers improved services to residents."
+            
+            risk_opp_content = f"⚠️ **If Austin Doesn't Act**\n{risk_text}\n\n✨ **If Austin Leads**\n{opp_text}"
+            self._add_smart_content_slide(
+                prs,
+                title="Risks & Opportunities",
+                content=risk_opp_content,
+                max_chars=1400
+            )
+            
+            # ===== 11. AI DISCLOSURE =====
             self._add_ai_disclosure_slide(prs)
             
             # Save to temp file

@@ -1105,6 +1105,18 @@ class PortfolioSynthesisData:
     priority_matrix: Dict[str, Any]
     cross_cutting_insights: List[str]
     recommended_actions: List[Dict[str, str]]
+    # Enhanced fields for executive presentations
+    urgency_statement: str = ""
+    implementation_guidance: Dict[str, List[str]] = None
+    ninety_day_actions: List[Dict[str, str]] = None
+    risk_summary: str = ""
+    opportunity_summary: str = ""
+    
+    def __post_init__(self):
+        if self.implementation_guidance is None:
+            self.implementation_guidance = {}
+        if self.ninety_day_actions is None:
+            self.ninety_day_actions = []
 
 
 def calculate_slides_per_card(card_count: int) -> int:
@@ -1192,17 +1204,19 @@ class GammaPortfolioService:
                 synthesis=synthesis
             )
             
-            # Calculate slide count
-            slides_per_card = calculate_slides_per_card(len(cards))
-            total_slides = 6 + (len(cards) * slides_per_card)  # 6 fixed + per-card
+            # Calculate slide count: 10 fixed slides + 3 per card
+            fixed_slides = 10  # Title, Dashboard, Urgency, Overview, Priority, Implementation, Themes, 90-day, Risks, Disclosure
+            slides_per_card = 3  # Overview, What's Happening, Austin Implications
+            total_slides = fixed_slides + (len(cards) * slides_per_card)
             
             # Build request
             request_body = self._build_portfolio_request(
                 input_text=portfolio_content,
-                num_cards=min(total_slides, 55),
+                num_cards=min(total_slides, 60),  # Gamma supports up to 60 for Pro
                 include_images=include_images,
                 export_format=export_format,
-                card_count=len(cards)
+                card_count=len(cards),
+                workstream_name=workstream_name
             )
             
             logger.info(f"Generating portfolio presentation: {workstream_name} ({len(cards)} cards, ~{total_slides} slides)")
@@ -1274,133 +1288,264 @@ class GammaPortfolioService:
         """
         Build Gamma-optimized content for portfolio presentation.
         
-        Structure:
+        Enhanced structure (~10 fixed slides + 3 per card):
         1. Title slide
-        2. Executive overview
-        3. Priority matrix
-        4. Per-card sections (2-3 slides each)
-        5. Cross-cutting themes
-        6. Recommended actions
-        7. AI disclosure
+        2. Portfolio at a Glance (dashboard metrics)
+        3. Why This Matters Now (urgency hook)
+        4. Executive Overview
+        5. Priority Matrix
+        6. Implementation Guidance
+        7-N. Per-card deep dives (3 slides each)
+        N+1. Cross-cutting themes
+        N+2. 90-Day Action Plan
+        N+3. Risks & Opportunities
+        N+4. AI Disclosure
         """
         sections = []
         
-        # 1. Title slide
+        # Collect pillar info
         pillar_icons = []
+        pillar_names_used = []
         for card in cards:
-            pillar_def = PILLAR_DEFINITIONS.get(card.pillar_id.upper(), {})
+            pillar_def = PILLAR_DEFINITIONS.get(card.pillar_id.upper() if card.pillar_id else "", {})
             icon = pillar_def.get("icon", "🏛️")
+            name = pillar_def.get("name", card.pillar_id or "Strategic")
             if icon not in pillar_icons:
                 pillar_icons.append(icon)
+                pillar_names_used.append(name)
         
+        # Calculate metrics for dashboard
+        avg_impact = sum(c.impact_score for c in cards if c.impact_score) // max(len(cards), 1)
+        avg_relevance = sum(c.relevance_score for c in cards if c.relevance_score) // max(len(cards), 1)
+        horizons_covered = sorted(set(c.horizon for c in cards if c.horizon))
+        
+        # ===== SLIDE 1: Title =====
         title_section = f"""# {workstream_name}
 
 **Strategic Intelligence Portfolio**
 
-{' '.join(pillar_icons)} | {len(cards)} Strategic Trends
+{' '.join(pillar_icons)} | {len(cards)} Strategic Trends | {', '.join(pillar_names_used)}
 
 City of Austin | FORESIGHT Platform
 {datetime.now().strftime('%B %Y')}"""
         sections.append(title_section)
         
-        # 2. Executive overview
+        # ===== SLIDE 2: Portfolio at a Glance =====
+        dashboard_section = f"""# Portfolio at a Glance
+
+**{len(cards)}** Strategic Trends Analyzed
+
+**{len(pillar_names_used)}** Strategic Pillars: {', '.join(pillar_names_used)}
+
+**{', '.join(horizons_covered) if horizons_covered else 'Mixed'}** Time Horizons
+
+**{avg_impact}/100** Average Impact Score | **{avg_relevance}/100** Average Relevance
+
+This portfolio synthesizes deep research across multiple emerging trends to provide actionable strategic guidance."""
+        sections.append(dashboard_section)
+        
+        # ===== SLIDE 3: Why This Matters Now =====
+        urgency = synthesis.urgency_statement if synthesis.urgency_statement else f"These {len(cards)} trends represent critical opportunities and challenges that will shape Austin's future. Early action positions the city as a leader; delay risks falling behind peer cities."
+        
+        urgency_section = f"""# Why This Matters Now
+
+{urgency}
+
+**The Window of Opportunity**
+
+Cities that move first on emerging trends gain competitive advantage in talent attraction, federal funding, and citizen satisfaction. This portfolio identifies where Austin should act decisively."""
+        sections.append(urgency_section)
+        
+        # ===== SLIDE 4: Executive Overview =====
         overview_section = f"""# Executive Overview
 
 {synthesis.executive_overview}"""
         sections.append(overview_section)
         
-        # 3. Priority matrix
-        matrix = synthesis.priority_matrix
+        # ===== SLIDE 5: Priority Matrix =====
+        matrix = synthesis.priority_matrix or {}
         urgent = matrix.get("high_impact_urgent", [])
         strategic = matrix.get("high_impact_strategic", [])
         monitor = matrix.get("monitor", [])
         
-        priority_section = f"""# Strategic Priorities
+        priority_section = f"""# Strategic Priority Matrix
 
-**🔴 High Impact - Urgent Action**
-{chr(10).join(f'- {item}' for item in urgent) if urgent else '- None identified'}
+**🔴 HIGH IMPACT - ACT NOW**
+{chr(10).join(f'• {item}' for item in urgent) if urgent else '• Assessment in progress'}
 
-**🟡 High Impact - Strategic Planning**
-{chr(10).join(f'- {item}' for item in strategic) if strategic else '- None identified'}
+**🟡 HIGH IMPACT - PLAN STRATEGICALLY**
+{chr(10).join(f'• {item}' for item in strategic) if strategic else '• Assessment in progress'}
 
-**🟢 Monitor & Evaluate**
-{chr(10).join(f'- {item}' for item in monitor) if monitor else '- None identified'}
+**🟢 MONITOR & EVALUATE**
+{chr(10).join(f'• {item}' for item in monitor) if monitor else '• Assessment in progress'}
 
-*{matrix.get('rationale', '')}*"""
+*{matrix.get('rationale', 'Prioritization based on impact potential, implementation readiness, and resource requirements.')}*"""
         sections.append(priority_section)
         
-        # 4. Per-card sections
-        slides_per_card = calculate_slides_per_card(len(cards))
+        # ===== SLIDE 6: Implementation Guidance =====
+        impl = synthesis.implementation_guidance or {}
+        pilot_now = impl.get("pilot_now", [])
+        investigate = impl.get("investigate_further", [])
+        vendors = impl.get("meet_with_vendors", [])
+        policy = impl.get("policy_review", [])
+        training = impl.get("staff_training", [])
+        budget = impl.get("budget_planning", [])
         
+        impl_lines = []
+        if pilot_now:
+            impl_lines.append(f"**🚀 Ready to Pilot**: {', '.join(pilot_now)}")
+        if investigate:
+            impl_lines.append(f"**🔍 Investigate Further**: {', '.join(investigate)}")
+        if vendors:
+            impl_lines.append(f"**🤝 Meet with Vendors**: {', '.join(vendors)}")
+        if policy:
+            impl_lines.append(f"**📋 Policy Review Needed**: {', '.join(policy)}")
+        if training:
+            impl_lines.append(f"**👥 Staff Training Focus**: {', '.join(training)}")
+        if budget:
+            impl_lines.append(f"**💰 Budget Planning**: {', '.join(budget)}")
+        
+        impl_content = chr(10).join(impl_lines) if impl_lines else "Implementation guidance will be refined based on leadership priorities."
+        
+        impl_section = f"""# Implementation Guidance
+
+What should Austin DO with each trend?
+
+{impl_content}
+
+*Each recommendation reflects the trend's maturity, Austin's readiness, and resource requirements.*"""
+        sections.append(impl_section)
+        
+        # ===== SLIDES 7+: Per-card deep dives (3 slides each) =====
         for i, card in enumerate(cards, 1):
-            pillar_def = PILLAR_DEFINITIONS.get(card.pillar_id.upper(), {})
-            pillar_name = pillar_def.get("name", card.pillar_id)
+            pillar_def = PILLAR_DEFINITIONS.get(card.pillar_id.upper() if card.pillar_id else "", {})
+            pillar_name = pillar_def.get("name", card.pillar_id or "Strategic")
             pillar_icon = pillar_def.get("icon", "🏛️")
             
             horizon_def = HORIZON_DEFINITIONS.get(card.horizon.upper() if card.horizon else "H2", {})
-            horizon_name = horizon_def.get("name", card.horizon)
+            horizon_name = horizon_def.get("name", card.horizon or "Medium-term")
             horizon_icon = horizon_def.get("icon", "📅")
             
-            # Card context slide
-            context_section = f"""# {i}. {card.card_name}
+            stage_match = re.search(r'(\d+)', str(card.stage_id)) if card.stage_id else None
+            stage_num = int(stage_match.group(1)) if stage_match else None
+            stage_def = STAGE_DEFINITIONS.get(stage_num, {}) if stage_num else {}
+            stage_name = stage_def.get("name", "Emerging")
+            
+            # Build score line only if we have scores
+            score_parts = []
+            if card.impact_score and card.impact_score > 0:
+                score_parts.append(f"Impact: {card.impact_score}/100")
+            if card.relevance_score and card.relevance_score > 0:
+                score_parts.append(f"Relevance: {card.relevance_score}/100")
+            score_line = " | ".join(score_parts) if score_parts else ""
+            
+            # CARD SLIDE 1: Overview
+            card_overview = f"""# {i}. {card.card_name}
 
-{pillar_icon} **{pillar_name}** | {horizon_icon} **{horizon_name}**
+{pillar_icon} **{pillar_name}** | {horizon_icon} **{horizon_name}** | 📊 **{stage_name}**
 
-**Impact Score**: {card.impact_score}/100 | **Relevance**: {card.relevance_score}/100
+{f'**{score_line}**' if score_line else ''}
 
 {card.brief_summary}"""
-            sections.append(context_section)
+            sections.append(card_overview)
             
-            # Key insights slide (if we have room)
-            if slides_per_card >= 3:
-                # Extract first ~500 chars of content for key insight
-                content_preview = card.brief_content[:500] if card.brief_content else ""
-                if content_preview:
-                    insight_section = f"""# {card.card_name}: Key Insights
+            # CARD SLIDE 2: What's Happening
+            # Extract key developments from brief content
+            content_preview = card.brief_content[:800] if card.brief_content else card.brief_summary
+            
+            developments_section = f"""# {card.card_name}: What's Happening
 
-{content_preview}..."""
-                    sections.append(insight_section)
+{content_preview}
+
+**Key Developments**: This trend is gaining momentum across multiple sectors, with implications for city services, infrastructure, and resident experience."""
+            sections.append(developments_section)
+            
+            # CARD SLIDE 3: Austin Implications
+            austin_section = f"""# {card.card_name}: Austin Implications
+
+**Strategic Considerations for Austin**
+
+• How does this trend align with Austin's strategic priorities?
+• What peer cities are already moving on this?
+• What resources would Austin need to act?
+• What are the risks of inaction?
+
+*Detailed analysis and recommendations available in the full executive brief.*"""
+            sections.append(austin_section)
         
-        # 5. Cross-cutting themes
-        themes_content = "\n".join(f"- {theme}" for theme in synthesis.key_themes)
-        insights_content = "\n".join(f"- {insight}" for insight in synthesis.cross_cutting_insights)
+        # ===== SLIDE N+1: Cross-cutting Themes =====
+        themes_content = chr(10).join(f"• {theme}" for theme in synthesis.key_themes) if synthesis.key_themes else "• Themes being analyzed"
+        insights_content = chr(10).join(f"• {insight}" for insight in synthesis.cross_cutting_insights) if synthesis.cross_cutting_insights else "• Connections being identified"
         
         themes_section = f"""# Cross-Cutting Themes
 
-**Common Patterns**
+**Common Patterns Across Trends**
 {themes_content}
 
 **Strategic Connections**
-{insights_content}"""
+{insights_content}
+
+*These themes suggest opportunities for coordinated initiatives across multiple trends.*"""
         sections.append(themes_section)
         
-        # 6. Recommended actions
-        actions_content = []
-        for action in synthesis.recommended_actions[:5]:  # Top 5 actions
-            action_text = action.get("action", "")
-            owner = action.get("owner", "TBD")
-            timeline = action.get("timeline", "TBD")
-            actions_content.append(f"**{action_text}**\n  - Owner: {owner} | Timeline: {timeline}")
+        # ===== SLIDE N+2: 90-Day Action Plan =====
+        ninety_day = synthesis.ninety_day_actions or []
+        if ninety_day:
+            actions_list = []
+            for action in ninety_day[:5]:
+                action_text = action.get("action", "")
+                owner = action.get("owner", "TBD")
+                by_when = action.get("by_when", "90 days")
+                metric = action.get("success_metric", "")
+                actions_list.append(f"**{action_text}**\n  • Owner: {owner} | By: {by_when}\n  • Success: {metric}")
+            ninety_day_content = chr(10).join(actions_list)
+        else:
+            # Fall back to recommended_actions
+            actions_list = []
+            for action in synthesis.recommended_actions[:5]:
+                action_text = action.get("action", "")
+                owner = action.get("owner", "TBD")
+                timeline = action.get("timeline", "TBD")
+                actions_list.append(f"**{action_text}**\n  • Owner: {owner} | Timeline: {timeline}")
+            ninety_day_content = chr(10).join(actions_list) if actions_list else "Action plan to be developed based on leadership priorities."
         
-        actions_section = f"""# Recommended Next Steps
+        actions_section = f"""# 90-Day Action Plan
 
-{chr(10).join(actions_content)}
+What Austin should do in the next 90 days:
 
-*Actions prioritized by strategic impact and resource requirements.*"""
+{ninety_day_content}
+
+*Actions sequenced by quick wins, dependencies, and resource availability.*"""
         sections.append(actions_section)
         
-        # 7. AI disclosure
+        # ===== SLIDE N+3: Risks & Opportunities =====
+        risk_text = synthesis.risk_summary if synthesis.risk_summary else "Delayed action on these trends could result in Austin falling behind peer cities, missing federal funding windows, and losing competitive advantage in talent and business attraction."
+        opp_text = synthesis.opportunity_summary if synthesis.opportunity_summary else "Early action positions Austin as a national leader, attracts innovation investment, and delivers improved services to residents ahead of demand curves."
+        
+        risk_opp_section = f"""# Risks & Opportunities
+
+**⚠️ If Austin Doesn't Act**
+{risk_text}
+
+**✨ If Austin Leads**
+{opp_text}
+
+*The strategic choice is clear: proactive investment in emerging trends yields compounding returns.*"""
+        sections.append(risk_opp_section)
+        
+        # ===== SLIDE N+4: AI Disclosure =====
         disclosure_section = """# About This Portfolio
 
 This strategic intelligence portfolio was generated using the FORESIGHT platform:
 
-- **AI Analysis**: Anthropic Claude & OpenAI GPT-4
-- **Presentation**: Gamma.app AI
-- **Research**: GPT Researcher with Exa AI
+• **AI Analysis**: Anthropic Claude & OpenAI GPT-4
+• **Presentation**: Gamma.app AI
+• **Deep Research**: GPT Researcher with Exa AI & Tavily
+• **Source Discovery**: Firecrawl web extraction
 
-The City of Austin is committed to transparent and responsible use of AI in public service.
+The City of Austin is committed to transparent and responsible use of AI in public service. All AI-generated content is reviewed for accuracy and relevance.
 
-*Individual brief details available in the FORESIGHT platform.*"""
+*Full executive briefs and source materials available in the FORESIGHT platform.*"""
         sections.append(disclosure_section)
         
         return "\n---\n".join(sections)
@@ -1411,58 +1556,80 @@ The City of Austin is committed to transparent and responsible use of AI in publ
         num_cards: int,
         include_images: bool,
         export_format: str,
-        card_count: int
+        card_count: int,
+        workstream_name: str = "Strategic Portfolio"
     ) -> Dict[str, Any]:
         """Build Gamma API request for portfolio presentation."""
         
-        # Portfolio-specific instructions (different from single brief)
+        # Portfolio-specific instructions - enhanced for executive quality
         instructions = f"""
-Executive portfolio deck for City of Austin leadership.
-This presentation covers {card_count} strategic trends - treat as a COMPARATIVE OVERVIEW.
+EXECUTIVE PORTFOLIO DECK for City of Austin senior leadership.
+This is a {card_count}-trend strategic intelligence portfolio requiring PREMIUM quality.
 
-PORTFOLIO STRUCTURE:
-- Title slide with workstream name and trend count
-- Executive Overview: synthesize ALL cards together (already provided)
-- Priority Matrix: visual categorization of trends
-- Per-card sections: 2-3 slides each with context and key insight
-- Cross-cutting themes connecting multiple trends
-- Recommended next steps with ownership
-- AI disclosure
+SLIDE STRUCTURE (follow the section breaks exactly):
+1. Title: Bold, impactful, professional
+2. Portfolio at a Glance: Dashboard-style metrics display
+3. Why This Matters Now: Urgency hook - make leadership pay attention
+4. Executive Overview: Synthesized insights across all trends
+5. Priority Matrix: Visual 2x2 categorization (use colored quadrants if possible)
+6. Implementation Guidance: Clear action categories with icons
+7-N. Per-Trend Deep Dives (3 slides each):
+   - Overview with classification badges
+   - What's Happening with key developments
+   - Austin Implications with strategic questions
+N+1. Cross-Cutting Themes: Pattern recognition
+N+2. 90-Day Action Plan: Concrete near-term steps
+N+3. Risks & Opportunities: Dual framing
+N+4. AI Disclosure: Transparency
 
-VISUAL DESIGN (City of Austin Brand):
-- Headers: Logo Blue #44499C
-- Highlights: Logo Green #009F4D
-- Backgrounds: White or #f7f6f5
-- Risks: Red #F83125
-- Clean, scannable, executive-ready
+VISUAL DESIGN (City of Austin Official Brand):
+- Primary headers: #44499C (Logo Blue)
+- Positive highlights: #009F4D (Logo Green)  
+- Backgrounds: White or #f7f6f5 (Faded White)
+- Urgent/Risk items: #F83125 (Red)
+- Strategic/Planning: #FFC600 (Yellow/Amber)
+- Monitor items: #009CDE (Cyan)
+- Text: #636262 (Dark Gray) or #22254E (Dark Blue)
 
-CONTENT APPROACH:
-- Decision-oriented: "Should Austin invest in X?"
-- Comparative: Show how trends relate
-- Scannable: One key point per slide
-- Action-focused: Clear recommendations
+EXECUTIVE PRESENTATION STANDARDS:
+- One key message per slide maximum
+- Bullet points: 4-5 max per section
+- Headlines should be actionable ("Act Now on X" not "About X")
+- Use icons and visual hierarchy
+- Classification badges should be color-coded pills/tags
+- Score metrics should be visual (gauges or progress indicators)
+- Action items need clear ownership and timelines
 
-Each card section should be visually distinct but maintain portfolio cohesion.
-Use classification badges consistently across all card slides.
-"""
+CONTENT TONE:
+- Authoritative but accessible
+- Data-driven with clear implications
+- Action-oriented: "What should Austin DO?"
+- Comparative: How does Austin compare to peer cities?
+- Forward-looking: Window of opportunity framing
+
+Create a presentation that a City Manager would proudly share with Council."""
         
         request = {
             "inputText": input_text,
-            "textMode": "condense",
+            "textMode": "preserve",  # Preserve our carefully structured content
             "format": "presentation",
             "numCards": num_cards,
             "cardSplit": "inputTextBreaks",  # Respect our section breaks
             "additionalInstructions": instructions.strip(),
             "exportAs": export_format,
             "textOptions": {
-                "amount": "medium",
-                "tone": "professional, executive, strategic, comparative, decision-oriented",
-                "audience": "City Manager, Mayor, Council Members, Department Directors - senior leadership making portfolio investment decisions",
+                "amount": "detailed",  # More content per slide
+                "tone": "authoritative, executive, strategic, data-driven, action-oriented",
+                "audience": "City Manager, Mayor, City Council Members, Department Directors - senior government executives making multi-million dollar strategic decisions about emerging technologies and municipal innovation",
                 "language": "en"
             },
             "cardOptions": {
                 "dimensions": "16x9",
                 "headerFooter": {
+                    "topLeft": {
+                        "type": "text",
+                        "value": workstream_name[:35]
+                    },
                     "topRight": {
                         "type": "image",
                         "source": "custom",
@@ -1471,7 +1638,7 @@ Use classification badges consistently across all card slides.
                     },
                     "bottomLeft": {
                         "type": "text",
-                        "value": "City of Austin | FORESIGHT Portfolio"
+                        "value": "FORESIGHT Strategic Intelligence"
                     },
                     "bottomRight": {
                         "type": "cardNumber"
@@ -1486,20 +1653,23 @@ Use classification badges consistently across all card slides.
             }
         }
         
-        # Add theme if configured
+        # Add theme - use Oasis for clean professional look, or custom COA theme if configured
         if GAMMA_THEME_ID:
             request["themeId"] = GAMMA_THEME_ID
+        else:
+            # Default to Oasis theme for professional government presentations
+            request["themeId"] = "Oasis"
         
         # Add folder if configured
         if GAMMA_FOLDER_ID:
             request["folderIds"] = [GAMMA_FOLDER_ID]
         
-        # Image options
+        # Enhanced image options for executive quality
         if include_images:
             request["imageOptions"] = {
                 "source": "aiGenerated",
-                "model": "imagen-4-pro",
-                "style": "professional corporate photography, government executive presentation, clean modern design, blue and green accents, strategic planning visuals, urban civic imagery"
+                "model": "imagen-4-pro",  # Highest quality model
+                "style": "premium executive photography, clean minimalist corporate design, municipal government imagery, smart city technology, urban innovation, professional blue and green color palette, editorial quality, strategic planning visuals, data visualization aesthetics, modern Austin Texas cityscape"
             }
         else:
             request["imageOptions"] = {"source": "noImages"}

@@ -5255,7 +5255,12 @@ async def bulk_brief_export(
             key_themes=synthesis.key_themes,
             priority_matrix=synthesis.priority_matrix,
             cross_cutting_insights=synthesis.cross_cutting_insights,
-            recommended_actions=synthesis.recommended_actions
+            recommended_actions=synthesis.recommended_actions,
+            urgency_statement=synthesis.urgency_statement,
+            implementation_guidance=synthesis.implementation_guidance,
+            ninety_day_actions=synthesis.ninety_day_actions,
+            risk_summary=synthesis.risk_summary,
+            opportunity_summary=synthesis.opportunity_summary
         )
         
         # Step 2: Generate presentation

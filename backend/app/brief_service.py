@@ -218,9 +218,21 @@ class PortfolioSynthesis:
     priority_matrix: Dict[str, Any]  # Cards organized by impact/urgency
     cross_cutting_insights: List[str]  # Connections between cards
     recommended_actions: List[Dict[str, str]]  # Prioritized next steps with owners
-    prompt_tokens: int
-    completion_tokens: int
-    model_used: str
+    # New fields for enhanced portfolio presentations
+    urgency_statement: str = ""  # Why this portfolio demands attention now
+    implementation_guidance: Dict[str, List[str]] = None  # Cards by action type
+    ninety_day_actions: List[Dict[str, str]] = None  # Concrete near-term actions
+    risk_summary: str = ""  # Top risks if Austin doesn't act
+    opportunity_summary: str = ""  # Top opportunities if Austin leads
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    model_used: str = ""
+    
+    def __post_init__(self):
+        if self.implementation_guidance is None:
+            self.implementation_guidance = {}
+        if self.ninety_day_actions is None:
+            self.ninety_day_actions = []
 
 
 @dataclass 
@@ -986,9 +998,10 @@ You synthesize multiple strategic intelligence briefs into executive-ready portf
 
 Your analysis should be:
 - Decision-oriented: Help leadership decide what to prioritize
+- Implementation-focused: Tell them exactly what to DO with each trend
 - Comparative: Show how trends relate to each other
-- Action-focused: Provide clear recommendations
 - Austin-specific: Frame everything in terms of city impact
+- Actionable: Provide concrete next steps, not vague recommendations
 
 Output your analysis as valid JSON matching the specified structure."""
 
@@ -999,6 +1012,8 @@ Output your analysis as valid JSON matching the specified structure."""
 Generate a comprehensive portfolio synthesis as JSON with this exact structure:
 {{
     "executive_overview": "2-3 paragraphs synthesizing what leadership needs to know about these {len(briefs)} trends together. What's the big picture? How do they connect? What decisions need to be made?",
+    
+    "urgency_statement": "A compelling 2-3 sentence statement about why this portfolio demands attention NOW. What window of opportunity is closing? What risks are accelerating?",
     
     "key_themes": [
         "Theme 1: A common thread across multiple cards",
@@ -1013,6 +1028,15 @@ Generate a comprehensive portfolio synthesis as JSON with this exact structure:
         "rationale": "Brief explanation of how you prioritized"
     }},
     
+    "implementation_guidance": {{
+        "pilot_now": ["Card names ready for small-scale testing - technology is mature enough"],
+        "investigate_further": ["Card names needing more research before action"],
+        "meet_with_vendors": ["Card names where vendor evaluation is the logical next step"],
+        "policy_review": ["Card names requiring regulatory or policy analysis"],
+        "staff_training": ["Card names where workforce readiness is the priority"],
+        "budget_planning": ["Card names ready for larger deployment planning"]
+    }},
+    
     "cross_cutting_insights": [
         "Insight 1: How Card X connects to Card Y",
         "Insight 2: Resource implications across multiple cards",
@@ -1022,7 +1046,16 @@ Generate a comprehensive portfolio synthesis as JSON with this exact structure:
     "recommended_actions": [
         {{"action": "Specific action to take", "owner": "Department or role", "timeline": "Q1 2025", "cards": ["Related card names"]}},
         {{"action": "Another action", "owner": "Owner", "timeline": "Timeline", "cards": ["Cards"]}}
-    ]
+    ],
+    
+    "ninety_day_actions": [
+        {{"action": "Concrete action for next 90 days", "owner": "Specific department", "by_when": "Within 30/60/90 days", "success_metric": "How we know it's done"}},
+        {{"action": "Another 90-day action", "owner": "Owner", "by_when": "Timeline", "success_metric": "Metric"}}
+    ],
+    
+    "risk_summary": "2-3 sentences on the top risks if Austin doesn't act on this portfolio. What could go wrong? What opportunities would be missed?",
+    
+    "opportunity_summary": "2-3 sentences on the top opportunities if Austin leads on these trends. What competitive advantage? What citizen benefits?"
 }}
 
 Respond with ONLY the JSON object, no markdown formatting or explanation."""
@@ -1037,7 +1070,7 @@ Respond with ONLY the JSON object, no markdown formatting or explanation."""
                 {"role": "user", "content": user_prompt}
             ],
             temperature=0.7,
-            max_tokens=3000,
+            max_tokens=4500,  # Increased for expanded synthesis fields
             timeout=REQUEST_TIMEOUT
         )
         
@@ -1074,6 +1107,11 @@ Respond with ONLY the JSON object, no markdown formatting or explanation."""
             priority_matrix=synthesis_data.get("priority_matrix", {}),
             cross_cutting_insights=synthesis_data.get("cross_cutting_insights", []),
             recommended_actions=synthesis_data.get("recommended_actions", []),
+            urgency_statement=synthesis_data.get("urgency_statement", ""),
+            implementation_guidance=synthesis_data.get("implementation_guidance", {}),
+            ninety_day_actions=synthesis_data.get("ninety_day_actions", []),
+            risk_summary=synthesis_data.get("risk_summary", ""),
+            opportunity_summary=synthesis_data.get("opportunity_summary", ""),
             prompt_tokens=response.usage.prompt_tokens if response.usage else 0,
             completion_tokens=response.usage.completion_tokens if response.usage else 0,
             model_used=model_deployment
