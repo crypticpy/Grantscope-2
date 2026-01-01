@@ -4764,12 +4764,21 @@ async def get_workstream_scan_status(
     scan = result.data[0]
     
     try:
+        # Parse JSON fields if they come back as strings (Supabase behavior)
+        import json
+        config_data = scan.get("config")
+        if isinstance(config_data, str):
+            config_data = json.loads(config_data)
+        results_data = scan.get("results")
+        if isinstance(results_data, str):
+            results_data = json.loads(results_data)
+        
         return WorkstreamScanStatusResponse(
             scan_id=scan["id"],
             workstream_id=scan["workstream_id"],
             status=scan["status"],
-            config=scan.get("config"),
-            results=scan.get("results"),
+            config=config_data,
+            results=results_data,
             started_at=scan.get("started_at"),
             completed_at=scan.get("completed_at"),
             error_message=scan.get("error_message"),
@@ -4811,18 +4820,28 @@ async def get_workstream_scan_history(
     today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     scans_today = sum(1 for s in scans if s.get("created_at") and s["created_at"] >= today_start.isoformat())
     
+    # Parse JSON fields if they come back as strings
+    import json
+    def parse_json_field(val):
+        if isinstance(val, str):
+            try:
+                return json.loads(val)
+            except:
+                return val
+        return val
+    
     return WorkstreamScanHistoryResponse(
         scans=[
             WorkstreamScanStatusResponse(
                 scan_id=s["id"],
                 workstream_id=s["workstream_id"],
                 status=s["status"],
-                config=s.get("config"),
-                results=s.get("results"),
+                config=parse_json_field(s.get("config")),
+                results=parse_json_field(s.get("results")),
                 started_at=s.get("started_at"),
                 completed_at=s.get("completed_at"),
                 error_message=s.get("error_message"),
-                created_at=s["created_at"],
+                created_at=s.get("created_at", ""),
             )
             for s in scans
         ],
