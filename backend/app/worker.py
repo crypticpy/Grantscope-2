@@ -33,6 +33,7 @@ from app.main import (
     ResearchTaskCreate,
     execute_discovery_run_background,
     execute_research_task_background,
+    execute_workstream_scan_background,
     openai_client,
     start_scheduler,
     supabase,
@@ -78,6 +79,7 @@ class ForesightWorker:
         self.poll_interval_seconds = _get_float_env("FORESIGHT_WORKER_POLL_INTERVAL_SECONDS", 5.0)
         self.brief_timeout_seconds = _get_int_env("FORESIGHT_BRIEF_TIMEOUT_SECONDS", 30 * 60)
         self.discovery_timeout_seconds = _get_int_env("FORESIGHT_DISCOVERY_TIMEOUT_SECONDS", 90 * 60)
+        self.workstream_scan_timeout_seconds = _get_int_env("FORESIGHT_WORKSTREAM_SCAN_TIMEOUT_SECONDS", 5 * 60)
         self.enable_scheduler = _truthy(os.getenv("FORESIGHT_ENABLE_SCHEDULER", "false"))
         self._stop_event = asyncio.Event()
 
@@ -107,6 +109,7 @@ class ForesightWorker:
                 did_work = await self._process_one_research_task() or did_work
                 did_work = await self._process_one_brief() or did_work
                 did_work = await self._process_one_discovery_run() or did_work
+                did_work = await self._process_one_workstream_scan() or did_work
             except Exception as e:
                 logger.exception(f"Worker loop error: {e}")
 
@@ -333,6 +336,73 @@ class ForesightWorker:
                     "summary_report": summary_report,
                 }
             ).eq("id", run_id).execute()
+            raise
+        return True
+
+    async def _process_one_workstream_scan(self) -> bool:
+        """Process one queued workstream scan job."""
+        scans = (
+            supabase.table("workstream_scans")
+            .select("id,workstream_id,user_id,config,status")
+            .eq("status", "queued")
+            .order("created_at", desc=False)
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+        if not scans:
+            return False
+
+        scan = scans[0]
+        scan_id = scan["id"]
+
+        # Claim the scan by setting status to running
+        now = datetime.now(timezone.utc).isoformat()
+        claimed = (
+            supabase.table("workstream_scans")
+            .update({"status": "running", "started_at": now})
+            .eq("id", scan_id)
+            .eq("status", "queued")
+            .execute()
+            .data
+        )
+        if not claimed:
+            return False
+
+        config = scan.get("config") or {}
+
+        logger.info(
+            "Processing workstream scan",
+            extra={
+                "worker_id": self.worker_id,
+                "scan_id": scan_id,
+                "workstream_id": scan.get("workstream_id"),
+                "user_id": scan.get("user_id"),
+            },
+        )
+
+        try:
+            await asyncio.wait_for(
+                execute_workstream_scan_background(scan_id, config),
+                timeout=self.workstream_scan_timeout_seconds,
+            )
+        except asyncio.TimeoutError:
+            supabase.table("workstream_scans").update(
+                {
+                    "status": "failed",
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "error_message": f"Workstream scan timed out after {self.workstream_scan_timeout_seconds} seconds",
+                }
+            ).eq("id", scan_id).execute()
+        except BaseException as e:
+            supabase.table("workstream_scans").update(
+                {
+                    "status": "failed",
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "error_message": str(e),
+                }
+            ).eq("id", scan_id).execute()
             raise
         return True
 

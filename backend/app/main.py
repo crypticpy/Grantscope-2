@@ -4571,6 +4571,279 @@ async def auto_populate_workstream(
     return AutoPopulateResponse(added=len(added_cards), cards=added_cards)
 
 
+# ============================================================================
+# Workstream Targeted Scan Endpoints
+# ============================================================================
+
+class WorkstreamScanResponse(BaseModel):
+    """Response for starting a workstream scan."""
+    scan_id: str = Field(..., description="UUID of the scan job")
+    workstream_id: str = Field(..., description="UUID of the workstream")
+    status: str = Field(..., description="Scan status (queued, running, completed, failed)")
+    message: str = Field(..., description="User-friendly status message")
+
+
+class WorkstreamScanStatusResponse(BaseModel):
+    """Response for scan status check."""
+    scan_id: str
+    workstream_id: str
+    status: str
+    config: Optional[Dict[str, Any]] = None
+    results: Optional[Dict[str, Any]] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    error_message: Optional[str] = None
+    created_at: datetime
+
+
+class WorkstreamScanHistoryResponse(BaseModel):
+    """Response for scan history."""
+    scans: List[WorkstreamScanStatusResponse]
+    total: int
+    scans_remaining_today: int
+
+
+@app.post("/api/v1/me/workstreams/{workstream_id}/scan", response_model=WorkstreamScanResponse)
+async def start_workstream_scan(
+    workstream_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Start a targeted discovery scan for a workstream.
+    
+    Generates queries from workstream keywords and pillars, fetches content
+    from all 5 source categories, and creates new cards that are added to
+    the global pool and auto-added to the workstream inbox.
+    
+    Rate limited to 2 scans per workstream per day.
+    
+    Args:
+        workstream_id: UUID of the workstream
+        current_user: Authenticated user (injected)
+    
+    Returns:
+        WorkstreamScanResponse with scan_id and queued status
+    
+    Raises:
+        HTTPException 404: Workstream not found
+        HTTPException 403: Not authorized
+        HTTPException 429: Rate limit exceeded (2 scans/day)
+    """
+    user_id = current_user["id"]
+    
+    # Verify workstream belongs to user
+    ws_response = supabase.table("workstreams").select(
+        "id, user_id, name, keywords, pillar_ids, horizon"
+    ).eq("id", workstream_id).execute()
+    
+    if not ws_response.data:
+        raise HTTPException(status_code=404, detail="Workstream not found")
+    
+    workstream = ws_response.data[0]
+    if workstream["user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this workstream")
+    
+    # Check rate limit: 2 scans per workstream per day
+    rate_check = supabase.table("workstream_scans").select("id").eq(
+        "workstream_id", workstream_id
+    ).gte(
+        "created_at", (datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)).isoformat()
+    ).execute()
+    
+    scans_today = len(rate_check.data) if rate_check.data else 0
+    if scans_today >= 2:
+        raise HTTPException(
+            status_code=429,
+            detail="Rate limit exceeded: Maximum 2 scans per workstream per day. Try again tomorrow."
+        )
+    
+    # Validate workstream has keywords or pillars to scan
+    keywords = workstream.get("keywords") or []
+    pillar_ids = workstream.get("pillar_ids") or []
+    
+    if not keywords and not pillar_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="Workstream needs keywords or pillars configured for scanning. Edit the workstream to add search criteria."
+        )
+    
+    # Create scan record
+    scan_id = str(uuid.uuid4())
+    config = {
+        "workstream_id": workstream_id,
+        "user_id": user_id,
+        "keywords": keywords,
+        "pillar_ids": pillar_ids,
+        "horizon": workstream.get("horizon") or "ALL",
+    }
+    
+    try:
+        result = supabase.table("workstream_scans").insert({
+            "id": scan_id,
+            "workstream_id": workstream_id,
+            "user_id": user_id,
+            "status": "queued",
+            "config": config,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=500, detail="Failed to create scan job")
+        
+        logger.info(f"Created workstream scan {scan_id} for workstream {workstream_id}")
+        
+        return WorkstreamScanResponse(
+            scan_id=scan_id,
+            workstream_id=workstream_id,
+            status="queued",
+            message=f"Scan started for '{workstream['name']}'. New cards will be added to your inbox."
+        )
+    
+    except Exception as e:
+        logger.error(f"Failed to create workstream scan: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start scan: {str(e)}")
+
+
+@app.get("/api/v1/me/workstreams/{workstream_id}/scan/status", response_model=WorkstreamScanStatusResponse)
+async def get_workstream_scan_status(
+    workstream_id: str,
+    scan_id: Optional[str] = Query(None, description="Specific scan ID, or latest if not provided"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get the status of a workstream scan.
+    
+    Returns the latest scan status by default, or a specific scan if scan_id provided.
+    
+    Args:
+        workstream_id: UUID of the workstream
+        scan_id: Optional specific scan ID
+        current_user: Authenticated user (injected)
+    
+    Returns:
+        WorkstreamScanStatusResponse with scan details and results
+    """
+    user_id = current_user["id"]
+    
+    # Verify workstream belongs to user
+    ws_response = supabase.table("workstreams").select("id, user_id").eq("id", workstream_id).execute()
+    if not ws_response.data:
+        raise HTTPException(status_code=404, detail="Workstream not found")
+    if ws_response.data[0]["user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    # Get scan
+    query = supabase.table("workstream_scans").select("*").eq("workstream_id", workstream_id)
+    
+    if scan_id:
+        query = query.eq("id", scan_id)
+    else:
+        query = query.order("created_at", desc=True).limit(1)
+    
+    result = query.execute()
+    
+    if not result.data:
+        raise HTTPException(status_code=404, detail="No scans found for this workstream")
+    
+    scan = result.data[0]
+    
+    return WorkstreamScanStatusResponse(
+        scan_id=scan["id"],
+        workstream_id=scan["workstream_id"],
+        status=scan["status"],
+        config=scan.get("config"),
+        results=scan.get("results"),
+        started_at=scan.get("started_at"),
+        completed_at=scan.get("completed_at"),
+        error_message=scan.get("error_message"),
+        created_at=scan["created_at"],
+    )
+
+
+@app.get("/api/v1/me/workstreams/{workstream_id}/scan/history", response_model=WorkstreamScanHistoryResponse)
+async def get_workstream_scan_history(
+    workstream_id: str,
+    limit: int = Query(10, ge=1, le=50),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get scan history for a workstream.
+    
+    Returns recent scans and remaining daily quota.
+    """
+    user_id = current_user["id"]
+    
+    # Verify workstream belongs to user
+    ws_response = supabase.table("workstreams").select("id, user_id").eq("id", workstream_id).execute()
+    if not ws_response.data:
+        raise HTTPException(status_code=404, detail="Workstream not found")
+    if ws_response.data[0]["user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    # Get scan history
+    result = supabase.table("workstream_scans").select("*").eq(
+        "workstream_id", workstream_id
+    ).order("created_at", desc=True).limit(limit).execute()
+    
+    scans = result.data or []
+    
+    # Count scans today
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    scans_today = sum(1 for s in scans if s.get("created_at") and s["created_at"] >= today_start.isoformat())
+    
+    return WorkstreamScanHistoryResponse(
+        scans=[
+            WorkstreamScanStatusResponse(
+                scan_id=s["id"],
+                workstream_id=s["workstream_id"],
+                status=s["status"],
+                config=s.get("config"),
+                results=s.get("results"),
+                started_at=s.get("started_at"),
+                completed_at=s.get("completed_at"),
+                error_message=s.get("error_message"),
+                created_at=s["created_at"],
+            )
+            for s in scans
+        ],
+        total=len(scans),
+        scans_remaining_today=max(0, 2 - scans_today),
+    )
+
+
+# Background task execution for workstream scans
+async def execute_workstream_scan_background(scan_id: str, config: dict):
+    """Execute a workstream scan in background."""
+    from app.workstream_scan_service import WorkstreamScanService, WorkstreamScanConfig
+    
+    try:
+        scan_config = WorkstreamScanConfig(
+            workstream_id=config["workstream_id"],
+            user_id=config["user_id"],
+            scan_id=scan_id,
+            keywords=config.get("keywords", []),
+            pillar_ids=config.get("pillar_ids", []),
+            horizon=config.get("horizon", "ALL"),
+        )
+        
+        service = WorkstreamScanService(supabase, openai_client)
+        result = await service.execute_scan(scan_config)
+        
+        logger.info(
+            f"Workstream scan {scan_id} completed: "
+            f"{len(result.cards_created)} created, {len(result.cards_added_to_workstream)} added to workstream"
+        )
+        
+    except Exception as e:
+        logger.exception(f"Workstream scan {scan_id} failed: {e}")
+        # Update scan status to failed
+        supabase.table("workstream_scans").update({
+            "status": "failed",
+            "error_message": str(e),
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+        }).eq("id", scan_id).execute()
+
+
 # Executive Brief endpoints
 @app.post("/api/v1/me/workstreams/{workstream_id}/cards/{card_id}/brief", response_model=BriefGenerateResponse)
 async def generate_executive_brief(

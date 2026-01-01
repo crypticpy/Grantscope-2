@@ -29,6 +29,7 @@ import {
   XCircle,
   Search,
   X,
+  Radar,
 } from 'lucide-react';
 import { supabase } from '../App';
 import { useAuthContext } from '../hooks/useAuthContext';
@@ -61,8 +62,11 @@ import {
   fetchResearchStatus,
   getBulkBriefStatus,
   exportBulkBriefs,
+  startWorkstreamScan,
+  getWorkstreamScanStatus,
   type WorkstreamResearchStatus,
   type BulkBriefStatusResponse,
+  type WorkstreamScanStatusResponse,
 } from '../lib/workstream-api';
 import { PillarBadgeGroup } from '../components/PillarBadge';
 import { HorizonBadge } from '../components/HorizonBadge';
@@ -358,6 +362,11 @@ const WorkstreamKanban: React.FC = () => {
   const [cardsLoading, setCardsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [autoPopulating, setAutoPopulating] = useState(false);
+
+  // Workstream scan state
+  const [scanning, setScanning] = useState(false);
+  const [scanStatus, setScanStatus] = useState<WorkstreamScanStatusResponse | null>(null);
+  const scanPollRef = useRef<NodeJS.Timeout | null>(null);
 
   // Error state
   const [error, setError] = useState<string | null>(null);
@@ -1269,6 +1278,92 @@ const WorkstreamKanban: React.FC = () => {
   }, [id, getAuthToken, loadCards, showToast]);
 
   /**
+   * Start a targeted scan for the workstream.
+   */
+  const handleStartScan = useCallback(async () => {
+    if (!id) return;
+
+    const token = await getAuthToken();
+    if (!token) {
+      showToast('error', 'Authentication required');
+      return;
+    }
+
+    try {
+      setScanning(true);
+      const response = await startWorkstreamScan(token, id);
+      setScanStatus({
+        scan_id: response.scan_id,
+        workstream_id: response.workstream_id,
+        status: response.status,
+        created_at: new Date().toISOString(),
+      });
+      showToast('info', response.message);
+
+      // Start polling for scan completion
+      const pollScanStatus = async () => {
+        try {
+          const status = await getWorkstreamScanStatus(token, id, response.scan_id);
+          setScanStatus(status);
+
+          if (status.status === 'completed') {
+            setScanning(false);
+            const cardsAdded = status.results?.cards_added_to_workstream ?? 0;
+            const cardsCreated = status.results?.cards_created ?? 0;
+            if (cardsAdded > 0 || cardsCreated > 0) {
+              showToast(
+                'success',
+                `Scan complete! ${cardsCreated} new card${cardsCreated !== 1 ? 's' : ''} created, ${cardsAdded} added to inbox`
+              );
+              await loadCards();
+            } else {
+              showToast('info', 'Scan complete - no new cards found');
+            }
+            if (scanPollRef.current) {
+              clearInterval(scanPollRef.current);
+              scanPollRef.current = null;
+            }
+          } else if (status.status === 'failed') {
+            setScanning(false);
+            showToast('error', status.error_message || 'Scan failed');
+            if (scanPollRef.current) {
+              clearInterval(scanPollRef.current);
+              scanPollRef.current = null;
+            }
+          }
+        } catch (err) {
+          console.error('Error polling scan status:', err);
+        }
+      };
+
+      // Poll every 3 seconds
+      scanPollRef.current = setInterval(pollScanStatus, 3000);
+      // Also poll immediately
+      pollScanStatus();
+
+    } catch (err: unknown) {
+      setScanning(false);
+      const message = err instanceof Error ? err.message : 'Failed to start scan';
+      if (message.includes('Rate limit')) {
+        showToast('error', 'Scan limit reached (2 per day). Try again tomorrow.');
+      } else if (message.includes('keywords or pillars')) {
+        showToast('error', 'Add keywords or pillars to this workstream to enable scanning.');
+      } else {
+        showToast('error', message);
+      }
+    }
+  }, [id, getAuthToken, showToast, loadCards]);
+
+  // Cleanup scan polling on unmount
+  useEffect(() => {
+    return () => {
+      if (scanPollRef.current) {
+        clearInterval(scanPollRef.current);
+      }
+    };
+  }, []);
+
+  /**
    * Handle form modal success.
    */
   const handleFormSuccess = useCallback(() => {
@@ -1458,6 +1553,24 @@ const WorkstreamKanban: React.FC = () => {
 
             {/* Action Buttons */}
             <div className="flex items-center gap-2 flex-wrap">
+              {/* Scan for Updates Button */}
+              <button
+                onClick={handleStartScan}
+                disabled={scanning}
+                className={cn(
+                  'inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-[#2d3166] transition-colors',
+                  scanning && 'opacity-75 cursor-not-allowed'
+                )}
+                title="Scan web sources for new content matching this workstream (2/day limit)"
+              >
+                {scanning ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Radar className="h-4 w-4 mr-2" />
+                )}
+                {scanning ? 'Scanning...' : 'Scan for Updates'}
+              </button>
+
               {/* Auto-Populate Button */}
               <button
                 onClick={handleAutoPopulate}
@@ -1466,7 +1579,7 @@ const WorkstreamKanban: React.FC = () => {
                   'inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-green hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-green dark:focus:ring-offset-[#2d3166] transition-colors',
                   autoPopulating && 'opacity-75 cursor-not-allowed'
                 )}
-                title="Find and add matching cards"
+                title="Find and add matching cards from existing database"
               >
                 {autoPopulating ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
