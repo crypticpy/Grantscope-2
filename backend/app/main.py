@@ -5269,7 +5269,7 @@ async def bulk_brief_export(
             gamma_service = GammaPortfolioService()
             
             if gamma_service.is_available():
-                logger.info("Generating portfolio via Gamma...")
+                logger.info(f"Generating portfolio via Gamma for {len(gamma_cards)} cards...")
                 result = await gamma_service.generate_portfolio_presentation(
                     workstream_name=workstream_name,
                     cards=gamma_cards,
@@ -5306,9 +5306,11 @@ async def bulk_brief_export(
                         )
                 
                 logger.warning(f"Gamma portfolio failed: {result.error_message}, falling back to local")
+            else:
+                logger.info("Gamma API not available (no API key or disabled), using local generation")
             
             # Fallback to local PPTX generation
-            logger.info("Generating portfolio locally (fallback)...")
+            logger.info("Generating portfolio locally...")
             export_service = ExportService(supabase)
             file_path = await export_service.generate_portfolio_pptx_local(
                 workstream_name=workstream_name,
