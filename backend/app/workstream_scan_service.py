@@ -377,40 +377,40 @@ class WorkstreamScanService:
         return all_sources, sources_by_category
     
     async def _fetch_news(self, queries: List[str], limit: int) -> List[RawSource]:
-        """Fetch news articles."""
+        """Fetch news articles - matches discovery_service.py pattern."""
         sources = []
         try:
-            # fetch_news_articles expects topics as a list
             articles = await fetch_news_articles(topics=queries[:3], max_articles=limit)
-            for article in articles:
-                sources.append(RawSource(
+            for article in articles[:limit]:
+                source = RawSource(
                     url=article.url,
                     title=article.title,
-                    content=article.content or getattr(article, 'excerpt', '') or "",
-                    source_name=article.source_name or "News",
-                    published_at=article.published_at,
-                ))
+                    content=article.content,
+                    source_name=article.source_name,
+                    relevance=article.relevance
+                )
+                sources.append(source)
         except Exception as e:
             logger.warning(f"News fetch error: {e}")
-        return sources[:limit]
+        return sources
     
     async def _fetch_tech_blogs(self, queries: List[str], limit: int) -> List[RawSource]:
-        """Fetch tech blog articles."""
+        """Fetch tech blog articles - matches NewsArticle pattern."""
         sources = []
         try:
-            # fetch_tech_blog_articles expects topics as a list
             articles = await fetch_tech_blog_articles(topics=queries[:3], max_articles=limit)
-            for article in articles:
-                sources.append(RawSource(
+            for article in articles[:limit]:
+                source = RawSource(
                     url=article.url,
                     title=article.title,
-                    content=article.content or getattr(article, 'summary', '') or "",
-                    source_name=article.source_name or "Tech Blog",
-                    published_at=article.published_at,
-                ))
+                    content=article.content,
+                    source_name=article.source_name,
+                    relevance=article.relevance
+                )
+                sources.append(source)
         except Exception as e:
             logger.warning(f"Tech blog fetch error: {e}")
-        return sources[:limit]
+        return sources
     
     async def _fetch_academic(self, queries: List[str], limit: int) -> List[RawSource]:
         """Fetch academic papers."""
