@@ -386,8 +386,8 @@ class WorkstreamScanService:
                 sources.append(RawSource(
                     url=article.url,
                     title=article.title,
-                    content=article.content or article.description or "",
-                    source_name=article.source or "News",
+                    content=article.content or getattr(article, 'excerpt', '') or "",
+                    source_name=article.source_name or "News",
                     published_at=article.published_at,
                 ))
         except Exception as e:
@@ -404,8 +404,8 @@ class WorkstreamScanService:
                 sources.append(RawSource(
                     url=article.url,
                     title=article.title,
-                    content=article.content or article.summary or "",
-                    source_name=article.source or "Tech Blog",
+                    content=article.content or getattr(article, 'summary', '') or "",
+                    source_name=article.source_name or "Tech Blog",
                     published_at=article.published_at,
                 ))
         except Exception as e:
