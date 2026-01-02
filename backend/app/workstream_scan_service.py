@@ -339,41 +339,47 @@ class WorkstreamScanService:
             news_sources = await self._fetch_news(query_subset, config.max_sources_per_category)
             all_sources.extend(news_sources)
             sources_by_category["news"] = len(news_sources)
+            logger.info(f"News: {len(news_sources)} sources")
         except Exception as e:
-            logger.warning(f"News fetch failed: {e}")
+            logger.warning(f"News fetch failed: {e}", exc_info=True)
         
         try:
             # Tech blogs
             tech_sources = await self._fetch_tech_blogs(query_subset, config.max_sources_per_category)
             all_sources.extend(tech_sources)
             sources_by_category["tech_blog"] = len(tech_sources)
+            logger.info(f"Tech blogs: {len(tech_sources)} sources")
         except Exception as e:
-            logger.warning(f"Tech blog fetch failed: {e}")
+            logger.warning(f"Tech blog fetch failed: {e}", exc_info=True)
         
         try:
             # Academic papers
             academic_sources = await self._fetch_academic(query_subset, config.max_sources_per_category)
             all_sources.extend(academic_sources)
             sources_by_category["academic"] = len(academic_sources)
+            logger.info(f"Academic: {len(academic_sources)} sources")
         except Exception as e:
-            logger.warning(f"Academic fetch failed: {e}")
+            logger.warning(f"Academic fetch failed: {e}", exc_info=True)
         
         try:
             # Government sources
             gov_sources = await self._fetch_government(query_subset, config.max_sources_per_category)
             all_sources.extend(gov_sources)
             sources_by_category["government"] = len(gov_sources)
+            logger.info(f"Government: {len(gov_sources)} sources")
         except Exception as e:
-            logger.warning(f"Government fetch failed: {e}")
+            logger.warning(f"Government fetch failed: {e}", exc_info=True)
         
         try:
             # RSS feeds
             rss_sources = await self._fetch_rss(query_subset, config.max_sources_per_category)
             all_sources.extend(rss_sources)
             sources_by_category["rss"] = len(rss_sources)
+            logger.info(f"RSS: {len(rss_sources)} sources")
         except Exception as e:
-            logger.warning(f"RSS fetch failed: {e}")
+            logger.warning(f"RSS fetch failed: {e}", exc_info=True)
         
+        logger.info(f"Total sources collected: {len(all_sources)}")
         return all_sources, sources_by_category
     
     async def _fetch_news(self, queries: List[str], limit: int) -> List[RawSource]:
