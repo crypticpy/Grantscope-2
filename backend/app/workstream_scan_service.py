@@ -167,11 +167,13 @@ class WorkstreamScanService:
                 return result
             
             # Step 3: Triage and analyze
+            logger.info(f"Starting triage of {len(raw_sources)} raw sources...")
             processed_sources = await self._triage_and_analyze(raw_sources, config)
             result.sources_triaged = len(processed_sources)
-            logger.info(f"Triaged {len(processed_sources)} relevant sources")
+            logger.info(f"Triaged {len(processed_sources)} relevant sources (from {len(raw_sources)} raw)")
             
             if not processed_sources:
+                logger.warning("No sources passed triage - completing scan with 0 cards")
                 result.status = "completed"
                 result.completed_at = datetime.now()
                 result.execution_time_seconds = (result.completed_at - start_time).total_seconds()
@@ -179,12 +181,13 @@ class WorkstreamScanService:
                 return result
             
             # Step 4: Deduplicate
+            logger.info(f"Starting deduplication of {len(processed_sources)} sources...")
             unique_sources, enrichment_candidates, duplicates = await self._deduplicate(
                 processed_sources, config
             )
             result.duplicates_skipped = duplicates
             logger.info(
-                f"Dedup: {len(unique_sources)} unique, "
+                f"Dedup complete: {len(unique_sources)} unique, "
                 f"{len(enrichment_candidates)} enrichments, {duplicates} duplicates"
             )
             
@@ -199,23 +202,33 @@ class WorkstreamScanService:
                     logger.warning(f"Failed to enrich card {card_id}: {e}")
             
             # Step 6: Create new cards
+            logger.info(f"Starting card creation for {len(unique_sources)} unique sources (max: {config.max_new_cards})")
             cards_created_count = 0
+            sources_without_analysis = 0
             for source in unique_sources:
                 if cards_created_count >= config.max_new_cards:
+                    logger.info(f"Reached max cards limit ({config.max_new_cards})")
                     break
                 
                 if not source.analysis:
+                    sources_without_analysis += 1
                     continue
                 
                 try:
+                    logger.info(f"Creating card for: {source.analysis.suggested_card_name[:50]}...")
                     card_id = await self._create_card(source, config)
                     if card_id:
                         result.cards_created.append(card_id)
                         cards_created_count += 1
-                        logger.info(f"Created card: {source.analysis.suggested_card_name}")
+                        logger.info(f"Created card {card_id}: {source.analysis.suggested_card_name}")
+                    else:
+                        logger.warning(f"Card creation returned None for: {source.analysis.suggested_card_name[:50]}")
                 except Exception as e:
-                    logger.warning(f"Failed to create card: {e}")
+                    logger.warning(f"Failed to create card: {e}", exc_info=True)
                     result.errors.append(f"Card creation failed: {str(e)[:100]}")
+            
+            if sources_without_analysis > 0:
+                logger.warning(f"Skipped {sources_without_analysis} sources without analysis")
             
             # Step 7: Auto-add to workstream inbox
             if config.auto_add_to_workstream:
