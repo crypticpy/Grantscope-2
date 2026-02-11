@@ -41,7 +41,7 @@ export function WorkstreamForm({
   onCreatedWithZeroMatches,
 }: {
   workstream?: import("../types/workstream").Workstream;
-  onSuccess: () => void;
+  onSuccess: (createdId?: string, scanTriggered?: boolean) => void;
   onCancel: () => void;
   onCreatedWithZeroMatches?: (workstreamId: string) => void;
 }) {

@@ -22,14 +22,15 @@ export interface Workstream {
   keywords: string[];
   is_active: boolean;
   auto_add: boolean;
+  auto_scan?: boolean;
   created_at: string;
 }
 
 export interface WorkstreamFormProps {
   /** If provided, form operates in EDIT mode; otherwise CREATE mode */
   workstream?: Workstream;
-  /** Called after successful save */
-  onSuccess: () => void;
+  /** Called after successful save. Receives the created workstream ID and whether a scan was triggered. */
+  onSuccess: (createdId?: string, scanTriggered?: boolean) => void;
   /** Called when form is cancelled */
   onCancel: () => void;
   /** Called after creation when auto-populate finds zero matching cards */

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Plus,
   FolderOpen,
@@ -20,6 +20,8 @@ import {
   ChevronDown,
   ChevronUp,
   BookOpen,
+  Radar,
+  Loader2,
 } from "lucide-react";
 import { supabase } from "../App";
 import { useAuthContext } from "../hooks/useAuthContext";
@@ -28,6 +30,10 @@ import { WorkstreamWizard } from "../components/workstream/WorkstreamWizard";
 import { PillarBadgeGroup } from "../components/PillarBadge";
 import { getGoalByCode } from "../data/taxonomy";
 import { cn } from "../lib/utils";
+import {
+  getWorkstreamScanStatus,
+  type WorkstreamScanStatusResponse,
+} from "../lib/workstream-api";
 
 // ============================================================================
 // Delete Confirmation Modal
@@ -94,7 +100,7 @@ function DeleteConfirmModal({
 
 interface FormModalProps {
   workstream?: Workstream;
-  onSuccess: () => void;
+  onSuccess: (createdId?: string, scanTriggered?: boolean) => void;
   onCancel: () => void;
 }
 
@@ -416,9 +422,15 @@ interface WorkstreamCardProps {
   workstream: Workstream;
   onEdit: () => void;
   onDelete: () => void;
+  scanStatus?: WorkstreamScanStatusResponse | null;
 }
 
-function WorkstreamCard({ workstream, onEdit, onDelete }: WorkstreamCardProps) {
+function WorkstreamCard({
+  workstream,
+  onEdit,
+  onDelete,
+  scanStatus,
+}: WorkstreamCardProps) {
   // Format stage IDs for display
   const formatStages = (stageIds: string[]): string => {
     if (stageIds.length === 0) return "";
@@ -466,7 +478,23 @@ function WorkstreamCard({ workstream, onEdit, onDelete }: WorkstreamCardProps) {
               </p>
             )}
           </div>
-          <div className="flex items-center gap-2 ml-4">
+          <div className="flex items-center gap-2 ml-4 flex-wrap justify-end">
+            {/* Scan running indicator */}
+            {scanStatus &&
+              (scanStatus.status === "queued" ||
+                scanStatus.status === "running") && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Scanning...
+                </span>
+              )}
+            {/* Auto-scan badge */}
+            {workstream.auto_scan && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+                <Radar className="h-3 w-3" />
+                Auto-scan
+              </span>
+            )}
             {workstream.is_active ? (
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
                 Active
@@ -601,6 +629,7 @@ function WorkstreamCard({ workstream, onEdit, onDelete }: WorkstreamCardProps) {
 
 const Workstreams: React.FC = () => {
   const { user } = useAuthContext();
+  const navigate = useNavigate();
   const [workstreams, setWorkstreams] = useState<Workstream[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -616,6 +645,13 @@ const Workstreams: React.FC = () => {
     Workstream | undefined
   >(undefined);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Scan status for each workstream (keyed by workstream ID)
+  const [scanStatuses, setScanStatuses] = useState<
+    Record<string, WorkstreamScanStatusResponse>
+  >({});
+  const scanPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const workstreamsRef = useRef<Workstream[]>([]);
 
   // Banner dismissed state (persisted in localStorage)
   const [bannerDismissed, setBannerDismissed] = useState(() => {
@@ -648,6 +684,57 @@ const Workstreams: React.FC = () => {
     loadWorkstreams();
   }, []);
 
+  const fetchScanStatuses = useCallback(async () => {
+    const wsList = workstreamsRef.current;
+    if (wsList.length === 0) return;
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) return;
+
+    const statuses: Record<string, WorkstreamScanStatusResponse> = {};
+    let hasActiveScans = false;
+
+    // Fetch latest scan status for each workstream (in parallel, but with concurrency limit)
+    const results = await Promise.allSettled(
+      wsList.map(async (ws) => {
+        try {
+          const status = await getWorkstreamScanStatus(token, ws.id);
+          return { id: ws.id, status };
+        } catch {
+          // No scan found for this workstream, that's fine
+          return null;
+        }
+      }),
+    );
+
+    for (const result of results) {
+      if (result.status === "fulfilled" && result.value) {
+        const { id, status } = result.value;
+        statuses[id] = status;
+        if (status.status === "queued" || status.status === "running") {
+          hasActiveScans = true;
+        }
+      }
+    }
+
+    setScanStatuses(statuses);
+
+    // If there are active scans, poll periodically
+    if (hasActiveScans) {
+      if (!scanPollRef.current) {
+        scanPollRef.current = setInterval(() => {
+          fetchScanStatuses();
+        }, 5000);
+      }
+    } else if (scanPollRef.current) {
+      clearInterval(scanPollRef.current);
+      scanPollRef.current = null;
+    }
+  }, []);
+
   const loadWorkstreams = async () => {
     try {
       const { data } = await supabase
@@ -656,7 +743,14 @@ const Workstreams: React.FC = () => {
         .eq("user_id", user?.id)
         .order("created_at", { ascending: false });
 
-      setWorkstreams(data || []);
+      const list = data || [];
+      setWorkstreams(list);
+      workstreamsRef.current = list;
+
+      // Fetch scan statuses for all active workstreams
+      if (list.length > 0) {
+        fetchScanStatuses();
+      }
     } catch (error) {
       console.error("Error loading workstreams:", error);
     } finally {
@@ -664,10 +758,27 @@ const Workstreams: React.FC = () => {
     }
   };
 
-  const handleFormSuccess = () => {
+  // Cleanup scan polling on unmount
+  useEffect(() => {
+    return () => {
+      if (scanPollRef.current) {
+        clearInterval(scanPollRef.current);
+      }
+    };
+  }, []);
+
+  const handleFormSuccess = (createdId?: string, scanTriggered?: boolean) => {
     setShowForm(false);
     setEditingWorkstream(undefined);
-    loadWorkstreams();
+
+    if (createdId && scanTriggered) {
+      // Navigate to the kanban board so user can see scan progress
+      navigate(`/workstreams/${createdId}/board`, {
+        state: { scanJustStarted: true },
+      });
+    } else {
+      loadWorkstreams();
+    }
   };
 
   const handleFormCancel = () => {
@@ -815,6 +926,7 @@ const Workstreams: React.FC = () => {
               workstream={workstream}
               onEdit={() => handleEditClick(workstream)}
               onDelete={() => handleDeleteClick(workstream)}
+              scanStatus={scanStatuses[workstream.id] || null}
             />
           ))}
         </div>

@@ -17,7 +17,7 @@ import React, {
   useRef,
   useMemo,
 } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
 import {
   ArrowLeft,
   RefreshCw,
@@ -69,7 +69,6 @@ import {
   getBulkBriefStatus,
   exportBulkBriefs,
   startWorkstreamScan,
-  getWorkstreamScanStatus,
   type WorkstreamResearchStatus,
   type BulkBriefStatusResponse,
   type WorkstreamScanStatusResponse,
@@ -78,6 +77,7 @@ import { PillarBadgeGroup } from "../components/PillarBadge";
 import { HorizonBadge } from "../components/HorizonBadge";
 import { StageBadge } from "../components/StageBadge";
 import { WorkstreamForm, type Workstream } from "../components/WorkstreamForm";
+import { useWorkstreamScanPolling } from "../hooks/useWorkstreamScanPolling";
 
 // ============================================================================
 // Types
@@ -357,7 +357,12 @@ function FormModal({
 const WorkstreamKanban: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuthContext();
+
+  // Check if we arrived from the wizard with a scan just started
+  const scanJustStarted =
+    (location.state as { scanJustStarted?: boolean })?.scanJustStarted === true;
 
   // Workstream and card state
   const [workstream, setWorkstream] = useState<Workstream | null>(null);
@@ -380,7 +385,6 @@ const WorkstreamKanban: React.FC = () => {
   const [scanning, setScanning] = useState(false);
   const [_scanStatus, setScanStatus] =
     useState<WorkstreamScanStatusResponse | null>(null);
-  const scanPollRef = useRef<NodeJS.Timeout | null>(null);
 
   // Error state
   const [error, setError] = useState<string | null>(null);
@@ -420,7 +424,7 @@ const WorkstreamKanban: React.FC = () => {
   const [researchStatuses, setResearchStatuses] = useState<
     Map<string, WorkstreamResearchStatus>
   >(new Map());
-  const researchPollRef = useRef<NodeJS.Timeout | null>(null);
+  const researchPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ============================================================================
   // Toast Helper Functions
@@ -1314,6 +1318,41 @@ const WorkstreamKanban: React.FC = () => {
     }
   }, [id, getAuthToken, loadCards, showToast]);
 
+  // ============================================================================
+  // Scan Polling (shared hook)
+  // ============================================================================
+
+  const { startPollingExistingScan } = useWorkstreamScanPolling({
+    workstreamId: id,
+    getAuthToken,
+    onStatus: (status) => {
+      setScanning(status.status === "queued" || status.status === "running");
+      setScanStatus(status);
+    },
+    onComplete: async (status) => {
+      setScanning(false);
+      if (status.status === "completed") {
+        const cardsAdded = status.results?.cards_added_to_workstream ?? 0;
+        const cardsCreated = status.results?.cards_created ?? 0;
+        if (cardsAdded > 0 || cardsCreated > 0) {
+          showToast(
+            "success",
+            `Scan complete! ${cardsCreated} new signal${cardsCreated !== 1 ? "s" : ""} created, ${cardsAdded} added to inbox`,
+          );
+          await loadCards();
+        } else {
+          showToast("info", "Scan complete - no new signals found");
+        }
+      } else if (status.status === "failed") {
+        showToast("error", status.error_message || "Scan failed");
+      }
+    },
+    onError: (msg) => {
+      setScanning(false);
+      showToast("error", msg);
+    },
+  });
+
   /**
    * Start a targeted scan for the workstream.
    */
@@ -1337,77 +1376,8 @@ const WorkstreamKanban: React.FC = () => {
       });
       showToast("info", response.message);
 
-      // Track polling attempts for timeout (10 min max = 200 polls at 3s each)
-      const MAX_POLL_ATTEMPTS = 200;
-      let pollAttempts = 0;
-      const scanId = response.scan_id;
-
-      // Start polling for scan completion
-      const pollScanStatus = async () => {
-        pollAttempts++;
-
-        // Timeout after max attempts
-        if (pollAttempts > MAX_POLL_ATTEMPTS) {
-          setScanning(false);
-          showToast("error", "Scan timed out. Check back later for results.");
-          if (scanPollRef.current) {
-            clearInterval(scanPollRef.current);
-            scanPollRef.current = null;
-          }
-          return;
-        }
-
-        try {
-          // Re-fetch token on each poll to handle expiration
-          const freshToken = await getAuthToken();
-          if (!freshToken) {
-            setScanning(false);
-            showToast("error", "Session expired. Please refresh the page.");
-            if (scanPollRef.current) {
-              clearInterval(scanPollRef.current);
-              scanPollRef.current = null;
-            }
-            return;
-          }
-
-          const status = await getWorkstreamScanStatus(freshToken, id, scanId);
-          setScanStatus(status);
-
-          if (status.status === "completed") {
-            setScanning(false);
-            const cardsAdded = status.results?.cards_added_to_workstream ?? 0;
-            const cardsCreated = status.results?.cards_created ?? 0;
-            if (cardsAdded > 0 || cardsCreated > 0) {
-              showToast(
-                "success",
-                `Scan complete! ${cardsCreated} new signal${cardsCreated !== 1 ? "s" : ""} created, ${cardsAdded} added to inbox`,
-              );
-              await loadCards();
-            } else {
-              showToast("info", "Scan complete - no new signals found");
-            }
-            if (scanPollRef.current) {
-              clearInterval(scanPollRef.current);
-              scanPollRef.current = null;
-            }
-          } else if (status.status === "failed") {
-            setScanning(false);
-            showToast("error", status.error_message || "Scan failed");
-            if (scanPollRef.current) {
-              clearInterval(scanPollRef.current);
-              scanPollRef.current = null;
-            }
-          }
-        } catch (err) {
-          console.error("Error polling scan status:", err);
-          // Don't stop polling on transient errors, but log them
-        }
-      };
-
-      // Poll every 3 seconds
-      scanPollRef.current = setInterval(pollScanStatus, 3000);
-      // Also poll immediately
-      pollScanStatus();
+      // Use the shared hook to poll the newly-created scan
+      startPollingExistingScan(response.scan_id);
     } catch (err: unknown) {
       setScanning(false);
       const message =
@@ -1431,16 +1401,26 @@ const WorkstreamKanban: React.FC = () => {
         showToast("error", message);
       }
     }
-  }, [id, getAuthToken, showToast, loadCards]);
+  }, [id, getAuthToken, showToast, startPollingExistingScan]);
 
-  // Cleanup scan polling on unmount
+  // Auto-start polling when arriving from wizard with scanJustStarted
   useEffect(() => {
-    return () => {
-      if (scanPollRef.current) {
-        clearInterval(scanPollRef.current);
-      }
-    };
-  }, []);
+    if (!scanJustStarted || !id || !workstream) return;
+    navigate(location.pathname, { replace: true, state: {} });
+    showToast(
+      "info",
+      "Scan started! We're looking for signals matching your workstream...",
+    );
+    startPollingExistingScan();
+  }, [
+    scanJustStarted,
+    id,
+    workstream,
+    navigate,
+    location.pathname,
+    startPollingExistingScan,
+    showToast,
+  ]);
 
   /**
    * Handle form modal success.

@@ -16,6 +16,7 @@ import { useAuthContext } from "./useAuthContext";
 import { useWorkstreamPreview } from "./useWorkstreamPreview";
 import { useKeywordSuggestions } from "./useKeywordSuggestions";
 import { getGoalsByPillar } from "../data/taxonomy";
+import { startWorkstreamScan } from "../lib/workstream-api";
 import type {
   Workstream,
   FormData,
@@ -25,7 +26,7 @@ import type {
 
 interface UseWorkstreamFormProps {
   workstream?: Workstream;
-  onSuccess: () => void;
+  onSuccess: (createdId?: string, scanTriggered?: boolean) => void;
   onCreatedWithZeroMatches?: (workstreamId: string) => void;
 }
 
@@ -264,28 +265,19 @@ export function useWorkstreamForm({
     setErrors({});
   }, []);
 
-  // Trigger workstream analysis via API
-  const triggerWorkstreamAnalysis = async (workstreamId: string) => {
+  // Trigger workstream scan via the real scan pipeline (workstream_scans table -> worker)
+  const triggerWorkstreamAnalysis = async (
+    workstreamId: string,
+  ): Promise<string | null> => {
     const token = await getAuthToken();
-    if (!token) return;
-
-    const API_BASE_URL =
-      import.meta.env.VITE_API_URL || "http://localhost:8000";
+    if (!token) return null;
 
     try {
-      await fetch(`${API_BASE_URL}/api/v1/research`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          workstream_id: workstreamId,
-          task_type: "workstream_analysis",
-        }),
-      });
+      const response = await startWorkstreamScan(token, workstreamId);
+      return response.scan_id;
     } catch (error) {
-      console.error("Error triggering workstream analysis:", error);
+      console.error("Error triggering workstream scan:", error);
+      return null;
     }
   };
 
@@ -321,6 +313,7 @@ export function useWorkstreamForm({
           .eq("user_id", user?.id);
 
         if (error) throw error;
+        onSuccess();
       } else {
         // CREATE mode: use backend API so auto-populate and auto-scan queueing runs
         const API_BASE_URL =
@@ -344,9 +337,15 @@ export function useWorkstreamForm({
         }
 
         const data = await response.json();
+        // If user requested a scan, always treat as triggered — the backend
+        // may have already queued one during creation (auto_scan + <3 matches),
+        // so our explicit call might get "already in progress" and return null.
+        // Either way a scan IS running and the kanban should show feedback.
+        let scanTriggered = false;
 
         if (formData.analyze_now && data?.id) {
           await triggerWorkstreamAnalysis(data.id);
+          scanTriggered = true;
         }
 
         if (data?.id && preview?.estimated_count === 0) {
@@ -356,9 +355,9 @@ export function useWorkstreamForm({
             onCreatedWithZeroMatches(data.id);
           }
         }
-      }
 
-      onSuccess();
+        onSuccess(data?.id, scanTriggered);
+      }
     } catch (error) {
       console.error("Error saving workstream:", error);
       setErrors({
