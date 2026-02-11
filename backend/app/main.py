@@ -2031,6 +2031,12 @@ async def follow_card(card_id: str, current_user: dict = Depends(get_current_use
         .insert({"user_id": current_user["id"], "card_id": card_id})
         .execute()
     )
+    try:
+        from app.signal_quality import update_signal_quality_score
+
+        update_signal_quality_score(supabase, card_id)
+    except Exception as e:
+        logger.warning(f"Failed to update signal quality score for {card_id}: {e}")
     return {"status": "followed"}
 
 
@@ -2044,6 +2050,12 @@ async def unfollow_card(card_id: str, current_user: dict = Depends(get_current_u
         .eq("card_id", card_id)
         .execute()
     )
+    try:
+        from app.signal_quality import update_signal_quality_score
+
+        update_signal_quality_score(supabase, card_id)
+    except Exception as e:
+        logger.warning(f"Failed to update signal quality score for {card_id}: {e}")
     return {"status": "unfollowed"}
 
 
@@ -2735,6 +2747,23 @@ async def bulk_review_cards(
             ]
             # Insert all timeline entries in a single batch
             supabase.table("card_timeline").insert(timeline_entries).execute()
+
+        # Step 5: Recompute signal quality scores for approved cards
+        if bulk_data.action == "approve" and updated_ids:
+            try:
+                from app.signal_quality import update_signal_quality_score
+
+                for card_id in updated_ids:
+                    try:
+                        update_signal_quality_score(supabase, card_id)
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to update signal quality score for {card_id}: {e}"
+                        )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to import signal quality module during bulk review: {e}"
+                )
 
         return {"processed": processed_count, "failed": failed}
 
