@@ -650,7 +650,8 @@ const Workstreams: React.FC = () => {
   const [scanStatuses, setScanStatuses] = useState<
     Record<string, WorkstreamScanStatusResponse>
   >({});
-  const scanPollRef = useRef<NodeJS.Timeout | null>(null);
+  const scanPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const workstreamsRef = useRef<Workstream[]>([]);
 
   // Banner dismissed state (persisted in localStorage)
   const [bannerDismissed, setBannerDismissed] = useState(() => {
@@ -683,28 +684,10 @@ const Workstreams: React.FC = () => {
     loadWorkstreams();
   }, []);
 
-  const loadWorkstreams = async () => {
-    try {
-      const { data } = await supabase
-        .from("workstreams")
-        .select("*")
-        .eq("user_id", user?.id)
-        .order("created_at", { ascending: false });
+  const fetchScanStatuses = useCallback(async () => {
+    const wsList = workstreamsRef.current;
+    if (wsList.length === 0) return;
 
-      setWorkstreams(data || []);
-
-      // Fetch scan statuses for all active workstreams
-      if (data && data.length > 0) {
-        fetchScanStatuses(data);
-      }
-    } catch (error) {
-      console.error("Error loading workstreams:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchScanStatuses = useCallback(async (wsList: Workstream[]) => {
     const {
       data: { session },
     } = await supabase.auth.getSession();
@@ -743,7 +726,7 @@ const Workstreams: React.FC = () => {
     if (hasActiveScans) {
       if (!scanPollRef.current) {
         scanPollRef.current = setInterval(() => {
-          fetchScanStatuses(wsList);
+          fetchScanStatuses();
         }, 5000);
       }
     } else if (scanPollRef.current) {
@@ -751,6 +734,29 @@ const Workstreams: React.FC = () => {
       scanPollRef.current = null;
     }
   }, []);
+
+  const loadWorkstreams = async () => {
+    try {
+      const { data } = await supabase
+        .from("workstreams")
+        .select("*")
+        .eq("user_id", user?.id)
+        .order("created_at", { ascending: false });
+
+      const list = data || [];
+      setWorkstreams(list);
+      workstreamsRef.current = list;
+
+      // Fetch scan statuses for all active workstreams
+      if (list.length > 0) {
+        fetchScanStatuses();
+      }
+    } catch (error) {
+      console.error("Error loading workstreams:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Cleanup scan polling on unmount
   useEffect(() => {

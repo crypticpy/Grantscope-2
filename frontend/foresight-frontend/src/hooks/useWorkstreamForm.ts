@@ -337,11 +337,15 @@ export function useWorkstreamForm({
         }
 
         const data = await response.json();
+        // If user requested a scan, always treat as triggered — the backend
+        // may have already queued one during creation (auto_scan + <3 matches),
+        // so our explicit call might get "already in progress" and return null.
+        // Either way a scan IS running and the kanban should show feedback.
         let scanTriggered = false;
 
         if (formData.analyze_now && data?.id) {
-          const scanId = await triggerWorkstreamAnalysis(data.id);
-          scanTriggered = scanId !== null;
+          await triggerWorkstreamAnalysis(data.id);
+          scanTriggered = true;
         }
 
         if (data?.id && preview?.estimated_count === 0) {
