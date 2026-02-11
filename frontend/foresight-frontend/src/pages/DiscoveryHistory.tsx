@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
 import {
   Clock,
   CheckCircle,
@@ -19,9 +19,9 @@ import {
   Filter,
   Copy,
   Sparkles,
-} from 'lucide-react';
-import { supabase } from '../App';
-import { useAuthContext } from '../hooks/useAuthContext';
+} from "lucide-react";
+import { supabase } from "../App";
+import { useAuthContext } from "../hooks/useAuthContext";
 import {
   fetchDiscoveryRuns,
   triggerDiscoveryRun,
@@ -29,13 +29,16 @@ import {
   fetchDiscoveryConfig,
   type DiscoveryRun,
   type DiscoveryConfig,
-} from '../lib/discovery-api';
+} from "../lib/discovery-api";
 
 /**
  * Format duration between two dates
  */
-const formatDuration = (startedAt: string, completedAt: string | null): string => {
-  if (!completedAt) return 'In progress...';
+const formatDuration = (
+  startedAt: string,
+  completedAt: string | null,
+): string => {
+  if (!completedAt) return "In progress...";
 
   const start = new Date(startedAt);
   const end = new Date(completedAt);
@@ -55,12 +58,12 @@ const formatDuration = (startedAt: string, completedAt: string | null): string =
  */
 const formatDate = (dateString: string): string => {
   const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
+  return date.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 };
 
@@ -74,9 +77,9 @@ const getRelativeTime = (dateString: string): string => {
   const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-  if (diffHours < 1) return 'Just now';
+  if (diffHours < 1) return "Just now";
   if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays === 1) return 'Yesterday';
+  if (diffDays === 1) return "Yesterday";
   if (diffDays < 7) return `${diffDays} days ago`;
   return formatDate(dateString);
 };
@@ -91,12 +94,12 @@ interface ProgressStage {
 }
 
 const DISCOVERY_STAGES: ProgressStage[] = [
-  { id: 'queries', label: 'Generate Queries', icon: FileText },
-  { id: 'search', label: 'Search Sources', icon: Search },
-  { id: 'triage', label: 'Triage Results', icon: Filter },
-  { id: 'blocked', label: 'Filter Blocked', icon: StopCircle },
-  { id: 'dedupe', label: 'Deduplicate', icon: Copy },
-  { id: 'cards', label: 'Create Cards', icon: Sparkles },
+  { id: "queries", label: "Generate Queries", icon: FileText },
+  { id: "search", label: "Search Sources", icon: Search },
+  { id: "triage", label: "Triage Results", icon: Filter },
+  { id: "blocked", label: "Filter Blocked", icon: StopCircle },
+  { id: "dedupe", label: "Deduplicate", icon: Copy },
+  { id: "cards", label: "Create Cards", icon: Sparkles },
 ];
 
 /**
@@ -133,7 +136,7 @@ const ProgressIndicator: React.FC<{
       {/* Stage progress bar */}
       <div className="flex items-center gap-1">
         {DISCOVERY_STAGES.map((stage, idx) => {
-          const status = stages?.[stage.id] || 'pending';
+          const status = stages?.[stage.id] || "pending";
           const Icon = stage.icon;
           const _isActive = stage.id === current_stage;
 
@@ -141,17 +144,17 @@ const ProgressIndicator: React.FC<{
             <div key={stage.id} className="flex items-center">
               <div
                 className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${
-                  status === 'completed'
-                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                    : status === 'in_progress'
-                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                    : 'bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-500'
+                  status === "completed"
+                    ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                    : status === "in_progress"
+                      ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                      : "bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-500"
                 }`}
                 title={stage.label}
               >
-                {status === 'completed' ? (
+                {status === "completed" ? (
                   <CheckCircle className="w-3 h-3" />
-                ) : status === 'in_progress' ? (
+                ) : status === "in_progress" ? (
                   <Loader2 className="w-3 h-3 animate-spin" />
                 ) : (
                   <Icon className="w-3 h-3" />
@@ -193,31 +196,36 @@ const ProgressIndicator: React.FC<{
 /**
  * Status badge component
  */
-const StatusBadge: React.FC<{ status: DiscoveryRun['status'] }> = ({ status }) => {
+const StatusBadge: React.FC<{ status: DiscoveryRun["status"] }> = ({
+  status,
+}) => {
   const config = {
     running: {
       icon: Loader2,
-      text: 'Running',
-      className: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
-      iconClass: 'animate-spin',
+      text: "Running",
+      className:
+        "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+      iconClass: "animate-spin",
     },
     completed: {
       icon: CheckCircle,
-      text: 'Completed',
-      className: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
-      iconClass: '',
+      text: "Completed",
+      className:
+        "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+      iconClass: "",
     },
     failed: {
       icon: XCircle,
-      text: 'Failed',
-      className: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
-      iconClass: '',
+      text: "Failed",
+      className: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
+      iconClass: "",
     },
     cancelled: {
       icon: StopCircle,
-      text: 'Cancelled',
-      className: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
-      iconClass: '',
+      text: "Cancelled",
+      className:
+        "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300",
+      iconClass: "",
     },
   }[status];
 
@@ -263,18 +271,21 @@ const RunRow: React.FC<{
 }> = ({ run, onCancel, cancelling }) => {
   const [expanded, setExpanded] = useState(false);
 
-  const summaryReport = (run.summary_report && typeof run.summary_report === 'object')
-    ? (run.summary_report as Record<string, unknown>)
-    : {};
+  const summaryReport =
+    run.summary_report && typeof run.summary_report === "object"
+      ? (run.summary_report as Record<string, unknown>)
+      : {};
 
   const configFromSummary = summaryReport.config;
-  const markdownReport = typeof summaryReport.markdown === 'string' ? summaryReport.markdown : null;
+  const markdownReport =
+    typeof summaryReport.markdown === "string" ? summaryReport.markdown : null;
   const createdCardIds = Array.isArray(summaryReport.cards_created_ids)
     ? (summaryReport.cards_created_ids as string[])
     : [];
 
   const derivedErrors = (() => {
-    const detailsErrors = (run.error_details as Record<string, unknown> | null)?.errors;
+    const detailsErrors = (run.error_details as Record<string, unknown> | null)
+      ?.errors;
     if (Array.isArray(detailsErrors)) return detailsErrors as string[];
     const reportErrors = summaryReport.errors;
     if (Array.isArray(reportErrors)) return reportErrors as string[];
@@ -319,7 +330,7 @@ const RunRow: React.FC<{
             </div>
           </div>
 
-          {run.status === 'running' && (
+          {run.status === "running" && (
             <button
               onClick={() => onCancel(run.id)}
               disabled={cancelling}
@@ -340,7 +351,7 @@ const RunRow: React.FC<{
           >
             <ChevronRight
               className={`w-5 h-5 text-gray-400 transition-transform ${
-                expanded ? 'rotate-90' : ''
+                expanded ? "rotate-90" : ""
               }`}
             />
           </div>
@@ -348,10 +359,21 @@ const RunRow: React.FC<{
       </div>
 
       {/* Progress indicator for running jobs - always visible */}
-      {run.status === 'running' && (
+      {run.status === "running" && (
         <div className="px-4 py-3 bg-blue-50 dark:bg-blue-900/10 border-t border-blue-200 dark:border-blue-800">
           <ProgressIndicator
-            progress={(run.summary_report as { progress?: { current_stage?: string; message?: string; stages?: Record<string, string>; stats?: Record<string, number> } })?.progress || null}
+            progress={
+              (
+                run.summary_report as {
+                  progress?: {
+                    current_stage?: string;
+                    message?: string;
+                    stages?: Record<string, string>;
+                    stats?: Record<string, number>;
+                  };
+                }
+              )?.progress || null
+            }
           />
         </div>
       )}
@@ -361,19 +383,23 @@ const RunRow: React.FC<{
           {/* Mobile stats */}
           <div className="sm:hidden grid grid-cols-2 gap-3 mb-4">
             <div className="text-sm">
-              <span className="text-gray-500">Sources:</span>{' '}
+              <span className="text-gray-500">Sources:</span>{" "}
               <span className="font-medium">{run.sources_found}</span>
             </div>
             <div className="text-sm">
-              <span className="text-gray-500">Created:</span>{' '}
-              <span className="font-medium text-green-600">{run.cards_created || 0}</span>
+              <span className="text-gray-500">Created:</span>{" "}
+              <span className="font-medium text-green-600">
+                {run.cards_created || 0}
+              </span>
             </div>
             <div className="text-sm">
-              <span className="text-gray-500">Updated:</span>{' '}
-              <span className="font-medium text-blue-600">{run.cards_enriched || 0}</span>
+              <span className="text-gray-500">Updated:</span>{" "}
+              <span className="font-medium text-blue-600">
+                {run.cards_enriched || 0}
+              </span>
             </div>
             <div className="text-sm">
-              <span className="text-gray-500">Duration:</span>{' '}
+              <span className="text-gray-500">Duration:</span>{" "}
               <span className="font-medium">
                 {formatDuration(run.started_at, run.completed_at)}
               </span>
@@ -381,29 +407,36 @@ const RunRow: React.FC<{
           </div>
 
           {/* Configuration */}
-          {configFromSummary != null && typeof configFromSummary === 'object' && (
-            <div className="mb-3">
-              <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
-                Configuration
+          {configFromSummary != null &&
+            typeof configFromSummary === "object" && (
+              <div className="mb-3">
+                <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                  Configuration
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                  {Object.entries(
+                    configFromSummary as Record<string, unknown>,
+                  ).map(([key, value]) => (
+                    <div key={key} className="flex items-start gap-2">
+                      <span className="text-gray-500 dark:text-gray-400 min-w-[140px]">
+                        {key}:
+                      </span>
+                      <span className="text-gray-900 dark:text-gray-100 break-words">
+                        {Array.isArray(value)
+                          ? value.join(", ")
+                          : String(value)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-                {Object.entries(configFromSummary as Record<string, unknown>).map(([key, value]) => (
-                  <div key={key} className="flex items-start gap-2">
-                    <span className="text-gray-500 dark:text-gray-400 min-w-[140px]">{key}:</span>
-                    <span className="text-gray-900 dark:text-gray-100 break-words">
-                      {Array.isArray(value) ? value.join(', ') : String(value)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+            )}
 
           {/* Created cards */}
           {createdCardIds.length > 0 && (
             <div className="mb-3">
               <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
-                Created Cards
+                Created Signals
               </div>
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm text-gray-700 dark:text-gray-300">
@@ -459,7 +492,9 @@ const RunRow: React.FC<{
           <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400">
             <div>Started: {new Date(run.started_at).toLocaleString()}</div>
             {run.completed_at && (
-              <div>Completed: {new Date(run.completed_at).toLocaleString()}</div>
+              <div>
+                Completed: {new Date(run.completed_at).toLocaleString()}
+              </div>
             )}
           </div>
         </div>
@@ -479,51 +514,59 @@ const DiscoveryHistory: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [triggerLoading, setTriggerLoading] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
-  const [_discoveryConfig, setDiscoveryConfig] = useState<DiscoveryConfig | null>(null);
+  const [_discoveryConfig, setDiscoveryConfig] =
+    useState<DiscoveryConfig | null>(null);
 
   // Fetch discovery config on mount
   useEffect(() => {
     const loadConfig = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
         if (session?.access_token) {
           const config = await fetchDiscoveryConfig(session.access_token);
           setDiscoveryConfig(config);
         }
       } catch (err) {
-        console.error('Failed to load discovery config:', err);
+        console.error("Failed to load discovery config:", err);
       }
     };
     loadConfig();
   }, []);
 
-  const loadRuns = useCallback(async (isInitial = false) => {
-    if (!user) return;
+  const loadRuns = useCallback(
+    async (isInitial = false) => {
+      if (!user) return;
 
-    try {
-      // Only show full-page spinner on initial load
-      if (isInitial) {
-        setInitialLoading(true);
-      } else {
-        setRefreshing(true);
+      try {
+        // Only show full-page spinner on initial load
+        if (isInitial) {
+          setInitialLoading(true);
+        } else {
+          setRefreshing(true);
+        }
+        setError(null);
+
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!session?.access_token) {
+          throw new Error("Not authenticated");
+        }
+
+        const data = await fetchDiscoveryRuns(session.access_token, 20);
+        setRuns(data);
+      } catch (err) {
+        console.error("Failed to load discovery runs:", err);
+        setError(err instanceof Error ? err.message : "Failed to load runs");
+      } finally {
+        setInitialLoading(false);
+        setRefreshing(false);
       }
-      setError(null);
-
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        throw new Error('Not authenticated');
-      }
-
-      const data = await fetchDiscoveryRuns(session.access_token, 20);
-      setRuns(data);
-    } catch (err) {
-      console.error('Failed to load discovery runs:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load runs');
-    } finally {
-      setInitialLoading(false);
-      setRefreshing(false);
-    }
-  }, [user]);
+    },
+    [user],
+  );
 
   useEffect(() => {
     loadRuns(true); // Initial load with full spinner
@@ -531,7 +574,7 @@ const DiscoveryHistory: React.FC = () => {
 
   // Poll for updates if there's a running job
   useEffect(() => {
-    const hasRunning = runs.some((r) => r.status === 'running');
+    const hasRunning = runs.some((r) => r.status === "running");
     if (!hasRunning) return;
 
     // Poll every 3 seconds for progress updates during active runs
@@ -546,16 +589,18 @@ const DiscoveryHistory: React.FC = () => {
       setTriggerLoading(true);
       setError(null);
 
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        throw new Error('Not authenticated');
+        throw new Error("Not authenticated");
       }
 
       await triggerDiscoveryRun(session.access_token);
       await loadRuns(false);
     } catch (err) {
-      console.error('Failed to trigger discovery run:', err);
-      setError(err instanceof Error ? err.message : 'Failed to trigger run');
+      console.error("Failed to trigger discovery run:", err);
+      setError(err instanceof Error ? err.message : "Failed to trigger run");
     } finally {
       setTriggerLoading(false);
     }
@@ -567,16 +612,18 @@ const DiscoveryHistory: React.FC = () => {
     try {
       setCancellingId(runId);
 
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        throw new Error('Not authenticated');
+        throw new Error("Not authenticated");
       }
 
       await cancelDiscoveryRun(session.access_token, runId);
       await loadRuns(false);
     } catch (err) {
-      console.error('Failed to cancel run:', err);
-      setError(err instanceof Error ? err.message : 'Failed to cancel run');
+      console.error("Failed to cancel run:", err);
+      setError(err instanceof Error ? err.message : "Failed to cancel run");
     } finally {
       setCancellingId(null);
     }
@@ -585,13 +632,16 @@ const DiscoveryHistory: React.FC = () => {
   // Calculate aggregate stats
   const stats = {
     totalRuns: runs.length,
-    successfulRuns: runs.filter((r) => r.status === 'completed').length,
+    successfulRuns: runs.filter((r) => r.status === "completed").length,
     totalCardsCreated: runs.reduce((sum, r) => sum + (r.cards_created || 0), 0),
-    totalCardsUpdated: runs.reduce((sum, r) => sum + (r.cards_enriched || 0), 0),
+    totalCardsUpdated: runs.reduce(
+      (sum, r) => sum + (r.cards_enriched || 0),
+      0,
+    ),
     totalSources: runs.reduce((sum, r) => sum + (r.sources_found || 0), 0),
   };
 
-  const hasRunningJob = runs.some((r) => r.status === 'running');
+  const hasRunningJob = runs.some((r) => r.status === "running");
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pt-20 pb-8">
@@ -621,7 +671,9 @@ const DiscoveryHistory: React.FC = () => {
                 className="p-2 text-gray-600 dark:text-gray-400 hover:text-brand-blue hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors disabled:opacity-50"
                 title="Refresh"
               >
-                <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
+                <RefreshCw
+                  className={`w-5 h-5 ${refreshing ? "animate-spin" : ""}`}
+                />
               </button>
               <button
                 onClick={handleTriggerRun}
@@ -659,13 +711,13 @@ const DiscoveryHistory: React.FC = () => {
               color="bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700"
             />
             <StatCard
-              label="Cards Created"
+              label="Signals Created"
               value={stats.totalCardsCreated}
               icon={<Zap className="w-5 h-5 text-green-600" />}
               color="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
             />
             <StatCard
-              label="Cards Updated"
+              label="Signals Updated"
               value={stats.totalCardsUpdated}
               icon={<RefreshCw className="w-5 h-5 text-blue-600" />}
               color="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800"
@@ -702,7 +754,8 @@ const DiscoveryHistory: React.FC = () => {
               No Discovery Runs Yet
             </h3>
             <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-md mx-auto">
-              Discovery runs automatically every Sunday at 2 AM UTC, or you can trigger one manually.
+              Discovery runs automatically every Sunday at 2 AM UTC, or you can
+              trigger one manually.
             </p>
             <button
               onClick={handleTriggerRun}
@@ -747,9 +800,9 @@ const DiscoveryHistory: React.FC = () => {
                 Automatic Discovery Schedule
               </div>
               <p className="text-sm text-blue-800 dark:text-blue-200 mt-1">
-                Discovery runs automatically every Sunday at 2:00 AM UTC. The system searches for
-                emerging trends aligned with Austin's strategic priorities and creates new cards
-                for review.
+                Discovery runs automatically every Sunday at 2:00 AM UTC. The
+                system searches for emerging trends aligned with Austin's
+                strategic priorities and creates new signals for review.
               </p>
             </div>
           </div>

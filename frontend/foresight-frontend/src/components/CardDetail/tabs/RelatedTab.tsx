@@ -14,10 +14,10 @@
  * @module CardDetail/tabs/RelatedTab
  */
 
-import React from 'react';
-import { ConceptNetworkDiagram } from '../../visualizations/ConceptNetworkDiagram';
-import type { RelatedCard } from '../../../lib/discovery-api';
-import type { Card } from '../types';
+import React from "react";
+import { ConceptNetworkDiagram } from "../../visualizations/ConceptNetworkDiagram";
+import type { RelatedCard } from "../../../lib/discovery-api";
+import type { Card } from "../types";
 
 /**
  * Props for the RelatedTab component
@@ -27,7 +27,7 @@ export interface RelatedTabProps {
    * The source/central card data
    * Used to display the current card in the center of the network
    */
-  card: Pick<Card, 'id' | 'name' | 'summary' | 'horizon'>;
+  card: Pick<Card, "id" | "name" | "summary" | "horizon">;
 
   /**
    * Array of related cards to display in the network
@@ -111,7 +111,7 @@ export interface RelatedTabProps {
  * const [error, setError] = useState<string | null>(null);
  *
  * const handleCardClick = (cardId: string, cardSlug: string) => {
- *   navigate(`/cards/${cardSlug}`);
+ *   navigate(`/signals/${cardSlug}`);
  * };
  *
  * const loadRelatedCards = async () => {
@@ -147,7 +147,7 @@ export const RelatedTab: React.FC<RelatedTabProps> = ({
   height = 600,
   showMinimap = true,
   showBackground = true,
-  title = 'Related Trends Network',
+  title = "Related Trends Network",
   className,
 }) => {
   return (

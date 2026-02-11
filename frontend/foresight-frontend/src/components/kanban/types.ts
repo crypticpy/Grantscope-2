@@ -197,9 +197,9 @@ export const KANBAN_COLUMNS: KanbanColumnDefinition[] = [
   {
     id: "inbox",
     title: "Inbox",
-    description: "New cards matching your filters",
+    description: "New signals matching your filters",
     emptyStateHint:
-      "Cards matching your filters will appear here automatically",
+      "Signals matching your filters will appear here automatically",
     // No primary action - inbox is for triage
   },
   {
@@ -214,7 +214,7 @@ export const KANBAN_COLUMNS: KanbanColumnDefinition[] = [
       handler: "quickUpdate",
       availability: "column-specific",
     },
-    emptyStateHint: "Drag cards here to evaluate their relevance",
+    emptyStateHint: "Drag signals here to evaluate their relevance",
   },
   {
     id: "research",
@@ -228,7 +228,7 @@ export const KANBAN_COLUMNS: KanbanColumnDefinition[] = [
       handler: "deepDive",
       availability: "column-specific",
     },
-    emptyStateHint: "Cards here are being actively researched",
+    emptyStateHint: "Signals here are being actively researched",
   },
   {
     id: "brief",
@@ -260,7 +260,7 @@ export const KANBAN_COLUMNS: KanbanColumnDefinition[] = [
         availability: "column-specific",
       },
     ],
-    emptyStateHint: "Cards ready for leadership briefings",
+    emptyStateHint: "Signals ready for leadership briefings",
   },
   {
     id: "watching",
@@ -274,13 +274,13 @@ export const KANBAN_COLUMNS: KanbanColumnDefinition[] = [
       handler: "checkUpdates",
       availability: "column-specific",
     },
-    emptyStateHint: "Cards here will be monitored for new developments",
+    emptyStateHint: "Signals here will be monitored for new developments",
   },
   {
     id: "archived",
     title: "Archived",
     description: "No longer active",
-    emptyStateHint: "Completed or dismissed cards",
+    emptyStateHint: "Completed or dismissed signals",
     // No primary action - archived cards are dormant
   },
 ];

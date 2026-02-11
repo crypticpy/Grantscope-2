@@ -95,7 +95,7 @@ export const DiscoverCard = React.memo(function DiscoverCard({
               </span>
             ) : (
               <Link
-                to={`/cards/${card.slug}`}
+                to={`/signals/${card.slug}`}
                 className="hover:text-brand-blue transition-colors"
                 onClick={(e) => e.stopPropagation()}
               >
@@ -170,7 +170,7 @@ export const DiscoverCard = React.memo(function DiscoverCard({
                 ? "text-red-500 hover:text-red-600"
                 : "text-gray-400 hover:text-red-500"
             }`}
-            title={isFollowed ? "Unfollow card" : "Follow card"}
+            title={isFollowed ? "Unfollow signal" : "Follow signal"}
             aria-pressed={isFollowed}
           >
             <Heart
@@ -233,7 +233,7 @@ export const DiscoverCard = React.memo(function DiscoverCard({
           </span>
         ) : (
           <Link
-            to={`/cards/${card.slug}`}
+            to={`/signals/${card.slug}`}
             className="inline-flex items-center text-sm text-brand-blue hover:text-brand-dark-blue dark:text-brand-blue dark:hover:text-brand-light-blue transition-colors"
             onClick={(e) => e.stopPropagation()}
           >

@@ -39,7 +39,7 @@
  *     <KanbanBoard
  *       cards={cards}
  *       onCardMove={handleCardMove}
- *       onCardClick={(card) => navigate(`/cards/${card.card.slug}`)}
+ *       onCardClick={(card) => navigate(`/signals/${card.card.slug}`)}
  *     />
  *   );
  * }
@@ -50,11 +50,11 @@
 // Components
 // =============================================================================
 
-export { KanbanBoard } from './KanbanBoard';
-export { KanbanColumn } from './KanbanColumn';
-export { KanbanCard } from './KanbanCard';
-export { CardActions } from './CardActions';
-export { KanbanErrorBoundary } from './KanbanErrorBoundary';
+export { KanbanBoard } from "./KanbanBoard";
+export { KanbanColumn } from "./KanbanColumn";
+export { KanbanCard } from "./KanbanCard";
+export { CardActions } from "./CardActions";
+export { KanbanErrorBoundary } from "./KanbanErrorBoundary";
 
 // =============================================================================
 // Types
@@ -78,19 +78,19 @@ export type {
   OnRemoveCardCallback,
   OnMoveToColumnCallback,
   CardActionCallbacks,
-} from './types';
+} from "./types";
 
 // =============================================================================
 // Constants
 // =============================================================================
 
-export { KANBAN_COLUMNS } from './types';
+export { KANBAN_COLUMNS } from "./types";
 
 // =============================================================================
 // Component Props Types
 // =============================================================================
 
-export type { KanbanBoardProps } from './KanbanBoard';
-export type { KanbanColumnProps } from './KanbanColumn';
-export type { KanbanCardProps } from './KanbanCard';
-export type { CardActionsProps } from './CardActions';
+export type { KanbanBoardProps } from "./KanbanBoard";
+export type { KanbanColumnProps } from "./KanbanColumn";
+export type { KanbanCardProps } from "./KanbanCard";
+export type { CardActionsProps } from "./CardActions";

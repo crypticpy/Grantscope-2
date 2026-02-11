@@ -6,11 +6,18 @@
  * Handles loading states, empty states, and AI service unavailability fallback.
  */
 
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { Sparkles, TrendingUp, AlertCircle, Lightbulb, ArrowRight, Zap } from 'lucide-react';
-import { getPillarByCode } from '../../data/taxonomy';
-import { PillarBadge } from '../PillarBadge';
+import React from "react";
+import { Link } from "react-router-dom";
+import {
+  Sparkles,
+  TrendingUp,
+  AlertCircle,
+  Lightbulb,
+  ArrowRight,
+  Zap,
+} from "lucide-react";
+import { getPillarByCode } from "../../data/taxonomy";
+import { PillarBadge } from "../PillarBadge";
 
 /**
  * Individual insight item from the analytics API
@@ -52,20 +59,20 @@ interface InsightsPanelProps {
  * Get score color based on value (0-100)
  */
 const getScoreColor = (score: number): string => {
-  if (score >= 80) return 'text-emerald-600 dark:text-emerald-400';
-  if (score >= 60) return 'text-blue-600 dark:text-blue-400';
-  if (score >= 40) return 'text-amber-600 dark:text-amber-400';
-  return 'text-gray-600 dark:text-gray-400';
+  if (score >= 80) return "text-emerald-600 dark:text-emerald-400";
+  if (score >= 60) return "text-blue-600 dark:text-blue-400";
+  if (score >= 40) return "text-amber-600 dark:text-amber-400";
+  return "text-gray-600 dark:text-gray-400";
 };
 
 /**
  * Get score background color for badge
  */
 const getScoreBgColor = (score: number): string => {
-  if (score >= 80) return 'bg-emerald-100 dark:bg-emerald-900/30';
-  if (score >= 60) return 'bg-blue-100 dark:bg-blue-900/30';
-  if (score >= 40) return 'bg-amber-100 dark:bg-amber-900/30';
-  return 'bg-gray-100 dark:bg-gray-700';
+  if (score >= 80) return "bg-emerald-100 dark:bg-emerald-900/30";
+  if (score >= 60) return "bg-blue-100 dark:bg-blue-900/30";
+  if (score >= 40) return "bg-amber-100 dark:bg-amber-900/30";
+  return "bg-gray-100 dark:bg-gray-700";
 };
 
 /**
@@ -74,7 +81,10 @@ const getScoreBgColor = (score: number): string => {
 const InsightSkeleton: React.FC = () => (
   <div className="animate-pulse space-y-4">
     {[1, 2, 3].map((i) => (
-      <div key={i} className="bg-white dark:bg-[#2d3166] rounded-lg p-4 border border-gray-100 dark:border-gray-700">
+      <div
+        key={i}
+        className="bg-white dark:bg-[#2d3166] rounded-lg p-4 border border-gray-100 dark:border-gray-700"
+      >
         <div className="flex items-start gap-3">
           <div className="w-10 h-10 bg-gray-200 dark:bg-gray-600 rounded-full" />
           <div className="flex-1 space-y-2">
@@ -116,7 +126,8 @@ const AIUnavailableFallback: React.FC<{ message?: string }> = ({ message }) => (
         Insights temporarily unavailable
       </h4>
       <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-        {message || 'AI-powered insights are currently unavailable. Showing summary data instead.'}
+        {message ||
+          "AI-powered insights are currently unavailable. Showing summary data instead."}
       </p>
     </div>
   </div>
@@ -140,7 +151,10 @@ const ErrorState: React.FC<{ error: string }> = ({ error }) => (
 /**
  * Individual insight card
  */
-const InsightCard: React.FC<{ insight: InsightItem; index: number }> = ({ insight, index }) => {
+const InsightCard: React.FC<{ insight: InsightItem; index: number }> = ({
+  insight,
+  index,
+}) => {
   const pillar = insight.pillar_id ? getPillarByCode(insight.pillar_id) : null;
 
   return (
@@ -158,7 +172,7 @@ const InsightCard: React.FC<{ insight: InsightItem; index: number }> = ({ insigh
               <h4 className="font-medium text-gray-900 dark:text-white truncate">
                 {insight.card_slug ? (
                   <Link
-                    to={`/cards/${insight.card_slug}`}
+                    to={`/signals/${insight.card_slug}`}
                     className="hover:text-brand-blue transition-colors"
                   >
                     {insight.trend_name}
@@ -168,12 +182,18 @@ const InsightCard: React.FC<{ insight: InsightItem; index: number }> = ({ insigh
                 )}
               </h4>
               {pillar && (
-                <PillarBadge pillarId={insight.pillar_id!} size="sm" showIcon={false} />
+                <PillarBadge
+                  pillarId={insight.pillar_id!}
+                  size="sm"
+                  showIcon={false}
+                />
               )}
             </div>
 
             {/* Score badge */}
-            <div className={`flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-semibold ${getScoreBgColor(insight.score)} ${getScoreColor(insight.score)}`}>
+            <div
+              className={`flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-semibold ${getScoreBgColor(insight.score)} ${getScoreColor(insight.score)}`}
+            >
               {insight.score.toFixed(0)}
             </div>
           </div>
@@ -209,7 +229,7 @@ const InsightsPanel: React.FC<InsightsPanelProps> = ({
   data,
   loading = false,
   error = null,
-  title = 'AI-Generated Insights',
+  title = "AI-Generated Insights",
   maxInsights = 5,
 }) => {
   // Handle loading state
@@ -218,7 +238,9 @@ const InsightsPanel: React.FC<InsightsPanelProps> = ({
       <div className="bg-gray-50 dark:bg-[#1e2048] rounded-lg p-6">
         <div className="flex items-center gap-2 mb-2">
           <Sparkles className="h-5 w-5 text-brand-blue animate-pulse" />
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+            {title}
+          </h3>
         </div>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
           Analyzing top trends and generating strategic insights...
@@ -234,7 +256,9 @@ const InsightsPanel: React.FC<InsightsPanelProps> = ({
       <div className="bg-gray-50 dark:bg-[#1e2048] rounded-lg p-6">
         <div className="flex items-center gap-2 mb-4">
           <Sparkles className="h-5 w-5 text-brand-blue" />
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+            {title}
+          </h3>
         </div>
         <ErrorState error={error} />
       </div>
@@ -252,7 +276,9 @@ const InsightsPanel: React.FC<InsightsPanelProps> = ({
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <Sparkles className="h-5 w-5 text-brand-blue" />
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+            {title}
+          </h3>
         </div>
         {data?.generated_at && (
           <span className="text-xs text-gray-500 dark:text-gray-400">
@@ -260,11 +286,13 @@ const InsightsPanel: React.FC<InsightsPanelProps> = ({
           </span>
         )}
       </div>
-      
+
       {/* Explanatory blurb */}
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-        AI analyzes the highest-scoring trends to surface strategic implications for city leadership.
-        {data?.period_analyzed && ` Based on ${data.period_analyzed.toLowerCase()}.`}
+        AI analyzes the highest-scoring trends to surface strategic implications
+        for city leadership.
+        {data?.period_analyzed &&
+          ` Based on ${data.period_analyzed.toLowerCase()}.`}
       </p>
 
       {/* AI unavailable fallback */}
@@ -280,7 +308,11 @@ const InsightsPanel: React.FC<InsightsPanelProps> = ({
       ) : (
         <div className="space-y-3">
           {insights.map((insight, index) => (
-            <InsightCard key={insight.card_id || `insight-${index}`} insight={insight} index={index} />
+            <InsightCard
+              key={insight.card_id || `insight-${index}`}
+              insight={insight}
+              index={index}
+            />
           ))}
         </div>
       )}

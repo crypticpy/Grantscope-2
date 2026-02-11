@@ -1,8 +1,14 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useHotkeys } from 'react-hotkeys-hook';
-import { useDrag } from '@use-gesture/react';
-import * as Progress from '@radix-ui/react-progress';
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useMemo,
+} from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useHotkeys } from "react-hotkeys-hook";
+import { useDrag } from "@use-gesture/react";
+import * as Progress from "@radix-ui/react-progress";
 import {
   Search,
   CheckCircle,
@@ -17,19 +23,22 @@ import {
   Zap,
   Undo2,
   X,
-} from 'lucide-react';
-import { supabase } from '../App';
-import { useAuthContext } from '../hooks/useAuthContext';
-import { useIsMobile } from '../hooks/use-mobile';
-import { useScrollRestoration } from '../hooks/useScrollRestoration';
-import { PillarBadge } from '../components/PillarBadge';
-import { HorizonBadge } from '../components/HorizonBadge';
-import { StageBadge } from '../components/StageBadge';
-import { ConfidenceBadge } from '../components/ConfidenceBadge';
-import { Tooltip } from '../components/ui/Tooltip';
-import { cn } from '../lib/utils';
-import { parseStageNumber } from '../lib/stage-utils';
-import { VirtualizedList, VirtualizedListHandle } from '../components/VirtualizedList';
+} from "lucide-react";
+import { supabase } from "../App";
+import { useAuthContext } from "../hooks/useAuthContext";
+import { useIsMobile } from "../hooks/use-mobile";
+import { useScrollRestoration } from "../hooks/useScrollRestoration";
+import { PillarBadge } from "../components/PillarBadge";
+import { HorizonBadge } from "../components/HorizonBadge";
+import { StageBadge } from "../components/StageBadge";
+import { ConfidenceBadge } from "../components/ConfidenceBadge";
+import { Tooltip } from "../components/ui/Tooltip";
+import { cn } from "../lib/utils";
+import { parseStageNumber } from "../lib/stage-utils";
+import {
+  VirtualizedList,
+  VirtualizedListHandle,
+} from "../components/VirtualizedList";
 import {
   fetchPendingReviewCards,
   reviewCard,
@@ -38,7 +47,7 @@ import {
   type PendingCard,
   type ReviewAction,
   type DismissReason,
-} from '../lib/discovery-api';
+} from "../lib/discovery-api";
 
 interface Pillar {
   id: string;
@@ -46,12 +55,12 @@ interface Pillar {
   color: string;
 }
 
-type ConfidenceFilter = 'all' | 'high' | 'medium' | 'low';
+type ConfidenceFilter = "all" | "high" | "medium" | "low";
 
 /**
  * Undo action types for tracking user actions
  */
-type UndoActionType = 'approve' | 'reject' | 'dismiss' | 'defer';
+type UndoActionType = "approve" | "reject" | "dismiss" | "defer";
 
 /**
  * Represents an action that can be undone
@@ -86,9 +95,9 @@ const formatDiscoveredDate = (dateString: string): string => {
   const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-  if (diffHours < 1) return 'Just now';
+  if (diffHours < 1) return "Just now";
   if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays === 1) return 'Yesterday';
+  if (diffDays === 1) return "Yesterday";
   if (diffDays < 7) return `${diffDays} days ago`;
   return date.toLocaleDateString();
 };
@@ -96,11 +105,15 @@ const formatDiscoveredDate = (dateString: string): string => {
 /**
  * Filter cards by confidence level
  */
-const filterByConfidence = (cards: PendingCard[], filter: ConfidenceFilter): PendingCard[] => {
-  if (filter === 'all') return cards;
+const filterByConfidence = (
+  cards: PendingCard[],
+  filter: ConfidenceFilter,
+): PendingCard[] => {
+  if (filter === "all") return cards;
   return cards.filter((card) => {
-    if (filter === 'high') return card.ai_confidence >= 0.9;
-    if (filter === 'medium') return card.ai_confidence >= 0.7 && card.ai_confidence < 0.9;
+    if (filter === "high") return card.ai_confidence >= 0.9;
+    if (filter === "medium")
+      return card.ai_confidence >= 0.7 && card.ai_confidence < 0.9;
     return card.ai_confidence < 0.7;
   });
 };
@@ -109,7 +122,7 @@ const filterByConfidence = (cards: PendingCard[], filter: ConfidenceFilter): Pen
  * Get impact score level and styling
  */
 function getImpactLevel(score: number): {
-  level: 'high' | 'medium' | 'low';
+  level: "high" | "medium" | "low";
   label: string;
   description: string;
   color: string;
@@ -118,31 +131,34 @@ function getImpactLevel(score: number): {
 } {
   if (score >= 70) {
     return {
-      level: 'high',
-      label: 'High Impact',
-      description: 'This discovery could significantly influence strategy or decision-making.',
-      color: 'text-purple-600 dark:text-purple-400',
-      bgColor: 'bg-purple-100 dark:bg-purple-900/30',
-      borderColor: 'border-purple-300 dark:border-purple-700',
+      level: "high",
+      label: "High Impact",
+      description:
+        "This discovery could significantly influence strategy or decision-making.",
+      color: "text-purple-600 dark:text-purple-400",
+      bgColor: "bg-purple-100 dark:bg-purple-900/30",
+      borderColor: "border-purple-300 dark:border-purple-700",
     };
   }
   if (score >= 40) {
     return {
-      level: 'medium',
-      label: 'Moderate Impact',
-      description: 'This discovery has notable strategic relevance and may influence planning.',
-      color: 'text-indigo-600 dark:text-indigo-400',
-      bgColor: 'bg-indigo-100 dark:bg-indigo-900/30',
-      borderColor: 'border-indigo-300 dark:border-indigo-700',
+      level: "medium",
+      label: "Moderate Impact",
+      description:
+        "This discovery has notable strategic relevance and may influence planning.",
+      color: "text-indigo-600 dark:text-indigo-400",
+      bgColor: "bg-indigo-100 dark:bg-indigo-900/30",
+      borderColor: "border-indigo-300 dark:border-indigo-700",
     };
   }
   return {
-    level: 'low',
-    label: 'Lower Impact',
-    description: 'This discovery provides background information with limited immediate strategic value.',
-    color: 'text-slate-600 dark:text-slate-400',
-    bgColor: 'bg-slate-100 dark:bg-slate-900/30',
-    borderColor: 'border-slate-300 dark:border-slate-700',
+    level: "low",
+    label: "Lower Impact",
+    description:
+      "This discovery provides background information with limited immediate strategic value.",
+    color: "text-slate-600 dark:text-slate-400",
+    bgColor: "bg-slate-100 dark:bg-slate-900/30",
+    borderColor: "border-slate-300 dark:border-slate-700",
   };
 }
 
@@ -156,8 +172,8 @@ function ImpactScoreTooltipContent({ score }: { score: number }) {
     <div className="space-y-3 min-w-[200px] max-w-[260px]">
       {/* Header */}
       <div className="flex items-center gap-2">
-        <div className={cn('p-1.5 rounded-md', impactInfo.bgColor)}>
-          <Zap className={cn('h-4 w-4', impactInfo.color)} />
+        <div className={cn("p-1.5 rounded-md", impactInfo.bgColor)}>
+          <Zap className={cn("h-4 w-4", impactInfo.color)} />
         </div>
         <div>
           <div className="font-semibold text-gray-900 dark:text-gray-100">
@@ -179,10 +195,11 @@ function ImpactScoreTooltipContent({ score }: { score: number }) {
         <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
           <div
             className={cn(
-              'h-full rounded-full transition-all',
-              impactInfo.level === 'high' && 'bg-purple-500 dark:bg-purple-400',
-              impactInfo.level === 'medium' && 'bg-indigo-500 dark:bg-indigo-400',
-              impactInfo.level === 'low' && 'bg-slate-500 dark:bg-slate-400'
+              "h-full rounded-full transition-all",
+              impactInfo.level === "high" && "bg-purple-500 dark:bg-purple-400",
+              impactInfo.level === "medium" &&
+                "bg-indigo-500 dark:bg-indigo-400",
+              impactInfo.level === "low" && "bg-slate-500 dark:bg-slate-400",
             )}
             style={{ width: `${score}%` }}
           />
@@ -197,18 +214,17 @@ function ImpactScoreTooltipContent({ score }: { score: number }) {
  */
 function ImpactScoreBadge({
   score,
-  size = 'sm',
+  size = "sm",
 }: {
   score: number;
-  size?: 'sm' | 'md';
+  size?: "sm" | "md";
 }) {
   const impactInfo = getImpactLevel(score);
 
-  const sizeClasses = size === 'sm'
-    ? 'px-1.5 py-0.5 text-xs gap-1'
-    : 'px-2 py-1 text-sm gap-1.5';
+  const sizeClasses =
+    size === "sm" ? "px-1.5 py-0.5 text-xs gap-1" : "px-2 py-1 text-sm gap-1.5";
 
-  const iconSize = size === 'sm' ? 10 : 12;
+  const iconSize = size === "sm" ? 10 : 12;
 
   return (
     <Tooltip
@@ -219,11 +235,11 @@ function ImpactScoreBadge({
     >
       <span
         className={cn(
-          'inline-flex items-center rounded-full font-medium border cursor-pointer',
+          "inline-flex items-center rounded-full font-medium border cursor-pointer",
           impactInfo.bgColor,
           impactInfo.color,
           impactInfo.borderColor,
-          sizeClasses
+          sizeClasses,
         )}
         role="status"
         aria-label={`${impactInfo.label}: ${score}/100`}
@@ -296,7 +312,7 @@ interface SwipeableCardProps {
  */
 function areSwipeableCardPropsEqual(
   prevProps: SwipeableCardProps,
-  nextProps: SwipeableCardProps
+  nextProps: SwipeableCardProps,
 ): boolean {
   // Compare primitive props by value
   if (prevProps.cardId !== nextProps.cardId) return false;
@@ -340,14 +356,24 @@ const SwipeableCard = React.memo(function SwipeableCard({
 }: SwipeableCardProps) {
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
-  const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);
+  const [swipeDirection, setSwipeDirection] = useState<"left" | "right" | null>(
+    null,
+  );
   const [willTrigger, setWillTrigger] = useState(false);
 
   // Use mobile or desktop distance threshold
-  const swipeDistance = isMobile ? SWIPE_CONFIG.mobileDistance : SWIPE_CONFIG.desktopDistance;
+  const swipeDistance = isMobile
+    ? SWIPE_CONFIG.mobileDistance
+    : SWIPE_CONFIG.desktopDistance;
 
   const bind = useDrag(
-    ({ movement: [mx, my], dragging, tap, velocity: [vx], direction: [dx] }) => {
+    ({
+      movement: [mx, my],
+      dragging,
+      tap,
+      velocity: [vx],
+      direction: [dx],
+    }) => {
       // Ignore taps - let regular click handlers work
       if (tap) return;
 
@@ -361,7 +387,10 @@ const SwipeableCard = React.memo(function SwipeableCard({
       const angle = Math.atan2(absY, absX) * (180 / Math.PI);
 
       // If angle is too steep (vertical gesture), don't track as swipe
-      if (angle > SWIPE_CONFIG.maxAngle && absX < SWIPE_CONFIG.feedbackThreshold) {
+      if (
+        angle > SWIPE_CONFIG.maxAngle &&
+        absX < SWIPE_CONFIG.feedbackThreshold
+      ) {
         if (isSwiping) {
           setIsSwiping(false);
           setSwipeOffset(0);
@@ -378,10 +407,10 @@ const SwipeableCard = React.memo(function SwipeableCard({
 
         // Determine direction
         if (mx < -SWIPE_CONFIG.feedbackThreshold) {
-          setSwipeDirection('left');
+          setSwipeDirection("left");
           setWillTrigger(Math.abs(mx) >= swipeDistance);
         } else if (mx > SWIPE_CONFIG.feedbackThreshold) {
-          setSwipeDirection('right');
+          setSwipeDirection("right");
           setWillTrigger(mx >= swipeDistance);
         } else {
           setSwipeDirection(null);
@@ -412,10 +441,10 @@ const SwipeableCard = React.memo(function SwipeableCard({
     },
     {
       filterTaps: true, // Distinguish clicks from drags
-      axis: 'lock', // Lock to first detected axis, helps with scroll vs swipe
+      axis: "lock", // Lock to first detected axis, helps with scroll vs swipe
       pointer: { touch: true }, // Optimize for touch
       threshold: 10, // Minimum movement before tracking starts
-    }
+    },
   );
 
   // Calculate swipe visual feedback styles
@@ -434,7 +463,7 @@ const SwipeableCard = React.memo(function SwipeableCard({
         boxShadow: willTrigger
           ? `inset -6px 0 0 0 rgba(239, 68, 68, 0.5), 0 0 20px rgba(239, 68, 68, 0.2)`
           : `inset -4px 0 0 0 rgba(239, 68, 68, ${intensity})`,
-        backgroundColor: willTrigger ? 'rgba(239, 68, 68, 0.05)' : undefined,
+        backgroundColor: willTrigger ? "rgba(239, 68, 68, 0.05)" : undefined,
       };
     } else if (swipeOffset > SWIPE_CONFIG.feedbackThreshold) {
       // Swiping right - follow (green indicator)
@@ -442,7 +471,7 @@ const SwipeableCard = React.memo(function SwipeableCard({
         boxShadow: willTrigger
           ? `inset 6px 0 0 0 rgba(34, 197, 94, 0.5), 0 0 20px rgba(34, 197, 94, 0.2)`
           : `inset 4px 0 0 0 rgba(34, 197, 94, ${intensity})`,
-        backgroundColor: willTrigger ? 'rgba(34, 197, 94, 0.05)' : undefined,
+        backgroundColor: willTrigger ? "rgba(34, 197, 94, 0.05)" : undefined,
       };
     }
     return {};
@@ -453,52 +482,64 @@ const SwipeableCard = React.memo(function SwipeableCard({
     if (!isSwiping || !swipeDirection) return null;
 
     const progress = Math.min(Math.abs(swipeOffset) / swipeDistance, 1);
-    const opacity = 0.3 + (progress * 0.5); // 30% to 80% opacity
+    const opacity = 0.3 + progress * 0.5; // 30% to 80% opacity
 
     return (
       <>
         {/* Left swipe indicator (dismiss) */}
-        {swipeDirection === 'left' && (
+        {swipeDirection === "left" && (
           <div
             className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none z-10"
             style={{ opacity }}
           >
-            <span className={cn(
-              'text-xs font-medium transition-all',
-              willTrigger ? 'text-red-600 dark:text-red-400' : 'text-red-400 dark:text-red-500'
-            )}>
-              {willTrigger ? 'Release to dismiss' : 'Dismiss'}
+            <span
+              className={cn(
+                "text-xs font-medium transition-all",
+                willTrigger
+                  ? "text-red-600 dark:text-red-400"
+                  : "text-red-400 dark:text-red-500",
+              )}
+            >
+              {willTrigger ? "Release to dismiss" : "Dismiss"}
             </span>
-            <div className={cn(
-              'p-1.5 rounded-full transition-all',
-              willTrigger
-                ? 'bg-red-500 text-white scale-110'
-                : 'bg-red-100 dark:bg-red-900/30 text-red-500 dark:text-red-400'
-            )}>
+            <div
+              className={cn(
+                "p-1.5 rounded-full transition-all",
+                willTrigger
+                  ? "bg-red-500 text-white scale-110"
+                  : "bg-red-100 dark:bg-red-900/30 text-red-500 dark:text-red-400",
+              )}
+            >
               <XCircle className="h-4 w-4" />
             </div>
           </div>
         )}
 
         {/* Right swipe indicator (follow/approve) */}
-        {swipeDirection === 'right' && (
+        {swipeDirection === "right" && (
           <div
             className="absolute left-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none z-10"
             style={{ opacity }}
           >
-            <div className={cn(
-              'p-1.5 rounded-full transition-all',
-              willTrigger
-                ? 'bg-green-500 text-white scale-110'
-                : 'bg-green-100 dark:bg-green-900/30 text-green-500 dark:text-green-400'
-            )}>
+            <div
+              className={cn(
+                "p-1.5 rounded-full transition-all",
+                willTrigger
+                  ? "bg-green-500 text-white scale-110"
+                  : "bg-green-100 dark:bg-green-900/30 text-green-500 dark:text-green-400",
+              )}
+            >
               <CheckCircle className="h-4 w-4" />
             </div>
-            <span className={cn(
-              'text-xs font-medium transition-all',
-              willTrigger ? 'text-green-600 dark:text-green-400' : 'text-green-400 dark:text-green-500'
-            )}>
-              {willTrigger ? 'Release to approve' : 'Approve'}
+            <span
+              className={cn(
+                "text-xs font-medium transition-all",
+                willTrigger
+                  ? "text-green-600 dark:text-green-400"
+                  : "text-green-400 dark:text-green-500",
+              )}
+            >
+              {willTrigger ? "Release to approve" : "Approve"}
             </span>
           </div>
         )}
@@ -517,12 +558,16 @@ const SwipeableCard = React.memo(function SwipeableCard({
       ref={cardRef}
       tabIndex={tabIndex}
       onClick={handleClick}
-      className={cn(className, 'relative')}
+      className={cn(className, "relative")}
       style={{
         ...style,
-        touchAction: 'pan-y pinch-zoom', // Allow vertical scroll and pinch zoom
-        transform: isSwiping ? `translateX(${swipeOffset * SWIPE_CONFIG.damping}px)` : undefined,
-        transition: isSwiping ? 'none' : 'transform 0.2s ease-out, box-shadow 0.2s ease-out',
+        touchAction: "pan-y pinch-zoom", // Allow vertical scroll and pinch zoom
+        transform: isSwiping
+          ? `translateX(${swipeOffset * SWIPE_CONFIG.damping}px)`
+          : undefined,
+        transition: isSwiping
+          ? "none"
+          : "transform 0.2s ease-out, box-shadow 0.2s ease-out",
         ...getSwipeStyles(),
       }}
     >
@@ -535,16 +580,31 @@ const SwipeableCard = React.memo(function SwipeableCard({
 /**
  * Get human-readable action description for toast
  */
-function getActionDescription(action: UndoAction): { verb: string; icon: React.ReactNode } {
+function getActionDescription(action: UndoAction): {
+  verb: string;
+  icon: React.ReactNode;
+} {
   switch (action.type) {
-    case 'approve':
-      return { verb: 'approved', icon: <CheckCircle className="h-4 w-4 text-green-500" /> };
-    case 'reject':
-      return { verb: 'rejected', icon: <XCircle className="h-4 w-4 text-red-500" /> };
-    case 'dismiss':
-      return { verb: 'dismissed', icon: <XCircle className="h-4 w-4 text-gray-500" /> };
-    case 'defer':
-      return { verb: 'deferred', icon: <Clock className="h-4 w-4 text-amber-500" /> };
+    case "approve":
+      return {
+        verb: "approved",
+        icon: <CheckCircle className="h-4 w-4 text-green-500" />,
+      };
+    case "reject":
+      return {
+        verb: "rejected",
+        icon: <XCircle className="h-4 w-4 text-red-500" />,
+      };
+    case "dismiss":
+      return {
+        verb: "dismissed",
+        icon: <XCircle className="h-4 w-4 text-gray-500" />,
+      };
+    case "defer":
+      return {
+        verb: "deferred",
+        icon: <Clock className="h-4 w-4 text-amber-500" />,
+      };
   }
 }
 
@@ -565,25 +625,32 @@ interface UndoToastProps {
   timeRemaining: number; // ms remaining until auto-dismiss
 }
 
-const UndoToast = React.memo(function UndoToast({ action, onUndo, onDismiss, timeRemaining }: UndoToastProps) {
+const UndoToast = React.memo(function UndoToast({
+  action,
+  onUndo,
+  onDismiss,
+  timeRemaining,
+}: UndoToastProps) {
   const { verb, icon } = getActionDescription(action);
   const progressPercent = Math.max(0, (timeRemaining / UNDO_TIMEOUT_MS) * 100);
 
   // Truncate card name based on screen size (shorter on mobile)
-  const maxLength = typeof window !== 'undefined' && window.innerWidth < 640 ? 20 : 40;
-  const cardName = action.card.name.length > maxLength
-    ? `${action.card.name.substring(0, maxLength - 3)}...`
-    : action.card.name;
+  const maxLength =
+    typeof window !== "undefined" && window.innerWidth < 640 ? 20 : 40;
+  const cardName =
+    action.card.name.length > maxLength
+      ? `${action.card.name.substring(0, maxLength - 3)}...`
+      : action.card.name;
 
   return (
     <div
       role="alert"
       aria-live="polite"
       className={cn(
-        'fixed bottom-4 sm:bottom-6 left-3 right-3 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-50',
-        'flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg shadow-lg',
-        'bg-white dark:bg-[#3d4176] border border-gray-200 dark:border-gray-600',
-        'animate-in slide-in-from-bottom-4 fade-in duration-200'
+        "fixed bottom-4 sm:bottom-6 left-3 right-3 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-50",
+        "flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg shadow-lg",
+        "bg-white dark:bg-[#3d4176] border border-gray-200 dark:border-gray-600",
+        "animate-in slide-in-from-bottom-4 fade-in duration-200",
       )}
     >
       {/* Icon */}
@@ -598,12 +665,12 @@ const UndoToast = React.memo(function UndoToast({ action, onUndo, onDismiss, tim
       <button
         onClick={onUndo}
         className={cn(
-          'inline-flex items-center justify-center gap-1 sm:gap-1.5 px-3 sm:px-3 py-2.5 sm:py-1.5',
-          'min-h-[44px] min-w-[44px]',
-          'text-xs sm:text-sm font-medium rounded-md transition-colors flex-shrink-0',
-          'bg-brand-blue/10 text-brand-blue hover:bg-brand-blue/20',
-          'dark:bg-brand-blue/20 dark:hover:bg-brand-blue/30',
-          'active:scale-95'
+          "inline-flex items-center justify-center gap-1 sm:gap-1.5 px-3 sm:px-3 py-2.5 sm:py-1.5",
+          "min-h-[44px] min-w-[44px]",
+          "text-xs sm:text-sm font-medium rounded-md transition-colors flex-shrink-0",
+          "bg-brand-blue/10 text-brand-blue hover:bg-brand-blue/20",
+          "dark:bg-brand-blue/20 dark:hover:bg-brand-blue/30",
+          "active:scale-95",
         )}
       >
         <Undo2 className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
@@ -636,12 +703,15 @@ const DiscoveryQueue: React.FC = () => {
   const navigate = useNavigate();
 
   // Stable scroll restoration options - useMemo prevents object recreation on each render
-  const scrollRestorationOptions = useMemo(() => ({
-    storageKey: 'discovery-queue',
-    clearAfterRestore: false,
-    debounce: true,
-    debounceDelay: 100,
-  }), []);
+  const scrollRestorationOptions = useMemo(
+    () => ({
+      storageKey: "discovery-queue",
+      clearAfterRestore: false,
+      debounce: true,
+      debounceDelay: 100,
+    }),
+    [],
+  );
 
   // Enable scroll position restoration for navigation
   useScrollRestoration(scrollRestorationOptions);
@@ -664,9 +734,10 @@ const DiscoveryQueue: React.FC = () => {
   const toastTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Filters
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedPillar, setSelectedPillar] = useState('');
-  const [confidenceFilter, setConfidenceFilter] = useState<ConfidenceFilter>('all');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedPillar, setSelectedPillar] = useState("");
+  const [confidenceFilter, setConfidenceFilter] =
+    useState<ConfidenceFilter>("all");
 
   // Bulk selection
   const [selectedCards, setSelectedCards] = useState<Set<string>>(new Set());
@@ -680,7 +751,9 @@ const DiscoveryQueue: React.FC = () => {
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   // Cache for stable ref callbacks per card ID - prevents new function references on each render
-  const cardRefCallbacksCache = useRef<Map<string, (el: HTMLDivElement | null) => void>>(new Map());
+  const cardRefCallbacksCache = useRef<
+    Map<string, (el: HTMLDivElement | null) => void>
+  >(new Map());
 
   // Virtualized list ref for scroll control
   const virtualizedListRef = useRef<VirtualizedListHandle>(null);
@@ -696,18 +769,20 @@ const DiscoveryQueue: React.FC = () => {
       setError(null);
 
       // Get auth token
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       const token = session?.access_token;
 
       if (!token) {
-        throw new Error('Not authenticated');
+        throw new Error("Not authenticated");
       }
 
       // Load pillars from Supabase
       const { data: pillarsData } = await supabase
-        .from('pillars')
-        .select('*')
-        .order('name');
+        .from("pillars")
+        .select("*")
+        .order("name");
 
       setPillars(pillarsData || []);
 
@@ -719,8 +794,10 @@ const DiscoveryQueue: React.FC = () => {
         setInitialCardCount(pendingCards.length);
       }
     } catch (err) {
-      console.error('Error loading discovery queue:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load discovery queue');
+      console.error("Error loading discovery queue:", err);
+      setError(
+        err instanceof Error ? err.message : "Failed to load discovery queue",
+      );
     } finally {
       setLoading(false);
     }
@@ -744,7 +821,7 @@ const DiscoveryQueue: React.FC = () => {
       // Remove any expired actions (older than UNDO_TIMEOUT_MS)
       const now = Date.now();
       const validActions = prev.filter(
-        (a) => now - a.timestamp < UNDO_TIMEOUT_MS
+        (a) => now - a.timestamp < UNDO_TIMEOUT_MS,
       );
       // Add the new action at the end (most recent)
       return [...validActions, action];
@@ -878,114 +955,139 @@ const DiscoveryQueue: React.FC = () => {
   /**
    * Handle card review action
    */
-  const handleReviewAction = useCallback(async (cardId: string, action: ReviewAction) => {
-    if (!user) return;
+  const handleReviewAction = useCallback(
+    async (cardId: string, action: ReviewAction) => {
+      if (!user) return;
 
-    // Find the card before we remove it (needed for undo)
-    const cardToAction = cards.find((c) => c.id === cardId);
-    if (!cardToAction) return;
+      // Find the card before we remove it (needed for undo)
+      const cardToAction = cards.find((c) => c.id === cardId);
+      if (!cardToAction) return;
 
-    try {
-      setActionLoading(cardId);
-      setOpenDropdown(null);
+      try {
+        setActionLoading(cardId);
+        setOpenDropdown(null);
 
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const token = session?.access_token;
 
-      if (!token) throw new Error('Not authenticated');
+        if (!token) throw new Error("Not authenticated");
 
-      await reviewCard(token, cardId, action);
+        await reviewCard(token, cardId, action);
 
-      // Push to undo stack before removing (map ReviewAction to UndoActionType)
-      const undoActionType: UndoActionType = action === 'approve' ? 'approve' : action === 'reject' ? 'reject' : 'defer';
-      pushToUndoStack({
-        type: undoActionType,
-        card: cardToAction,
-        timestamp: Date.now(),
-      });
+        // Push to undo stack before removing (map ReviewAction to UndoActionType)
+        const undoActionType: UndoActionType =
+          action === "approve"
+            ? "approve"
+            : action === "reject"
+              ? "reject"
+              : "defer";
+        pushToUndoStack({
+          type: undoActionType,
+          card: cardToAction,
+          timestamp: Date.now(),
+        });
 
-      // Remove card from list on success
-      setCards((prev) => prev.filter((c) => c.id !== cardId));
-      setSelectedCards((prev) => {
-        const next = new Set(prev);
-        next.delete(cardId);
-        return next;
-      });
+        // Remove card from list on success
+        setCards((prev) => prev.filter((c) => c.id !== cardId));
+        setSelectedCards((prev) => {
+          const next = new Set(prev);
+          next.delete(cardId);
+          return next;
+        });
 
-      // Show undo toast
-      showToast();
-    } catch (err) {
-      console.error('Error reviewing card:', err);
-      setError(err instanceof Error ? err.message : 'Failed to review card');
-    } finally {
-      setActionLoading(null);
-    }
-  }, [user, cards, pushToUndoStack, showToast]);
+        // Show undo toast
+        showToast();
+      } catch (err) {
+        console.error("Error reviewing card:", err);
+        setError(
+          err instanceof Error ? err.message : "Failed to review signal",
+        );
+      } finally {
+        setActionLoading(null);
+      }
+    },
+    [user, cards, pushToUndoStack, showToast],
+  );
 
   /**
    * Handle card dismissal
    */
-  const handleDismiss = useCallback(async (cardId: string, reason?: DismissReason) => {
-    if (!user) return;
+  const handleDismiss = useCallback(
+    async (cardId: string, reason?: DismissReason) => {
+      if (!user) return;
 
-    // Find the card before we remove it (needed for undo)
-    const cardToDismiss = cards.find((c) => c.id === cardId);
-    if (!cardToDismiss) return;
+      // Find the card before we remove it (needed for undo)
+      const cardToDismiss = cards.find((c) => c.id === cardId);
+      if (!cardToDismiss) return;
 
-    try {
-      setActionLoading(cardId);
-      setOpenDropdown(null);
+      try {
+        setActionLoading(cardId);
+        setOpenDropdown(null);
 
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const token = session?.access_token;
 
-      if (!token) throw new Error('Not authenticated');
+        if (!token) throw new Error("Not authenticated");
 
-      await dismissCard(token, cardId, reason);
+        await dismissCard(token, cardId, reason);
 
-      // Push to undo stack before removing
-      pushToUndoStack({
-        type: 'dismiss',
-        card: cardToDismiss,
-        timestamp: Date.now(),
-        dismissReason: reason,
-      });
+        // Push to undo stack before removing
+        pushToUndoStack({
+          type: "dismiss",
+          card: cardToDismiss,
+          timestamp: Date.now(),
+          dismissReason: reason,
+        });
 
-      // Remove card from list on success
-      setCards((prev) => prev.filter((c) => c.id !== cardId));
-      setSelectedCards((prev) => {
-        const next = new Set(prev);
-        next.delete(cardId);
-        return next;
-      });
+        // Remove card from list on success
+        setCards((prev) => prev.filter((c) => c.id !== cardId));
+        setSelectedCards((prev) => {
+          const next = new Set(prev);
+          next.delete(cardId);
+          return next;
+        });
 
-      // Show undo toast
-      showToast();
-    } catch (err) {
-      console.error('Error dismissing card:', err);
-      setError(err instanceof Error ? err.message : 'Failed to dismiss card');
-    } finally {
-      setActionLoading(null);
-    }
-  }, [user, cards, pushToUndoStack, showToast]);
+        // Show undo toast
+        showToast();
+      } catch (err) {
+        console.error("Error dismissing card:", err);
+        setError(
+          err instanceof Error ? err.message : "Failed to dismiss signal",
+        );
+      } finally {
+        setActionLoading(null);
+      }
+    },
+    [user, cards, pushToUndoStack, showToast],
+  );
 
   /**
    * Stable callback for swipe-right action (approve)
    * Used by SwipeableCard - accepts cardId parameter for stable reference pattern
    * This prevents creating new function references per card per render
    */
-  const handleSwipeApprove = useCallback((cardId: string) => {
-    handleReviewAction(cardId, 'approve');
-  }, [handleReviewAction]);
+  const handleSwipeApprove = useCallback(
+    (cardId: string) => {
+      handleReviewAction(cardId, "approve");
+    },
+    [handleReviewAction],
+  );
 
   /**
    * Stable callback for swipe-left action (dismiss as irrelevant)
    * Used by SwipeableCard - accepts cardId parameter for stable reference pattern
    * This prevents creating new function references per card per render
    */
-  const handleSwipeDismiss = useCallback((cardId: string) => {
-    handleDismiss(cardId, 'irrelevant');
-  }, [handleDismiss]);
+  const handleSwipeDismiss = useCallback(
+    (cardId: string) => {
+      handleDismiss(cardId, "irrelevant");
+    },
+    [handleDismiss],
+  );
 
   // Filter cards - MUST be defined before callbacks that use it
   const filteredCards = React.useMemo(() => {
@@ -997,7 +1099,7 @@ const DiscoveryQueue: React.FC = () => {
       result = result.filter(
         (card) =>
           card.name.toLowerCase().includes(term) ||
-          card.summary.toLowerCase().includes(term)
+          card.summary.toLowerCase().includes(term),
       );
     }
 
@@ -1021,36 +1123,43 @@ const DiscoveryQueue: React.FC = () => {
       if (!card.slug) return;
       navigate(`/cards/${encodeURIComponent(card.slug)}?mode=review`);
     },
-    [navigate]
+    [navigate],
   );
 
   /**
    * Handle bulk action
    */
-  const handleBulkAction = useCallback(async (action: ReviewAction) => {
-    if (!user || selectedCards.size === 0) return;
+  const handleBulkAction = useCallback(
+    async (action: ReviewAction) => {
+      if (!user || selectedCards.size === 0) return;
 
-    try {
-      setActionLoading('bulk');
+      try {
+        setActionLoading("bulk");
 
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const token = session?.access_token;
 
-      if (!token) throw new Error('Not authenticated');
+        if (!token) throw new Error("Not authenticated");
 
-      const cardIds = Array.from(selectedCards);
-      await bulkReviewCards(token, cardIds, action);
+        const cardIds = Array.from(selectedCards);
+        await bulkReviewCards(token, cardIds, action);
 
-      // Remove processed cards from list
-      setCards((prev) => prev.filter((c) => !selectedCards.has(c.id)));
-      setSelectedCards(new Set());
-    } catch (err) {
-      console.error('Error bulk reviewing cards:', err);
-      setError(err instanceof Error ? err.message : 'Failed to bulk review cards');
-    } finally {
-      setActionLoading(null);
-    }
-  }, [user, selectedCards]);
+        // Remove processed cards from list
+        setCards((prev) => prev.filter((c) => !selectedCards.has(c.id)));
+        setSelectedCards(new Set());
+      } catch (err) {
+        console.error("Error bulk reviewing cards:", err);
+        setError(
+          err instanceof Error ? err.message : "Failed to bulk review signals",
+        );
+      } finally {
+        setActionLoading(null);
+      }
+    },
+    [user, selectedCards],
+  );
 
   /**
    * Toggle card selection
@@ -1085,7 +1194,9 @@ const DiscoveryQueue: React.FC = () => {
   // Stats
   const stats = React.useMemo(() => {
     const high = cards.filter((c) => c.ai_confidence >= 0.9).length;
-    const medium = cards.filter((c) => c.ai_confidence >= 0.7 && c.ai_confidence < 0.9).length;
+    const medium = cards.filter(
+      (c) => c.ai_confidence >= 0.7 && c.ai_confidence < 0.9,
+    ).length;
     const low = cards.filter((c) => c.ai_confidence < 0.7).length;
     return { total: cards.length, high, medium, low };
   }, [cards]);
@@ -1099,9 +1210,10 @@ const DiscoveryQueue: React.FC = () => {
   }, [cards.length, initialCardCount]);
 
   // Get the currently focused card (if any)
-  const focusedCardId = focusedCardIndex >= 0 && focusedCardIndex < filteredCards.length
-    ? filteredCards[focusedCardIndex].id
-    : null;
+  const focusedCardId =
+    focusedCardIndex >= 0 && focusedCardIndex < filteredCards.length
+      ? filteredCards[focusedCardIndex].id
+      : null;
 
   /**
    * Check if enough time has passed since the last action to allow a new one.
@@ -1126,7 +1238,7 @@ const DiscoveryQueue: React.FC = () => {
     setFocusedCardIndex((prev) => {
       const nextIndex = prev < filteredCards.length - 1 ? prev + 1 : 0;
       // Scroll the card into view using virtualized list
-      virtualizedListRef.current?.scrollToIndex(nextIndex, { align: 'center' });
+      virtualizedListRef.current?.scrollToIndex(nextIndex, { align: "center" });
       return nextIndex;
     });
   }, [filteredCards.length]);
@@ -1140,20 +1252,23 @@ const DiscoveryQueue: React.FC = () => {
     setFocusedCardIndex((prev) => {
       const nextIndex = prev > 0 ? prev - 1 : filteredCards.length - 1;
       // Scroll the card into view using virtualized list
-      virtualizedListRef.current?.scrollToIndex(nextIndex, { align: 'center' });
+      virtualizedListRef.current?.scrollToIndex(nextIndex, { align: "center" });
       return nextIndex;
     });
   }, [filteredCards.length]);
 
   // Stable hotkey options to prevent object recreation on every render
-  const hotkeyOptions = useMemo(() => ({
-    preventDefault: true,
-    enableOnFormTags: false,
-  }), []);
+  const hotkeyOptions = useMemo(
+    () => ({
+      preventDefault: true,
+      enableOnFormTags: false,
+    }),
+    [],
+  );
 
   // Keyboard shortcuts for navigation (disabled in form fields)
-  useHotkeys('j', navigateNext, hotkeyOptions, [navigateNext]);
-  useHotkeys('k', navigatePrevious, hotkeyOptions, [navigatePrevious]);
+  useHotkeys("j", navigateNext, hotkeyOptions, [navigateNext]);
+  useHotkeys("k", navigatePrevious, hotkeyOptions, [navigatePrevious]);
 
   /**
    * Follow/approve the focused card (f key)
@@ -1161,14 +1276,14 @@ const DiscoveryQueue: React.FC = () => {
    * Debounced to prevent rapid double-execution
    */
   useHotkeys(
-    'f',
+    "f",
     () => {
       if (focusedCardId && !actionLoading && canExecuteAction()) {
-        handleReviewAction(focusedCardId, 'approve');
+        handleReviewAction(focusedCardId, "approve");
       }
     },
     hotkeyOptions,
-    [focusedCardId, actionLoading, handleReviewAction, canExecuteAction]
+    [focusedCardId, actionLoading, handleReviewAction, canExecuteAction],
   );
 
   /**
@@ -1177,14 +1292,14 @@ const DiscoveryQueue: React.FC = () => {
    * Debounced to prevent rapid double-execution
    */
   useHotkeys(
-    'd',
+    "d",
     () => {
       if (focusedCardId && !actionLoading && canExecuteAction()) {
-        handleDismiss(focusedCardId, 'irrelevant');
+        handleDismiss(focusedCardId, "irrelevant");
       }
     },
     hotkeyOptions,
-    [focusedCardId, actionLoading, handleDismiss, canExecuteAction]
+    [focusedCardId, actionLoading, handleDismiss, canExecuteAction],
   );
 
   /**
@@ -1193,14 +1308,14 @@ const DiscoveryQueue: React.FC = () => {
    * Debounced to prevent accidental double-undo
    */
   useHotkeys(
-    'z',
+    "z",
     () => {
       if (toastVisible && canUndo() && canExecuteAction()) {
         handleUndoFromToast();
       }
     },
     hotkeyOptions,
-    [toastVisible, canUndo, handleUndoFromToast, canExecuteAction]
+    [toastVisible, canUndo, handleUndoFromToast, canExecuteAction],
   );
 
   // Reset focus when filtered cards change
@@ -1247,7 +1362,8 @@ const DiscoveryQueue: React.FC = () => {
               <span className="truncate">Discovery Queue</span>
             </h1>
             <p className="mt-1 sm:mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400">
-              Review AI-discovered cards before they're added to the intelligence library.
+              Review AI-discovered signals before they're added to the
+              intelligence library.
             </p>
           </div>
           <button
@@ -1255,8 +1371,10 @@ const DiscoveryQueue: React.FC = () => {
             disabled={loading}
             className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] px-3 sm:px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue disabled:opacity-50 transition-colors flex-shrink-0 active:scale-95"
           >
-            <RefreshCw className={`h-5 w-5 sm:h-4 sm:w-4 ${loading ? 'animate-spin' : ''} ${isMobile ? '' : 'mr-2'}`} />
-            {!isMobile && 'Refresh'}
+            <RefreshCw
+              className={`h-5 w-5 sm:h-4 sm:w-4 ${loading ? "animate-spin" : ""} ${isMobile ? "" : "mr-2"}`}
+            />
+            {!isMobile && "Refresh"}
           </button>
         </div>
 
@@ -1296,7 +1414,8 @@ const DiscoveryQueue: React.FC = () => {
                 Review Progress
               </span>
               <span className="text-sm text-gray-600 dark:text-gray-400">
-                {progressStats.reviewed} of {progressStats.total} cards reviewed
+                {progressStats.reviewed} of {progressStats.total} signals
+                reviewed
               </span>
             </div>
             <Progress.Root
@@ -1305,13 +1424,15 @@ const DiscoveryQueue: React.FC = () => {
             >
               <Progress.Indicator
                 className="h-full rounded-full bg-brand-blue transition-transform duration-300 ease-out"
-                style={{ transform: `translateX(-${100 - progressStats.percentage}%)` }}
+                style={{
+                  transform: `translateX(-${100 - progressStats.percentage}%)`,
+                }}
               />
             </Progress.Root>
             {progressStats.percentage === 100 && progressStats.total > 0 && (
               <p className="mt-2 text-sm text-green-600 dark:text-green-400 flex items-center gap-1.5">
                 <CheckCircle className="h-4 w-4" />
-                All cards reviewed! Great job.
+                All signals reviewed! Great job.
               </p>
             )}
           </div>
@@ -1333,7 +1454,10 @@ const DiscoveryQueue: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {/* Search */}
           <div className="sm:col-span-2 lg:col-span-2">
-            <label htmlFor="search" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label
+              htmlFor="search"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+            >
               Search
             </label>
             <div className="relative">
@@ -1342,7 +1466,7 @@ const DiscoveryQueue: React.FC = () => {
                 type="text"
                 id="search"
                 className="pl-10 block w-full min-h-[44px] sm:min-h-0 border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue text-base sm:text-sm"
-                placeholder="Search pending cards..."
+                placeholder="Search pending signals..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -1351,7 +1475,10 @@ const DiscoveryQueue: React.FC = () => {
 
           {/* Pillar Filter */}
           <div>
-            <label htmlFor="pillar" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label
+              htmlFor="pillar"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+            >
               Pillar
             </label>
             <select
@@ -1371,14 +1498,19 @@ const DiscoveryQueue: React.FC = () => {
 
           {/* Confidence Filter */}
           <div>
-            <label htmlFor="confidence" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label
+              htmlFor="confidence"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+            >
               Confidence
             </label>
             <select
               id="confidence"
               className="block w-full min-h-[44px] sm:min-h-0 border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue text-base sm:text-sm"
               value={confidenceFilter}
-              onChange={(e) => setConfidenceFilter(e.target.value as ConfidenceFilter)}
+              onChange={(e) =>
+                setConfidenceFilter(e.target.value as ConfidenceFilter)
+              }
             >
               <option value="all">All Levels</option>
               <option value="high">High (90%+)</option>
@@ -1396,10 +1528,16 @@ const DiscoveryQueue: React.FC = () => {
             </p>
             {filteredCards.length > 0 && (
               <button
-                onClick={selectedCards.size === filteredCards.length ? clearSelection : selectAllVisible}
+                onClick={
+                  selectedCards.size === filteredCards.length
+                    ? clearSelection
+                    : selectAllVisible
+                }
                 className="min-h-[44px] px-2 py-2 -my-2 text-xs sm:text-sm text-brand-blue hover:text-brand-dark-blue dark:hover:text-brand-light-blue transition-colors active:scale-95"
               >
-                {selectedCards.size === filteredCards.length ? 'Deselect All' : 'Select All'}
+                {selectedCards.size === filteredCards.length
+                  ? "Deselect All"
+                  : "Select All"}
               </button>
             )}
           </div>
@@ -1411,20 +1549,30 @@ const DiscoveryQueue: React.FC = () => {
         <div className="mb-4 px-4 py-2 bg-gray-50 dark:bg-[#2d3166]/50 rounded-lg border border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-center gap-6 text-xs text-gray-500 dark:text-gray-400">
             <span className="flex items-center gap-1.5">
-              <kbd className="px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 font-mono text-gray-700 dark:text-gray-300">j</kbd>
-              <kbd className="px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 font-mono text-gray-700 dark:text-gray-300">k</kbd>
+              <kbd className="px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 font-mono text-gray-700 dark:text-gray-300">
+                j
+              </kbd>
+              <kbd className="px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 font-mono text-gray-700 dark:text-gray-300">
+                k
+              </kbd>
               <span>Navigate</span>
             </span>
             <span className="flex items-center gap-1.5">
-              <kbd className="px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 font-mono text-gray-700 dark:text-gray-300">f</kbd>
+              <kbd className="px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 font-mono text-gray-700 dark:text-gray-300">
+                f
+              </kbd>
               <span>Follow</span>
             </span>
             <span className="flex items-center gap-1.5">
-              <kbd className="px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 font-mono text-gray-700 dark:text-gray-300">d</kbd>
+              <kbd className="px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 font-mono text-gray-700 dark:text-gray-300">
+                d
+              </kbd>
               <span>Dismiss</span>
             </span>
             <span className="flex items-center gap-1.5">
-              <kbd className="px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 font-mono text-gray-700 dark:text-gray-300">z</kbd>
+              <kbd className="px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 font-mono text-gray-700 dark:text-gray-300">
+                z
+              </kbd>
               <span>Undo</span>
             </span>
           </div>
@@ -1445,24 +1593,25 @@ const DiscoveryQueue: React.FC = () => {
         <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-brand-light-blue dark:bg-brand-blue/20 border border-brand-blue/20 rounded-lg">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <span className="text-sm font-medium text-brand-dark-blue dark:text-brand-light-blue">
-              {selectedCards.size} card{selectedCards.size !== 1 ? 's' : ''} selected
+              {selectedCards.size} card{selectedCards.size !== 1 ? "s" : ""}{" "}
+              selected
             </span>
             <div className="flex items-center gap-2 flex-wrap">
               <button
-                onClick={() => handleBulkAction('approve')}
-                disabled={actionLoading === 'bulk'}
+                onClick={() => handleBulkAction("approve")}
+                disabled={actionLoading === "bulk"}
                 className="inline-flex items-center justify-center min-h-[44px] px-3 sm:px-3 py-2 rounded-md text-xs sm:text-sm font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 transition-colors active:scale-95"
               >
                 <CheckCircle className="h-4 w-4 sm:h-4 sm:w-4 mr-1.5 sm:mr-1.5" />
-                {isMobile ? 'Approve' : 'Approve All'}
+                {isMobile ? "Approve" : "Approve All"}
               </button>
               <button
-                onClick={() => handleBulkAction('reject')}
-                disabled={actionLoading === 'bulk'}
+                onClick={() => handleBulkAction("reject")}
+                disabled={actionLoading === "bulk"}
                 className="inline-flex items-center justify-center min-h-[44px] px-3 sm:px-3 py-2 rounded-md text-xs sm:text-sm font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors active:scale-95"
               >
                 <XCircle className="h-4 w-4 sm:h-4 sm:w-4 mr-1.5 sm:mr-1.5" />
-                {isMobile ? 'Reject' : 'Reject All'}
+                {isMobile ? "Reject" : "Reject All"}
               </button>
               <button
                 onClick={clearSelection}
@@ -1492,7 +1641,8 @@ const DiscoveryQueue: React.FC = () => {
                 All Caught Up!
               </h3>
               <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
-                Great work! You&apos;ve reviewed all pending discoveries. Check back later for new AI-discovered cards.
+                Great work! You&apos;ve reviewed all pending discoveries. Check
+                back later for new AI-discovered signals.
               </p>
               <Link
                 to="/discover"
@@ -1506,16 +1656,17 @@ const DiscoveryQueue: React.FC = () => {
               {/* No cards match current filters */}
               <Inbox className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
-                No Matching Cards
+                No Matching Signals
               </h3>
               <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
-                No cards match your current filters. Try adjusting your search or filter settings.
+                No signals match your current filters. Try adjusting your search
+                or filter settings.
               </p>
               <button
                 onClick={() => {
-                  setSearchTerm('');
-                  setSelectedPillar('');
-                  setConfidenceFilter('all');
+                  setSearchTerm("");
+                  setSelectedPillar("");
+                  setConfidenceFilter("all");
                 }}
                 className="mt-4 inline-flex items-center justify-center min-h-[44px] px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] transition-colors active:scale-95"
               >
@@ -1536,7 +1687,7 @@ const DiscoveryQueue: React.FC = () => {
           focusedIndex={focusedCardIndex}
           onFocusedIndexChange={setFocusedCardIndex}
           onItemClick={openCardDetail}
-          ariaLabel="Discovery queue cards"
+          ariaLabel="Discovery queue signals"
           scrollContainerClassName="h-[calc(100vh-280px)] sm:h-[calc(100vh-300px)]"
           renderItem={(card, _index) => {
             const stageNumber = parseStageNumber(card.stage_id);
@@ -1546,22 +1697,22 @@ const DiscoveryQueue: React.FC = () => {
             const isFocused = focusedCardId === card.id;
 
             return (
-                <SwipeableCard
-                  cardId={card.id}
-                  isMobile={isMobile}
-                  cardRef={getCardRefCallback(card.id)}
-                  onSwipeRight={handleSwipeApprove}
-                  onSwipeLeft={handleSwipeDismiss}
-                  disabled={isLoading}
-                  tabIndex={isFocused ? 0 : -1}
-                  className={cn(
-                    'bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6 border-l-4 transition-all duration-200 cursor-pointer',
-                    isFocused
-                      ? 'border-l-brand-blue ring-2 ring-brand-blue/50 shadow-lg'
-                      : isSelected
-                        ? 'border-l-brand-blue ring-2 ring-brand-blue/20'
-                      : 'border-transparent hover:border-l-brand-blue',
-                  isLoading && 'opacity-60'
+              <SwipeableCard
+                cardId={card.id}
+                isMobile={isMobile}
+                cardRef={getCardRefCallback(card.id)}
+                onSwipeRight={handleSwipeApprove}
+                onSwipeLeft={handleSwipeDismiss}
+                disabled={isLoading}
+                tabIndex={isFocused ? 0 : -1}
+                className={cn(
+                  "bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6 border-l-4 transition-all duration-200 cursor-pointer",
+                  isFocused
+                    ? "border-l-brand-blue ring-2 ring-brand-blue/50 shadow-lg"
+                    : isSelected
+                      ? "border-l-brand-blue ring-2 ring-brand-blue/20"
+                      : "border-transparent hover:border-l-brand-blue",
+                  isLoading && "opacity-60",
                 )}
               >
                 <div className="flex items-start gap-2 sm:gap-4">
@@ -1590,13 +1741,27 @@ const DiscoveryQueue: React.FC = () => {
                         {/* Badges - horizontally scrollable on mobile */}
                         <div className="mt-1.5 sm:mt-2 -mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto scrollbar-hide">
                           <div className="flex items-center gap-1.5 sm:gap-2 flex-nowrap sm:flex-wrap min-w-max sm:min-w-0">
-                            <PillarBadge pillarId={card.pillar_id} showIcon={!isMobile} size="sm" />
+                            <PillarBadge
+                              pillarId={card.pillar_id}
+                              showIcon={!isMobile}
+                              size="sm"
+                            />
                             <HorizonBadge horizon={card.horizon} size="sm" />
                             {stageNumber !== null && (
-                              <StageBadge stage={stageNumber} size="sm" variant="minimal" />
+                              <StageBadge
+                                stage={stageNumber}
+                                size="sm"
+                                variant="minimal"
+                              />
                             )}
-                            <ConfidenceBadge confidence={card.ai_confidence} size="sm" />
-                            <ImpactScoreBadge score={card.impact_score} size="sm" />
+                            <ConfidenceBadge
+                              confidence={card.ai_confidence}
+                              size="sm"
+                            />
+                            <ImpactScoreBadge
+                              score={card.impact_score}
+                              size="sm"
+                            />
                           </div>
                         </div>
                       </div>
@@ -1605,7 +1770,9 @@ const DiscoveryQueue: React.FC = () => {
                       <div className="flex-shrink-0 flex sm:flex-col items-center sm:items-end gap-2 sm:gap-0 sm:text-right text-xs text-gray-500 dark:text-gray-400">
                         <div className="flex items-center gap-1">
                           <Clock className="h-3 w-3" />
-                          <span>{formatDiscoveredDate(card.discovered_at)}</span>
+                          <span>
+                            {formatDiscoveredDate(card.discovered_at)}
+                          </span>
                         </div>
                         {card.source_type && (
                           <span className="sm:mt-1 text-gray-400 dark:text-gray-500">
@@ -1625,11 +1792,11 @@ const DiscoveryQueue: React.FC = () => {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleReviewAction(card.id, 'approve');
+                          handleReviewAction(card.id, "approve");
                         }}
                         disabled={isLoading}
                         className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 px-3 sm:px-3 py-2 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50 disabled:opacity-50 transition-colors active:scale-95"
-                        title="Approve this card"
+                        title="Approve this signal"
                       >
                         <CheckCircle className="h-5 w-5 sm:h-4 sm:w-4 sm:mr-1.5" />
                         <span className="hidden sm:inline ml-1.5">Approve</span>
@@ -1648,7 +1815,7 @@ const DiscoveryQueue: React.FC = () => {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleDismiss(card.id, 'irrelevant');
+                          handleDismiss(card.id, "irrelevant");
                         }}
                         disabled={isLoading}
                         className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 px-3 sm:px-3 py-2 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50 disabled:opacity-50 transition-colors active:scale-95"
@@ -1677,7 +1844,7 @@ const DiscoveryQueue: React.FC = () => {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleDismiss(card.id, 'duplicate');
+                                handleDismiss(card.id, "duplicate");
                               }}
                               className="w-full min-h-[44px] sm:min-h-0 px-4 py-3 sm:py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500"
                             >
@@ -1686,7 +1853,7 @@ const DiscoveryQueue: React.FC = () => {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleDismiss(card.id, 'out_of_scope');
+                                handleDismiss(card.id, "out_of_scope");
                               }}
                               className="w-full min-h-[44px] sm:min-h-0 px-4 py-3 sm:py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500"
                             >
@@ -1695,7 +1862,7 @@ const DiscoveryQueue: React.FC = () => {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleDismiss(card.id, 'low_quality');
+                                handleDismiss(card.id, "low_quality");
                               }}
                               className="w-full min-h-[44px] sm:min-h-0 px-4 py-3 sm:py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500"
                             >
@@ -1704,7 +1871,7 @@ const DiscoveryQueue: React.FC = () => {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleReviewAction(card.id, 'defer');
+                                handleReviewAction(card.id, "defer");
                               }}
                               className="w-full min-h-[44px] sm:min-h-0 px-4 py-3 sm:py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500"
                             >

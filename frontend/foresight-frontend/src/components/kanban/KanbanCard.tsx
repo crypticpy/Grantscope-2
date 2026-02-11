@@ -115,7 +115,7 @@ function AddedFromTooltipContent({
           </span>
         </div>
         <p className="text-xs text-gray-600 dark:text-gray-400">
-          This card was automatically added because it matched your workstream
+          This signal was automatically added because it matched your workstream
           filters:
         </p>
         <div className="space-y-1 text-xs">
@@ -150,7 +150,7 @@ function AddedFromTooltipContent({
           </span>
         </div>
         <p className="text-xs text-gray-600 dark:text-gray-400">
-          You added this card to your workstream.
+          You added this signal to your workstream.
         </p>
       </div>
     );
@@ -162,11 +162,11 @@ function AddedFromTooltipContent({
       <div className="flex items-center gap-2">
         <Heart className="h-4 w-4 text-pink-500" />
         <span className="font-medium text-gray-900 dark:text-gray-100">
-          From followed card
+          From followed signal
         </span>
       </div>
       <p className="text-xs text-gray-600 dark:text-gray-400">
-        Added because you followed this card.
+        Added because you followed this signal.
       </p>
     </div>
   );
@@ -239,7 +239,7 @@ export const KanbanCard = memo(function KanbanCard({
     if (onCardClick) {
       onCardClick(card);
     } else {
-      navigate(`/cards/${embeddedCard.slug}`);
+      navigate(`/signals/${embeddedCard.slug}`);
     }
   };
 
@@ -252,7 +252,7 @@ export const KanbanCard = memo(function KanbanCard({
       if (onCardClick) {
         onCardClick(card);
       } else {
-        navigate(`/cards/${embeddedCard.slug}`);
+        navigate(`/signals/${embeddedCard.slug}`);
       }
     }
   };

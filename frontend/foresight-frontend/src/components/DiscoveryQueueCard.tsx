@@ -14,24 +14,24 @@
  * - Responsive design for mobile and desktop
  */
 
-import React, { memo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useDrag } from '@use-gesture/react';
+import React, { memo, useState } from "react";
+import { Link } from "react-router-dom";
+import { useDrag } from "@use-gesture/react";
 import {
   CheckCircle,
   XCircle,
   Edit3,
   Clock,
   MoreHorizontal,
-} from 'lucide-react';
-import { PillarBadge } from './PillarBadge';
-import { HorizonBadge } from './HorizonBadge';
-import { StageBadge } from './StageBadge';
-import { ConfidenceBadge } from './ConfidenceBadge';
-import { Tooltip } from './ui/Tooltip';
-import { cn } from '../lib/utils';
-import { type PendingCard, type DismissReason } from '../lib/discovery-api';
-import { Zap } from 'lucide-react';
+} from "lucide-react";
+import { PillarBadge } from "./PillarBadge";
+import { HorizonBadge } from "./HorizonBadge";
+import { StageBadge } from "./StageBadge";
+import { ConfidenceBadge } from "./ConfidenceBadge";
+import { Tooltip } from "./ui/Tooltip";
+import { cn } from "../lib/utils";
+import { type PendingCard, type DismissReason } from "../lib/discovery-api";
+import { Zap } from "lucide-react";
 
 /**
  * Mobile-optimized swipe configuration constants
@@ -72,9 +72,9 @@ const formatDiscoveredDate = (dateString: string): string => {
   const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-  if (diffHours < 1) return 'Just now';
+  if (diffHours < 1) return "Just now";
   if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays === 1) return 'Yesterday';
+  if (diffDays === 1) return "Yesterday";
   if (diffDays < 7) return `${diffDays} days ago`;
   return date.toLocaleDateString();
 };
@@ -83,7 +83,7 @@ const formatDiscoveredDate = (dateString: string): string => {
  * Get impact score level and styling
  */
 function getImpactLevel(score: number): {
-  level: 'high' | 'medium' | 'low';
+  level: "high" | "medium" | "low";
   label: string;
   description: string;
   color: string;
@@ -92,31 +92,34 @@ function getImpactLevel(score: number): {
 } {
   if (score >= 70) {
     return {
-      level: 'high',
-      label: 'High Impact',
-      description: 'This discovery could significantly influence strategy or decision-making.',
-      color: 'text-purple-600 dark:text-purple-400',
-      bgColor: 'bg-purple-100 dark:bg-purple-900/30',
-      borderColor: 'border-purple-300 dark:border-purple-700',
+      level: "high",
+      label: "High Impact",
+      description:
+        "This discovery could significantly influence strategy or decision-making.",
+      color: "text-purple-600 dark:text-purple-400",
+      bgColor: "bg-purple-100 dark:bg-purple-900/30",
+      borderColor: "border-purple-300 dark:border-purple-700",
     };
   }
   if (score >= 40) {
     return {
-      level: 'medium',
-      label: 'Moderate Impact',
-      description: 'This discovery has notable strategic relevance and may influence planning.',
-      color: 'text-indigo-600 dark:text-indigo-400',
-      bgColor: 'bg-indigo-100 dark:bg-indigo-900/30',
-      borderColor: 'border-indigo-300 dark:border-indigo-700',
+      level: "medium",
+      label: "Moderate Impact",
+      description:
+        "This discovery has notable strategic relevance and may influence planning.",
+      color: "text-indigo-600 dark:text-indigo-400",
+      bgColor: "bg-indigo-100 dark:bg-indigo-900/30",
+      borderColor: "border-indigo-300 dark:border-indigo-700",
     };
   }
   return {
-    level: 'low',
-    label: 'Lower Impact',
-    description: 'This discovery provides background information with limited immediate strategic value.',
-    color: 'text-slate-600 dark:text-slate-400',
-    bgColor: 'bg-slate-100 dark:bg-slate-900/30',
-    borderColor: 'border-slate-300 dark:border-slate-700',
+    level: "low",
+    label: "Lower Impact",
+    description:
+      "This discovery provides background information with limited immediate strategic value.",
+    color: "text-slate-600 dark:text-slate-400",
+    bgColor: "bg-slate-100 dark:bg-slate-900/30",
+    borderColor: "border-slate-300 dark:border-slate-700",
   };
 }
 
@@ -130,8 +133,8 @@ function ImpactScoreTooltipContent({ score }: { score: number }) {
     <div className="space-y-3 min-w-[200px] max-w-[260px]">
       {/* Header */}
       <div className="flex items-center gap-2">
-        <div className={cn('p-1.5 rounded-md', impactInfo.bgColor)}>
-          <Zap className={cn('h-4 w-4', impactInfo.color)} />
+        <div className={cn("p-1.5 rounded-md", impactInfo.bgColor)}>
+          <Zap className={cn("h-4 w-4", impactInfo.color)} />
         </div>
         <div>
           <div className="font-semibold text-gray-900 dark:text-gray-100">
@@ -153,10 +156,11 @@ function ImpactScoreTooltipContent({ score }: { score: number }) {
         <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
           <div
             className={cn(
-              'h-full rounded-full transition-all',
-              impactInfo.level === 'high' && 'bg-purple-500 dark:bg-purple-400',
-              impactInfo.level === 'medium' && 'bg-indigo-500 dark:bg-indigo-400',
-              impactInfo.level === 'low' && 'bg-slate-500 dark:bg-slate-400'
+              "h-full rounded-full transition-all",
+              impactInfo.level === "high" && "bg-purple-500 dark:bg-purple-400",
+              impactInfo.level === "medium" &&
+                "bg-indigo-500 dark:bg-indigo-400",
+              impactInfo.level === "low" && "bg-slate-500 dark:bg-slate-400",
             )}
             style={{ width: `${score}%` }}
           />
@@ -171,18 +175,17 @@ function ImpactScoreTooltipContent({ score }: { score: number }) {
  */
 function ImpactScoreBadge({
   score,
-  size = 'sm',
+  size = "sm",
 }: {
   score: number;
-  size?: 'sm' | 'md';
+  size?: "sm" | "md";
 }) {
   const impactInfo = getImpactLevel(score);
 
-  const sizeClasses = size === 'sm'
-    ? 'px-1.5 py-0.5 text-xs gap-1'
-    : 'px-2 py-1 text-sm gap-1.5';
+  const sizeClasses =
+    size === "sm" ? "px-1.5 py-0.5 text-xs gap-1" : "px-2 py-1 text-sm gap-1.5";
 
-  const iconSize = size === 'sm' ? 10 : 12;
+  const iconSize = size === "sm" ? 10 : 12;
 
   return (
     <Tooltip
@@ -193,11 +196,11 @@ function ImpactScoreBadge({
     >
       <span
         className={cn(
-          'inline-flex items-center rounded-full font-medium border cursor-pointer',
+          "inline-flex items-center rounded-full font-medium border cursor-pointer",
           impactInfo.bgColor,
           impactInfo.color,
           impactInfo.borderColor,
-          sizeClasses
+          sizeClasses,
         )}
         role="status"
         aria-label={`${impactInfo.label}: ${score}/100`}
@@ -241,14 +244,24 @@ function SwipeableCardWrapper({
 }: SwipeableCardWrapperProps) {
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
-  const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);
+  const [swipeDirection, setSwipeDirection] = useState<"left" | "right" | null>(
+    null,
+  );
   const [willTrigger, setWillTrigger] = useState(false);
 
   // Use mobile or desktop distance threshold
-  const swipeDistance = isMobile ? SWIPE_CONFIG.mobileDistance : SWIPE_CONFIG.desktopDistance;
+  const swipeDistance = isMobile
+    ? SWIPE_CONFIG.mobileDistance
+    : SWIPE_CONFIG.desktopDistance;
 
   const bind = useDrag(
-    ({ movement: [mx, my], dragging, tap, velocity: [vx], direction: [dx] }) => {
+    ({
+      movement: [mx, my],
+      dragging,
+      tap,
+      velocity: [vx],
+      direction: [dx],
+    }) => {
       // Ignore taps - let regular click handlers work
       if (tap) return;
 
@@ -261,7 +274,10 @@ function SwipeableCardWrapper({
       const angle = Math.atan2(absY, absX) * (180 / Math.PI);
 
       // If angle is too steep (vertical gesture), don't track as swipe
-      if (angle > SWIPE_CONFIG.maxAngle && absX < SWIPE_CONFIG.feedbackThreshold) {
+      if (
+        angle > SWIPE_CONFIG.maxAngle &&
+        absX < SWIPE_CONFIG.feedbackThreshold
+      ) {
         if (isSwiping) {
           setIsSwiping(false);
           setSwipeOffset(0);
@@ -278,10 +294,10 @@ function SwipeableCardWrapper({
 
         // Determine direction
         if (mx < -SWIPE_CONFIG.feedbackThreshold) {
-          setSwipeDirection('left');
+          setSwipeDirection("left");
           setWillTrigger(Math.abs(mx) >= swipeDistance);
         } else if (mx > SWIPE_CONFIG.feedbackThreshold) {
-          setSwipeDirection('right');
+          setSwipeDirection("right");
           setWillTrigger(mx >= swipeDistance);
         } else {
           setSwipeDirection(null);
@@ -311,10 +327,10 @@ function SwipeableCardWrapper({
     },
     {
       filterTaps: true,
-      axis: 'lock',
+      axis: "lock",
       pointer: { touch: true },
       threshold: 10,
-    }
+    },
   );
 
   // Calculate swipe visual feedback styles
@@ -331,14 +347,14 @@ function SwipeableCardWrapper({
         boxShadow: willTrigger
           ? `inset -6px 0 0 0 rgba(239, 68, 68, 0.5), 0 0 20px rgba(239, 68, 68, 0.2)`
           : `inset -4px 0 0 0 rgba(239, 68, 68, ${intensity})`,
-        backgroundColor: willTrigger ? 'rgba(239, 68, 68, 0.05)' : undefined,
+        backgroundColor: willTrigger ? "rgba(239, 68, 68, 0.05)" : undefined,
       };
     } else if (swipeOffset > SWIPE_CONFIG.feedbackThreshold) {
       return {
         boxShadow: willTrigger
           ? `inset 6px 0 0 0 rgba(34, 197, 94, 0.5), 0 0 20px rgba(34, 197, 94, 0.2)`
           : `inset 4px 0 0 0 rgba(34, 197, 94, ${intensity})`,
-        backgroundColor: willTrigger ? 'rgba(34, 197, 94, 0.05)' : undefined,
+        backgroundColor: willTrigger ? "rgba(34, 197, 94, 0.05)" : undefined,
       };
     }
     return {};
@@ -349,52 +365,64 @@ function SwipeableCardWrapper({
     if (!isSwiping || !swipeDirection) return null;
 
     const progress = Math.min(Math.abs(swipeOffset) / swipeDistance, 1);
-    const opacity = 0.3 + (progress * 0.5);
+    const opacity = 0.3 + progress * 0.5;
 
     return (
       <>
         {/* Left swipe indicator (dismiss) */}
-        {swipeDirection === 'left' && (
+        {swipeDirection === "left" && (
           <div
             className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none z-10"
             style={{ opacity }}
           >
-            <span className={cn(
-              'text-xs font-medium transition-all',
-              willTrigger ? 'text-red-600 dark:text-red-400' : 'text-red-400 dark:text-red-500'
-            )}>
-              {willTrigger ? 'Release to dismiss' : 'Dismiss'}
+            <span
+              className={cn(
+                "text-xs font-medium transition-all",
+                willTrigger
+                  ? "text-red-600 dark:text-red-400"
+                  : "text-red-400 dark:text-red-500",
+              )}
+            >
+              {willTrigger ? "Release to dismiss" : "Dismiss"}
             </span>
-            <div className={cn(
-              'p-1.5 rounded-full transition-all',
-              willTrigger
-                ? 'bg-red-500 text-white scale-110'
-                : 'bg-red-100 dark:bg-red-900/30 text-red-500 dark:text-red-400'
-            )}>
+            <div
+              className={cn(
+                "p-1.5 rounded-full transition-all",
+                willTrigger
+                  ? "bg-red-500 text-white scale-110"
+                  : "bg-red-100 dark:bg-red-900/30 text-red-500 dark:text-red-400",
+              )}
+            >
               <XCircle className="h-4 w-4" />
             </div>
           </div>
         )}
 
         {/* Right swipe indicator (follow/approve) */}
-        {swipeDirection === 'right' && (
+        {swipeDirection === "right" && (
           <div
             className="absolute left-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none z-10"
             style={{ opacity }}
           >
-            <div className={cn(
-              'p-1.5 rounded-full transition-all',
-              willTrigger
-                ? 'bg-green-500 text-white scale-110'
-                : 'bg-green-100 dark:bg-green-900/30 text-green-500 dark:text-green-400'
-            )}>
+            <div
+              className={cn(
+                "p-1.5 rounded-full transition-all",
+                willTrigger
+                  ? "bg-green-500 text-white scale-110"
+                  : "bg-green-100 dark:bg-green-900/30 text-green-500 dark:text-green-400",
+              )}
+            >
               <CheckCircle className="h-4 w-4" />
             </div>
-            <span className={cn(
-              'text-xs font-medium transition-all',
-              willTrigger ? 'text-green-600 dark:text-green-400' : 'text-green-400 dark:text-green-500'
-            )}>
-              {willTrigger ? 'Release to approve' : 'Approve'}
+            <span
+              className={cn(
+                "text-xs font-medium transition-all",
+                willTrigger
+                  ? "text-green-600 dark:text-green-400"
+                  : "text-green-400 dark:text-green-500",
+              )}
+            >
+              {willTrigger ? "Release to approve" : "Approve"}
             </span>
           </div>
         )}
@@ -408,12 +436,16 @@ function SwipeableCardWrapper({
       ref={cardRef}
       tabIndex={tabIndex}
       onClick={onClick}
-      className={cn(className, 'relative')}
+      className={cn(className, "relative")}
       style={{
         ...style,
-        touchAction: 'pan-y pinch-zoom',
-        transform: isSwiping ? `translateX(${swipeOffset * SWIPE_CONFIG.damping}px)` : undefined,
-        transition: isSwiping ? 'none' : 'transform 0.2s ease-out, box-shadow 0.2s ease-out',
+        touchAction: "pan-y pinch-zoom",
+        transform: isSwiping
+          ? `translateX(${swipeOffset * SWIPE_CONFIG.damping}px)`
+          : undefined,
+        transition: isSwiping
+          ? "none"
+          : "transform 0.2s ease-out, box-shadow 0.2s ease-out",
         ...getSwipeStyles(),
       }}
     >
@@ -498,13 +530,13 @@ export const DiscoveryQueueCard = memo(function DiscoveryQueueCard({
       tabIndex={isFocused ? 0 : -1}
       onClick={onCardClick}
       className={cn(
-        'bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6 border-l-4 transition-all duration-200',
+        "bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6 border-l-4 transition-all duration-200",
         isFocused
-          ? 'border-l-brand-blue ring-2 ring-brand-blue/50 shadow-lg'
+          ? "border-l-brand-blue ring-2 ring-brand-blue/50 shadow-lg"
           : isSelected
-            ? 'border-l-brand-blue ring-2 ring-brand-blue/20'
-            : 'border-transparent hover:border-l-brand-blue',
-        isLoading && 'opacity-60'
+            ? "border-l-brand-blue ring-2 ring-brand-blue/20"
+            : "border-transparent hover:border-l-brand-blue",
+        isLoading && "opacity-60",
       )}
     >
       <div className="flex items-start gap-2 sm:gap-4">
@@ -532,10 +564,18 @@ export const DiscoveryQueueCard = memo(function DiscoveryQueueCard({
               {/* Badges - horizontally scrollable on mobile */}
               <div className="mt-1.5 sm:mt-2 -mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto scrollbar-hide">
                 <div className="flex items-center gap-1.5 sm:gap-2 flex-nowrap sm:flex-wrap min-w-max sm:min-w-0">
-                  <PillarBadge pillarId={card.pillar_id} showIcon={!isMobile} size="sm" />
+                  <PillarBadge
+                    pillarId={card.pillar_id}
+                    showIcon={!isMobile}
+                    size="sm"
+                  />
                   <HorizonBadge horizon={card.horizon} size="sm" />
                   {stageNumber !== null && (
-                    <StageBadge stage={stageNumber} size="sm" variant="minimal" />
+                    <StageBadge
+                      stage={stageNumber}
+                      size="sm"
+                      variant="minimal"
+                    />
                   )}
                   <ConfidenceBadge confidence={card.ai_confidence} size="sm" />
                   <ImpactScoreBadge score={card.impact_score} size="sm" />
@@ -571,7 +611,7 @@ export const DiscoveryQueueCard = memo(function DiscoveryQueueCard({
               }}
               disabled={isLoading}
               className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 px-3 sm:px-3 py-2 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50 disabled:opacity-50 transition-colors active:scale-95"
-              title="Approve this card"
+              title="Approve this signal"
             >
               <CheckCircle className="h-5 w-5 sm:h-4 sm:w-4 sm:mr-1.5" />
               <span className="hidden sm:inline ml-1.5">Approve</span>
@@ -594,7 +634,7 @@ export const DiscoveryQueueCard = memo(function DiscoveryQueueCard({
               }}
               disabled={isLoading}
               className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 px-3 sm:px-3 py-2 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50 disabled:opacity-50 transition-colors active:scale-95"
-              title="Reject this card"
+              title="Reject this signal"
             >
               <XCircle className="h-5 w-5 sm:h-4 sm:w-4 sm:mr-1.5" />
               <span className="hidden sm:inline ml-1.5">Reject</span>
@@ -619,7 +659,7 @@ export const DiscoveryQueueCard = memo(function DiscoveryQueueCard({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      onDismissWithReason('duplicate');
+                      onDismissWithReason("duplicate");
                     }}
                     className="w-full min-h-[44px] sm:min-h-0 px-4 py-3 sm:py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500"
                   >
@@ -628,7 +668,7 @@ export const DiscoveryQueueCard = memo(function DiscoveryQueueCard({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      onDismissWithReason('out_of_scope');
+                      onDismissWithReason("out_of_scope");
                     }}
                     className="w-full min-h-[44px] sm:min-h-0 px-4 py-3 sm:py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500"
                   >
@@ -637,7 +677,7 @@ export const DiscoveryQueueCard = memo(function DiscoveryQueueCard({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      onDismissWithReason('low_quality');
+                      onDismissWithReason("low_quality");
                     }}
                     className="w-full min-h-[44px] sm:min-h-0 px-4 py-3 sm:py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-gray-200 dark:active:bg-gray-500"
                   >

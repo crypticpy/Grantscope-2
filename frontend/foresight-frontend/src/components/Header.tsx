@@ -15,6 +15,7 @@ import {
   MoreHorizontal,
   User,
   BookOpen,
+  Radio,
 } from "lucide-react";
 import { useAuthContext } from "../hooks/useAuthContext";
 
@@ -72,6 +73,7 @@ const Header: React.FC = () => {
   const navigation = [
     { name: "Dashboard", href: "/", icon: Home },
     { name: "Discover", href: "/discover", icon: Compass },
+    { name: "Signals", href: "/signals", icon: Radio },
     { name: "Workstreams", href: "/workstreams", icon: FolderOpen },
   ];
 
@@ -120,7 +122,11 @@ const Header: React.FC = () => {
               const isActive =
                 location.pathname === item.href ||
                 (item.href === "/discover" &&
-                  location.pathname.startsWith("/discover"));
+                  location.pathname.startsWith("/discover")) ||
+                (item.href === "/signals" &&
+                  location.pathname.startsWith("/signals")) ||
+                (item.href === "/workstreams" &&
+                  location.pathname.startsWith("/workstreams"));
               return (
                 <Link
                   key={item.name}
@@ -285,7 +291,11 @@ const Header: React.FC = () => {
               const isActive =
                 location.pathname === item.href ||
                 (item.href === "/discover" &&
-                  location.pathname.startsWith("/discover"));
+                  location.pathname.startsWith("/discover")) ||
+                (item.href === "/signals" &&
+                  location.pathname.startsWith("/signals")) ||
+                (item.href === "/workstreams" &&
+                  location.pathname.startsWith("/workstreams"));
               return (
                 <Link
                   key={item.name}

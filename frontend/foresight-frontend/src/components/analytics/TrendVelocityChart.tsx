@@ -11,7 +11,7 @@
  * - Performance optimization for large datasets (animations disabled > 100 points)
  */
 
-import React from 'react';
+import React from "react";
 import {
   LineChart,
   Line,
@@ -22,9 +22,9 @@ import {
   Legend,
   ResponsiveContainer,
   ReferenceLine,
-} from 'recharts';
-import { format, parseISO } from 'date-fns';
-import { TrendingUp, TrendingDown, Minus, Loader2 } from 'lucide-react';
+} from "recharts";
+import { format, parseISO } from "date-fns";
+import { TrendingUp, TrendingDown, Minus, Loader2 } from "lucide-react";
 
 // ============================================================================
 // Type Definitions
@@ -71,7 +71,11 @@ interface CustomTooltipProps {
   label?: string;
 }
 
-const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label }) => {
+const CustomTooltip: React.FC<CustomTooltipProps> = ({
+  active,
+  payload,
+  label,
+}) => {
   if (!active || !payload || payload.length === 0) {
     return null;
   }
@@ -79,9 +83,9 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label })
   const dataPoint = payload[0]?.payload;
   if (!dataPoint) return null;
 
-  let formattedDate = label || '';
+  let formattedDate = label || "";
   try {
-    formattedDate = format(parseISO(dataPoint.date), 'MMM dd, yyyy');
+    formattedDate = format(parseISO(dataPoint.date), "MMM dd, yyyy");
   } catch {
     formattedDate = dataPoint.date;
   }
@@ -93,20 +97,26 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label })
       </p>
       <div className="space-y-1">
         <div className="flex items-center justify-between gap-4">
-          <span className="text-sm text-gray-600 dark:text-gray-400">Total Velocity:</span>
+          <span className="text-sm text-gray-600 dark:text-gray-400">
+            Total Velocity:
+          </span>
           <span className="text-sm font-medium text-brand-blue">
             {dataPoint.velocity.toLocaleString()}
           </span>
         </div>
         <div className="flex items-center justify-between gap-4">
-          <span className="text-sm text-gray-600 dark:text-gray-400">Cards:</span>
+          <span className="text-sm text-gray-600 dark:text-gray-400">
+            Signals:
+          </span>
           <span className="text-sm font-medium text-gray-900 dark:text-white">
             {dataPoint.count}
           </span>
         </div>
         {dataPoint.avg_velocity_score != null && (
           <div className="flex items-center justify-between gap-4">
-            <span className="text-sm text-gray-600 dark:text-gray-400">Avg Score:</span>
+            <span className="text-sm text-gray-600 dark:text-gray-400">
+              Avg Score:
+            </span>
             <span className="text-sm font-medium text-gray-900 dark:text-white">
               {dataPoint.avg_velocity_score.toFixed(1)}
             </span>
@@ -133,15 +143,20 @@ const WoWChangeBadge: React.FC<WoWChangeBadgeProps> = ({ change }) => {
 
   const Icon = isPositive ? TrendingUp : isNeutral ? Minus : TrendingDown;
   const colorClass = isPositive
-    ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30'
+    ? "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30"
     : isNeutral
-    ? 'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800'
-    : 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30';
+      ? "text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800"
+      : "text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30";
 
   return (
-    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium ${colorClass}`}>
+    <div
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium ${colorClass}`}
+    >
       <Icon className="h-4 w-4" />
-      <span>{isPositive ? '+' : ''}{change.toFixed(1)}%</span>
+      <span>
+        {isPositive ? "+" : ""}
+        {change.toFixed(1)}%
+      </span>
       <span className="text-xs opacity-75">WoW</span>
     </div>
   );
@@ -159,21 +174,22 @@ export const TrendVelocityChart: React.FC<TrendVelocityChartProps> = ({
   height = 400,
   periodStart,
   periodEnd,
-  className = '',
+  className = "",
 }) => {
   // Format date labels for X-axis
   const formatXAxisDate = (dateStr: string): string => {
     try {
-      return format(parseISO(dateStr), 'MMM dd');
+      return format(parseISO(dateStr), "MMM dd");
     } catch {
       return dateStr;
     }
   };
 
   // Calculate average velocity for reference line
-  const avgVelocity = data.length > 0
-    ? data.reduce((sum, point) => sum + point.velocity, 0) / data.length
-    : 0;
+  const avgVelocity =
+    data.length > 0
+      ? data.reduce((sum, point) => sum + point.velocity, 0) / data.length
+      : 0;
 
   // Disable animations for large datasets (performance optimization)
   const disableAnimations = data.length > 100;
@@ -212,11 +228,11 @@ export const TrendVelocityChart: React.FC<TrendVelocityChartProps> = ({
   }
 
   // Format period display
-  let periodDisplay = '';
+  let periodDisplay = "";
   try {
     if (periodStart && periodEnd) {
-      const startFormatted = format(parseISO(periodStart), 'MMM dd, yyyy');
-      const endFormatted = format(parseISO(periodEnd), 'MMM dd, yyyy');
+      const startFormatted = format(parseISO(periodStart), "MMM dd, yyyy");
+      const endFormatted = format(parseISO(periodEnd), "MMM dd, yyyy");
       periodDisplay = `${startFormatted} - ${endFormatted}`;
     }
   } catch {
@@ -224,7 +240,9 @@ export const TrendVelocityChart: React.FC<TrendVelocityChartProps> = ({
   }
 
   return (
-    <div className={`bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4 ${className}`}>
+    <div
+      className={`bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4 ${className}`}
+    >
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
         <div>
@@ -242,8 +260,8 @@ export const TrendVelocityChart: React.FC<TrendVelocityChartProps> = ({
             <div className="text-sm text-gray-500 dark:text-gray-400">
               <span className="font-medium text-gray-900 dark:text-white">
                 {totalCardsAnalyzed.toLocaleString()}
-              </span>{' '}
-              cards analyzed
+              </span>{" "}
+              signals analyzed
             </div>
           )}
           <WoWChangeBadge change={weekOverWeekChange} />
@@ -264,23 +282,25 @@ export const TrendVelocityChart: React.FC<TrendVelocityChartProps> = ({
           <XAxis
             dataKey="date"
             tickFormatter={formatXAxisDate}
-            tick={{ fontSize: 12, fill: '#6b7280' }}
-            tickLine={{ stroke: '#d1d5db' }}
-            axisLine={{ stroke: '#d1d5db' }}
+            tick={{ fontSize: 12, fill: "#6b7280" }}
+            tickLine={{ stroke: "#d1d5db" }}
+            axisLine={{ stroke: "#d1d5db" }}
             interval="preserveStartEnd"
             minTickGap={50}
           />
           <YAxis
-            tick={{ fontSize: 12, fill: '#6b7280' }}
-            tickLine={{ stroke: '#d1d5db' }}
-            axisLine={{ stroke: '#d1d5db' }}
+            tick={{ fontSize: 12, fill: "#6b7280" }}
+            tickLine={{ stroke: "#d1d5db" }}
+            axisLine={{ stroke: "#d1d5db" }}
             tickFormatter={(value) => value.toLocaleString()}
           />
           <Tooltip content={<CustomTooltip />} />
           <Legend
-            wrapperStyle={{ paddingTop: '10px' }}
+            wrapperStyle={{ paddingTop: "10px" }}
             formatter={(value) => (
-              <span className="text-sm text-gray-600 dark:text-gray-400">{value}</span>
+              <span className="text-sm text-gray-600 dark:text-gray-400">
+                {value}
+              </span>
             )}
           />
           {/* Average velocity reference line */}
@@ -291,8 +311,8 @@ export const TrendVelocityChart: React.FC<TrendVelocityChartProps> = ({
               strokeDasharray="5 5"
               label={{
                 value: `Avg: ${avgVelocity.toFixed(0)}`,
-                position: 'right',
-                fill: '#6b7280',
+                position: "right",
+                fill: "#6b7280",
                 fontSize: 11,
               }}
             />
@@ -303,18 +323,28 @@ export const TrendVelocityChart: React.FC<TrendVelocityChartProps> = ({
             name="Total Velocity"
             stroke="#3b82f6"
             strokeWidth={2}
-            dot={{ fill: '#3b82f6', strokeWidth: 2, r: 3 }}
-            activeDot={{ r: 6, fill: '#3b82f6', stroke: '#fff', strokeWidth: 2 }}
+            dot={{ fill: "#3b82f6", strokeWidth: 2, r: 3 }}
+            activeDot={{
+              r: 6,
+              fill: "#3b82f6",
+              stroke: "#fff",
+              strokeWidth: 2,
+            }}
             animationDuration={disableAnimations ? 0 : 500}
           />
           <Line
             type="monotone"
             dataKey="count"
-            name="Card Count"
+            name="Signal Count"
             stroke="#10b981"
             strokeWidth={2}
-            dot={{ fill: '#10b981', strokeWidth: 2, r: 3 }}
-            activeDot={{ r: 6, fill: '#10b981', stroke: '#fff', strokeWidth: 2 }}
+            dot={{ fill: "#10b981", strokeWidth: 2, r: 3 }}
+            activeDot={{
+              r: 6,
+              fill: "#10b981",
+              stroke: "#fff",
+              strokeWidth: 2,
+            }}
             animationDuration={disableAnimations ? 0 : 500}
           />
         </LineChart>

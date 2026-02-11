@@ -8,8 +8,8 @@
  * - Empty state when no cards match filters
  */
 
-import React, { useState, useEffect } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from "react";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   Edit,
@@ -23,15 +23,15 @@ import {
   FileText,
   Presentation,
   ChevronDown,
-} from 'lucide-react';
-import { supabase } from '../App';
-import { useAuthContext } from '../hooks/useAuthContext';
-import { cn } from '../lib/utils';
-import { PillarBadge, PillarBadgeGroup } from '../components/PillarBadge';
-import { HorizonBadge } from '../components/HorizonBadge';
-import { StageBadge } from '../components/StageBadge';
-import { Top25Badge } from '../components/Top25Badge';
-import { WorkstreamForm } from '../components/WorkstreamForm';
+} from "lucide-react";
+import { supabase } from "../App";
+import { useAuthContext } from "../hooks/useAuthContext";
+import { cn } from "../lib/utils";
+import { PillarBadge, PillarBadgeGroup } from "../components/PillarBadge";
+import { HorizonBadge } from "../components/HorizonBadge";
+import { StageBadge } from "../components/StageBadge";
+import { Top25Badge } from "../components/Top25Badge";
+import { WorkstreamForm } from "../components/WorkstreamForm";
 
 // ============================================================================
 // Types
@@ -59,7 +59,7 @@ interface Card {
   summary: string;
   pillar_id: string;
   stage_id: number;
-  horizon: 'H1' | 'H2' | 'H3';
+  horizon: "H1" | "H2" | "H3";
   novelty_score: number;
   maturity_score: number;
   impact_score: number;
@@ -84,13 +84,13 @@ function StatusBadge({ isActive }: { isActive: boolean }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium',
+        "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
         isActive
-          ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400 border border-green-300 dark:border-green-700'
-          : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300 border border-gray-300 dark:border-gray-600'
+          ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400 border border-green-300 dark:border-green-700"
+          : "bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300 border border-gray-300 dark:border-gray-600",
       )}
     >
-      {isActive ? 'Active' : 'Inactive'}
+      {isActive ? "Active" : "Inactive"}
     </span>
   );
 }
@@ -126,7 +126,13 @@ function StageRangeDisplay({ stageIds }: { stageIds: string[] }) {
     return (
       <div className="flex items-center gap-1 flex-wrap">
         {stageNumbers.map((stage) => (
-          <StageBadge key={stage} stage={stage} size="sm" showName={false} variant="minimal" />
+          <StageBadge
+            key={stage}
+            stage={stage}
+            size="sm"
+            showName={false}
+            variant="minimal"
+          />
         ))}
       </div>
     );
@@ -134,7 +140,7 @@ function StageRangeDisplay({ stageIds }: { stageIds: string[] }) {
 
   // Check if consecutive
   const isConsecutive = stageNumbers.every(
-    (n, i) => i === 0 || n === stageNumbers[i - 1] + 1
+    (n, i) => i === 0 || n === stageNumbers[i - 1] + 1,
   );
 
   if (isConsecutive) {
@@ -151,7 +157,13 @@ function StageRangeDisplay({ stageIds }: { stageIds: string[] }) {
   return (
     <div className="flex items-center gap-1 flex-wrap">
       {stageNumbers.map((stage) => (
-        <StageBadge key={stage} stage={stage} size="sm" showName={false} variant="minimal" />
+        <StageBadge
+          key={stage}
+          stage={stage}
+          size="sm"
+          showName={false}
+          variant="minimal"
+        />
       ))}
     </div>
   );
@@ -170,9 +182,9 @@ function CardItem({
   onToggleFollow: (cardId: string, isFollowed: boolean) => void;
 }) {
   const getScoreColor = (score: number) => {
-    if (score >= 80) return 'text-green-600';
-    if (score >= 60) return 'text-yellow-600';
-    return 'text-red-600';
+    if (score >= 80) return "text-green-600";
+    if (score >= 60) return "text-yellow-600";
+    return "text-red-600";
   };
 
   return (
@@ -180,29 +192,41 @@ function CardItem({
       <div className="flex items-start justify-between mb-4">
         <div className="flex-1 min-w-0">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2 truncate">
-            <Link to={`/cards/${card.slug}`} className="hover:text-brand-blue transition-colors">
+            <Link
+              to={`/cards/${card.slug}`}
+              className="hover:text-brand-blue transition-colors"
+            >
               {card.name}
             </Link>
           </h3>
           <div className="flex items-center gap-2 flex-wrap mb-3">
             <PillarBadge pillarId={card.pillar_id} size="sm" />
             <HorizonBadge horizon={card.horizon} size="sm" />
-            <StageBadge stage={card.stage_id} size="sm" showName={false} variant="minimal" />
+            <StageBadge
+              stage={card.stage_id}
+              size="sm"
+              showName={false}
+              variant="minimal"
+            />
             {card.top25_priorities && card.top25_priorities.length > 0 && (
-              <Top25Badge priorities={card.top25_priorities} size="sm" showCount />
+              <Top25Badge
+                priorities={card.top25_priorities}
+                size="sm"
+                showCount
+              />
             )}
           </div>
         </div>
         <button
           onClick={() => onToggleFollow(card.id, isFollowed)}
           className={cn(
-            'flex-shrink-0 p-2 transition-colors rounded-full',
+            "flex-shrink-0 p-2 transition-colors rounded-full",
             isFollowed
-              ? 'text-red-500 hover:text-red-600 hover:bg-red-50'
-              : 'text-gray-400 hover:text-red-500 hover:bg-gray-50'
+              ? "text-red-500 hover:text-red-600 hover:bg-red-50"
+              : "text-gray-400 hover:text-red-500 hover:bg-gray-50",
           )}
-          title={isFollowed ? 'Unfollow card' : 'Follow card'}
-          aria-label={isFollowed ? 'Unfollow card' : 'Follow card'}
+          title={isFollowed ? "Unfollow signal" : "Follow signal"}
+          aria-label={isFollowed ? "Unfollow signal" : "Follow signal"}
         >
           {isFollowed ? (
             <Heart className="h-5 w-5 fill-current" />
@@ -212,25 +236,35 @@ function CardItem({
         </button>
       </div>
 
-      <p className="text-gray-600 dark:text-gray-400 mb-4 line-clamp-3">{card.summary}</p>
+      <p className="text-gray-600 dark:text-gray-400 mb-4 line-clamp-3">
+        {card.summary}
+      </p>
 
       {/* Scores */}
       <div className="grid grid-cols-2 gap-2 text-xs">
         <div className="flex justify-between">
           <span className="text-gray-500 dark:text-gray-400">Impact:</span>
-          <span className={getScoreColor(card.impact_score)}>{card.impact_score}</span>
+          <span className={getScoreColor(card.impact_score)}>
+            {card.impact_score}
+          </span>
         </div>
         <div className="flex justify-between">
           <span className="text-gray-500 dark:text-gray-400">Relevance:</span>
-          <span className={getScoreColor(card.relevance_score)}>{card.relevance_score}</span>
+          <span className={getScoreColor(card.relevance_score)}>
+            {card.relevance_score}
+          </span>
         </div>
         <div className="flex justify-between">
           <span className="text-gray-500 dark:text-gray-400">Velocity:</span>
-          <span className={getScoreColor(card.velocity_score)}>{card.velocity_score}</span>
+          <span className={getScoreColor(card.velocity_score)}>
+            {card.velocity_score}
+          </span>
         </div>
         <div className="flex justify-between">
           <span className="text-gray-500 dark:text-gray-400">Novelty:</span>
-          <span className={getScoreColor(card.novelty_score)}>{card.novelty_score}</span>
+          <span className={getScoreColor(card.novelty_score)}>
+            {card.novelty_score}
+          </span>
         </div>
       </div>
 
@@ -259,14 +293,18 @@ const WorkstreamFeed: React.FC = () => {
   // State
   const [workstream, setWorkstream] = useState<Workstream | null>(null);
   const [cards, setCards] = useState<Card[]>([]);
-  const [followedCardIds, setFollowedCardIds] = useState<Set<string>>(new Set());
+  const [followedCardIds, setFollowedCardIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [loading, setLoading] = useState(true);
   const [cardsLoading, setCardsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Export state
   const [showExportMenu, setShowExportMenu] = useState(false);
-  const [exportLoading, setExportLoading] = useState<'pdf' | 'pptx' | null>(null);
+  const [exportLoading, setExportLoading] = useState<"pdf" | "pptx" | null>(
+    null,
+  );
 
   // Edit modal state
   const [showEditModal, setShowEditModal] = useState(false);
@@ -295,27 +333,29 @@ const WorkstreamFeed: React.FC = () => {
       setError(null);
 
       const { data, error: fetchError } = await supabase
-        .from('workstreams')
-        .select('*')
-        .eq('id', id)
+        .from("workstreams")
+        .select("*")
+        .eq("id", id)
         .single();
 
       if (fetchError) {
-        console.error('Error loading workstream:', fetchError);
-        setError('Failed to load workstream. It may not exist or you may not have access.');
+        console.error("Error loading workstream:", fetchError);
+        setError(
+          "Failed to load workstream. It may not exist or you may not have access.",
+        );
         return;
       }
 
       // Verify ownership
       if (data.user_id !== user?.id) {
-        setError('You do not have access to this workstream.');
+        setError("You do not have access to this workstream.");
         return;
       }
 
       setWorkstream(data);
     } catch (err) {
-      console.error('Error loading workstream:', err);
-      setError('An unexpected error occurred.');
+      console.error("Error loading workstream:", err);
+      setError("An unexpected error occurred.");
     } finally {
       setLoading(false);
     }
@@ -334,19 +374,16 @@ const WorkstreamFeed: React.FC = () => {
     try {
       setCardsLoading(true);
 
-      let query = supabase
-        .from('cards')
-        .select('*')
-        .eq('status', 'active');
+      let query = supabase.from("cards").select("*").eq("status", "active");
 
       // Apply pillar filter
       if (workstream.pillar_ids && workstream.pillar_ids.length > 0) {
-        query = query.in('pillar_id', workstream.pillar_ids);
+        query = query.in("pillar_id", workstream.pillar_ids);
       }
 
       // Apply horizon filter
-      if (workstream.horizon && workstream.horizon !== 'ALL') {
-        query = query.eq('horizon', workstream.horizon);
+      if (workstream.horizon && workstream.horizon !== "ALL") {
+        query = query.eq("horizon", workstream.horizon);
       }
 
       // Apply stage filter
@@ -355,16 +392,18 @@ const WorkstreamFeed: React.FC = () => {
           .map((s) => parseInt(s, 10))
           .filter((n) => !isNaN(n));
         if (stageNumbers.length > 0) {
-          query = query.in('stage_id', stageNumbers);
+          query = query.in("stage_id", stageNumbers);
         }
       }
 
       // Note: Keyword filtering would ideally be done server-side with full-text search
       // For now, we'll filter client-side if needed
-      const { data, error: fetchError } = await query.order('created_at', { ascending: false });
+      const { data, error: fetchError } = await query.order("created_at", {
+        ascending: false,
+      });
 
       if (fetchError) {
-        console.error('Error loading feed:', fetchError);
+        console.error("Error loading feed:", fetchError);
         return;
       }
 
@@ -372,16 +411,20 @@ const WorkstreamFeed: React.FC = () => {
 
       // Client-side keyword filtering (if keywords exist)
       if (workstream.keywords && workstream.keywords.length > 0) {
-        const lowercaseKeywords = workstream.keywords.map((k) => k.toLowerCase());
+        const lowercaseKeywords = workstream.keywords.map((k) =>
+          k.toLowerCase(),
+        );
         filteredCards = filteredCards.filter((card) => {
           const cardText = `${card.name} ${card.summary}`.toLowerCase();
-          return lowercaseKeywords.some((keyword) => cardText.includes(keyword));
+          return lowercaseKeywords.some((keyword) =>
+            cardText.includes(keyword),
+          );
         });
       }
 
       setCards(filteredCards);
     } catch (err) {
-      console.error('Error loading feed:', err);
+      console.error("Error loading feed:", err);
     } finally {
       setCardsLoading(false);
     }
@@ -395,32 +438,35 @@ const WorkstreamFeed: React.FC = () => {
 
     try {
       const { data } = await supabase
-        .from('card_follows')
-        .select('card_id')
-        .eq('user_id', user.id);
+        .from("card_follows")
+        .select("card_id")
+        .eq("user_id", user.id);
 
       if (data) {
         setFollowedCardIds(new Set(data.map((f) => f.card_id)));
       }
     } catch (err) {
-      console.error('Error loading followed cards:', err);
+      console.error("Error loading followed cards:", err);
     }
   };
 
   /**
    * Toggle card follow status
    */
-  const handleToggleFollow = async (cardId: string, isCurrentlyFollowed: boolean) => {
+  const handleToggleFollow = async (
+    cardId: string,
+    isCurrentlyFollowed: boolean,
+  ) => {
     if (!user) return;
 
     try {
       if (isCurrentlyFollowed) {
         // Unfollow
         await supabase
-          .from('card_follows')
+          .from("card_follows")
           .delete()
-          .eq('user_id', user.id)
-          .eq('card_id', cardId);
+          .eq("user_id", user.id)
+          .eq("card_id", cardId);
 
         setFollowedCardIds((prev) => {
           const next = new Set(prev);
@@ -429,16 +475,16 @@ const WorkstreamFeed: React.FC = () => {
         });
       } else {
         // Follow
-        await supabase.from('card_follows').insert({
+        await supabase.from("card_follows").insert({
           user_id: user.id,
           card_id: cardId,
-          priority: 'medium',
+          priority: "medium",
         });
 
         setFollowedCardIds((prev) => new Set([...prev, cardId]));
       }
     } catch (err) {
-      console.error('Error toggling follow:', err);
+      console.error("Error toggling follow:", err);
     }
   };
 
@@ -454,7 +500,7 @@ const WorkstreamFeed: React.FC = () => {
   /**
    * Export workstream report
    */
-  const handleExport = async (format: 'pdf' | 'pptx') => {
+  const handleExport = async (format: "pdf" | "pptx") => {
     if (!workstream || !id) return;
 
     try {
@@ -462,31 +508,35 @@ const WorkstreamFeed: React.FC = () => {
       setShowExportMenu(false);
 
       // Get the session token
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        throw new Error('Authentication required');
+        throw new Error("Authentication required");
       }
 
       // Build the export URL
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
       const exportUrl = `${apiUrl}/api/v1/workstreams/${id}/export/${format}`;
 
       // Fetch the export file
       const response = await fetch(exportUrl, {
-        method: 'GET',
+        method: "GET",
         headers: {
-          'Authorization': `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${session.access_token}`,
         },
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || `Export failed: ${response.status}`);
+        throw new Error(
+          errorData.detail || `Export failed: ${response.status}`,
+        );
       }
 
       // Get the filename from Content-Disposition header or generate one
-      const contentDisposition = response.headers.get('Content-Disposition');
-      let filename = `${workstream.name.replace(/[^a-zA-Z0-9-_]/g, '_')}.${format}`;
+      const contentDisposition = response.headers.get("Content-Disposition");
+      let filename = `${workstream.name.replace(/[^a-zA-Z0-9-_]/g, "_")}.${format}`;
       if (contentDisposition) {
         const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
         if (filenameMatch) {
@@ -497,7 +547,7 @@ const WorkstreamFeed: React.FC = () => {
       // Create blob and download
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
+      const link = document.createElement("a");
       link.href = url;
       link.download = filename;
       document.body.appendChild(link);
@@ -505,7 +555,7 @@ const WorkstreamFeed: React.FC = () => {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      console.error('Export failed:', err);
+      console.error("Export failed:", err);
       // Could add toast notification here
     } finally {
       setExportLoading(null);
@@ -533,7 +583,9 @@ const WorkstreamFeed: React.FC = () => {
       <div className="min-h-screen flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-brand-blue" />
-          <p className="text-gray-600 dark:text-gray-400">Loading workstream...</p>
+          <p className="text-gray-600 dark:text-gray-400">
+            Loading workstream...
+          </p>
         </div>
       </div>
     );
@@ -547,7 +599,9 @@ const WorkstreamFeed: React.FC = () => {
           <div className="text-red-500 dark:text-red-400 mb-4">
             <Filter className="mx-auto h-12 w-12" />
           </div>
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Error</h3>
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+            Error
+          </h3>
           <p className="text-gray-600 dark:text-gray-400 mb-6">{error}</p>
           <Link
             to="/workstreams"
@@ -567,7 +621,9 @@ const WorkstreamFeed: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="text-center py-12 bg-white dark:bg-[#2d3166] rounded-lg shadow">
           <Filter className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" />
-          <h3 className="mt-2 text-lg font-medium text-gray-900 dark:text-white">Workstream not found</h3>
+          <h3 className="mt-2 text-lg font-medium text-gray-900 dark:text-white">
+            Workstream not found
+          </h3>
           <p className="mt-1 text-gray-600 dark:text-gray-400">
             The workstream you're looking for doesn't exist or has been deleted.
           </p>
@@ -602,11 +658,15 @@ const WorkstreamFeed: React.FC = () => {
         <div className="flex items-start justify-between">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2">
-              <h1 className="text-3xl font-bold text-brand-dark-blue dark:text-white">{workstream.name}</h1>
+              <h1 className="text-3xl font-bold text-brand-dark-blue dark:text-white">
+                {workstream.name}
+              </h1>
               <StatusBadge isActive={workstream.is_active} />
             </div>
             {workstream.description && (
-              <p className="text-gray-600 dark:text-gray-400 max-w-3xl">{workstream.description}</p>
+              <p className="text-gray-600 dark:text-gray-400 max-w-3xl">
+                {workstream.description}
+              </p>
             )}
           </div>
 
@@ -616,7 +676,9 @@ const WorkstreamFeed: React.FC = () => {
               className="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-[#2d3166] transition-colors"
               title="Refresh feed"
             >
-              <RefreshCw className={cn('h-4 w-4', cardsLoading && 'animate-spin')} />
+              <RefreshCw
+                className={cn("h-4 w-4", cardsLoading && "animate-spin")}
+              />
             </button>
 
             {/* Export Dropdown */}
@@ -625,8 +687,8 @@ const WorkstreamFeed: React.FC = () => {
                 onClick={() => setShowExportMenu(!showExportMenu)}
                 disabled={exportLoading !== null}
                 className={cn(
-                  'inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-[#2d3166] transition-colors',
-                  exportLoading !== null && 'opacity-75 cursor-not-allowed'
+                  "inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-[#2d3166] transition-colors",
+                  exportLoading !== null && "opacity-75 cursor-not-allowed",
                 )}
                 title="Export workstream report"
               >
@@ -636,7 +698,12 @@ const WorkstreamFeed: React.FC = () => {
                   <FileDown className="h-4 w-4 mr-2" />
                 )}
                 Export
-                <ChevronDown className={cn('h-4 w-4 ml-1 transition-transform', showExportMenu && 'rotate-180')} />
+                <ChevronDown
+                  className={cn(
+                    "h-4 w-4 ml-1 transition-transform",
+                    showExportMenu && "rotate-180",
+                  )}
+                />
               </button>
 
               {/* Dropdown Menu */}
@@ -648,27 +715,35 @@ const WorkstreamFeed: React.FC = () => {
                     onClick={() => setShowExportMenu(false)}
                   />
                   <div className="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-[#3d4176] ring-1 ring-black ring-opacity-5 z-20">
-                    <div className="py-1" role="menu" aria-orientation="vertical">
+                    <div
+                      className="py-1"
+                      role="menu"
+                      aria-orientation="vertical"
+                    >
                       <button
-                        onClick={() => handleExport('pdf')}
+                        onClick={() => handleExport("pdf")}
                         className="w-full text-left px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#4d5186] flex items-center gap-3 transition-colors"
                         role="menuitem"
                       >
                         <FileText className="h-5 w-5 text-red-500" />
                         <div>
                           <div className="font-medium">PDF Report</div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400">Printable document format</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                            Printable document format
+                          </div>
                         </div>
                       </button>
                       <button
-                        onClick={() => handleExport('pptx')}
+                        onClick={() => handleExport("pptx")}
                         className="w-full text-left px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#4d5186] flex items-center gap-3 transition-colors"
                         role="menuitem"
                       >
                         <Presentation className="h-5 w-5 text-orange-500" />
                         <div>
                           <div className="font-medium">PowerPoint</div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400">Presentation slides</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                            Presentation slides
+                          </div>
                         </div>
                       </button>
                     </div>
@@ -710,13 +785,13 @@ const WorkstreamFeed: React.FC = () => {
           )}
 
           {/* Horizon */}
-          {workstream.horizon && workstream.horizon !== 'ALL' && (
+          {workstream.horizon && workstream.horizon !== "ALL" && (
             <div className="flex items-center gap-3">
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300 w-20 shrink-0">
                 Horizon:
               </span>
               <HorizonBadge
-                horizon={workstream.horizon as 'H1' | 'H2' | 'H3'}
+                horizon={workstream.horizon as "H1" | "H2" | "H3"}
                 size="sm"
               />
             </div>
@@ -748,11 +823,11 @@ const WorkstreamFeed: React.FC = () => {
 
           {/* No filters */}
           {(!workstream.pillar_ids || workstream.pillar_ids.length === 0) &&
-            (!workstream.horizon || workstream.horizon === 'ALL') &&
+            (!workstream.horizon || workstream.horizon === "ALL") &&
             (!workstream.stage_ids || workstream.stage_ids.length === 0) &&
             (!workstream.keywords || workstream.keywords.length === 0) && (
               <p className="text-sm text-gray-500 dark:text-gray-400 italic">
-                No filters configured. Showing all cards.
+                No filters configured. Showing all signals.
               </p>
             )}
         </div>
@@ -763,17 +838,21 @@ const WorkstreamFeed: React.FC = () => {
         <div className="flex items-center justify-center py-12">
           <div className="flex flex-col items-center gap-4">
             <Loader2 className="h-8 w-8 animate-spin text-brand-blue" />
-            <p className="text-gray-600 dark:text-gray-400">Loading cards...</p>
+            <p className="text-gray-600 dark:text-gray-400">
+              Loading signals...
+            </p>
           </div>
         </div>
       ) : cards.length === 0 ? (
         /* Empty State */
         <div className="text-center py-12 bg-white dark:bg-[#2d3166] rounded-lg shadow">
           <Filter className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" />
-          <h3 className="mt-2 text-lg font-medium text-gray-900 dark:text-white">No matching cards</h3>
+          <h3 className="mt-2 text-lg font-medium text-gray-900 dark:text-white">
+            No matching signals
+          </h3>
           <p className="mt-1 text-gray-500 dark:text-gray-400 max-w-md mx-auto">
-            No intelligence cards currently match this workstream's filters. Try adjusting
-            the filter criteria to broaden your results.
+            No intelligence signals currently match this workstream's filters.
+            Try adjusting the filter criteria to broaden your results.
           </p>
           <div className="mt-6">
             <button
@@ -790,7 +869,7 @@ const WorkstreamFeed: React.FC = () => {
           {/* Results count */}
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              Showing {cards.length} {cards.length === 1 ? 'card' : 'cards'}
+              Showing {cards.length} {cards.length === 1 ? "card" : "cards"}
             </p>
           </div>
 
@@ -817,7 +896,8 @@ const WorkstreamFeed: React.FC = () => {
                 Edit Workstream Filters
               </h3>
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Adjust the filters to change which cards match this workstream.
+                Adjust the filters to change which signals match this
+                workstream.
               </p>
             </div>
             <div className="flex-1 overflow-y-auto">

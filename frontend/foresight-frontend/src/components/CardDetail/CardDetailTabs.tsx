@@ -15,10 +15,18 @@
  * @module CardDetail
  */
 
-import React, { useCallback, useRef, type KeyboardEvent } from 'react';
-import { Eye, FileText, Calendar, TrendingUp, GitBranch, FolderOpen, type LucideIcon } from 'lucide-react';
-import { cn } from '../../lib/utils';
-import type { CardDetailTab } from './types';
+import React, { useCallback, useRef, type KeyboardEvent } from "react";
+import {
+  Eye,
+  FileText,
+  Calendar,
+  TrendingUp,
+  GitBranch,
+  FolderOpen,
+  type LucideIcon,
+} from "lucide-react";
+import { cn } from "../../lib/utils";
+import type { CardDetailTab } from "./types";
 
 /**
  * Tab definition object
@@ -36,12 +44,12 @@ export interface TabDefinition {
  * Default tab definitions for CardDetail
  */
 export const DEFAULT_TABS: readonly TabDefinition[] = [
-  { id: 'overview', name: 'Overview', icon: Eye },
-  { id: 'sources', name: 'Sources', icon: FileText },
-  { id: 'timeline', name: 'Timeline', icon: Calendar },
-  { id: 'notes', name: 'Notes', icon: TrendingUp },
-  { id: 'related', name: 'Related', icon: GitBranch },
-  { id: 'assets', name: 'Assets', icon: FolderOpen },
+  { id: "overview", name: "Overview", icon: Eye },
+  { id: "sources", name: "Sources", icon: FileText },
+  { id: "timeline", name: "Timeline", icon: Calendar },
+  { id: "notes", name: "Notes", icon: TrendingUp },
+  { id: "related", name: "Related", icon: GitBranch },
+  { id: "assets", name: "Assets", icon: FolderOpen },
 ] as const;
 
 /**
@@ -95,7 +103,7 @@ export const CardDetailTabs: React.FC<CardDetailTabsProps> = ({
   activeTab,
   onTabChange,
   tabs = DEFAULT_TABS,
-  className = '',
+  className = "",
 }) => {
   const tabListRef = useRef<HTMLElement>(null);
 
@@ -108,56 +116,62 @@ export const CardDetailTabs: React.FC<CardDetailTabsProps> = ({
       const tabCount = tabs.length;
 
       switch (event.key) {
-        case 'ArrowLeft': {
+        case "ArrowLeft": {
           event.preventDefault();
-          const prevIndex = currentIndex === 0 ? tabCount - 1 : currentIndex - 1;
+          const prevIndex =
+            currentIndex === 0 ? tabCount - 1 : currentIndex - 1;
           onTabChange(tabs[prevIndex].id);
           // Focus the previous tab button
-          const buttons = tabListRef.current?.querySelectorAll('button[role="tab"]');
+          const buttons =
+            tabListRef.current?.querySelectorAll('button[role="tab"]');
           (buttons?.[prevIndex] as HTMLButtonElement)?.focus();
           break;
         }
-        case 'ArrowRight': {
+        case "ArrowRight": {
           event.preventDefault();
-          const nextIndex = currentIndex === tabCount - 1 ? 0 : currentIndex + 1;
+          const nextIndex =
+            currentIndex === tabCount - 1 ? 0 : currentIndex + 1;
           onTabChange(tabs[nextIndex].id);
           // Focus the next tab button
-          const buttons = tabListRef.current?.querySelectorAll('button[role="tab"]');
+          const buttons =
+            tabListRef.current?.querySelectorAll('button[role="tab"]');
           (buttons?.[nextIndex] as HTMLButtonElement)?.focus();
           break;
         }
-        case 'Home': {
+        case "Home": {
           event.preventDefault();
           onTabChange(tabs[0].id);
-          const buttons = tabListRef.current?.querySelectorAll('button[role="tab"]');
+          const buttons =
+            tabListRef.current?.querySelectorAll('button[role="tab"]');
           (buttons?.[0] as HTMLButtonElement)?.focus();
           break;
         }
-        case 'End': {
+        case "End": {
           event.preventDefault();
           onTabChange(tabs[tabCount - 1].id);
-          const buttons = tabListRef.current?.querySelectorAll('button[role="tab"]');
+          const buttons =
+            tabListRef.current?.querySelectorAll('button[role="tab"]');
           (buttons?.[tabCount - 1] as HTMLButtonElement)?.focus();
           break;
         }
         // Enter and Space are handled by the button's onClick
       }
     },
-    [tabs, onTabChange]
+    [tabs, onTabChange],
   );
 
   return (
     <div
       className={cn(
-        'border-b border-gray-200 dark:border-gray-700 mb-6 sm:mb-8 -mx-4 px-4 sm:mx-0 sm:px-0',
-        className
+        "border-b border-gray-200 dark:border-gray-700 mb-6 sm:mb-8 -mx-4 px-4 sm:mx-0 sm:px-0",
+        className,
       )}
     >
       <nav
         ref={tabListRef}
         className="-mb-px flex space-x-4 sm:space-x-8 overflow-x-auto scrollbar-hide"
         role="tablist"
-        aria-label="Card detail sections"
+        aria-label="Signal detail sections"
       >
         {tabs.map((tab, index) => {
           const Icon = tab.icon;
@@ -174,16 +188,16 @@ export const CardDetailTabs: React.FC<CardDetailTabsProps> = ({
               tabIndex={isActive ? 0 : -1}
               className={cn(
                 // Base styles
-                'py-2 px-1 border-b-2 font-medium text-sm flex items-center',
-                'whitespace-nowrap transition-colors flex-shrink-0',
+                "py-2 px-1 border-b-2 font-medium text-sm flex items-center",
+                "whitespace-nowrap transition-colors flex-shrink-0",
                 // Touch-friendly minimum tap target
-                'min-h-[44px]',
+                "min-h-[44px]",
                 // Active state
                 isActive
-                  ? 'border-brand-blue text-brand-blue'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300',
+                  ? "border-brand-blue text-brand-blue"
+                  : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300",
                 // Focus ring for keyboard navigation
-                'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900'
+                "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900",
               )}
             >
               <Icon className="h-4 w-4 mr-2" aria-hidden="true" />

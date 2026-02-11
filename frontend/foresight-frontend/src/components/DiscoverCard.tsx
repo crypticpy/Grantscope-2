@@ -14,8 +14,8 @@
  * - Responsive design
  */
 
-import React, { memo } from 'react';
-import { Link } from 'react-router-dom';
+import React, { memo } from "react";
+import { Link } from "react-router-dom";
 import {
   Eye,
   Heart,
@@ -23,14 +23,14 @@ import {
   Calendar,
   ArrowLeftRight,
   Check,
-} from 'lucide-react';
-import { format, formatDistanceToNow } from 'date-fns';
-import { PillarBadge } from './PillarBadge';
-import { HorizonBadge } from './HorizonBadge';
-import { StageBadge } from './StageBadge';
-import { Top25Badge } from './Top25Badge';
-import { highlightText } from '../lib/highlight-utils';
-import { cn } from '../lib/utils';
+} from "lucide-react";
+import { format, formatDistanceToNow } from "date-fns";
+import { PillarBadge } from "./PillarBadge";
+import { HorizonBadge } from "./HorizonBadge";
+import { StageBadge } from "./StageBadge";
+import { Top25Badge } from "./Top25Badge";
+import { highlightText } from "../lib/highlight-utils";
+import { cn } from "../lib/utils";
 
 /**
  * Card data interface
@@ -42,7 +42,7 @@ export interface DiscoverCardData {
   summary: string;
   pillar_id: string;
   stage_id: string;
-  horizon: 'H1' | 'H2' | 'H3';
+  horizon: "H1" | "H2" | "H3";
   novelty_score: number;
   maturity_score: number;
   impact_score: number;
@@ -70,16 +70,19 @@ const parseStageNumber = (stageId: string): number | null => {
  * Get color classes for score values
  */
 const getScoreColorClasses = (score: number): string => {
-  if (score >= 80) return 'text-green-600 dark:text-green-400';
-  if (score >= 60) return 'text-amber-600 dark:text-amber-400';
-  return 'text-red-600 dark:text-red-400';
+  if (score >= 80) return "text-green-600 dark:text-green-400";
+  if (score >= 60) return "text-amber-600 dark:text-amber-400";
+  return "text-red-600 dark:text-red-400";
 };
 
 /**
  * Format card date for display
  * Shows relative time for recent updates, absolute date for creation
  */
-const formatCardDate = (createdAt: string, updatedAt?: string): { label: string; text: string } => {
+const formatCardDate = (
+  createdAt: string,
+  updatedAt?: string,
+): { label: string; text: string } => {
   try {
     const created = new Date(createdAt);
     const updated = updatedAt ? new Date(updatedAt) : null;
@@ -87,21 +90,21 @@ const formatCardDate = (createdAt: string, updatedAt?: string): { label: string;
     // If updated_at exists and is different from created_at (more than 1 minute difference)
     if (updated && Math.abs(updated.getTime() - created.getTime()) > 60000) {
       return {
-        label: 'Updated',
-        text: formatDistanceToNow(updated, { addSuffix: true })
+        label: "Updated",
+        text: formatDistanceToNow(updated, { addSuffix: true }),
       };
     }
 
     // Fall back to created_at with absolute date format
     return {
-      label: 'Created',
-      text: format(created, 'MMM d, yyyy')
+      label: "Created",
+      text: format(created, "MMM d, yyyy"),
     };
   } catch {
     // Handle invalid dates gracefully
     return {
-      label: 'Created',
-      text: 'Unknown'
+      label: "Created",
+      text: "Unknown",
     };
   }
 };
@@ -121,7 +124,7 @@ export interface DiscoverCardProps {
   /** Current search term for highlighting */
   searchTerm: string;
   /** Display mode - grid or list */
-  viewMode: 'grid' | 'list';
+  viewMode: "grid" | "list";
   /** Callback when follow button is clicked */
   onFollowToggle: () => void;
   /** Callback when card is selected for comparison */
@@ -150,27 +153,25 @@ export const DiscoverCard = memo(function DiscoverCard({
     <div
       onClick={compareMode ? onCompareToggle : undefined}
       className={cn(
-        'bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 border-l-4 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg relative',
+        "bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 border-l-4 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg relative",
         compareMode
           ? isSelectedForCompare
-            ? 'border-l-extended-purple ring-2 ring-extended-purple/50 cursor-pointer'
-            : 'border-transparent hover:border-l-extended-purple/50 cursor-pointer'
-          : 'border-transparent hover:border-l-brand-blue'
+            ? "border-l-extended-purple ring-2 ring-extended-purple/50 cursor-pointer"
+            : "border-transparent hover:border-l-extended-purple/50 cursor-pointer"
+          : "border-transparent hover:border-l-brand-blue",
       )}
     >
       {/* Compare Mode Selection Indicator */}
       {compareMode && (
         <div
           className={cn(
-            'absolute top-3 right-3 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all',
+            "absolute top-3 right-3 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all",
             isSelectedForCompare
-              ? 'bg-extended-purple border-extended-purple text-white'
-              : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
+              ? "bg-extended-purple border-extended-purple text-white"
+              : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800",
           )}
         >
-          {isSelectedForCompare && (
-            <Check className="h-4 w-4" />
-          )}
+          {isSelectedForCompare && <Check className="h-4 w-4" />}
         </div>
       )}
 
@@ -183,7 +184,7 @@ export const DiscoverCard = memo(function DiscoverCard({
               </span>
             ) : (
               <Link
-                to={`/cards/${card.slug}`}
+                to={`/signals/${card.slug}`}
                 className="hover:text-brand-blue transition-colors"
                 onClick={(e) => e.stopPropagation()}
               >
@@ -208,7 +209,11 @@ export const DiscoverCard = memo(function DiscoverCard({
               <StageBadge stage={stageNumber} size="sm" variant="minimal" />
             )}
             {card.top25_relevance && card.top25_relevance.length > 0 && (
-              <Top25Badge priorities={card.top25_relevance} size="sm" showCount />
+              <Top25Badge
+                priorities={card.top25_relevance}
+                size="sm"
+                showCount
+              />
             )}
           </div>
         </div>
@@ -219,17 +224,17 @@ export const DiscoverCard = memo(function DiscoverCard({
               onFollowToggle();
             }}
             className={cn(
-              'flex-shrink-0 p-2 transition-colors',
+              "flex-shrink-0 p-2 transition-colors",
               isFollowing
-                ? 'text-red-500 hover:text-red-600'
-                : 'text-gray-400 hover:text-red-500'
+                ? "text-red-500 hover:text-red-600"
+                : "text-gray-400 hover:text-red-500",
             )}
-            title={isFollowing ? 'Unfollow card' : 'Follow card'}
+            title={isFollowing ? "Unfollow signal" : "Follow signal"}
             aria-pressed={isFollowing}
           >
             <Heart
               className="h-5 w-5"
-              fill={isFollowing ? 'currentColor' : 'none'}
+              fill={isFollowing ? "currentColor" : "none"}
             />
           </button>
         )}
@@ -241,25 +246,37 @@ export const DiscoverCard = memo(function DiscoverCard({
 
       {/* Scores */}
       <div className="grid grid-cols-2 gap-2 text-xs">
-        <div className="flex justify-between" title="How much this could affect Austin's operations or residents">
+        <div
+          className="flex justify-between"
+          title="How much this could affect Austin's operations or residents"
+        >
           <span className="text-gray-500 dark:text-gray-400">Impact:</span>
           <span className={getScoreColorClasses(card.impact_score)}>
             {card.impact_score}
           </span>
         </div>
-        <div className="flex justify-between" title="How closely this aligns with Austin's strategic priorities">
+        <div
+          className="flex justify-between"
+          title="How closely this aligns with Austin's strategic priorities"
+        >
           <span className="text-gray-500 dark:text-gray-400">Relevance:</span>
           <span className={getScoreColorClasses(card.relevance_score)}>
             {card.relevance_score}
           </span>
         </div>
-        <div className="flex justify-between" title="How quickly this technology or trend is evolving">
+        <div
+          className="flex justify-between"
+          title="How quickly this technology or trend is evolving"
+        >
           <span className="text-gray-500 dark:text-gray-400">Velocity:</span>
           <span className={getScoreColorClasses(card.velocity_score)}>
             {card.velocity_score}
           </span>
         </div>
-        <div className="flex justify-between" title="How new or emerging this is in the market">
+        <div
+          className="flex justify-between"
+          title="How new or emerging this is in the market"
+        >
           <span className="text-gray-500 dark:text-gray-400">Novelty:</span>
           <span className={getScoreColorClasses(card.novelty_score)}>
             {card.novelty_score}
@@ -271,7 +288,7 @@ export const DiscoverCard = memo(function DiscoverCard({
         {compareMode ? (
           <span className="inline-flex items-center text-sm text-extended-purple">
             <ArrowLeftRight className="h-4 w-4 mr-1" />
-            {isSelectedForCompare ? 'Selected' : 'Click to select'}
+            {isSelectedForCompare ? "Selected" : "Click to select"}
           </span>
         ) : (
           <Link

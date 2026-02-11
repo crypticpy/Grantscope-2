@@ -4,6 +4,7 @@ import {
   Routes,
   Route,
   Navigate,
+  useParams,
 } from "react-router-dom";
 import { createClient, User } from "@supabase/supabase-js";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
@@ -34,11 +35,22 @@ const WorkstreamKanban = lazy(() => import("./pages/WorkstreamKanban"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Analytics = lazy(() => import("./pages/AnalyticsV2"));
 const Methodology = lazy(() => import("./pages/Methodology"));
+const Signals = lazy(() => import("./pages/Signals"));
 
 // Supabase configuration
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error(
+    "Missing Supabase environment variables. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.",
+  );
+}
+
+export const supabase =
+  supabaseUrl && supabaseAnonKey
+    ? createClient(supabaseUrl, supabaseAnonKey)
+    : (null as unknown as ReturnType<typeof createClient>);
 
 export interface AuthContextType {
   user: User | null;
@@ -48,6 +60,11 @@ export interface AuthContextType {
 }
 
 // AuthContext is provided by AuthContextProvider from hooks/useAuthContext
+
+function CardRedirect() {
+  const { slug } = useParams<{ slug: string }>();
+  return <Navigate to={`/signals/${slug || ""}`} replace />;
+}
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -154,16 +171,38 @@ function App() {
                   }
                 />
 
-                {/* Card visualization pages - lazy-loaded with React Flow */}
+                {/* Signal pages */}
+                <Route
+                  path="/signals/:slug"
+                  element={
+                    <ProtectedRoute
+                      element={<CardDetail />}
+                      loadingMessage="Loading signal details..."
+                    />
+                  }
+                />
+                <Route
+                  path="/signals"
+                  element={
+                    <ProtectedRoute
+                      element={<Signals />}
+                      loadingMessage="Loading signals..."
+                    />
+                  }
+                />
+
+                {/* Legacy card routes - redirect to signals */}
                 <Route
                   path="/cards/:slug"
                   element={
                     <ProtectedRoute
-                      element={<CardDetail />}
-                      loadingMessage="Loading card details..."
+                      element={<CardRedirect />}
+                      withSuspense={false}
                     />
                   }
                 />
+
+                {/* Comparison page - lazy-loaded with React Flow */}
                 <Route
                   path="/compare"
                   element={

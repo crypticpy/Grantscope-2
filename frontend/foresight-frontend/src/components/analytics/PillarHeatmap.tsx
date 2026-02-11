@@ -12,9 +12,9 @@
  * - Empty/loading states
  */
 
-import React, { useState } from 'react';
-import { pillars } from '../../data/taxonomy';
-import { Filter } from 'lucide-react';
+import React, { useState } from "react";
+import { pillars } from "../../data/taxonomy";
+import { Filter } from "lucide-react";
 
 // ============================================================================
 // Type Definitions
@@ -29,7 +29,7 @@ export interface PillarCoverageItem {
   count: number;
   percentage: number;
   avg_velocity?: number | null;
-  trend_direction?: 'up' | 'down' | 'stable' | null;
+  trend_direction?: "up" | "down" | "stable" | null;
 }
 
 /**
@@ -88,7 +88,10 @@ export const PillarHeatmap: React.FC<PillarHeatmapProps> = ({
             {title}
           </h3>
         )}
-        <div className="flex items-center justify-center" style={{ height: height - 80 }}>
+        <div
+          className="flex items-center justify-center"
+          style={{ height: height - 80 }}
+        >
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue"></div>
         </div>
       </div>
@@ -139,7 +142,7 @@ export const PillarHeatmap: React.FC<PillarHeatmapProps> = ({
 
       {/* Explanatory text */}
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-        Card distribution across strategic pillars
+        Signal distribution across strategic pillars
       </p>
 
       {/* Horizontal bar chart */}
@@ -156,7 +159,7 @@ export const PillarHeatmap: React.FC<PillarHeatmapProps> = ({
           return (
             <div
               key={pillar.code}
-              className={`group relative ${isClickable ? 'cursor-pointer' : ''}`}
+              className={`group relative ${isClickable ? "cursor-pointer" : ""}`}
               onMouseEnter={() => setHoveredPillar(pillar.code)}
               onMouseLeave={() => setHoveredPillar(null)}
               onClick={() => onPillarClick && onPillarClick(pillar.code)}
@@ -167,7 +170,7 @@ export const PillarHeatmap: React.FC<PillarHeatmapProps> = ({
                 <div className="w-10 flex-shrink-0">
                   <span
                     className={`inline-flex items-center justify-center w-10 h-6 rounded text-xs font-bold text-white transition-transform ${
-                      isClickable && isHovered ? 'scale-105' : ''
+                      isClickable && isHovered ? "scale-105" : ""
                     }`}
                     style={{ backgroundColor: pillar.color }}
                   >
@@ -182,7 +185,7 @@ export const PillarHeatmap: React.FC<PillarHeatmapProps> = ({
                     {/* Filled bar */}
                     <div
                       className={`h-full rounded-md transition-all duration-300 ${
-                        isClickable && isHovered ? 'opacity-90' : 'opacity-100'
+                        isClickable && isHovered ? "opacity-90" : "opacity-100"
                       }`}
                       style={{
                         width: `${Math.max(barWidth, 2)}%`,
@@ -195,10 +198,12 @@ export const PillarHeatmap: React.FC<PillarHeatmapProps> = ({
                   <div className="absolute inset-0 flex items-center px-3">
                     <span
                       className={`text-sm font-semibold ${
-                        barWidth > 30 ? 'text-white' : 'text-gray-700 dark:text-gray-300'
+                        barWidth > 30
+                          ? "text-white"
+                          : "text-gray-700 dark:text-gray-300"
                       }`}
                     >
-                      {count} cards
+                      {count} signals
                     </span>
                   </div>
                 </div>
@@ -216,10 +221,14 @@ export const PillarHeatmap: React.FC<PillarHeatmapProps> = ({
                 <div className="absolute left-14 -top-8 z-10 bg-gray-900 dark:bg-gray-800 text-white text-xs px-3 py-2 rounded-lg shadow-lg whitespace-nowrap">
                   <div className="font-semibold">{pillar.name}</div>
                   {avgVelocity !== null && avgVelocity !== undefined && (
-                    <div className="text-gray-300">Avg. Velocity: {avgVelocity.toFixed(0)}</div>
+                    <div className="text-gray-300">
+                      Avg. Velocity: {avgVelocity.toFixed(0)}
+                    </div>
                   )}
                   {isClickable && (
-                    <div className="text-blue-300 mt-1">Click to filter by this pillar</div>
+                    <div className="text-blue-300 mt-1">
+                      Click to filter by this pillar
+                    </div>
                   )}
                   {/* Arrow */}
                   <div className="absolute left-4 -bottom-1 w-2 h-2 bg-gray-900 dark:bg-gray-800 rotate-45" />
@@ -232,7 +241,7 @@ export const PillarHeatmap: React.FC<PillarHeatmapProps> = ({
 
       {/* Summary footer */}
       <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700 flex justify-between text-xs text-gray-500 dark:text-gray-400">
-        <span>Total: {data.reduce((sum, d) => sum + d.count, 0)} cards</span>
+        <span>Total: {data.reduce((sum, d) => sum + d.count, 0)} signals</span>
         <span>{pillars.length} strategic pillars</span>
       </div>
     </div>

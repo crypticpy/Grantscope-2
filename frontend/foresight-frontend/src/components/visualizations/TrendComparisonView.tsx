@@ -14,10 +14,20 @@
  * - Responsive on tablet/desktop
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ArrowLeftRight, AlertCircle, Loader2, TrendingUp, TrendingDown, Minus, RefreshCw, ExternalLink } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import {
+  ArrowLeft,
+  ArrowLeftRight,
+  AlertCircle,
+  Loader2,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  RefreshCw,
+  ExternalLink,
+} from "lucide-react";
+import { format, parseISO } from "date-fns";
 import {
   LineChart,
   Line,
@@ -27,17 +37,17 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-} from 'recharts';
+} from "recharts";
 
-import { cn } from '../../lib/utils';
-import { parseStageNumber } from '../../lib/stage-utils';
-import { supabase } from '../../App';
-import { useAuthContext } from '../../hooks/useAuthContext';
+import { cn } from "../../lib/utils";
+import { parseStageNumber } from "../../lib/stage-utils";
+import { supabase } from "../../App";
+import { useAuthContext } from "../../hooks/useAuthContext";
 
 // Badge components for card metadata
-import { PillarBadge } from '../PillarBadge';
-import { HorizonBadge } from '../HorizonBadge';
-import { StageBadge } from '../StageBadge';
+import { PillarBadge } from "../PillarBadge";
+import { HorizonBadge } from "../HorizonBadge";
+import { StageBadge } from "../StageBadge";
 
 // API and types
 import {
@@ -45,11 +55,15 @@ import {
   type CardComparisonResponse,
   type ScoreHistory,
   type CardData,
-} from '../../lib/discovery-api';
+} from "../../lib/discovery-api";
 
 // Visualization components from phase 6
-import { ScoreTimelineChart, SCORE_CONFIGS, type ScoreType } from './ScoreTimelineChart';
-import { StageProgressionTimeline } from './StageProgressionTimeline';
+import {
+  ScoreTimelineChart,
+  SCORE_CONFIGS,
+  type ScoreType,
+} from "./ScoreTimelineChart";
+import { StageProgressionTimeline } from "./StageProgressionTimeline";
 
 // ============================================================================
 // Type Definitions
@@ -80,7 +94,10 @@ interface ScoreDifference {
 /**
  * Calculate score differences between two cards
  */
-function calculateScoreDifferences(card1: CardData, card2: CardData): ScoreDifference[] {
+function calculateScoreDifferences(
+  card1: CardData,
+  card2: CardData,
+): ScoreDifference[] {
   return SCORE_CONFIGS.map((config) => {
     const card1Value = card1[config.key];
     const card2Value = card2[config.key];
@@ -131,7 +148,7 @@ interface MergedDataPoint {
 
 function mergeScoreHistories(
   history1: ScoreHistory[],
-  history2: ScoreHistory[]
+  history2: ScoreHistory[],
 ): MergedDataPoint[] {
   // Collect all unique dates
   const dateMap = new Map<string, MergedDataPoint>();
@@ -210,8 +227,12 @@ function LoadingState() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[400px]">
       <Loader2 className="h-12 w-12 text-brand-blue animate-spin mb-4" />
-      <p className="text-gray-600 dark:text-gray-300 text-lg">Loading comparison data...</p>
-      <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">This may take a moment</p>
+      <p className="text-gray-600 dark:text-gray-300 text-lg">
+        Loading comparison data...
+      </p>
+      <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">
+        This may take a moment
+      </p>
     </div>
   );
 }
@@ -221,7 +242,7 @@ function LoadingState() {
  */
 function ErrorState({
   message,
-  onRetry
+  onRetry,
 }: {
   message: string;
   onRetry?: () => void;
@@ -232,7 +253,9 @@ function ErrorState({
       <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
         Comparison Failed
       </h2>
-      <p className="text-gray-600 dark:text-gray-300 max-w-md mb-4">{message}</p>
+      <p className="text-gray-600 dark:text-gray-300 max-w-md mb-4">
+        {message}
+      </p>
       {onRetry && (
         <button
           onClick={onRetry}
@@ -254,10 +277,11 @@ function InvalidParamsState() {
     <div className="flex flex-col items-center justify-center min-h-[400px] text-center px-4">
       <ArrowLeftRight className="h-16 w-16 text-gray-400 mb-4" />
       <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-        Select Two Cards to Compare
+        Select Two Signals to Compare
       </h2>
       <p className="text-gray-600 dark:text-gray-300 max-w-md mb-4">
-        Please select exactly two cards to compare their trends and metrics side-by-side.
+        Please select exactly two signals to compare their trends and metrics
+        side-by-side.
       </p>
       <Link
         to="/discover"
@@ -291,17 +315,14 @@ function CardHeader({ card, label, onCardClick }: CardHeaderProps) {
           <button
             onClick={() => onCardClick(card.id)}
             className="text-brand-blue hover:text-brand-dark-blue transition-colors"
-            title="View card details"
+            title="View signal details"
           >
             <ExternalLink className="h-4 w-4" />
           </button>
         )}
       </div>
 
-      <Link
-        to={`/cards/${card.slug}`}
-        className="block group"
-      >
+      <Link to={`/signals/${card.slug}`} className="block group">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white group-hover:text-brand-blue transition-colors line-clamp-2">
           {card.name}
         </h3>
@@ -314,15 +335,9 @@ function CardHeader({ card, label, onCardClick }: CardHeaderProps) {
       )}
 
       <div className="flex items-center flex-wrap gap-2 mt-3">
-        {card.pillar_id && (
-          <PillarBadge pillarId={card.pillar_id} size="sm" />
-        )}
-        {card.horizon && (
-          <HorizonBadge horizon={card.horizon} size="sm" />
-        )}
-        {stageNumber && (
-          <StageBadge stage={stageNumber} size="sm" showName />
-        )}
+        {card.pillar_id && <PillarBadge pillarId={card.pillar_id} size="sm" />}
+        {card.horizon && <HorizonBadge horizon={card.horizon} size="sm" />}
+        {stageNumber && <StageBadge stage={stageNumber} size="sm" showName />}
       </div>
     </div>
   );
@@ -337,7 +352,11 @@ interface ScoreComparisonProps {
   card2Name: string;
 }
 
-function ScoreComparison({ differences, card1Name, card2Name }: ScoreComparisonProps) {
+function ScoreComparison({
+  differences,
+  card1Name,
+  card2Name,
+}: ScoreComparisonProps) {
   return (
     <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
@@ -348,8 +367,12 @@ function ScoreComparison({ differences, card1Name, card2Name }: ScoreComparisonP
       {/* Column headers */}
       <div className="grid grid-cols-4 gap-4 mb-3 text-xs font-medium text-gray-500 dark:text-gray-400">
         <div>Metric</div>
-        <div className="text-center truncate" title={card1Name}>{card1Name}</div>
-        <div className="text-center truncate" title={card2Name}>{card2Name}</div>
+        <div className="text-center truncate" title={card1Name}>
+          {card1Name}
+        </div>
+        <div className="text-center truncate" title={card2Name}>
+          {card2Name}
+        </div>
         <div className="text-center">Difference</div>
       </div>
 
@@ -369,28 +392,31 @@ function ScoreComparison({ differences, card1Name, card2Name }: ScoreComparisonP
               </div>
               <div className="text-center">
                 <span className="inline-flex items-center justify-center min-w-[40px] px-2 py-0.5 rounded text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200">
-                  {diff.card1Value !== null ? diff.card1Value : '-'}
+                  {diff.card1Value !== null ? diff.card1Value : "-"}
                 </span>
               </div>
               <div className="text-center">
                 <span className="inline-flex items-center justify-center min-w-[40px] px-2 py-0.5 rounded text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200">
-                  {diff.card2Value !== null ? diff.card2Value : '-'}
+                  {diff.card2Value !== null ? diff.card2Value : "-"}
                 </span>
               </div>
               <div className="text-center">
                 {diff.difference !== null ? (
                   <span
                     className={cn(
-                      'inline-flex items-center justify-center gap-1 min-w-[60px] px-2 py-0.5 rounded text-sm font-medium',
-                      isPositive && 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300',
-                      isNegative && 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',
-                      isEqual && 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                      "inline-flex items-center justify-center gap-1 min-w-[60px] px-2 py-0.5 rounded text-sm font-medium",
+                      isPositive &&
+                        "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300",
+                      isNegative &&
+                        "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300",
+                      isEqual &&
+                        "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300",
                     )}
                   >
                     {isPositive && <TrendingUp className="h-3 w-3" />}
                     {isNegative && <TrendingDown className="h-3 w-3" />}
                     {isEqual && <Minus className="h-3 w-3" />}
-                    {isPositive && '+'}
+                    {isPositive && "+"}
                     {diff.difference}
                   </span>
                 ) : (
@@ -429,13 +455,16 @@ function SynchronizedTimeline({
 
   // Map score key to chart data keys
   const scoreKeyMap: Record<ScoreType, { card1: string; card2: string }> = {
-    maturity_score: { card1: 'card1_maturity', card2: 'card2_maturity' },
-    velocity_score: { card1: 'card1_velocity', card2: 'card2_velocity' },
-    novelty_score: { card1: 'card1_novelty', card2: 'card2_novelty' },
-    impact_score: { card1: 'card1_impact', card2: 'card2_impact' },
-    relevance_score: { card1: 'card1_relevance', card2: 'card2_relevance' },
-    risk_score: { card1: 'card1_risk', card2: 'card2_risk' },
-    opportunity_score: { card1: 'card1_opportunity', card2: 'card2_opportunity' },
+    maturity_score: { card1: "card1_maturity", card2: "card2_maturity" },
+    velocity_score: { card1: "card1_velocity", card2: "card2_velocity" },
+    novelty_score: { card1: "card1_novelty", card2: "card2_novelty" },
+    impact_score: { card1: "card1_impact", card2: "card2_impact" },
+    relevance_score: { card1: "card1_relevance", card2: "card2_relevance" },
+    risk_score: { card1: "card1_risk", card2: "card2_risk" },
+    opportunity_score: {
+      card1: "card1_opportunity",
+      card2: "card2_opportunity",
+    },
   };
 
   const keys = scoreKeyMap[selectedScore];
@@ -444,9 +473,9 @@ function SynchronizedTimeline({
     try {
       const date = parseISO(value);
       if (data.length > 90) {
-        return format(date, 'MMM yyyy');
+        return format(date, "MMM yyyy");
       }
-      return format(date, 'MMM d');
+      return format(date, "MMM d");
     } catch {
       return value;
     }
@@ -489,7 +518,10 @@ function SynchronizedTimeline({
 
       <div style={{ height }}>
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+          <LineChart
+            data={data}
+            margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+          >
             <CartesianGrid
               strokeDasharray="3 3"
               stroke="currentColor"
@@ -500,8 +532,8 @@ function SynchronizedTimeline({
               dataKey="date"
               tickFormatter={formatXAxisTick}
               tick={{ fontSize: 11 }}
-              tickLine={{ stroke: 'currentColor' }}
-              axisLine={{ stroke: 'currentColor' }}
+              tickLine={{ stroke: "currentColor" }}
+              axisLine={{ stroke: "currentColor" }}
               className="text-gray-500 dark:text-gray-400"
               interval="preserveStartEnd"
               minTickGap={50}
@@ -509,8 +541,8 @@ function SynchronizedTimeline({
             <YAxis
               domain={[0, 100]}
               tick={{ fontSize: 11 }}
-              tickLine={{ stroke: 'currentColor' }}
-              axisLine={{ stroke: 'currentColor' }}
+              tickLine={{ stroke: "currentColor" }}
+              axisLine={{ stroke: "currentColor" }}
               className="text-gray-500 dark:text-gray-400"
               tickCount={6}
               width={40}
@@ -521,11 +553,14 @@ function SynchronizedTimeline({
                 return (
                   <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3">
                     <div className="font-medium text-gray-900 dark:text-gray-100 text-sm mb-2 pb-2 border-b border-gray-200 dark:border-gray-700">
-                      {format(parseISO(label), 'MMM d, yyyy')}
+                      {format(parseISO(label), "MMM d, yyyy")}
                     </div>
                     <div className="space-y-1.5">
                       {payload.map((item) => (
-                        <div key={item.dataKey} className="flex items-center justify-between gap-4 text-xs">
+                        <div
+                          key={item.dataKey}
+                          className="flex items-center justify-between gap-4 text-xs"
+                        >
                           <div className="flex items-center gap-2">
                             <div
                               className="w-2 h-2 rounded-full"
@@ -536,7 +571,9 @@ function SynchronizedTimeline({
                             </span>
                           </div>
                           <span className="font-medium text-gray-900 dark:text-gray-100">
-                            {item.value !== null ? Math.round(item.value as number) : '-'}
+                            {item.value !== null
+                              ? Math.round(item.value as number)
+                              : "-"}
                           </span>
                         </div>
                       ))}
@@ -545,12 +582,12 @@ function SynchronizedTimeline({
                 );
               }}
             />
-            <Legend wrapperStyle={{ paddingTop: '20px' }} />
+            <Legend wrapperStyle={{ paddingTop: "20px" }} />
             <Line
               type="monotone"
               dataKey={keys.card1}
               name={card1Name}
-              stroke={scoreConfig?.color || '#8884d8'}
+              stroke={scoreConfig?.color || "#8884d8"}
               strokeWidth={2}
               dot={data.length <= 30}
               connectNulls
@@ -560,7 +597,9 @@ function SynchronizedTimeline({
               type="monotone"
               dataKey={keys.card2}
               name={card2Name}
-              stroke={scoreConfig?.color ? `${scoreConfig.color}80` : '#8884d880'}
+              stroke={
+                scoreConfig?.color ? `${scoreConfig.color}80` : "#8884d880"
+              }
               strokeWidth={2}
               strokeDasharray="5 5"
               dot={data.length <= 30}
@@ -574,16 +613,20 @@ function SynchronizedTimeline({
       {/* Legend explanation */}
       <div className="mt-4 flex items-center justify-center gap-6 text-xs text-gray-500 dark:text-gray-400">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-0.5" style={{ backgroundColor: scoreConfig?.color || '#8884d8' }} />
+          <div
+            className="w-6 h-0.5"
+            style={{ backgroundColor: scoreConfig?.color || "#8884d8" }}
+          />
           <span>Solid line: {card1Name}</span>
         </div>
         <div className="flex items-center gap-2">
           <div
             className="w-6 h-0.5"
             style={{
-              backgroundColor: scoreConfig?.color || '#8884d8',
+              backgroundColor: scoreConfig?.color || "#8884d8",
               opacity: 0.5,
-              backgroundImage: 'repeating-linear-gradient(90deg, transparent, transparent 3px, currentColor 3px, currentColor 6px)',
+              backgroundImage:
+                "repeating-linear-gradient(90deg, transparent, transparent 3px, currentColor 3px, currentColor 6px)",
             }}
           />
           <span>Dashed line: {card2Name}</span>
@@ -612,19 +655,21 @@ export function TrendComparisonView({
   const [searchParams] = useSearchParams();
 
   // State
-  const [comparisonData, setComparisonData] = useState<CardComparisonResponse | null>(null);
+  const [comparisonData, setComparisonData] =
+    useState<CardComparisonResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedScore, setSelectedScore] = useState<ScoreType>('maturity_score');
+  const [selectedScore, setSelectedScore] =
+    useState<ScoreType>("maturity_score");
 
   // Parse card IDs from props or URL
   const cardIds = useMemo((): [string, string] | null => {
     if (propCardIds) return propCardIds;
 
-    const idsParam = searchParams.get('card_ids');
+    const idsParam = searchParams.get("card_ids");
     if (!idsParam) return null;
 
-    const ids = idsParam.split(',').filter(Boolean);
+    const ids = idsParam.split(",").filter(Boolean);
     if (ids.length !== 2) return null;
 
     return [ids[0], ids[1]];
@@ -638,17 +683,20 @@ export function TrendComparisonView({
     setError(null);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       const token = session?.access_token;
 
       if (!token) {
-        throw new Error('Not authenticated');
+        throw new Error("Not authenticated");
       }
 
       const data = await compareCards(token, cardIds[0], cardIds[1]);
       setComparisonData(data);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load comparison data';
+      const message =
+        err instanceof Error ? err.message : "Failed to load comparison data";
       setError(message);
     } finally {
       setLoading(false);
@@ -665,7 +713,7 @@ export function TrendComparisonView({
     if (!comparisonData) return [];
     return mergeScoreHistories(
       comparisonData.card1.score_history,
-      comparisonData.card2.score_history
+      comparisonData.card2.score_history,
     );
   }, [comparisonData]);
 
@@ -673,14 +721,16 @@ export function TrendComparisonView({
     if (!comparisonData) return [];
     return calculateScoreDifferences(
       comparisonData.card1.card,
-      comparisonData.card2.card
+      comparisonData.card2.card,
     );
   }, [comparisonData]);
 
   // Render states
   if (!cardIds) {
     return (
-      <div className={cn('max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8', className)}>
+      <div
+        className={cn("max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8", className)}
+      >
         <InvalidParamsState />
       </div>
     );
@@ -688,7 +738,9 @@ export function TrendComparisonView({
 
   if (loading) {
     return (
-      <div className={cn('max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8', className)}>
+      <div
+        className={cn("max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8", className)}
+      >
         <LoadingState />
       </div>
     );
@@ -696,7 +748,9 @@ export function TrendComparisonView({
 
   if (error) {
     return (
-      <div className={cn('max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8', className)}>
+      <div
+        className={cn("max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8", className)}
+      >
         <ErrorState message={error} onRetry={fetchComparisonData} />
       </div>
     );
@@ -704,8 +758,13 @@ export function TrendComparisonView({
 
   if (!comparisonData) {
     return (
-      <div className={cn('max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8', className)}>
-        <ErrorState message="No comparison data available" onRetry={fetchComparisonData} />
+      <div
+        className={cn("max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8", className)}
+      >
+        <ErrorState
+          message="No comparison data available"
+          onRetry={fetchComparisonData}
+        />
       </div>
     );
   }
@@ -713,7 +772,9 @@ export function TrendComparisonView({
   const { card1, card2 } = comparisonData;
 
   return (
-    <div className={cn('max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8', className)}>
+    <div
+      className={cn("max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8", className)}
+    >
       {/* Header */}
       <div className="mb-8">
         <Link
@@ -731,10 +792,14 @@ export function TrendComparisonView({
           </h1>
         </div>
         <p className="mt-2 text-gray-600 dark:text-gray-300">
-          Comparing score trends and progression between two cards
+          Comparing score trends and progression between two signals
         </p>
         <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-          Generated: {format(parseISO(comparisonData.comparison_generated_at), 'MMM d, yyyy h:mm a')}
+          Generated:{" "}
+          {format(
+            parseISO(comparisonData.comparison_generated_at),
+            "MMM d, yyyy h:mm a",
+          )}
         </p>
       </div>
 
@@ -742,12 +807,12 @@ export function TrendComparisonView({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <CardHeader
           card={card1.card}
-          label="Card A"
+          label="Signal A"
           onCardClick={onCardClick}
         />
         <CardHeader
           card={card2.card}
-          label="Card B"
+          label="Signal B"
           onCardClick={onCardClick}
         />
       </div>

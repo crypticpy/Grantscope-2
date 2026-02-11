@@ -14,8 +14,15 @@
  * - Keyboard navigation and accessibility
  */
 
-import React, { useState, useRef, useEffect, useCallback, memo, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  memo,
+  useMemo,
+} from "react";
+import { useNavigate } from "react-router-dom";
 import {
   MoreVertical,
   Eye,
@@ -25,9 +32,14 @@ import {
   X,
   ChevronRight,
   Loader2,
-} from 'lucide-react';
-import { cn } from '../../lib/utils';
-import { KANBAN_COLUMNS, type KanbanStatus, type WorkstreamCard, type ColumnAction } from './types';
+} from "lucide-react";
+import { cn } from "../../lib/utils";
+import {
+  KANBAN_COLUMNS,
+  type KanbanStatus,
+  type WorkstreamCard,
+  type ColumnAction,
+} from "./types";
 
 // =============================================================================
 // Types
@@ -51,9 +63,9 @@ export interface CardActionsProps {
   /** Callback for quick update action (screening column) */
   onQuickUpdate?: (cardId: string) => Promise<void>;
   /** Callback for export action (card export) */
-  onExport?: (cardId: string, format: 'pdf' | 'pptx') => Promise<void>;
+  onExport?: (cardId: string, format: "pdf" | "pptx") => Promise<void>;
   /** Callback for exporting executive brief (brief column) */
-  onExportBrief?: (cardId: string, format: 'pdf' | 'pptx') => Promise<void>;
+  onExportBrief?: (cardId: string, format: "pdf" | "pptx") => Promise<void>;
   /** Callback for check updates action (watching column) */
   onCheckUpdates?: (cardId: string) => Promise<void>;
   /** Callback for generating an executive brief (brief column) */
@@ -106,10 +118,10 @@ const NotesModal = memo(function NotesModal({
     if (!isOpen) return;
 
     const handleTabKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Tab') return;
+      if (e.key !== "Tab") return;
 
       const focusableElements = modalRef.current?.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        'button:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
       );
 
       if (!focusableElements || focusableElements.length === 0) return;
@@ -126,20 +138,20 @@ const NotesModal = memo(function NotesModal({
       }
     };
 
-    document.addEventListener('keydown', handleTabKey);
-    return () => document.removeEventListener('keydown', handleTabKey);
+    document.addEventListener("keydown", handleTabKey);
+    return () => document.removeEventListener("keydown", handleTabKey);
   }, [isOpen]);
 
   // Handle escape key to close
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen && !isSaving) {
+      if (e.key === "Escape" && isOpen && !isSaving) {
         onClose();
       }
     };
 
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
   }, [isOpen, isSaving, onClose]);
 
   // Handle save
@@ -150,12 +162,12 @@ const NotesModal = memo(function NotesModal({
   // Handle keyboard shortcut (Cmd/Ctrl + Enter to save)
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && !isSaving) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !isSaving) {
         e.preventDefault();
         handleSave();
       }
     },
-    [handleSave, isSaving]
+    [handleSave, isSaving],
   );
 
   if (!isOpen) return null;
@@ -187,7 +199,7 @@ const NotesModal = memo(function NotesModal({
               id="notes-modal-title"
               className="text-lg font-semibold text-gray-900 dark:text-white truncate"
             >
-              {initialNotes ? 'Edit Notes' : 'Add Notes'}
+              {initialNotes ? "Edit Notes" : "Add Notes"}
             </h2>
           </div>
           <button
@@ -206,7 +218,7 @@ const NotesModal = memo(function NotesModal({
         <div className="p-6 space-y-4">
           {/* Card Name Reference */}
           <div className="text-sm text-gray-600 dark:text-gray-400">
-            <span className="font-medium">Card:</span>{' '}
+            <span className="font-medium">Signal:</span>{" "}
             <span className="text-gray-900 dark:text-white">{cardName}</span>
           </div>
 
@@ -224,15 +236,15 @@ const NotesModal = memo(function NotesModal({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Add your notes about this card..."
+              placeholder="Add your notes about this signal..."
               disabled={isSaving}
               rows={6}
               className={cn(
-                'w-full px-3 py-2 border rounded-md shadow-sm text-sm resize-none',
-                'focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-brand-blue',
-                'dark:bg-[#3d4176] dark:text-white dark:placeholder-gray-400',
-                'border-gray-300 bg-white dark:border-gray-600',
-                'disabled:opacity-50 disabled:cursor-not-allowed'
+                "w-full px-3 py-2 border rounded-md shadow-sm text-sm resize-none",
+                "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-brand-blue",
+                "dark:bg-[#3d4176] dark:text-white dark:placeholder-gray-400",
+                "border-gray-300 bg-white dark:border-gray-600",
+                "disabled:opacity-50 disabled:cursor-not-allowed",
               )}
             />
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -257,17 +269,22 @@ const NotesModal = memo(function NotesModal({
             onClick={handleSave}
             disabled={isSaving}
             className={cn(
-              'inline-flex items-center px-4 py-2 text-sm font-medium text-white rounded-md',
-              'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-[#2d3166]',
-              'transition-colors',
+              "inline-flex items-center px-4 py-2 text-sm font-medium text-white rounded-md",
+              "focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-[#2d3166]",
+              "transition-colors",
               isSaving
-                ? 'bg-brand-blue/60 cursor-not-allowed'
-                : 'bg-brand-blue hover:bg-brand-dark-blue'
+                ? "bg-brand-blue/60 cursor-not-allowed"
+                : "bg-brand-blue hover:bg-brand-dark-blue",
             )}
             aria-busy={isSaving}
           >
-            {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden="true" />}
-            {isSaving ? 'Saving...' : 'Save Notes'}
+            {isSaving && (
+              <Loader2
+                className="h-4 w-4 mr-2 animate-spin"
+                aria-hidden="true"
+              />
+            )}
+            {isSaving ? "Saving..." : "Save Notes"}
           </button>
         </div>
       </div>
@@ -306,10 +323,10 @@ const MoveSubmenu = memo(function MoveSubmenu({
             }}
             disabled={isCurrentColumn}
             className={cn(
-              'w-full flex items-center gap-2 px-4 py-2 text-sm text-left transition-colors',
+              "w-full flex items-center gap-2 px-4 py-2 text-sm text-left transition-colors",
               isCurrentColumn
-                ? 'text-gray-400 dark:text-gray-500 cursor-not-allowed bg-gray-50 dark:bg-gray-800/50'
-                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                ? "text-gray-400 dark:text-gray-500 cursor-not-allowed bg-gray-50 dark:bg-gray-800/50"
+                : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700",
             )}
           >
             <span className="flex-1">{column.title}</span>
@@ -370,12 +387,12 @@ export const CardActions = memo(function CardActions({
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
 
   // Screen reader announcement for loading states
-  const [srAnnouncement, setSrAnnouncement] = useState('');
+  const [srAnnouncement, setSrAnnouncement] = useState("");
 
   // Get column-specific actions
   const columnDefinition = useMemo(
     () => KANBAN_COLUMNS.find((col) => col.id === columnId),
-    [columnId]
+    [columnId],
   );
 
   const columnActions = useMemo<ColumnAction[]>(() => {
@@ -402,8 +419,9 @@ export const CardActions = memo(function CardActions({
     };
 
     if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
+      document.addEventListener("mousedown", handleClickOutside);
+      return () =>
+        document.removeEventListener("mousedown", handleClickOutside);
     }
   }, [isOpen]);
 
@@ -413,13 +431,13 @@ export const CardActions = memo(function CardActions({
       if (!isOpen) return;
 
       switch (e.key) {
-        case 'Escape':
+        case "Escape":
           setIsOpen(false);
           setShowMoveSubmenu(false);
           setFocusedIndex(-1);
           buttonRef.current?.focus();
           break;
-        case 'ArrowDown':
+        case "ArrowDown":
           e.preventDefault();
           setFocusedIndex((prev) => {
             const menuItems = menuItemsRef.current.filter(Boolean);
@@ -428,7 +446,7 @@ export const CardActions = memo(function CardActions({
             return next;
           });
           break;
-        case 'ArrowUp':
+        case "ArrowUp":
           e.preventDefault();
           setFocusedIndex((prev) => {
             const menuItems = menuItemsRef.current.filter(Boolean);
@@ -437,12 +455,12 @@ export const CardActions = memo(function CardActions({
             return next;
           });
           break;
-        case 'Home':
+        case "Home":
           e.preventDefault();
           setFocusedIndex(0);
           menuItemsRef.current[0]?.focus();
           break;
-        case 'End': {
+        case "End": {
           e.preventDefault();
           const menuItems = menuItemsRef.current.filter(Boolean);
           setFocusedIndex(menuItems.length - 1);
@@ -452,8 +470,8 @@ export const CardActions = memo(function CardActions({
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isOpen]);
 
   // Toggle dropdown
@@ -468,7 +486,7 @@ export const CardActions = memo(function CardActions({
   // Handle view details
   const handleViewDetails = useCallback(() => {
     setIsOpen(false);
-    navigate(`/cards/${card.card.slug}`);
+    navigate(`/signals/${card.card.slug}`);
   }, [navigate, card.card.slug]);
 
   // Handle notes action
@@ -488,7 +506,7 @@ export const CardActions = memo(function CardActions({
         setIsSavingNotes(false);
       }
     },
-    [card.id, onNotesUpdate]
+    [card.id, onNotesUpdate],
   );
 
   // Handle deep dive
@@ -502,12 +520,12 @@ export const CardActions = memo(function CardActions({
     if (!onQuickUpdate) return;
     setIsOpen(false);
     setIsQuickUpdating(true);
-    setSrAnnouncement('Starting quick update...');
+    setSrAnnouncement("Starting quick update...");
     try {
       await onQuickUpdate(card.id);
-      setSrAnnouncement('Quick update completed');
+      setSrAnnouncement("Quick update completed");
     } catch {
-      setSrAnnouncement('Quick update failed');
+      setSrAnnouncement("Quick update failed");
     } finally {
       setIsQuickUpdating(false);
     }
@@ -518,25 +536,31 @@ export const CardActions = memo(function CardActions({
   // In the Brief column, use onExportBrief to export the executive brief content
   // In other columns, use onExport to export the original card
   const handleExport = useCallback(
-    async (format: 'pdf' | 'pptx') => {
+    async (format: "pdf" | "pptx") => {
       // In Brief column, export the brief; otherwise export the card
-      const exportFn = columnId === 'brief' ? onExportBrief : onExport;
+      const exportFn = columnId === "brief" ? onExportBrief : onExport;
       if (!exportFn) return;
 
       setIsOpen(false);
       setIsExporting(true);
-      const exportType = columnId === 'brief' ? 'Brief' : '';
-      setSrAnnouncement(`Exporting ${exportType} as ${format.toUpperCase()}...`);
+      const exportType = columnId === "brief" ? "Brief" : "";
+      setSrAnnouncement(
+        `Exporting ${exportType} as ${format.toUpperCase()}...`,
+      );
       try {
         await exportFn(card.card.id, format);
-        setSrAnnouncement(`${exportType} ${format.toUpperCase()} export completed`);
+        setSrAnnouncement(
+          `${exportType} ${format.toUpperCase()} export completed`,
+        );
       } catch {
-        setSrAnnouncement(`${exportType} ${format.toUpperCase()} export failed`);
+        setSrAnnouncement(
+          `${exportType} ${format.toUpperCase()} export failed`,
+        );
       } finally {
         setIsExporting(false);
       }
     },
-    [card.card.id, columnId, onExport, onExportBrief]
+    [card.card.id, columnId, onExport, onExportBrief],
   );
 
   // Handle check updates (watching column)
@@ -544,12 +568,12 @@ export const CardActions = memo(function CardActions({
     if (!onCheckUpdates) return;
     setIsOpen(false);
     setIsCheckingUpdates(true);
-    setSrAnnouncement('Checking for updates...');
+    setSrAnnouncement("Checking for updates...");
     try {
       await onCheckUpdates(card.id);
-      setSrAnnouncement('Update check completed');
+      setSrAnnouncement("Update check completed");
     } catch {
-      setSrAnnouncement('Update check failed');
+      setSrAnnouncement("Update check failed");
     } finally {
       setIsCheckingUpdates(false);
     }
@@ -569,7 +593,7 @@ export const CardActions = memo(function CardActions({
       setShowMoveSubmenu(false);
       onMoveToColumn(card.id, status);
     },
-    [card.id, onMoveToColumn]
+    [card.id, onMoveToColumn],
   );
 
   // Handle remove (must be defined before handleColumnAction which references it)
@@ -582,40 +606,50 @@ export const CardActions = memo(function CardActions({
   const handleColumnAction = useCallback(
     async (action: ColumnAction) => {
       switch (action.handler) {
-        case 'quickUpdate':
+        case "quickUpdate":
           await handleQuickUpdate();
           break;
-        case 'deepDive':
+        case "deepDive":
           handleDeepDive();
           break;
-        case 'exportPdf':
-          await handleExport('pdf');
+        case "exportPdf":
+          await handleExport("pdf");
           break;
-        case 'exportPptx':
-          await handleExport('pptx');
+        case "exportPptx":
+          await handleExport("pptx");
           break;
-        case 'checkUpdates':
+        case "checkUpdates":
           await handleCheckUpdates();
           break;
-        case 'viewDetails':
+        case "viewDetails":
           handleViewDetails();
           break;
-        case 'addNotes':
+        case "addNotes":
           handleNotesClick();
           break;
-        case 'remove':
+        case "remove":
           handleRemove();
           break;
-        case 'generateBrief':
+        case "generateBrief":
           handleGenerateBrief();
           break;
       }
     },
-    [handleQuickUpdate, handleDeepDive, handleExport, handleCheckUpdates, handleViewDetails, handleNotesClick, handleRemove, handleGenerateBrief]
+    [
+      handleQuickUpdate,
+      handleDeepDive,
+      handleExport,
+      handleCheckUpdates,
+      handleViewDetails,
+      handleNotesClick,
+      handleRemove,
+      handleGenerateBrief,
+    ],
   );
 
   // Check if any column action is loading
-  const isColumnActionLoading = isQuickUpdating || isExporting || isCheckingUpdates;
+  const isColumnActionLoading =
+    isQuickUpdating || isExporting || isCheckingUpdates;
 
   // Toggle move submenu
   const toggleMoveSubmenu = useCallback((e: React.MouseEvent) => {
@@ -634,13 +668,14 @@ export const CardActions = memo(function CardActions({
           ref={buttonRef}
           onClick={toggleDropdown}
           className={cn(
-            'p-1.5 rounded-md transition-colors',
-            'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
-            'hover:bg-gray-100 dark:hover:bg-gray-700',
-            'focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-1 dark:focus:ring-offset-gray-800',
-            isOpen && 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+            "p-1.5 rounded-md transition-colors",
+            "text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300",
+            "hover:bg-gray-100 dark:hover:bg-gray-700",
+            "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-1 dark:focus:ring-offset-gray-800",
+            isOpen &&
+              "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300",
           )}
-          aria-label="Card actions"
+          aria-label="Signal actions"
           aria-haspopup="true"
           aria-expanded={isOpen}
         >
@@ -651,10 +686,10 @@ export const CardActions = memo(function CardActions({
         {isOpen && (
           <div
             className={cn(
-              'absolute right-0 mt-1 w-52 z-50',
-              'bg-white dark:bg-gray-800 rounded-lg shadow-lg',
-              'border border-gray-200 dark:border-gray-700',
-              'py-1 overflow-hidden'
+              "absolute right-0 mt-1 w-52 z-50",
+              "bg-white dark:bg-gray-800 rounded-lg shadow-lg",
+              "border border-gray-200 dark:border-gray-700",
+              "py-1 overflow-hidden",
             )}
             role="menu"
             aria-orientation="vertical"
@@ -665,10 +700,10 @@ export const CardActions = memo(function CardActions({
                 {columnActions.map((action) => {
                   const Icon = action.icon;
                   const isLoading =
-                    (action.handler === 'quickUpdate' && isQuickUpdating) ||
-                    (action.handler === 'exportPdf' && isExporting) ||
-                    (action.handler === 'exportPptx' && isExporting) ||
-                    (action.handler === 'checkUpdates' && isCheckingUpdates);
+                    (action.handler === "quickUpdate" && isQuickUpdating) ||
+                    (action.handler === "exportPdf" && isExporting) ||
+                    (action.handler === "exportPptx" && isExporting) ||
+                    (action.handler === "checkUpdates" && isCheckingUpdates);
 
                   return (
                     <button
@@ -676,10 +711,10 @@ export const CardActions = memo(function CardActions({
                       onClick={() => handleColumnAction(action)}
                       disabled={isColumnActionLoading}
                       className={cn(
-                        'w-full flex items-center gap-3 px-4 py-2 text-sm transition-colors',
-                        'text-brand-blue dark:text-brand-light-blue',
-                        'hover:bg-blue-50 dark:hover:bg-blue-900/20',
-                        'disabled:opacity-50 disabled:cursor-not-allowed'
+                        "w-full flex items-center gap-3 px-4 py-2 text-sm transition-colors",
+                        "text-brand-blue dark:text-brand-light-blue",
+                        "hover:bg-blue-50 dark:hover:bg-blue-900/20",
+                        "disabled:opacity-50 disabled:cursor-not-allowed",
                       )}
                       role="menuitem"
                       title={action.description}
@@ -692,8 +727,8 @@ export const CardActions = memo(function CardActions({
                       <span className="flex-1 text-left">{action.label}</span>
                       {action.description && (
                         <span className="text-xs text-gray-400 dark:text-gray-500 truncate max-w-[80px]">
-                          {action.handler === 'quickUpdate' && '5 sources'}
-                          {action.handler === 'deepDive' && '15 sources'}
+                          {action.handler === "quickUpdate" && "5 sources"}
+                          {action.handler === "deepDive" && "15 sources"}
                         </span>
                       )}
                     </button>
@@ -722,7 +757,7 @@ export const CardActions = memo(function CardActions({
               role="menuitem"
             >
               <StickyNote className="h-4 w-4 text-amber-500" />
-              {hasExistingNotes ? 'Edit Notes' : 'Add Notes'}
+              {hasExistingNotes ? "Edit Notes" : "Add Notes"}
             </button>
 
             {/* Divider */}
@@ -743,8 +778,8 @@ export const CardActions = memo(function CardActions({
                 </span>
                 <ChevronRight
                   className={cn(
-                    'h-4 w-4 text-gray-400 transition-transform',
-                    showMoveSubmenu && 'rotate-90'
+                    "h-4 w-4 text-gray-400 transition-transform",
+                    showMoveSubmenu && "rotate-90",
                   )}
                 />
               </button>
@@ -753,10 +788,10 @@ export const CardActions = memo(function CardActions({
               {showMoveSubmenu && (
                 <div
                   className={cn(
-                    'absolute left-full top-0 ml-1 w-44',
-                    'bg-white dark:bg-gray-800 rounded-lg shadow-lg',
-                    'border border-gray-200 dark:border-gray-700',
-                    'overflow-hidden'
+                    "absolute left-full top-0 ml-1 w-44",
+                    "bg-white dark:bg-gray-800 rounded-lg shadow-lg",
+                    "border border-gray-200 dark:border-gray-700",
+                    "overflow-hidden",
                   )}
                 >
                   <MoveSubmenu
@@ -788,7 +823,7 @@ export const CardActions = memo(function CardActions({
         isOpen={isNotesModalOpen}
         onClose={() => setIsNotesModalOpen(false)}
         onSave={handleSaveNotes}
-        initialNotes={card.notes || ''}
+        initialNotes={card.notes || ""}
         cardName={card.card.name}
         isSaving={isSavingNotes}
       />

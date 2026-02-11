@@ -18,9 +18,9 @@ import React, {
   useEffect,
   useImperativeHandle,
   forwardRef,
-} from 'react';
-import { useVirtualizer, VirtualItem } from '@tanstack/react-virtual';
-import { cn } from '../lib/utils';
+} from "react";
+import { useVirtualizer, VirtualItem } from "@tanstack/react-virtual";
+import { cn } from "../lib/utils";
 
 /**
  * Props for the VirtualizedList component
@@ -29,7 +29,11 @@ export interface VirtualizedListProps<T> {
   /** Array of items to render */
   items: T[];
   /** Function to render each item */
-  renderItem: (item: T, index: number, virtualItem: VirtualItem) => React.ReactNode;
+  renderItem: (
+    item: T,
+    index: number,
+    virtualItem: VirtualItem,
+  ) => React.ReactNode;
   /** Estimated height of each item in pixels (used for initial layout) */
   estimatedSize?: number;
   /** Number of items to render outside the visible area */
@@ -73,7 +77,10 @@ export interface VirtualizedListProps<T> {
  */
 export interface VirtualizedListHandle {
   /** Scroll to a specific item index */
-  scrollToIndex: (index: number, options?: { align?: 'start' | 'center' | 'end' | 'auto' }) => void;
+  scrollToIndex: (
+    index: number,
+    options?: { align?: "start" | "center" | "end" | "auto" },
+  ) => void;
   /** Get the current scroll offset */
   getScrollOffset: () => number;
   /** Set the scroll offset */
@@ -109,7 +116,7 @@ function DefaultEmptyComponent() {
  */
 function VirtualizedListInner<T>(
   props: VirtualizedListProps<T>,
-  ref: React.ForwardedRef<VirtualizedListHandle>
+  ref: React.ForwardedRef<VirtualizedListHandle>,
 ) {
   const {
     items,
@@ -144,7 +151,7 @@ function VirtualizedListInner<T>(
   const estimateSizeFn = useCallback(() => estimatedSize, [estimatedSize]);
   const getVirtualizerItemKey = useCallback(
     (index: number) => getItemKey?.(items[index], index) ?? index,
-    [getItemKey, items]
+    [getItemKey, items],
   );
 
   // Update internal focused index when controlled value changes
@@ -168,21 +175,25 @@ function VirtualizedListInner<T>(
   });
 
   // Expose imperative handle
-  useImperativeHandle(ref, () => ({
-    scrollToIndex: (index, options) => {
-      virtualizer.scrollToIndex(index, {
-        align: options?.align ?? 'auto',
-        behavior: 'smooth',
-      });
-    },
-    getScrollOffset: () => virtualizer.scrollOffset ?? 0,
-    setScrollOffset: (offset) => {
-      if (parentRef.current) {
-        parentRef.current.scrollTop = offset;
-      }
-    },
-    measure: () => virtualizer.measure(),
-  }), [virtualizer]);
+  useImperativeHandle(
+    ref,
+    () => ({
+      scrollToIndex: (index, options) => {
+        virtualizer.scrollToIndex(index, {
+          align: options?.align ?? "auto",
+          behavior: "smooth",
+        });
+      },
+      getScrollOffset: () => virtualizer.scrollOffset ?? 0,
+      setScrollOffset: (offset) => {
+        if (parentRef.current) {
+          parentRef.current.scrollTop = offset;
+        }
+      },
+      measure: () => virtualizer.measure(),
+    }),
+    [virtualizer],
+  );
 
   // Handle keyboard navigation
   const handleKeyDown = useCallback(
@@ -193,28 +204,34 @@ function VirtualizedListInner<T>(
       let handled = false;
 
       switch (event.key) {
-        case 'ArrowDown':
-        case 'j':
-          newIndex = Math.min(internalFocusedIndex.current + 1, items.length - 1);
+        case "ArrowDown":
+        case "j":
+          newIndex = Math.min(
+            internalFocusedIndex.current + 1,
+            items.length - 1,
+          );
           handled = true;
           break;
-        case 'ArrowUp':
-        case 'k':
+        case "ArrowUp":
+        case "k":
           newIndex = Math.max(internalFocusedIndex.current - 1, 0);
           handled = true;
           break;
-        case 'Home':
+        case "Home":
           newIndex = 0;
           handled = true;
           break;
-        case 'End':
+        case "End":
           newIndex = items.length - 1;
           handled = true;
           break;
-        case 'Enter':
-        case ' ':
+        case "Enter":
+        case " ":
           if (internalFocusedIndex.current >= 0 && onItemClick) {
-            onItemClick(items[internalFocusedIndex.current], internalFocusedIndex.current);
+            onItemClick(
+              items[internalFocusedIndex.current],
+              internalFocusedIndex.current,
+            );
             handled = true;
           }
           break;
@@ -227,11 +244,17 @@ function VirtualizedListInner<T>(
         if (newIndex !== internalFocusedIndex.current && newIndex >= 0) {
           internalFocusedIndex.current = newIndex;
           onFocusedIndexChange?.(newIndex);
-          virtualizer.scrollToIndex(newIndex, { align: 'auto' });
+          virtualizer.scrollToIndex(newIndex, { align: "auto" });
         }
       }
     },
-    [enableKeyboardNavigation, items, onItemClick, onFocusedIndexChange, virtualizer]
+    [
+      enableKeyboardNavigation,
+      items,
+      onItemClick,
+      onFocusedIndexChange,
+      virtualizer,
+    ],
   );
 
   // Handle item click
@@ -241,13 +264,13 @@ function VirtualizedListInner<T>(
       onFocusedIndexChange?.(index);
       onItemClick?.(item, index);
     },
-    [onItemClick, onFocusedIndexChange]
+    [onItemClick, onFocusedIndexChange],
   );
 
   // Loading state
   if (isLoading) {
     return (
-      <div className={cn('w-full', className)} data-testid={testId}>
+      <div className={cn("w-full", className)} data-testid={testId}>
         {loadingComponent ?? <DefaultLoadingComponent />}
       </div>
     );
@@ -256,7 +279,7 @@ function VirtualizedListInner<T>(
   // Empty state
   if (items.length === 0) {
     return (
-      <div className={cn('w-full', className)} data-testid={testId}>
+      <div className={cn("w-full", className)} data-testid={testId}>
         {emptyComponent ?? <DefaultEmptyComponent />}
       </div>
     );
@@ -266,7 +289,7 @@ function VirtualizedListInner<T>(
 
   return (
     <div
-      className={cn('w-full', className)}
+      className={cn("w-full", className)}
       data-testid={testId}
       onKeyDown={enableKeyboardNavigation ? handleKeyDown : undefined}
       tabIndex={enableKeyboardNavigation ? 0 : undefined}
@@ -276,25 +299,23 @@ function VirtualizedListInner<T>(
       {/* Scrollable container */}
       <div
         ref={parentRef}
-        className={cn(
-          'h-full w-full overflow-auto',
-          scrollContainerClassName
-        )}
+        className={cn("h-full w-full overflow-auto", scrollContainerClassName)}
       >
         {/* Virtual content container */}
         <div
           style={{
             height: `${virtualizer.getTotalSize()}px`,
-            width: '100%',
-            position: 'relative',
+            width: "100%",
+            position: "relative",
           }}
         >
           {/* Render visible items */}
           {virtualItems.map((virtualItem) => {
             const item = items[virtualItem.index];
-            const isFocused = focusedIndex !== undefined
-              ? virtualItem.index === focusedIndex
-              : virtualItem.index === internalFocusedIndex.current;
+            const isFocused =
+              focusedIndex !== undefined
+                ? virtualItem.index === focusedIndex
+                : virtualItem.index === internalFocusedIndex.current;
 
             return (
               <div
@@ -304,10 +325,10 @@ function VirtualizedListInner<T>(
                 role="listitem"
                 aria-selected={isFocused}
                 style={{
-                  position: 'absolute',
+                  position: "absolute",
                   top: 0,
                   left: 0,
-                  width: '100%',
+                  width: "100%",
                   transform: `translateY(${virtualItem.start}px)`,
                 }}
                 onClick={() => handleItemClick(item, virtualItem.index)}
@@ -338,12 +359,14 @@ function VirtualizedListInner<T>(
  *   renderItem={(card, index) => <CardItem card={card} />}
  *   estimatedSize={200}
  *   enableKeyboardNavigation
- *   onItemClick={(card) => navigate(`/cards/${card.slug}`)}
+ *   onItemClick={(card) => navigate(`/signals/${card.slug}`)}
  * />
  * ```
  */
 export const VirtualizedList = forwardRef(VirtualizedListInner) as <T>(
-  props: VirtualizedListProps<T> & { ref?: React.ForwardedRef<VirtualizedListHandle> }
+  props: VirtualizedListProps<T> & {
+    ref?: React.ForwardedRef<VirtualizedListHandle>;
+  },
 ) => React.ReactElement;
 
 export default VirtualizedList;

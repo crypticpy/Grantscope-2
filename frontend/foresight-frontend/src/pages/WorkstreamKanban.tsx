@@ -10,8 +10,14 @@
  * - Edit workstream filters
  */
 
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useMemo,
+} from "react";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   ArrowLeft,
   RefreshCw,
@@ -30,11 +36,11 @@ import {
   Search,
   X,
   Radar,
-} from 'lucide-react';
-import { supabase } from '../App';
-import { useAuthContext } from '../hooks/useAuthContext';
-import { cn } from '../lib/utils';
-import { logger } from '../lib/logger';
+} from "lucide-react";
+import { supabase } from "../App";
+import { useAuthContext } from "../hooks/useAuthContext";
+import { cn } from "../lib/utils";
+import { logger } from "../lib/logger";
 import {
   KanbanBoard,
   KanbanErrorBoundary,
@@ -42,17 +48,17 @@ import {
   type WorkstreamCard,
   type CardActionCallbacks,
   KANBAN_COLUMNS,
-} from '../components/kanban';
+} from "../components/kanban";
 import {
   useQuickUpdate,
   useCardExport,
   useCheckUpdates,
   useBriefGeneration,
-} from '../components/kanban/actions';
-import { BriefPreviewModal } from '../components/kanban/BriefPreviewModal';
-import { ExportProgressModal } from '../components/ExportProgressModal';
-import { BulkExportModal } from '../components/BulkExportModal';
-import { useExportWithProgress } from '../hooks/useExportWithProgress';
+} from "../components/kanban/actions";
+import { BriefPreviewModal } from "../components/kanban/BriefPreviewModal";
+import { ExportProgressModal } from "../components/ExportProgressModal";
+import { BulkExportModal } from "../components/BulkExportModal";
+import { useExportWithProgress } from "../hooks/useExportWithProgress";
 import {
   fetchWorkstreamCards,
   updateWorkstreamCard,
@@ -67,11 +73,11 @@ import {
   type WorkstreamResearchStatus,
   type BulkBriefStatusResponse,
   type WorkstreamScanStatusResponse,
-} from '../lib/workstream-api';
-import { PillarBadgeGroup } from '../components/PillarBadge';
-import { HorizonBadge } from '../components/HorizonBadge';
-import { StageBadge } from '../components/StageBadge';
-import { WorkstreamForm, type Workstream } from '../components/WorkstreamForm';
+} from "../lib/workstream-api";
+import { PillarBadgeGroup } from "../components/PillarBadge";
+import { HorizonBadge } from "../components/HorizonBadge";
+import { StageBadge } from "../components/StageBadge";
+import { WorkstreamForm, type Workstream } from "../components/WorkstreamForm";
 
 // ============================================================================
 // Types
@@ -82,7 +88,7 @@ import { WorkstreamForm, type Workstream } from '../components/WorkstreamForm';
  */
 interface ToastNotification {
   id: string;
-  type: 'success' | 'error' | 'info';
+  type: "success" | "error" | "info";
   message: string;
 }
 
@@ -107,24 +113,25 @@ function Toast({
     return () => clearTimeout(timer);
   }, [notification.id, onDismiss]);
 
-  const iconClass = 'h-5 w-5 flex-shrink-0';
+  const iconClass = "h-5 w-5 flex-shrink-0";
   const icons = {
-    success: <CheckCircle2 className={cn(iconClass, 'text-green-500')} />,
-    error: <XCircle className={cn(iconClass, 'text-red-500')} />,
-    info: <Sparkles className={cn(iconClass, 'text-brand-blue')} />,
+    success: <CheckCircle2 className={cn(iconClass, "text-green-500")} />,
+    error: <XCircle className={cn(iconClass, "text-red-500")} />,
+    info: <Sparkles className={cn(iconClass, "text-brand-blue")} />,
   };
 
   const bgClass = {
-    success: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700',
-    error: 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700',
-    info: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700',
+    success:
+      "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700",
+    error: "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700",
+    info: "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700",
   };
 
   return (
     <div
       className={cn(
-        'flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border transition-all duration-300',
-        bgClass[notification.type]
+        "flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border transition-all duration-300",
+        bgClass[notification.type],
       )}
       role="alert"
     >
@@ -175,13 +182,13 @@ function StatusBadge({ isActive }: { isActive: boolean }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium',
+        "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
         isActive
-          ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400'
-          : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300'
+          ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400"
+          : "bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300",
       )}
     >
-      {isActive ? 'Active' : 'Inactive'}
+      {isActive ? "Active" : "Inactive"}
     </span>
   );
 }
@@ -228,7 +235,7 @@ function StageRangeDisplay({ stageIds }: { stageIds: string[] }) {
   }
 
   const isConsecutive = stageNumbers.every(
-    (n, i) => i === 0 || n === stageNumbers[i - 1] + 1
+    (n, i) => i === 0 || n === stageNumbers[i - 1] + 1,
   );
 
   if (isConsecutive) {
@@ -257,10 +264,14 @@ function StageRangeDisplay({ stageIds }: { stageIds: string[] }) {
 /**
  * Stats bar displaying card counts per Kanban column
  */
-function StatsBar({ cards }: { cards: Record<KanbanStatus, WorkstreamCard[]> }) {
+function StatsBar({
+  cards,
+}: {
+  cards: Record<KanbanStatus, WorkstreamCard[]>;
+}) {
   const totalCards = Object.values(cards).reduce(
     (sum, columnCards) => sum + columnCards.length,
-    0
+    0,
   );
 
   return (
@@ -268,9 +279,11 @@ function StatsBar({ cards }: { cards: Record<KanbanStatus, WorkstreamCard[]> }) 
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-gray-900 dark:text-white">
-            Total Cards:
+            Total Signals:
           </span>
-          <span className="text-lg font-bold text-brand-blue">{totalCards}</span>
+          <span className="text-lg font-bold text-brand-blue">
+            {totalCards}
+          </span>
         </div>
         <div className="flex items-center gap-4 flex-wrap">
           {KANBAN_COLUMNS.map((column) => {
@@ -365,7 +378,8 @@ const WorkstreamKanban: React.FC = () => {
 
   // Workstream scan state
   const [scanning, setScanning] = useState(false);
-  const [_scanStatus, setScanStatus] = useState<WorkstreamScanStatusResponse | null>(null);
+  const [_scanStatus, setScanStatus] =
+    useState<WorkstreamScanStatusResponse | null>(null);
   const scanPollRef = useRef<NodeJS.Timeout | null>(null);
 
   // Error state
@@ -376,29 +390,36 @@ const WorkstreamKanban: React.FC = () => {
 
   // Export state
   const [showExportMenu, setShowExportMenu] = useState(false);
-  const [exportLoading, setExportLoading] = useState<'pdf' | 'pptx' | null>(null);
+  const [exportLoading, setExportLoading] = useState<"pdf" | "pptx" | null>(
+    null,
+  );
 
   // Toast notifications
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
   const toastIdRef = useRef(0);
 
   // Brief preview modal state
-  const [briefModalCard, setBriefModalCard] = useState<WorkstreamCard | null>(null);
+  const [briefModalCard, setBriefModalCard] = useState<WorkstreamCard | null>(
+    null,
+  );
   const [showBriefModal, setShowBriefModal] = useState(false);
 
   // Bulk export modal state
   const [showBulkExportModal, setShowBulkExportModal] = useState(false);
-  const [bulkExportStatus, setBulkExportStatus] = useState<BulkBriefStatusResponse | null>(null);
+  const [bulkExportStatus, setBulkExportStatus] =
+    useState<BulkBriefStatusResponse | null>(null);
   const [bulkExportLoading, setBulkExportLoading] = useState(false);
   const [bulkExportError, setBulkExportError] = useState<string | null>(null);
   const [isBulkExporting, setIsBulkExporting] = useState(false);
 
   // Search/filter state for kanban board
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [filterPillar, setFilterPillar] = useState<string | null>(null);
 
   // Research status tracking
-  const [researchStatuses, setResearchStatuses] = useState<Map<string, WorkstreamResearchStatus>>(new Map());
+  const [researchStatuses, setResearchStatuses] = useState<
+    Map<string, WorkstreamResearchStatus>
+  >(new Map());
   const researchPollRef = useRef<NodeJS.Timeout | null>(null);
 
   // ============================================================================
@@ -409,11 +430,11 @@ const WorkstreamKanban: React.FC = () => {
    * Show a toast notification.
    */
   const showToast = useCallback(
-    (type: ToastNotification['type'], message: string) => {
+    (type: ToastNotification["type"], message: string) => {
       const id = `toast-${toastIdRef.current++}`;
       setToasts((prev) => [...prev, { id, type, message }]);
     },
-    []
+    [],
   );
 
   /**
@@ -444,25 +465,28 @@ const WorkstreamKanban: React.FC = () => {
   // Use a ref to hold startResearchPolling to avoid circular dependencies
   const startResearchPollingRef = useRef<() => void>(() => {});
 
-  const { triggerQuickUpdate } = useQuickUpdate(getAuthToken, id || '', {
+  const { triggerQuickUpdate } = useQuickUpdate(getAuthToken, id || "", {
     onSuccess: () => {
-      showToast('success', 'Quick update started');
+      showToast("success", "Quick update started");
       // Start polling for research status updates
       startResearchPollingRef.current();
     },
-    onError: (_, error) => showToast('error', error.message),
+    onError: (_, error) => showToast("error", error.message),
   });
 
   const { exportCard } = useCardExport(getAuthToken, {
     onSuccess: (_, format) =>
-      showToast('success', `${format.toUpperCase()} export started`),
+      showToast("success", `${format.toUpperCase()} export started`),
     onError: (_, format, error) =>
-      showToast('error', `Failed to export ${format.toUpperCase()}: ${error.message}`),
+      showToast(
+        "error",
+        `Failed to export ${format.toUpperCase()}: ${error.message}`,
+      ),
   });
 
-  const { checkForUpdates } = useCheckUpdates(getAuthToken, id || '', {
-    onSuccess: () => showToast('success', 'Update check started'),
-    onError: (_, error) => showToast('error', error.message),
+  const { checkForUpdates } = useCheckUpdates(getAuthToken, id || "", {
+    onSuccess: () => showToast("success", "Update check started"),
+    onError: (_, error) => showToast("error", error.message),
   });
 
   const {
@@ -470,10 +494,10 @@ const WorkstreamKanban: React.FC = () => {
     isCardGenerating,
     getCardBrief,
     getCardError,
-  } = useBriefGeneration(getAuthToken, id || '', {
-    onGenerating: () => showToast('info', 'Generating executive brief...'),
+  } = useBriefGeneration(getAuthToken, id || "", {
+    onGenerating: () => showToast("info", "Generating executive brief..."),
     onSuccess: (cardId, _brief) => {
-      showToast('success', 'Executive brief generated');
+      showToast("success", "Executive brief generated");
       // Find the card to show the modal
       for (const columnCards of Object.values(cards)) {
         const card = columnCards.find((c) => c.card.id === cardId);
@@ -484,7 +508,8 @@ const WorkstreamKanban: React.FC = () => {
         }
       }
     },
-    onError: (_, error) => showToast('error', `Brief generation failed: ${error.message}`),
+    onError: (_, error) =>
+      showToast("error", `Brief generation failed: ${error.message}`),
   });
 
   // Export with progress modal hook
@@ -508,29 +533,29 @@ const WorkstreamKanban: React.FC = () => {
 
     try {
       const { data, error: fetchError } = await supabase
-        .from('workstreams')
-        .select('*')
-        .eq('id', id)
+        .from("workstreams")
+        .select("*")
+        .eq("id", id)
         .single();
 
       if (fetchError) {
-        console.error('Error loading workstream:', fetchError);
+        console.error("Error loading workstream:", fetchError);
         setError(
-          'Failed to load workstream. It may not exist or you may not have access.'
+          "Failed to load workstream. It may not exist or you may not have access.",
         );
         return;
       }
 
       // Verify ownership
       if (data.user_id !== user.id) {
-        setError('You do not have access to this workstream.');
+        setError("You do not have access to this workstream.");
         return;
       }
 
       setWorkstream(data);
     } catch (err) {
-      console.error('Error loading workstream:', err);
-      setError('An unexpected error occurred.');
+      console.error("Error loading workstream:", err);
+      setError("An unexpected error occurred.");
     }
   }, [id, user]);
 
@@ -542,7 +567,7 @@ const WorkstreamKanban: React.FC = () => {
 
     const token = await getAuthToken();
     if (!token) {
-      showToast('error', 'Authentication required');
+      showToast("error", "Authentication required");
       return;
     }
 
@@ -551,8 +576,8 @@ const WorkstreamKanban: React.FC = () => {
       const groupedCards = await fetchWorkstreamCards(token, id);
       setCards(groupedCards);
     } catch (err) {
-      console.error('Error loading cards:', err);
-      showToast('error', 'Failed to load cards');
+      console.error("Error loading cards:", err);
+      showToast("error", "Failed to load signals");
     } finally {
       setCardsLoading(false);
     }
@@ -588,15 +613,15 @@ const WorkstreamKanban: React.FC = () => {
         const result = await autoPopulateWorkstream(token, id, 20);
         if (result.added > 0) {
           showToast(
-            'info',
-            `${result.added} new card${result.added !== 1 ? 's' : ''} added to inbox`
+            "info",
+            `${result.added} new signal${result.added !== 1 ? "s" : ""} added to inbox`,
           );
           // Refresh cards to include the new additions
           await loadCards();
         }
       } catch (err) {
         // Silent fail - auto-populate is an enhancement, not critical
-        logger.warn('Auto-populate on load failed:', err);
+        logger.warn("Auto-populate on load failed:", err);
       }
     };
 
@@ -615,23 +640,23 @@ const WorkstreamKanban: React.FC = () => {
 
     try {
       const { tasks } = await fetchResearchStatus(token, id);
-      
+
       // Build a map of card_id -> research status
       const statusMap = new Map<string, WorkstreamResearchStatus>();
       for (const task of tasks) {
         statusMap.set(task.card_id, task);
       }
-      
+
       setResearchStatuses(statusMap);
-      
+
       // If there are any active tasks (queued or processing), keep polling
       const hasActiveTasks = tasks.some(
-        t => t.status === 'queued' || t.status === 'processing'
+        (t) => t.status === "queued" || t.status === "processing",
       );
-      
+
       return hasActiveTasks;
     } catch (err) {
-      console.error('Error fetching research status:', err);
+      console.error("Error fetching research status:", err);
       return false;
     }
   }, [id, getAuthToken]);
@@ -731,7 +756,7 @@ const WorkstreamKanban: React.FC = () => {
 
       const token = await getAuthToken();
       if (!token) {
-        showToast('error', 'Authentication required');
+        showToast("error", "Authentication required");
         return;
       }
 
@@ -777,16 +802,17 @@ const WorkstreamKanban: React.FC = () => {
           status: newStatus,
           position: newPosition,
         });
-        showToast('success', 'Card moved successfully');
+        showToast("success", "Signal moved successfully");
       } catch (err: unknown) {
         // Rollback on error
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-        console.error('Error moving card:', errorMessage);
+        const errorMessage =
+          err instanceof Error ? err.message : "Unknown error";
+        console.error("Error moving card:", errorMessage);
         setCards(previousCards);
-        showToast('error', 'Failed to move card. Changes reverted.');
+        showToast("error", "Failed to move signal. Changes reverted.");
       }
     },
-    [id, cards, getAuthToken, showToast]
+    [id, cards, getAuthToken, showToast],
   );
 
   /**
@@ -796,7 +822,7 @@ const WorkstreamKanban: React.FC = () => {
     (card: WorkstreamCard) => {
       navigate(`/cards/${card.card.slug}`);
     },
-    [navigate]
+    [navigate],
   );
 
   /**
@@ -808,7 +834,7 @@ const WorkstreamKanban: React.FC = () => {
 
       const token = await getAuthToken();
       if (!token) {
-        showToast('error', 'Authentication required');
+        showToast("error", "Authentication required");
         return;
       }
 
@@ -820,19 +846,19 @@ const WorkstreamKanban: React.FC = () => {
           const updated = { ...prev };
           for (const status of Object.keys(updated) as KanbanStatus[]) {
             updated[status] = updated[status].map((card) =>
-              card.id === cardId ? { ...card, notes } : card
+              card.id === cardId ? { ...card, notes } : card,
             );
           }
           return updated;
         });
 
-        showToast('success', 'Notes saved');
+        showToast("success", "Notes saved");
       } catch (err) {
-        console.error('Error updating notes:', err);
-        showToast('error', 'Failed to save notes');
+        console.error("Error updating notes:", err);
+        showToast("error", "Failed to save notes");
       }
     },
-    [id, getAuthToken, showToast]
+    [id, getAuthToken, showToast],
   );
 
   /**
@@ -844,21 +870,21 @@ const WorkstreamKanban: React.FC = () => {
 
       const token = await getAuthToken();
       if (!token) {
-        showToast('error', 'Authentication required');
+        showToast("error", "Authentication required");
         return;
       }
 
       try {
         await triggerDeepDive(token, id, cardId);
-        showToast('success', 'Deep dive analysis started');
+        showToast("success", "Deep dive analysis started");
         // Start polling for research status updates
         startResearchPollingRef.current();
       } catch (err) {
-        console.error('Error triggering deep dive:', err);
-        showToast('error', 'Failed to start deep dive analysis');
+        console.error("Error triggering deep dive:", err);
+        showToast("error", "Failed to start deep dive analysis");
       }
     },
-    [id, getAuthToken, showToast]
+    [id, getAuthToken, showToast],
   );
 
   /**
@@ -870,7 +896,7 @@ const WorkstreamKanban: React.FC = () => {
 
       const token = await getAuthToken();
       if (!token) {
-        showToast('error', 'Authentication required');
+        showToast("error", "Authentication required");
         return;
       }
 
@@ -880,21 +906,23 @@ const WorkstreamKanban: React.FC = () => {
       setCards((prev) => {
         const updated = { ...prev };
         for (const status of Object.keys(updated) as KanbanStatus[]) {
-          updated[status] = updated[status].filter((card) => card.id !== cardId);
+          updated[status] = updated[status].filter(
+            (card) => card.id !== cardId,
+          );
         }
         return updated;
       });
 
       try {
         await removeCardFromWorkstream(token, id, cardId);
-        showToast('success', 'Card removed from workstream');
+        showToast("success", "Card removed from workstream");
       } catch (err) {
-        console.error('Error removing card:', err);
+        console.error("Error removing card:", err);
         setCards(previousCards);
-        showToast('error', 'Failed to remove card');
+        showToast("error", "Failed to remove signal");
       }
     },
-    [id, cards, getAuthToken, showToast]
+    [id, cards, getAuthToken, showToast],
   );
 
   /**
@@ -906,7 +934,7 @@ const WorkstreamKanban: React.FC = () => {
 
       const token = await getAuthToken();
       if (!token) {
-        showToast('error', 'Authentication required');
+        showToast("error", "Authentication required");
         return;
       }
 
@@ -934,7 +962,7 @@ const WorkstreamKanban: React.FC = () => {
 
         // Remove from source column
         updated[sourceStatus!] = updated[sourceStatus!].filter(
-          (c) => c.id !== cardId
+          (c) => c.id !== cardId,
         );
 
         // Add to target column at the end
@@ -949,14 +977,14 @@ const WorkstreamKanban: React.FC = () => {
           status,
           position: targetPosition,
         });
-        showToast('success', 'Card moved successfully');
+        showToast("success", "Signal moved successfully");
       } catch (err) {
-        console.error('Error moving card:', err);
+        console.error("Error moving card:", err);
         setCards(previousCards);
-        showToast('error', 'Failed to move card');
+        showToast("error", "Failed to move signal");
       }
     },
-    [id, cards, getAuthToken, showToast]
+    [id, cards, getAuthToken, showToast],
   );
 
   /**
@@ -966,17 +994,17 @@ const WorkstreamKanban: React.FC = () => {
     async (cardId: string) => {
       await triggerQuickUpdate(cardId);
     },
-    [triggerQuickUpdate]
+    [triggerQuickUpdate],
   );
 
   /**
    * Handle export action (brief column).
    */
   const handleExport = useCallback(
-    async (cardId: string, format: 'pdf' | 'pptx') => {
+    async (cardId: string, format: "pdf" | "pptx") => {
       await exportCard(cardId, format);
     },
-    [exportCard]
+    [exportCard],
   );
 
   /**
@@ -986,7 +1014,7 @@ const WorkstreamKanban: React.FC = () => {
     async (cardId: string) => {
       await checkForUpdates(cardId);
     },
-    [checkForUpdates]
+    [checkForUpdates],
   );
 
   /**
@@ -1007,7 +1035,7 @@ const WorkstreamKanban: React.FC = () => {
       // Trigger generation (uses cardId, the actual card UUID)
       await triggerBriefGeneration(cardId);
     },
-    [cards, triggerBriefGeneration]
+    [cards, triggerBriefGeneration],
   );
 
   /**
@@ -1023,21 +1051,21 @@ const WorkstreamKanban: React.FC = () => {
    * Uses progress modal for PPTX (Gamma-powered), direct download for PDF.
    */
   const handleBriefExport = useCallback(
-    async (format: 'pdf' | 'pptx') => {
+    async (format: "pdf" | "pptx") => {
       if (briefModalCard && id) {
         // Get card name for the progress modal
-        const cardName = briefModalCard.card.name || 'Executive Brief';
-        
+        const cardName = briefModalCard.card.name || "Executive Brief";
+
         // Use progress modal for exports (especially PPTX which uses Gamma)
         await exportBriefWithProgress(
           id,
           briefModalCard.card.id,
           format,
-          cardName
+          cardName,
         );
       }
     },
-    [briefModalCard, id, exportBriefWithProgress]
+    [briefModalCard, id, exportBriefWithProgress],
   );
 
   /**
@@ -1045,11 +1073,11 @@ const WorkstreamKanban: React.FC = () => {
    * Uses progress modal for PPTX (Gamma-powered), direct download for PDF.
    */
   const handleBriefExportFromCard = useCallback(
-    async (cardId: string, format: 'pdf' | 'pptx') => {
+    async (cardId: string, format: "pdf" | "pptx") => {
       if (!id) return;
-      
+
       // Find the card to get its name
-      let cardName = 'Executive Brief';
+      let cardName = "Executive Brief";
       for (const columnCards of Object.values(cards)) {
         const card = columnCards.find((c) => c.card.id === cardId);
         if (card) {
@@ -1057,11 +1085,11 @@ const WorkstreamKanban: React.FC = () => {
           break;
         }
       }
-      
+
       // Use progress modal for exports
       await exportBriefWithProgress(id, cardId, format, cardName);
     },
-    [id, cards, exportBriefWithProgress]
+    [id, cards, exportBriefWithProgress],
   );
 
   // ============================================================================
@@ -1081,15 +1109,17 @@ const WorkstreamKanban: React.FC = () => {
     try {
       const token = await getAuthToken();
       if (!token) {
-        setBulkExportError('Authentication required');
+        setBulkExportError("Authentication required");
         return;
       }
 
       const status = await getBulkBriefStatus(token, id);
       setBulkExportStatus(status);
     } catch (err) {
-      console.error('Error fetching bulk brief status:', err);
-      setBulkExportError(err instanceof Error ? err.message : 'Failed to load brief status');
+      console.error("Error fetching bulk brief status:", err);
+      setBulkExportError(
+        err instanceof Error ? err.message : "Failed to load brief status",
+      );
     } finally {
       setBulkExportLoading(false);
     }
@@ -1109,7 +1139,7 @@ const WorkstreamKanban: React.FC = () => {
    * Execute the bulk export.
    */
   const handleExecuteBulkExport = useCallback(
-    async (format: 'pptx' | 'pdf', cardOrder: string[]) => {
+    async (format: "pptx" | "pdf", cardOrder: string[]) => {
       if (!id) return;
 
       setIsBulkExporting(true);
@@ -1117,34 +1147,37 @@ const WorkstreamKanban: React.FC = () => {
       try {
         const token = await getAuthToken();
         if (!token) {
-          showToast('error', 'Authentication required');
+          showToast("error", "Authentication required");
           return;
         }
 
-        showToast('info', `Generating ${format.toUpperCase()} portfolio...`);
+        showToast("info", `Generating ${format.toUpperCase()} portfolio...`);
 
         const result = await exportBulkBriefs(token, id, format, cardOrder);
 
-        if (result.status === 'success' || result.status === 'completed') {
+        if (result.status === "success" || result.status === "completed") {
           // Handle Gamma URL for PPTX
           if (result.pptx_url) {
-            window.open(result.pptx_url, '_blank');
-            showToast('success', 'Portfolio presentation opened in new tab');
+            window.open(result.pptx_url, "_blank");
+            showToast("success", "Portfolio presentation opened in new tab");
           } else {
-            showToast('success', 'Portfolio export completed');
+            showToast("success", "Portfolio export completed");
           }
           setShowBulkExportModal(false);
         } else if (result.error) {
-          showToast('error', result.error);
+          showToast("error", result.error);
         }
       } catch (err) {
-        console.error('Bulk export error:', err);
-        showToast('error', err instanceof Error ? err.message : 'Export failed');
+        console.error("Bulk export error:", err);
+        showToast(
+          "error",
+          err instanceof Error ? err.message : "Export failed",
+        );
       } finally {
         setIsBulkExporting(false);
       }
     },
-    [id, getAuthToken, showToast]
+    [id, getAuthToken, showToast],
   );
 
   /**
@@ -1183,7 +1216,9 @@ const WorkstreamKanban: React.FC = () => {
 
     const query = searchQuery.toLowerCase().trim();
 
-    for (const [status, columnCards] of Object.entries(cardsWithResearchStatus)) {
+    for (const [status, columnCards] of Object.entries(
+      cardsWithResearchStatus,
+    )) {
       filtered[status as KanbanStatus] = columnCards.filter((card) => {
         // Check pillar filter
         if (filterPillar && card.card.pillar_id !== filterPillar) {
@@ -1193,10 +1228,12 @@ const WorkstreamKanban: React.FC = () => {
         // Check search query
         if (query) {
           const cardText = [
-            card.card.name || '',
-            card.card.summary || '',
-            card.notes || '',
-          ].join(' ').toLowerCase();
+            card.card.name || "",
+            card.card.summary || "",
+            card.notes || "",
+          ]
+            .join(" ")
+            .toLowerCase();
 
           if (!cardText.includes(query)) {
             return false;
@@ -1229,7 +1266,7 @@ const WorkstreamKanban: React.FC = () => {
    * Clear all search/filter state.
    */
   const clearFilters = useCallback(() => {
-    setSearchQuery('');
+    setSearchQuery("");
     setFilterPillar(null);
   }, []);
 
@@ -1240,7 +1277,7 @@ const WorkstreamKanban: React.FC = () => {
     setRefreshing(true);
     await loadCards();
     setRefreshing(false);
-    showToast('success', 'Cards refreshed');
+    showToast("success", "Signals refreshed");
   }, [loadCards, showToast]);
 
   /**
@@ -1251,7 +1288,7 @@ const WorkstreamKanban: React.FC = () => {
 
     const token = await getAuthToken();
     if (!token) {
-      showToast('error', 'Authentication required');
+      showToast("error", "Authentication required");
       return;
     }
 
@@ -1261,17 +1298,17 @@ const WorkstreamKanban: React.FC = () => {
 
       if (result.added > 0) {
         showToast(
-          'success',
-          `Added ${result.added} card${result.added !== 1 ? 's' : ''} to inbox`
+          "success",
+          `Added ${result.added} signal${result.added !== 1 ? "s" : ""} to inbox`,
         );
         // Reload cards to show the new ones
         await loadCards();
       } else {
-        showToast('info', 'No new matching cards found');
+        showToast("info", "No new matching signals found");
       }
     } catch (err) {
-      console.error('Error auto-populating:', err);
-      showToast('error', 'Failed to auto-populate workstream');
+      console.error("Error auto-populating:", err);
+      showToast("error", "Failed to auto-populate workstream");
     } finally {
       setAutoPopulating(false);
     }
@@ -1285,7 +1322,7 @@ const WorkstreamKanban: React.FC = () => {
 
     const token = await getAuthToken();
     if (!token) {
-      showToast('error', 'Authentication required');
+      showToast("error", "Authentication required");
       return;
     }
 
@@ -1298,7 +1335,7 @@ const WorkstreamKanban: React.FC = () => {
         status: response.status,
         created_at: new Date().toISOString(),
       });
-      showToast('info', response.message);
+      showToast("info", response.message);
 
       // Track polling attempts for timeout (10 min max = 200 polls at 3s each)
       const MAX_POLL_ATTEMPTS = 200;
@@ -1312,7 +1349,7 @@ const WorkstreamKanban: React.FC = () => {
         // Timeout after max attempts
         if (pollAttempts > MAX_POLL_ATTEMPTS) {
           setScanning(false);
-          showToast('error', 'Scan timed out. Check back later for results.');
+          showToast("error", "Scan timed out. Check back later for results.");
           if (scanPollRef.current) {
             clearInterval(scanPollRef.current);
             scanPollRef.current = null;
@@ -1325,7 +1362,7 @@ const WorkstreamKanban: React.FC = () => {
           const freshToken = await getAuthToken();
           if (!freshToken) {
             setScanning(false);
-            showToast('error', 'Session expired. Please refresh the page.');
+            showToast("error", "Session expired. Please refresh the page.");
             if (scanPollRef.current) {
               clearInterval(scanPollRef.current);
               scanPollRef.current = null;
@@ -1336,33 +1373,33 @@ const WorkstreamKanban: React.FC = () => {
           const status = await getWorkstreamScanStatus(freshToken, id, scanId);
           setScanStatus(status);
 
-          if (status.status === 'completed') {
+          if (status.status === "completed") {
             setScanning(false);
             const cardsAdded = status.results?.cards_added_to_workstream ?? 0;
             const cardsCreated = status.results?.cards_created ?? 0;
             if (cardsAdded > 0 || cardsCreated > 0) {
               showToast(
-                'success',
-                `Scan complete! ${cardsCreated} new card${cardsCreated !== 1 ? 's' : ''} created, ${cardsAdded} added to inbox`
+                "success",
+                `Scan complete! ${cardsCreated} new signal${cardsCreated !== 1 ? "s" : ""} created, ${cardsAdded} added to inbox`,
               );
               await loadCards();
             } else {
-              showToast('info', 'Scan complete - no new cards found');
+              showToast("info", "Scan complete - no new signals found");
             }
             if (scanPollRef.current) {
               clearInterval(scanPollRef.current);
               scanPollRef.current = null;
             }
-          } else if (status.status === 'failed') {
+          } else if (status.status === "failed") {
             setScanning(false);
-            showToast('error', status.error_message || 'Scan failed');
+            showToast("error", status.error_message || "Scan failed");
             if (scanPollRef.current) {
               clearInterval(scanPollRef.current);
               scanPollRef.current = null;
             }
           }
         } catch (err) {
-          console.error('Error polling scan status:', err);
+          console.error("Error polling scan status:", err);
           // Don't stop polling on transient errors, but log them
         }
       };
@@ -1371,18 +1408,27 @@ const WorkstreamKanban: React.FC = () => {
       scanPollRef.current = setInterval(pollScanStatus, 3000);
       // Also poll immediately
       pollScanStatus();
-
     } catch (err: unknown) {
       setScanning(false);
-      const message = err instanceof Error ? err.message : 'Failed to start scan';
-      if (message.includes('Rate limit')) {
-        showToast('error', 'Scan limit reached (2 per day). Try again tomorrow.');
-      } else if (message.includes('already in progress')) {
-        showToast('error', 'A scan is already running. Please wait for it to complete.');
-      } else if (message.includes('keywords or pillars')) {
-        showToast('error', 'Add keywords or pillars to this workstream to enable scanning.');
+      const message =
+        err instanceof Error ? err.message : "Failed to start scan";
+      if (message.includes("Rate limit")) {
+        showToast(
+          "error",
+          "Scan limit reached (2 per day). Try again tomorrow.",
+        );
+      } else if (message.includes("already in progress")) {
+        showToast(
+          "error",
+          "A scan is already running. Please wait for it to complete.",
+        );
+      } else if (message.includes("keywords or pillars")) {
+        showToast(
+          "error",
+          "Add keywords or pillars to this workstream to enable scanning.",
+        );
       } else {
-        showToast('error', message);
+        showToast("error", message);
       }
     }
   }, [id, getAuthToken, showToast, loadCards]);
@@ -1402,7 +1448,7 @@ const WorkstreamKanban: React.FC = () => {
   const handleFormSuccess = useCallback(() => {
     setShowEditModal(false);
     loadWorkstream();
-    showToast('success', 'Workstream updated');
+    showToast("success", "Workstream updated");
   }, [loadWorkstream, showToast]);
 
   /**
@@ -1416,7 +1462,7 @@ const WorkstreamKanban: React.FC = () => {
    * Export workstream report.
    */
   const handleWorkstreamExport = useCallback(
-    async (format: 'pdf' | 'pptx') => {
+    async (format: "pdf" | "pptx") => {
       if (!workstream || !id) return;
 
       try {
@@ -1425,14 +1471,14 @@ const WorkstreamKanban: React.FC = () => {
 
         const token = await getAuthToken();
         if (!token) {
-          throw new Error('Authentication required');
+          throw new Error("Authentication required");
         }
 
-        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
         const exportUrl = `${apiUrl}/api/v1/workstreams/${id}/export/${format}`;
 
         const response = await fetch(exportUrl, {
-          method: 'GET',
+          method: "GET",
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -1441,17 +1487,16 @@ const WorkstreamKanban: React.FC = () => {
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(
-            errorData.detail || `Export failed: ${response.status}`
+            errorData.detail || `Export failed: ${response.status}`,
           );
         }
 
         // Get filename from Content-Disposition header or generate one
-        const contentDisposition = response.headers.get('Content-Disposition');
-        let filename = `${workstream.name.replace(/[^a-zA-Z0-9-_]/g, '_')}.${format}`;
+        const contentDisposition = response.headers.get("Content-Disposition");
+        let filename = `${workstream.name.replace(/[^a-zA-Z0-9-_]/g, "_")}.${format}`;
         if (contentDisposition) {
-          const filenameMatch = contentDisposition.match(
-            /filename="?([^"]+)"?/
-          );
+          const filenameMatch =
+            contentDisposition.match(/filename="?([^"]+)"?/);
           if (filenameMatch) {
             filename = filenameMatch[1];
           }
@@ -1460,7 +1505,7 @@ const WorkstreamKanban: React.FC = () => {
         // Create blob and download
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
+        const link = document.createElement("a");
         link.href = url;
         link.download = filename;
         document.body.appendChild(link);
@@ -1468,18 +1513,18 @@ const WorkstreamKanban: React.FC = () => {
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
 
-        showToast('success', `${format.toUpperCase()} export started`);
+        showToast("success", `${format.toUpperCase()} export started`);
       } catch (err) {
-        console.error('Export failed:', err);
+        console.error("Export failed:", err);
         showToast(
-          'error',
-          err instanceof Error ? err.message : 'Export failed'
+          "error",
+          err instanceof Error ? err.message : "Export failed",
         );
       } finally {
         setExportLoading(null);
       }
     },
-    [workstream, id, getAuthToken, showToast]
+    [workstream, id, getAuthToken, showToast],
   );
 
   // ============================================================================
@@ -1591,8 +1636,8 @@ const WorkstreamKanban: React.FC = () => {
                 onClick={handleStartScan}
                 disabled={scanning}
                 className={cn(
-                  'inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-[#2d3166] transition-colors',
-                  scanning && 'opacity-75 cursor-not-allowed'
+                  "inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-[#2d3166] transition-colors",
+                  scanning && "opacity-75 cursor-not-allowed",
                 )}
                 title="Scan web sources for new content matching this workstream (2/day limit)"
               >
@@ -1601,7 +1646,7 @@ const WorkstreamKanban: React.FC = () => {
                 ) : (
                   <Radar className="h-4 w-4 mr-2" />
                 )}
-                {scanning ? 'Scanning...' : 'Scan for Updates'}
+                {scanning ? "Scanning..." : "Scan for Updates"}
               </button>
 
               {/* Auto-Populate Button */}
@@ -1609,8 +1654,8 @@ const WorkstreamKanban: React.FC = () => {
                 onClick={handleAutoPopulate}
                 disabled={autoPopulating}
                 className={cn(
-                  'inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-green hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-green dark:focus:ring-offset-[#2d3166] transition-colors',
-                  autoPopulating && 'opacity-75 cursor-not-allowed'
+                  "inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-green hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-green dark:focus:ring-offset-[#2d3166] transition-colors",
+                  autoPopulating && "opacity-75 cursor-not-allowed",
                 )}
                 title="Find and add matching cards from existing database"
               >
@@ -1631,8 +1676,8 @@ const WorkstreamKanban: React.FC = () => {
               >
                 <RefreshCw
                   className={cn(
-                    'h-4 w-4',
-                    (refreshing || cardsLoading) && 'animate-spin'
+                    "h-4 w-4",
+                    (refreshing || cardsLoading) && "animate-spin",
                   )}
                 />
               </button>
@@ -1643,8 +1688,8 @@ const WorkstreamKanban: React.FC = () => {
                   onClick={() => setShowExportMenu(!showExportMenu)}
                   disabled={exportLoading !== null}
                   className={cn(
-                    'inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-[#2d3166] transition-colors',
-                    exportLoading !== null && 'opacity-75 cursor-not-allowed'
+                    "inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-[#2d3166] transition-colors",
+                    exportLoading !== null && "opacity-75 cursor-not-allowed",
                   )}
                   title="Export workstream report"
                 >
@@ -1656,8 +1701,8 @@ const WorkstreamKanban: React.FC = () => {
                   Export
                   <ChevronDown
                     className={cn(
-                      'h-4 w-4 ml-1 transition-transform',
-                      showExportMenu && 'rotate-180'
+                      "h-4 w-4 ml-1 transition-transform",
+                      showExportMenu && "rotate-180",
                     )}
                   />
                 </button>
@@ -1676,7 +1721,7 @@ const WorkstreamKanban: React.FC = () => {
                         aria-orientation="vertical"
                       >
                         <button
-                          onClick={() => handleWorkstreamExport('pdf')}
+                          onClick={() => handleWorkstreamExport("pdf")}
                           className="w-full text-left px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#4d5186] flex items-center gap-3 transition-colors"
                           role="menuitem"
                         >
@@ -1689,7 +1734,7 @@ const WorkstreamKanban: React.FC = () => {
                           </div>
                         </button>
                         <button
-                          onClick={() => handleWorkstreamExport('pptx')}
+                          onClick={() => handleWorkstreamExport("pptx")}
                           className="w-full text-left px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#4d5186] flex items-center gap-3 transition-colors"
                           role="menuitem"
                         >
@@ -1741,13 +1786,13 @@ const WorkstreamKanban: React.FC = () => {
             )}
 
             {/* Horizon */}
-            {workstream.horizon && workstream.horizon !== 'ALL' && (
+            {workstream.horizon && workstream.horizon !== "ALL" && (
               <div className="flex items-center gap-2">
                 <span className="text-gray-600 dark:text-gray-400">
                   Horizon:
                 </span>
                 <HorizonBadge
-                  horizon={workstream.horizon as 'H1' | 'H2' | 'H3'}
+                  horizon={workstream.horizon as "H1" | "H2" | "H3"}
                   size="sm"
                 />
               </div>
@@ -1784,7 +1829,7 @@ const WorkstreamKanban: React.FC = () => {
 
             {/* No filters */}
             {(!workstream.pillar_ids || workstream.pillar_ids.length === 0) &&
-              (!workstream.horizon || workstream.horizon === 'ALL') &&
+              (!workstream.horizon || workstream.horizon === "ALL") &&
               (!workstream.stage_ids || workstream.stage_ids.length === 0) &&
               (!workstream.keywords || workstream.keywords.length === 0) && (
                 <p className="text-gray-500 dark:text-gray-400 italic">
@@ -1812,7 +1857,7 @@ const WorkstreamKanban: React.FC = () => {
               />
               {searchQuery && (
                 <button
-                  onClick={() => setSearchQuery('')}
+                  onClick={() => setSearchQuery("")}
                   className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                   aria-label="Clear search"
                 >
@@ -1826,7 +1871,7 @@ const WorkstreamKanban: React.FC = () => {
               <div className="flex items-center gap-2">
                 <Filter className="h-4 w-4 text-gray-400" />
                 <select
-                  value={filterPillar || ''}
+                  value={filterPillar || ""}
                   onChange={(e) => setFilterPillar(e.target.value || null)}
                   className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-[#3d4176] text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-brand-blue"
                 >
@@ -1854,7 +1899,8 @@ const WorkstreamKanban: React.FC = () => {
             {/* Filter Results Count */}
             {(searchQuery || filterPillar) && (
               <span className="text-sm text-gray-500 dark:text-gray-400">
-                Showing {Object.values(filteredCards).flat().length} of {Object.values(cards).flat().length} cards
+                Showing {Object.values(filteredCards).flat().length} of{" "}
+                {Object.values(cards).flat().length} cards
               </span>
             )}
           </div>
@@ -1873,8 +1919,8 @@ const WorkstreamKanban: React.FC = () => {
         ) : (
           <KanbanErrorBoundary
             onError={(error) => {
-              console.error('Kanban board error:', error);
-              showToast('error', 'An error occurred in the Kanban board');
+              console.error("Kanban board error:", error);
+              showToast("error", "An error occurred in the Kanban board");
             }}
           >
             <KanbanBoard
@@ -1911,18 +1957,24 @@ const WorkstreamKanban: React.FC = () => {
                     id: brief.id,
                     card_id: brief.card_id,
                     title: briefModalCard.card.name,
-                    executive_summary: brief.summary || '',
-                    content_markdown: brief.content_markdown || '',
+                    executive_summary: brief.summary || "",
+                    content_markdown: brief.content_markdown || "",
                     created_at: brief.created_at,
                   };
                 })()
               : null
           }
-          isGenerating={briefModalCard ? isCardGenerating(briefModalCard.card.id) : false}
-          error={briefModalCard ? getCardError(briefModalCard.card.id)?.message || null : null}
-          onExportPdf={() => handleBriefExport('pdf')}
-          onExportPptx={() => handleBriefExport('pptx')}
-          cardName={briefModalCard?.card.name || ''}
+          isGenerating={
+            briefModalCard ? isCardGenerating(briefModalCard.card.id) : false
+          }
+          error={
+            briefModalCard
+              ? getCardError(briefModalCard.card.id)?.message || null
+              : null
+          }
+          onExportPdf={() => handleBriefExport("pdf")}
+          onExportPptx={() => handleBriefExport("pptx")}
+          cardName={briefModalCard?.card.name || ""}
           onRetry={
             briefModalCard
               ? () => triggerBriefGeneration(briefModalCard.card.id)
@@ -1935,7 +1987,7 @@ const WorkstreamKanban: React.FC = () => {
           isOpen={exportState.showModal}
           onClose={closeExportModal}
           status={exportState.status}
-          format={exportState.format || 'pptx'}
+          format={exportState.format || "pptx"}
           progress={exportState.progress}
           statusMessage={exportState.statusMessage}
           errorMessage={exportState.errorMessage}
@@ -1952,7 +2004,7 @@ const WorkstreamKanban: React.FC = () => {
         <BulkExportModal
           isOpen={showBulkExportModal}
           onClose={handleCloseBulkExport}
-          workstreamName={workstream?.name || 'Workstream'}
+          workstreamName={workstream?.name || "Workstream"}
           statusData={bulkExportStatus}
           isLoading={bulkExportLoading}
           error={bulkExportError}

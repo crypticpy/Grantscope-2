@@ -9,8 +9,8 @@
  * - Follow: Toggle following status for the card
  */
 
-import React, { useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Heart,
   RefreshCw,
@@ -23,11 +23,11 @@ import {
   Presentation,
   ArrowLeftRight,
   Briefcase,
-} from 'lucide-react';
-import { Tooltip } from '../ui/Tooltip';
-import { AddToWorkstreamModal } from './AddToWorkstreamModal';
-import type { Card, ResearchTask } from './types';
-import { API_BASE_URL } from './utils';
+} from "lucide-react";
+import { Tooltip } from "../ui/Tooltip";
+import { AddToWorkstreamModal } from "./AddToWorkstreamModal";
+import type { Card, ResearchTask } from "./types";
+import { API_BASE_URL } from "./utils";
 
 /**
  * Props for the CardActionButtons component
@@ -44,7 +44,7 @@ export interface CardActionButtonsProps {
   /** Whether deep research is available (rate limit not exceeded) */
   canDeepResearch: boolean;
   /** Callback to trigger research (update or deep_research) */
-  onTriggerResearch: (taskType: 'update' | 'deep_research') => void;
+  onTriggerResearch: (taskType: "update" | "deep_research") => void;
   /** Callback to toggle follow status */
   onToggleFollow: () => void;
   /** Function to get auth token for API requests */
@@ -56,7 +56,7 @@ export interface CardActionButtonsProps {
 /**
  * Export format type
  */
-type ExportFormat = 'pdf' | 'pptx' | 'csv';
+type ExportFormat = "pdf" | "pptx" | "csv";
 
 /**
  * CardActionButtons component
@@ -73,7 +73,7 @@ export function CardActionButtons({
   onTriggerResearch,
   onToggleFollow,
   getAuthToken,
-  className = '',
+  className = "",
 }: CardActionButtonsProps): React.ReactElement {
   const navigate = useNavigate();
 
@@ -84,7 +84,9 @@ export function CardActionButtons({
 
   // Workstream modal state
   const [showWorkstreamModal, setShowWorkstreamModal] = useState(false);
-  const [workstreamSuccess, setWorkstreamSuccess] = useState<string | null>(null);
+  const [workstreamSuccess, setWorkstreamSuccess] = useState<string | null>(
+    null,
+  );
 
   /**
    * Handle export to different formats
@@ -100,7 +102,7 @@ export function CardActionButtons({
       try {
         const token = await getAuthToken();
         if (!token) {
-          throw new Error('Not authenticated');
+          throw new Error("Not authenticated");
         }
 
         const response = await fetch(
@@ -109,20 +111,20 @@ export function CardActionButtons({
             headers: {
               Authorization: `Bearer ${token}`,
             },
-          }
+          },
         );
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(
-            errorData.detail || `Export failed: ${response.statusText}`
+            errorData.detail || `Export failed: ${response.statusText}`,
           );
         }
 
         // Create blob from response and trigger download
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
+        const a = document.createElement("a");
         a.href = url;
         a.download = `${card.slug}-export.${format}`;
         document.body.appendChild(a);
@@ -131,13 +133,13 @@ export function CardActionButtons({
         document.body.removeChild(a);
       } catch (error: unknown) {
         const errorMessage =
-          error instanceof Error ? error.message : 'Failed to export card';
+          error instanceof Error ? error.message : "Failed to export card";
         setExportError(errorMessage);
       } finally {
         setIsExporting(false);
       }
     },
-    [card, isExporting, getAuthToken]
+    [card, isExporting, getAuthToken],
   );
 
   /**
@@ -146,10 +148,10 @@ export function CardActionButtons({
    */
   const handleCompare = useCallback(() => {
     sessionStorage.setItem(
-      'compareCard',
-      JSON.stringify({ id: card.id, name: card.name })
+      "compareCard",
+      JSON.stringify({ id: card.id, name: card.name }),
     );
-    navigate('/discover?compare=true');
+    navigate("/discover?compare=true");
   }, [card.id, card.name, navigate]);
 
   /**
@@ -194,7 +196,7 @@ export function CardActionButtons({
             <div className="max-w-[200px]">
               <p className="font-medium">Compare Trends</p>
               <p className="text-xs text-gray-500">
-                Select another card to compare trends side-by-side
+                Select another signal to compare trends side-by-side
               </p>
             </div>
           }
@@ -222,11 +224,11 @@ export function CardActionButtons({
           side="bottom"
         >
           <button
-            onClick={() => onTriggerResearch('update')}
+            onClick={() => onTriggerResearch("update")}
             disabled={isResearching}
             className="inline-flex items-center justify-center min-h-[44px] sm:min-h-0 px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors active:scale-95"
           >
-            {isResearching && researchTask?.task_type === 'update' ? (
+            {isResearching && researchTask?.task_type === "update" ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             ) : (
               <RefreshCw className="h-4 w-4 mr-2" />
@@ -253,11 +255,11 @@ export function CardActionButtons({
           side="bottom"
         >
           <button
-            onClick={() => onTriggerResearch('deep_research')}
+            onClick={() => onTriggerResearch("deep_research")}
             disabled={isResearching || !canDeepResearch}
             className="inline-flex items-center justify-center min-h-[44px] sm:min-h-0 px-3 py-2 border border-brand-blue rounded-md shadow-sm text-sm font-medium text-white bg-brand-blue hover:bg-brand-dark-blue disabled:opacity-50 disabled:cursor-not-allowed transition-colors active:scale-95"
           >
-            {isResearching && researchTask?.task_type === 'deep_research' ? (
+            {isResearching && researchTask?.task_type === "deep_research" ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             ) : (
               <Search className="h-4 w-4 mr-2" />
@@ -298,21 +300,21 @@ export function CardActionButtons({
           {showExportDropdown && (
             <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-[#3d4176] rounded-md shadow-lg border border-gray-200 dark:border-gray-600 py-1 z-20">
               <button
-                onClick={() => handleExport('pdf')}
+                onClick={() => handleExport("pdf")}
                 className="w-full flex items-center min-h-[44px] sm:min-h-0 px-4 py-3 sm:py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors active:bg-gray-200 dark:active:bg-gray-600"
               >
                 <FileText className="h-4 w-4 mr-3 text-red-500" />
                 Export as PDF
               </button>
               <button
-                onClick={() => handleExport('pptx')}
+                onClick={() => handleExport("pptx")}
                 className="w-full flex items-center min-h-[44px] sm:min-h-0 px-4 py-3 sm:py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors active:bg-gray-200 dark:active:bg-gray-600"
               >
                 <Presentation className="h-4 w-4 mr-3 text-orange-500" />
                 Export as PowerPoint
               </button>
               <button
-                onClick={() => handleExport('csv')}
+                onClick={() => handleExport("csv")}
                 className="w-full flex items-center min-h-[44px] sm:min-h-0 px-4 py-3 sm:py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors active:bg-gray-200 dark:active:bg-gray-600"
               >
                 <FileSpreadsheet className="h-4 w-4 mr-3 text-green-500" />
@@ -348,14 +350,14 @@ export function CardActionButtons({
           onClick={handleFollowClick}
           className={`inline-flex items-center justify-center min-h-[44px] sm:min-h-0 px-4 py-2 border rounded-md shadow-sm text-sm font-medium transition-colors active:scale-95 ${
             isFollowing
-              ? 'border-red-300 text-red-700 bg-red-50 hover:bg-red-100'
-              : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'
+              ? "border-red-300 text-red-700 bg-red-50 hover:bg-red-100"
+              : "border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
           }`}
         >
           <Heart
-            className={`h-4 w-4 mr-2 ${isFollowing ? 'fill-current' : ''}`}
+            className={`h-4 w-4 mr-2 ${isFollowing ? "fill-current" : ""}`}
           />
-          {isFollowing ? 'Following' : 'Follow'}
+          {isFollowing ? "Following" : "Follow"}
         </button>
       </div>
 
