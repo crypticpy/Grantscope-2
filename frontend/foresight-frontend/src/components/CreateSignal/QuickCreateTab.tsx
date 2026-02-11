@@ -27,7 +27,7 @@ import { cn } from "../../lib/utils";
 import {
   createCardFromTopic,
   suggestKeywords,
-  type Card,
+  type CreateCardFromTopicResponse,
 } from "../../lib/discovery-api";
 
 // =============================================================================
@@ -38,7 +38,7 @@ export interface QuickCreateTabProps {
   /** Pre-selected workstream ID (optional) */
   workstreamId?: string;
   /** Callback when a card is successfully created */
-  onCreated?: (card: Card) => void;
+  onCreated?: (card: CreateCardFromTopicResponse) => void;
 }
 
 /** Workstream option for the dropdown */
@@ -70,7 +70,8 @@ export function QuickCreateTab({
   // Async state
   const [isCreating, setIsCreating] = useState(false);
   const [isSuggestingKeywords, setIsSuggestingKeywords] = useState(false);
-  const [createdCard, setCreatedCard] = useState<Card | null>(null);
+  const [createdCard, setCreatedCard] =
+    useState<CreateCardFromTopicResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Workstreams for dropdown
@@ -163,17 +164,16 @@ export function QuickCreateTab({
         return;
       }
 
-      const card = await createCardFromTopic(
+      const result = await createCardFromTopic(
         {
           topic: topic.trim(),
           workstream_id: selectedWorkstreamId || undefined,
-          pillar_hints: keywords.length > 0 ? keywords : undefined,
         },
         session.access_token,
       );
 
-      setCreatedCard(card);
-      onCreated?.(card);
+      setCreatedCard(result);
+      onCreated?.(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create signal.");
     } finally {
@@ -207,12 +207,12 @@ export function QuickCreateTab({
             Signal Created
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            &ldquo;{createdCard.name}&rdquo; has been created successfully.
+            &ldquo;{createdCard.card_name}&rdquo; has been created successfully.
           </p>
         </div>
         <div className="flex items-center gap-3">
           <Link
-            to={`/cards/${createdCard.slug || createdCard.id}`}
+            to={`/cards/${createdCard.card_id}`}
             className={cn(
               "inline-flex items-center px-4 py-2 text-sm font-medium rounded-md",
               "bg-brand-blue text-white hover:bg-brand-dark-blue",

@@ -489,6 +489,22 @@ const Discover: React.FC = () => {
             search_relevance: result.search_relevance,
           }));
 
+          // Apply quick filters client-side for semantic search results
+          if (quickFilter === "new") {
+            const oneWeekAgo = new Date();
+            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+            mappedCards = mappedCards.filter(
+              (c) => c.created_at >= oneWeekAgo.toISOString(),
+            );
+          }
+          if (quickFilter === "updated") {
+            const oneWeekAgo = new Date();
+            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+            mappedCards = mappedCards.filter(
+              (c) => (c.updated_at ?? c.created_at) >= oneWeekAgo.toISOString(),
+            );
+          }
+
           const sortConfig = getSortConfig(sortOption);
           mappedCards = mappedCards.sort((a, b) => {
             const aVal =
@@ -517,6 +533,12 @@ const Discover: React.FC = () => {
         const oneWeekAgo = new Date();
         oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
         query = query.gte("created_at", oneWeekAgo.toISOString());
+      }
+
+      if (quickFilter === "updated") {
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+        query = query.gte("updated_at", oneWeekAgo.toISOString());
       }
 
       if (selectedPillar) query = query.eq("pillar_id", selectedPillar);
@@ -830,6 +852,17 @@ const Discover: React.FC = () => {
           >
             <Clock className="h-4 w-4 mr-1.5" />
             New This Week
+          </button>
+          <button
+            onClick={() => setSearchParams({ filter: "updated" })}
+            className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              quickFilter === "updated"
+                ? "bg-amber-500 text-white"
+                : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+            }`}
+          >
+            <RefreshCw className="h-4 w-4 mr-1.5" />
+            Updated This Week
           </button>
           <button
             onClick={() => setSearchParams({ filter: "following" })}

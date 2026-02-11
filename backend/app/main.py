@@ -51,6 +51,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+def _safe_error(operation: str, e: Exception) -> str:
+    """Log the full exception but return a safe message without internal details.
+
+    This prevents leaking stack traces, file paths, or database internals
+    to API consumers while preserving full diagnostics in server logs.
+    """
+    logger.exception("Error during %s", operation)
+    return f"{operation} failed. Please try again or contact support."
+
+
 # Research service import
 from app.research_service import ResearchService
 
@@ -1360,7 +1371,7 @@ async def search_cards(request: AdvancedSearchRequest):
 
     except Exception as e:
         logger.error(f"Search error: {e}")
-        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=_safe_error("search", e))
 
 
 def _apply_search_filters(
@@ -2276,7 +2287,7 @@ async def export_card(
         logger.error(f"Export generation failed: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate export: {str(e)}",
+            detail=_safe_error("export generation", e),
         )
 
 
@@ -2430,7 +2441,7 @@ async def export_workstream_report(
                 pass
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Export generation failed: {str(e)}",
+            detail=_safe_error("export generation", e),
         )
 
 
@@ -3620,7 +3631,7 @@ async def get_pillar_coverage(
         logger.error(f"Failed to get pillar coverage: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get pillar coverage: {str(e)}",
+            detail=_safe_error("pillar coverage retrieval", e),
         )
 
 
@@ -3660,7 +3671,7 @@ def _compute_card_data_hash(cards: list) -> str:
             for c in sorted(cards, key=lambda x: x.get("id", ""))
         ]
     )
-    return hashlib.md5(data_str.encode()).hexdigest()
+    return hashlib.sha256(data_str.encode()).hexdigest()
 
 
 @app.get("/api/v1/analytics/insights", response_model=InsightsResponse)
@@ -3904,7 +3915,9 @@ async def get_analytics_insights(
 
     except Exception as e:
         logger.error(f"Analytics insights endpoint failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500, detail=_safe_error("analytics insights", e)
+        )
 
 
 # ============================================================================
@@ -5395,7 +5408,7 @@ async def start_workstream_scan(
         raise  # Re-raise HTTP exceptions as-is
     except Exception as e:
         logger.error(f"Failed to create workstream scan: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to start scan: {str(e)}")
+        raise HTTPException(status_code=500, detail=_safe_error("scan initiation", e))
 
 
 @app.get(
@@ -5452,7 +5465,9 @@ async def get_workstream_scan_status(
         result = query.execute()
     except Exception as e:
         logger.error(f"Error querying workstream_scans: {e}")
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=_safe_error("database operation", e)
+        )
 
     if not result.data:
         raise HTTPException(
@@ -5485,7 +5500,9 @@ async def get_workstream_scan_status(
         )
     except Exception as e:
         logger.error(f"Error building scan status response: {e}, scan data: {scan}")
-        raise HTTPException(status_code=500, detail=f"Response error: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=_safe_error("response processing", e)
+        )
 
 
 @app.get(
@@ -5717,9 +5734,7 @@ async def generate_executive_brief(
 
     except Exception as e:
         logger.error(f"Failed to initiate brief generation: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to start brief generation: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=_safe_error("brief generation", e))
 
 
 @app.get(
@@ -6115,7 +6130,7 @@ async def export_brief(
         logger.error(f"Brief export generation failed: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate export: {str(e)}",
+            detail=_safe_error("export generation", e),
         )
 
 
@@ -6509,7 +6524,7 @@ async def bulk_brief_export(
     except Exception as e:
         logger.error(f"Portfolio export failed: {str(e)}")
         raise HTTPException(
-            status_code=500, detail=f"Failed to generate portfolio: {str(e)}"
+            status_code=500, detail=_safe_error("portfolio generation", e)
         )
 
 
@@ -6680,7 +6695,7 @@ async def get_card_assets(card_id: str, current_user: dict = Depends(get_current
         logger.error(f"Error fetching card assets: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch card assets: {str(e)}",
+            detail=_safe_error("card assets retrieval", e),
         )
 
 
@@ -6762,7 +6777,8 @@ async def trigger_manual_scan(
     except Exception as e:
         logger.error(f"Manual scan failed: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("manual scan", e),
         )
 
 
@@ -7188,7 +7204,7 @@ async def trigger_discovery_run(
     except Exception as e:
         logger.error(f"Failed to trigger discovery run: {str(e)}")
         raise HTTPException(
-            status_code=500, detail=f"Failed to trigger discovery run: {str(e)}"
+            status_code=500, detail=_safe_error("discovery run trigger", e)
         )
 
 
@@ -7900,7 +7916,7 @@ async def list_search_history(
         logger.error(f"Failed to fetch search history: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch search history: {str(e)}",
+            detail=_safe_error("search history retrieval", e),
         )
 
 
@@ -7963,7 +7979,7 @@ async def record_search_history(
         logger.error(f"Failed to record search history: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to record search history: {str(e)}",
+            detail=_safe_error("search history recording", e),
         )
 
 
@@ -8013,7 +8029,7 @@ async def delete_search_history_entry(
         logger.error(f"Failed to delete search history entry: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete search history entry: {str(e)}",
+            detail=_safe_error("search history deletion", e),
         )
 
 
@@ -8040,7 +8056,7 @@ async def clear_search_history(current_user: dict = Depends(get_current_user)):
         logger.error(f"Failed to clear search history: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to clear search history: {str(e)}",
+            detail=_safe_error("search history clearing", e),
         )
 
 
@@ -8186,7 +8202,7 @@ async def get_trend_velocity(
         logger.error(f"Failed to fetch velocity analytics: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch velocity analytics: {str(e)}",
+            detail=_safe_error("velocity analytics retrieval", e),
         )
 
 
@@ -8686,7 +8702,7 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
         logger.error(f"Failed to fetch system-wide stats: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch system-wide stats: {str(e)}",
+            detail=_safe_error("system-wide stats retrieval", e),
         )
 
 
@@ -9013,7 +9029,7 @@ async def get_personal_stats(current_user: dict = Depends(get_current_user)):
         logger.error(f"Failed to fetch personal stats: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch personal stats: {str(e)}",
+            detail=_safe_error("personal stats retrieval", e),
         )
 
 
@@ -9078,7 +9094,7 @@ async def rate_source(
         logger.error(f"Failed to rate source {source_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to save rating: {str(e)}",
+            detail=_safe_error("rating save", e),
         )
 
 
@@ -9128,7 +9144,7 @@ async def get_source_ratings(source_id: str, user=Depends(get_current_user)):
         logger.error(f"Failed to get source ratings for {source_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get source ratings: {str(e)}",
+            detail=_safe_error("source ratings retrieval", e),
         )
 
 
@@ -9144,7 +9160,7 @@ async def delete_source_rating(source_id: str, user=Depends(get_current_user)):
         logger.error(f"Failed to delete source rating for {source_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete rating: {str(e)}",
+            detail=_safe_error("rating deletion", e),
         )
 
 
@@ -9166,12 +9182,15 @@ async def get_card_quality(card_id: str, user=Depends(get_current_user)):
         logger.error(f"Failed to get quality for card {card_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get card quality: {str(e)}",
+            detail=_safe_error("card quality retrieval", e),
         )
 
 
 @app.post("/api/v1/cards/{card_id}/quality/recalculate")
-async def recalculate_card_quality(card_id: str, user=Depends(get_current_user)):
+@limiter.limit("20/minute")
+async def recalculate_card_quality(
+    request: Request, card_id: str, user=Depends(get_current_user)
+):
     """Force SQI recalculation for a card."""
     try:
         result = quality_service.calculate_sqi(supabase, card_id)
@@ -9180,7 +9199,7 @@ async def recalculate_card_quality(card_id: str, user=Depends(get_current_user))
         logger.error(f"Failed to recalculate quality for card {card_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to recalculate card quality: {str(e)}",
+            detail=_safe_error("card quality recalculation", e),
         )
 
 
@@ -9194,7 +9213,7 @@ async def recalculate_all_quality(user=Depends(get_current_user)):
         logger.error(f"Failed to batch recalculate quality: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to batch recalculate quality: {str(e)}",
+            detail=_safe_error("batch quality recalculation", e),
         )
 
 
@@ -9231,7 +9250,7 @@ async def list_domain_reputations(
         logger.error(f"Failed to list domain reputations: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list domain reputations: {str(e)}",
+            detail=_safe_error("domain reputations listing", e),
         )
 
 
@@ -9251,7 +9270,7 @@ async def get_domain_reputation(domain_id: str, user=Depends(get_current_user)):
         logger.error(f"Failed to get domain reputation {domain_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Domain reputation not found: {str(e)}",
+            detail=_safe_error("domain reputation lookup", e),
         )
 
 
@@ -9281,7 +9300,7 @@ async def create_domain_reputation(
         logger.error(f"Failed to create domain reputation: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create domain reputation: {str(e)}",
+            detail=_safe_error("domain reputation creation", e),
         )
 
 
@@ -9317,7 +9336,7 @@ async def update_domain_reputation(
         logger.error(f"Failed to update domain reputation {domain_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update domain reputation: {str(e)}",
+            detail=_safe_error("domain reputation update", e),
         )
 
 
@@ -9331,7 +9350,7 @@ async def delete_domain_reputation(domain_id: str, user=Depends(get_current_user
         logger.error(f"Failed to delete domain reputation {domain_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete domain reputation: {str(e)}",
+            detail=_safe_error("domain reputation deletion", e),
         )
 
 
@@ -9345,7 +9364,7 @@ async def recalculate_domain_reputations(user=Depends(get_current_user)):
         logger.error(f"Failed to recalculate domain reputations: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to recalculate domain reputations: {str(e)}",
+            detail=_safe_error("domain reputations recalculation", e),
         )
 
 
@@ -9371,7 +9390,7 @@ async def get_top_domains(
         logger.error(f"Failed to get top domains: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get top domains: {str(e)}",
+            detail=_safe_error("top domains retrieval", e),
         )
 
 
@@ -9381,8 +9400,9 @@ async def get_top_domains(
 
 
 @app.post("/api/v1/cards/create-from-topic")
+@limiter.limit("10/minute")
 async def create_card_from_topic(
-    body: CreateCardFromTopicRequest, user=Depends(get_current_user)
+    request: Request, body: CreateCardFromTopicRequest, user=Depends(get_current_user)
 ):
     """Quick card creation from a topic phrase. Creates card and optionally starts background scan."""
     try:
@@ -9400,7 +9420,7 @@ async def create_card_from_topic(
         }
 
         if body.pillar_hints and len(body.pillar_hints) > 0:
-            card_data["primary_pillar"] = body.pillar_hints[0]
+            card_data["pillar_id"] = body.pillar_hints[0]
 
         result = supabase.table("cards").insert(card_data).execute()
 
@@ -9438,13 +9458,14 @@ async def create_card_from_topic(
         logger.error(f"Failed to create card from topic: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create card: {str(e)}",
+            detail=_safe_error("card creation", e),
         )
 
 
 @app.post("/api/v1/cards/create-manual")
+@limiter.limit("10/minute")
 async def create_manual_card(
-    body: ManualCardCreateRequest, user=Depends(get_current_user)
+    request: Request, body: ManualCardCreateRequest, user=Depends(get_current_user)
 ):
     """Create a card from a full manual form with all fields specified.
 
@@ -9487,7 +9508,7 @@ async def create_manual_card(
         }
 
         if primary_pillar:
-            card_data["primary_pillar"] = primary_pillar
+            card_data["pillar_id"] = primary_pillar
 
         result = supabase.table("cards").insert(card_data).execute()
 
@@ -9532,12 +9553,15 @@ async def create_manual_card(
         logger.error(f"Failed to create manual card: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create card: {str(e)}",
+            detail=_safe_error("card creation", e),
         )
 
 
 @app.post("/api/v1/ai/suggest-keywords")
-async def suggest_keywords(topic: str, user=Depends(get_current_user)):
+@limiter.limit("10/minute")
+async def suggest_keywords(
+    request: Request, topic: str, user=Depends(get_current_user)
+):
     """Suggest municipal-relevant keywords for a topic."""
     try:
         import json
@@ -9575,7 +9599,7 @@ async def suggest_keywords(topic: str, user=Depends(get_current_user)):
         logger.error(f"Failed to suggest keywords for '{topic}': {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to suggest keywords: {str(e)}",
+            detail=_safe_error("keyword suggestion", e),
         )
 
 
@@ -9644,7 +9668,7 @@ async def toggle_workstream_auto_scan(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update auto_scan: {str(e)}",
+            detail=_safe_error("auto_scan update", e),
         )
 
 
