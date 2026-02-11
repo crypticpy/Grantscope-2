@@ -275,7 +275,7 @@ function StatsBar({
   );
 
   return (
-    <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 mb-6">
+    <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-4 mb-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-gray-900 dark:text-white">
@@ -323,8 +323,8 @@ function FormModal({
 }) {
   return (
     <div className="fixed inset-0 bg-gray-600/50 dark:bg-black/60 flex items-center justify-center p-4 z-50 overflow-y-auto">
-      <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto my-8">
-        <div className="sticky top-0 bg-white dark:bg-[#2d3166] border-b border-gray-200 dark:border-gray-700 px-6 py-4 rounded-t-lg">
+      <div className="bg-white dark:bg-dark-surface rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto my-8">
+        <div className="sticky top-0 bg-white dark:bg-dark-surface border-b border-gray-200 dark:border-gray-700 px-6 py-4 rounded-t-lg">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white">
             Edit Workstream Filters
           </h3>
@@ -820,7 +820,7 @@ const WorkstreamKanban: React.FC = () => {
    */
   const handleCardClick = useCallback(
     (card: WorkstreamCard) => {
-      navigate(`/cards/${card.card.slug}`);
+      navigate(`/signals/${card.card.slug}`);
     },
     [navigate],
   );
@@ -1549,7 +1549,7 @@ const WorkstreamKanban: React.FC = () => {
   if (error) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="text-center py-12 bg-white dark:bg-[#2d3166] rounded-lg shadow">
+        <div className="text-center py-12 bg-white dark:bg-dark-surface rounded-lg shadow">
           <div className="text-red-500 dark:text-red-400 mb-4">
             <Filter className="mx-auto h-12 w-12" />
           </div>
@@ -1573,7 +1573,7 @@ const WorkstreamKanban: React.FC = () => {
   if (!workstream) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="text-center py-12 bg-white dark:bg-[#2d3166] rounded-lg shadow">
+        <div className="text-center py-12 bg-white dark:bg-dark-surface rounded-lg shadow">
           <Filter className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" />
           <h3 className="mt-2 text-lg font-medium text-gray-900 dark:text-white">
             Workstream not found
@@ -1636,7 +1636,7 @@ const WorkstreamKanban: React.FC = () => {
                 onClick={handleStartScan}
                 disabled={scanning}
                 className={cn(
-                  "inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-[#2d3166] transition-colors",
+                  "inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-dark-surface transition-colors",
                   scanning && "opacity-75 cursor-not-allowed",
                 )}
                 title="Scan web sources for new content matching this workstream (2/day limit)"
@@ -1654,7 +1654,7 @@ const WorkstreamKanban: React.FC = () => {
                 onClick={handleAutoPopulate}
                 disabled={autoPopulating}
                 className={cn(
-                  "inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-green hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-green dark:focus:ring-offset-[#2d3166] transition-colors",
+                  "inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-green hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-green dark:focus:ring-offset-dark-surface transition-colors",
                   autoPopulating && "opacity-75 cursor-not-allowed",
                 )}
                 title="Find and add matching cards from existing database"
@@ -1671,7 +1671,7 @@ const WorkstreamKanban: React.FC = () => {
               <button
                 onClick={handleRefresh}
                 disabled={refreshing || cardsLoading}
-                className="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-[#2d3166] transition-colors"
+                className="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-dark-surface-elevated hover:bg-gray-50 dark:hover:bg-dark-surface-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-dark-surface transition-colors"
                 title="Refresh cards"
               >
                 <RefreshCw
@@ -1688,7 +1688,7 @@ const WorkstreamKanban: React.FC = () => {
                   onClick={() => setShowExportMenu(!showExportMenu)}
                   disabled={exportLoading !== null}
                   className={cn(
-                    "inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-[#2d3166] transition-colors",
+                    "inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-dark-surface-elevated hover:bg-gray-50 dark:hover:bg-dark-surface-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-dark-surface transition-colors",
                     exportLoading !== null && "opacity-75 cursor-not-allowed",
                   )}
                   title="Export workstream report"
@@ -1714,7 +1714,7 @@ const WorkstreamKanban: React.FC = () => {
                       className="fixed inset-0 z-10"
                       onClick={() => setShowExportMenu(false)}
                     />
-                    <div className="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-[#3d4176] ring-1 ring-black ring-opacity-5 z-20">
+                    <div className="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-dark-surface-elevated ring-1 ring-black ring-opacity-5 z-20">
                       <div
                         className="py-1"
                         role="menu"
@@ -1722,7 +1722,7 @@ const WorkstreamKanban: React.FC = () => {
                       >
                         <button
                           onClick={() => handleWorkstreamExport("pdf")}
-                          className="w-full text-left px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#4d5186] flex items-center gap-3 transition-colors"
+                          className="w-full text-left px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-dark-surface-hover flex items-center gap-3 transition-colors"
                           role="menuitem"
                         >
                           <FileText className="h-5 w-5 text-red-500" />
@@ -1735,7 +1735,7 @@ const WorkstreamKanban: React.FC = () => {
                         </button>
                         <button
                           onClick={() => handleWorkstreamExport("pptx")}
-                          className="w-full text-left px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#4d5186] flex items-center gap-3 transition-colors"
+                          className="w-full text-left px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-dark-surface-hover flex items-center gap-3 transition-colors"
                           role="menuitem"
                         >
                           <Presentation className="h-5 w-5 text-orange-500" />
@@ -1755,7 +1755,7 @@ const WorkstreamKanban: React.FC = () => {
               {/* Edit Filters Button */}
               <button
                 onClick={() => setShowEditModal(true)}
-                className="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-[#2d3166] transition-colors"
+                className="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-dark-surface-elevated hover:bg-gray-50 dark:hover:bg-dark-surface-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-dark-surface transition-colors"
                 title="Edit workstream filters"
               >
                 <Settings className="h-4 w-4 mr-2" />
@@ -1766,7 +1766,7 @@ const WorkstreamKanban: React.FC = () => {
         </div>
 
         {/* Filter Summary */}
-        <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 mb-6">
+        <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-4 mb-6">
           <h2 className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
             Active Filters
           </h2>
@@ -1843,7 +1843,7 @@ const WorkstreamKanban: React.FC = () => {
         <StatsBar cards={cards} />
 
         {/* Search and Filter Bar */}
-        <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 mb-6">
+        <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-4 mb-6">
           <div className="flex items-center gap-4 flex-wrap">
             {/* Search Input */}
             <div className="flex-1 min-w-[200px] relative">
@@ -1853,7 +1853,7 @@ const WorkstreamKanban: React.FC = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search cards by name or notes..."
-                className="w-full pl-9 pr-8 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-[#3d4176] text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-brand-blue"
+                className="w-full pl-9 pr-8 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-dark-surface-elevated text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-brand-blue"
               />
               {searchQuery && (
                 <button
@@ -1873,7 +1873,7 @@ const WorkstreamKanban: React.FC = () => {
                 <select
                   value={filterPillar || ""}
                   onChange={(e) => setFilterPillar(e.target.value || null)}
-                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-[#3d4176] text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-brand-blue"
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-dark-surface-elevated text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-brand-blue"
                 >
                   <option value="">All Pillars</option>
                   {availablePillars.map((pillarId) => (

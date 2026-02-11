@@ -121,11 +121,11 @@
 
   /* Button variants */
   .btn-primary {
-    @apply bg-brand-blue text-white hover:bg-brand-dark-blue transition-colors duration-150;
+    @apply bg-brand-blue text-white hover:bg-brand-dark-blue transition-colors duration-200;
   }
 
   .btn-secondary {
-    @apply bg-brand-light-blue text-brand-blue hover:bg-brand-blue hover:text-white transition-colors duration-150;
+    @apply bg-brand-light-blue text-brand-blue hover:bg-brand-blue hover:text-white transition-colors duration-200;
   }
 }
 
@@ -151,6 +151,10 @@
 
   .scrollbar-hide::-webkit-scrollbar {
     display: none; /* Chrome, Safari and Opera */
+  }
+
+  .page-enter {
+    @apply animate-in fade-in duration-200;
   }
 }
 

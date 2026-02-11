@@ -193,7 +193,7 @@ function CustomTooltip({ active, payload, label, visibleScores }: CustomTooltipP
   const dateLabel = firstPayload?.dateLabel || label;
 
   return (
-    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3 min-w-[180px]">
+    <div className="bg-white dark:bg-dark-surface border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3 min-w-[180px]">
       <div className="font-medium text-gray-900 dark:text-gray-100 text-sm mb-2 pb-2 border-b border-gray-200 dark:border-gray-700">
         {dateLabel}
       </div>
@@ -338,7 +338,7 @@ export function ScoreTimelineChart({
   // Show loading state
   if (loading) {
     return (
-      <div className={cn('bg-white dark:bg-[#2d3166] rounded-lg shadow p-6', className)}>
+      <div className={cn('bg-white dark:bg-dark-surface rounded-lg shadow p-6', className)}>
         {title && (
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-brand-blue" />
@@ -355,7 +355,7 @@ export function ScoreTimelineChart({
   // Show error state
   if (error) {
     return (
-      <div className={cn('bg-white dark:bg-[#2d3166] rounded-lg shadow p-6', className)}>
+      <div className={cn('bg-white dark:bg-dark-surface rounded-lg shadow p-6', className)}>
         {title && (
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-brand-blue" />
@@ -372,7 +372,7 @@ export function ScoreTimelineChart({
   // Show empty state if insufficient data
   if (chartData.length < 2) {
     return (
-      <div className={cn('bg-white dark:bg-[#2d3166] rounded-lg shadow p-6', className)}>
+      <div className={cn('bg-white dark:bg-dark-surface rounded-lg shadow p-6', className)}>
         {title && (
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-brand-blue" />
@@ -387,7 +387,7 @@ export function ScoreTimelineChart({
   }
 
   return (
-    <div className={cn('bg-white dark:bg-[#2d3166] rounded-lg shadow', compact ? 'p-4' : 'p-6', className)}>
+    <div className={cn('bg-white dark:bg-dark-surface rounded-lg shadow', compact ? 'p-4' : 'p-6', className)}>
       {title && (
         <h3 className={cn(
           'font-semibold text-gray-900 dark:text-white flex items-center gap-2',

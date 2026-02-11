@@ -214,7 +214,7 @@ function TagInput({
               placeholder={placeholder}
               className={cn(
                 "w-full pl-8 pr-3 py-2 text-sm rounded-md border",
-                "bg-white dark:bg-[#2d3166]",
+                "bg-white dark:bg-dark-surface",
                 "text-gray-900 dark:text-gray-100",
                 "placeholder-gray-400 dark:placeholder-gray-500",
                 "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent",
@@ -235,7 +235,7 @@ function TagInput({
               "bg-brand-blue text-white hover:bg-brand-dark-blue",
               "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2",
               "disabled:opacity-50 disabled:cursor-not-allowed",
-              "transition-colors duration-150",
+              "transition-colors duration-200",
             )}
             aria-label={`Add ${label.toLowerCase()}`}
           >
@@ -263,7 +263,7 @@ function TagInput({
               role="listitem"
               className={cn(
                 "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full",
-                "bg-gray-100 dark:bg-[#3d4176]",
+                "bg-gray-100 dark:bg-dark-surface-elevated",
                 "text-xs text-gray-700 dark:text-gray-300",
                 "border border-gray-200 dark:border-gray-600",
                 "max-w-[300px]",
@@ -284,7 +284,7 @@ function TagInput({
                   "text-gray-400 hover:text-red-500 dark:hover:text-red-400",
                   "hover:bg-gray-200 dark:hover:bg-gray-600",
                   "focus:outline-none focus:ring-1 focus:ring-red-400",
-                  "transition-colors duration-150",
+                  "transition-colors duration-200",
                 )}
                 aria-label={`Remove ${item}`}
               >
@@ -443,11 +443,11 @@ export function SourcePreferencesStep({
                 onClick={() => handleToggleCategory(category.id)}
                 className={cn(
                   "w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left",
-                  "transition-colors duration-150",
+                  "transition-colors duration-200",
                   "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-inset",
                   isEnabled
                     ? "bg-brand-blue/10 border-brand-blue dark:bg-brand-blue/20 dark:border-brand-blue/60"
-                    : "bg-white dark:bg-[#2d3166] border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500",
+                    : "bg-white dark:bg-dark-surface border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500",
                 )}
               >
                 <div
@@ -455,7 +455,7 @@ export function SourcePreferencesStep({
                     "flex items-center justify-center w-9 h-9 rounded-lg shrink-0",
                     isEnabled
                       ? "bg-brand-blue/20 text-brand-blue dark:bg-brand-blue/30"
-                      : "bg-gray-100 dark:bg-[#3d4176] text-gray-500 dark:text-gray-400",
+                      : "bg-gray-100 dark:bg-dark-surface-elevated text-gray-500 dark:text-gray-400",
                   )}
                 >
                   <Icon className="h-5 w-5" aria-hidden="true" />
@@ -478,7 +478,7 @@ export function SourcePreferencesStep({
                 {/* Toggle indicator */}
                 <div
                   className={cn(
-                    "w-10 h-6 rounded-full shrink-0 relative transition-colors duration-150",
+                    "w-10 h-6 rounded-full shrink-0 relative transition-colors duration-200",
                     isEnabled
                       ? "bg-brand-blue"
                       : "bg-gray-300 dark:bg-gray-600",
@@ -486,7 +486,7 @@ export function SourcePreferencesStep({
                 >
                   <div
                     className={cn(
-                      "absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-150",
+                      "absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200",
                       isEnabled ? "translate-x-[18px]" : "translate-x-0.5",
                     )}
                   />
@@ -517,10 +517,10 @@ export function SourcePreferencesStep({
                 key={option.value}
                 className={cn(
                   "flex items-center gap-3 px-4 py-2.5 rounded-md border cursor-pointer",
-                  "transition-colors duration-150",
+                  "transition-colors duration-200",
                   isSelected
                     ? "bg-brand-blue/10 border-brand-blue dark:bg-brand-blue/20 dark:border-brand-blue/60"
-                    : "bg-white dark:bg-[#2d3166] border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500",
+                    : "bg-white dark:bg-dark-surface border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500",
                 )}
               >
                 <input

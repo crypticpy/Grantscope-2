@@ -64,7 +64,7 @@ function getStageColorClasses(horizonCode: string): {
   };
 
   return colorMap[horizonCode] || {
-    bg: 'bg-gray-50 dark:bg-gray-800',
+    bg: 'bg-gray-50 dark:bg-dark-surface',
     text: 'text-gray-800 dark:text-gray-200',
     border: 'border-gray-400 dark:border-gray-600',
     progress: 'bg-gray-500 dark:bg-gray-400',
@@ -317,7 +317,7 @@ export function StageBadge({
     >
       <span
         className={cn(
-          'inline-flex items-center justify-center rounded-full font-semibold bg-white dark:bg-gray-800',
+          'inline-flex items-center justify-center rounded-full font-semibold bg-white dark:bg-dark-surface',
           size === 'sm' && 'w-4 h-4 text-[10px]',
           size === 'md' && 'w-5 h-5 text-xs',
           size === 'lg' && 'w-6 h-6 text-sm'

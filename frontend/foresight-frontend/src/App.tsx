@@ -5,6 +5,7 @@ import {
   Route,
   Navigate,
   useParams,
+  useLocation,
 } from "react-router-dom";
 import { createClient, User } from "@supabase/supabase-js";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
@@ -68,7 +69,14 @@ export interface AuthContextType {
 
 function CardRedirect() {
   const { slug } = useParams<{ slug: string }>();
-  return <Navigate to={`/signals/${slug || ""}`} replace />;
+  const location = useLocation();
+  return (
+    <Navigate
+      to={`/signals/${slug || ""}${location.search}`}
+      state={location.state}
+      replace
+    />
+  );
 }
 
 function App() {
@@ -115,7 +123,10 @@ function App() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-brand-faded-white dark:bg-brand-dark-blue">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-brand-blue"></div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-blue mx-auto"></div>
+          <p className="mt-4 text-gray-500 dark:text-gray-400">Loading...</p>
+        </div>
       </div>
     );
   }
@@ -127,8 +138,14 @@ function App() {
           future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
         >
           <div className="min-h-screen bg-brand-faded-white dark:bg-brand-dark-blue transition-colors">
+            <a
+              href="#main-content"
+              className="sr-only focus:not-sr-only focus:absolute focus:z-[100] focus:bg-brand-blue focus:text-white focus:p-3 focus:rounded-md"
+            >
+              Skip to main content
+            </a>
             {user && <Header />}
-            <main className={user ? "pt-16" : ""}>
+            <main id="main-content" className={user ? "pt-16" : ""}>
               <Routes>
                 {/* Login route - public, redirects to home if already authenticated */}
                 <Route
@@ -304,6 +321,9 @@ function App() {
                     />
                   }
                 />
+
+                {/* 404 catch-all - redirect to home */}
+                <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </main>
           </div>

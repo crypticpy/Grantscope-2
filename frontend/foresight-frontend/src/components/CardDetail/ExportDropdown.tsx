@@ -249,7 +249,7 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
           aria-expanded={isOpen}
           aria-haspopup="menu"
           aria-label="Export signal options"
-          className="inline-flex items-center justify-center min-h-[44px] sm:min-h-0 px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors active:scale-95 dark:bg-[#3d4176] dark:border-gray-600 dark:text-gray-200 dark:hover:bg-[#4d5186]"
+          className="inline-flex items-center justify-center min-h-[44px] sm:min-h-0 px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors active:scale-95 dark:bg-dark-surface-elevated dark:border-gray-600 dark:text-gray-200 dark:hover:bg-dark-surface-hover"
         >
           {isExporting ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -268,7 +268,7 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
         <div
           role="menu"
           aria-orientation="vertical"
-          className="absolute right-0 mt-1 w-48 bg-white dark:bg-[#3d4176] rounded-md shadow-lg border border-gray-200 dark:border-gray-600 py-1 z-20"
+          className="absolute right-0 mt-1 w-48 bg-white dark:bg-dark-surface-elevated rounded-md shadow-lg border border-gray-200 dark:border-gray-600 py-1 z-20"
         >
           {exportOptions.map((option) => {
             const Icon = option.icon;

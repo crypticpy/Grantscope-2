@@ -283,7 +283,7 @@ const TopDomainsLeaderboard: React.FC = () => {
     : domains;
 
   return (
-    <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
+    <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
@@ -323,7 +323,7 @@ const TopDomainsLeaderboard: React.FC = () => {
               placeholder="Filter domains..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 text-sm bg-gray-50 dark:bg-[#1e2048] border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-blue/40 focus:border-brand-blue"
+              className="w-full pl-9 pr-3 py-2 text-sm bg-gray-50 dark:bg-dark-surface border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-blue/40 focus:border-brand-blue"
             />
           </div>
 

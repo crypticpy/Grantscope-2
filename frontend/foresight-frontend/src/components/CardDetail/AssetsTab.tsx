@@ -214,7 +214,7 @@ const AssetCard: React.FC<AssetCardProps> = ({
     <div
       className={cn(
         'group relative p-4 rounded-lg border transition-all duration-200',
-        'bg-white dark:bg-gray-800',
+        'bg-white dark:bg-dark-surface',
         'border-gray-200 dark:border-gray-700',
         'hover:border-gray-300 dark:hover:border-gray-600',
         'hover:shadow-md'
@@ -464,7 +464,7 @@ export const AssetsTab: React.FC<AssetsTabProps> = ({
             className={cn(
               'w-full pl-9 pr-4 py-2 text-sm rounded-lg',
               'border border-gray-200 dark:border-gray-700',
-              'bg-white dark:bg-gray-800',
+              'bg-white dark:bg-dark-surface',
               'text-gray-900 dark:text-white',
               'placeholder-gray-500 dark:placeholder-gray-400',
               'focus:ring-2 focus:ring-blue-500 focus:border-transparent'
@@ -479,7 +479,7 @@ export const AssetsTab: React.FC<AssetsTabProps> = ({
             className={cn(
               'inline-flex items-center gap-2 px-3 py-2 text-sm rounded-lg',
               'border border-gray-200 dark:border-gray-700',
-              'bg-white dark:bg-gray-800',
+              'bg-white dark:bg-dark-surface',
               'text-gray-700 dark:text-gray-300',
               'hover:bg-gray-50 dark:hover:bg-gray-700',
               'transition-colors'
@@ -496,7 +496,7 @@ export const AssetsTab: React.FC<AssetsTabProps> = ({
           </button>
 
           {showFilters && (
-            <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-10">
+            <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-dark-surface rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-10">
               <button
                 onClick={() => handleFilterChange('all')}
                 className={cn(
@@ -532,7 +532,7 @@ export const AssetsTab: React.FC<AssetsTabProps> = ({
             className={cn(
               'p-2 rounded-lg',
               'border border-gray-200 dark:border-gray-700',
-              'bg-white dark:bg-gray-800',
+              'bg-white dark:bg-dark-surface',
               'text-gray-500 dark:text-gray-400',
               'hover:bg-gray-50 dark:hover:bg-gray-700',
               'transition-colors'

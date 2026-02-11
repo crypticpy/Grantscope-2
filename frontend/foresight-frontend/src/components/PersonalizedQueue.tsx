@@ -460,7 +460,7 @@ export function PersonalizedQueue({
             </h2>
           </div>
         )}
-        <div className="text-center py-12 bg-white dark:bg-[#2d3166] rounded-lg shadow">
+        <div className="text-center py-12 bg-white dark:bg-dark-surface rounded-lg shadow">
           <p className="text-red-600 dark:text-red-400 mb-4">{error}</p>
           <button
             onClick={handleRefresh}
@@ -489,7 +489,7 @@ export function PersonalizedQueue({
             </p>
           </div>
         )}
-        <div className="text-center py-12 bg-white dark:bg-[#2d3166] rounded-lg shadow">
+        <div className="text-center py-12 bg-white dark:bg-dark-surface rounded-lg shadow">
           <Sparkles className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">
             All caught up!
@@ -546,7 +546,7 @@ export function PersonalizedQueue({
           return (
             <div
               key={card.id}
-              className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 border-l-4 border-transparent transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-l-brand-blue relative group"
+              className="bg-white dark:bg-dark-surface rounded-lg shadow p-6 border-l-4 border-transparent transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-l-brand-blue relative group"
             >
               {/* Dismiss button */}
               <button
@@ -563,7 +563,7 @@ export function PersonalizedQueue({
                 <div className="flex-1 pr-6">
                   <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
                     <Link
-                      to={`/cards/${card.slug}`}
+                      to={`/signals/${card.slug}`}
                       className="hover:text-brand-blue transition-colors"
                     >
                       {card.name}
@@ -624,7 +624,7 @@ export function PersonalizedQueue({
 
               <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
                 <Link
-                  to={`/cards/${card.slug}`}
+                  to={`/signals/${card.slug}`}
                   className="inline-flex items-center text-sm text-brand-blue hover:text-brand-dark-blue dark:text-brand-blue dark:hover:text-brand-light-blue transition-colors"
                 >
                   <Eye className="h-4 w-4 mr-1" />
@@ -642,7 +642,7 @@ export function PersonalizedQueue({
           <button
             onClick={handleLoadMore}
             disabled={loadingMore}
-            className="inline-flex items-center gap-2 px-6 py-2 bg-white dark:bg-[#2d3166] text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-6 py-2 bg-white dark:bg-dark-surface text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
           >
             {loadingMore ? (
               <>

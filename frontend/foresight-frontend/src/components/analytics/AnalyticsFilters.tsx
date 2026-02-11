@@ -206,7 +206,7 @@ const Dropdown: React.FC<DropdownProps> = ({
           />
           <div
             className={cn(
-              'absolute z-20 mt-2 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-2 max-h-80 overflow-y-auto',
+              'absolute z-20 mt-2 w-64 bg-white dark:bg-dark-surface rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-2 max-h-80 overflow-y-auto',
               align === 'left' ? 'left-0' : 'right-0'
             )}
           >
@@ -250,7 +250,7 @@ const PillarFilterDropdown: React.FC<PillarFilterDropdownProps> = ({
             'text-sm font-medium',
             hasSelection
               ? 'bg-brand-blue/10 border-brand-blue text-brand-blue'
-              : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300',
+              : 'bg-white dark:bg-dark-surface border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300',
             'hover:bg-gray-50 dark:hover:bg-gray-700',
             disabled && 'opacity-50 cursor-not-allowed'
           )}
@@ -374,7 +374,7 @@ const StageFilterDropdown: React.FC<StageFilterDropdownProps> = ({
             'text-sm font-medium',
             hasSelection
               ? 'bg-brand-blue/10 border-brand-blue text-brand-blue'
-              : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300',
+              : 'bg-white dark:bg-dark-surface border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300',
             'hover:bg-gray-50 dark:hover:bg-gray-700',
             disabled && 'opacity-50 cursor-not-allowed'
           )}
@@ -517,7 +517,7 @@ const TimeRangeFilter: React.FC<TimeRangeFilterProps> = ({
           className={cn(
             'inline-flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors',
             'text-sm font-medium',
-            'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300',
+            'bg-white dark:bg-dark-surface border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300',
             'hover:bg-gray-50 dark:hover:bg-gray-700',
             disabled && 'opacity-50 cursor-not-allowed'
           )}

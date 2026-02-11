@@ -153,7 +153,7 @@ export const DiscoverCard = memo(function DiscoverCard({
     <div
       onClick={compareMode ? onCompareToggle : undefined}
       className={cn(
-        "bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 border-l-4 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg relative",
+        "bg-white dark:bg-dark-surface rounded-lg shadow p-6 border-l-4 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg relative",
         compareMode
           ? isSelectedForCompare
             ? "border-l-extended-purple ring-2 ring-extended-purple/50 cursor-pointer"
@@ -168,7 +168,7 @@ export const DiscoverCard = memo(function DiscoverCard({
             "absolute top-3 right-3 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all",
             isSelectedForCompare
               ? "bg-extended-purple border-extended-purple text-white"
-              : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800",
+              : "border-gray-300 dark:border-gray-600 bg-white dark:bg-dark-surface",
           )}
         >
           {isSelectedForCompare && <Check className="h-4 w-4" />}
@@ -292,7 +292,7 @@ export const DiscoverCard = memo(function DiscoverCard({
           </span>
         ) : (
           <Link
-            to={`/cards/${card.slug}`}
+            to={`/signals/${card.slug}`}
             className="inline-flex items-center text-sm text-brand-blue hover:text-brand-dark-blue dark:text-brand-blue dark:hover:text-brand-light-blue transition-colors"
             onClick={(e) => e.stopPropagation()}
           >

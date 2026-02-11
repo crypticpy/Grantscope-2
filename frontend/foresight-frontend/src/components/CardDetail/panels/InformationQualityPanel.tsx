@@ -261,7 +261,7 @@ export const InformationQualityPanel: React.FC<
     return (
       <div
         className={cn(
-          "bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6",
+          "bg-white dark:bg-dark-surface rounded-lg shadow p-4 sm:p-6",
           className,
         )}
       >
@@ -283,7 +283,7 @@ export const InformationQualityPanel: React.FC<
     return (
       <div
         className={cn(
-          "bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6",
+          "bg-white dark:bg-dark-surface rounded-lg shadow p-4 sm:p-6",
           className,
         )}
       >
@@ -316,7 +316,7 @@ export const InformationQualityPanel: React.FC<
   return (
     <div
       className={cn(
-        "bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6",
+        "bg-white dark:bg-dark-surface rounded-lg shadow p-4 sm:p-6",
         className,
       )}
     >

@@ -234,7 +234,7 @@ const StatCard: React.FC<StatCardProps> = ({
   colorClass = "text-brand-blue",
 }) => {
   const content = (
-    <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg group">
+    <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg group">
       <div className="flex items-center justify-between">
         <div className="flex items-center">
           <div
@@ -298,7 +298,7 @@ const LoadingSkeleton: React.FC = () => (
   <div className="animate-pulse space-y-6">
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
       {[1, 2, 3, 4].map((i) => (
-        <div key={i} className="bg-white dark:bg-[#2d3166] rounded-lg p-5 h-24">
+        <div key={i} className="bg-white dark:bg-dark-surface rounded-lg p-5 h-24">
           <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mb-2" />
           <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-1/3" />
         </div>
@@ -306,7 +306,7 @@ const LoadingSkeleton: React.FC = () => (
     </div>
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {[1, 2].map((i) => (
-        <div key={i} className="bg-white dark:bg-[#2d3166] rounded-lg p-6 h-64">
+        <div key={i} className="bg-white dark:bg-dark-surface rounded-lg p-6 h-64">
           <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" />
           <div className="space-y-3">
             {[1, 2, 3, 4].map((j) => (
@@ -348,7 +348,7 @@ const PillarDistribution: React.FC<{ data: PillarCoverageItem[] }> = ({
   const maxCount = Math.max(...data.map((d) => d.count), 1);
 
   return (
-    <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
+    <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-6">
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
         <Layers className="h-5 w-5 text-brand-blue" />
         Signals by Pillar
@@ -397,7 +397,7 @@ const StageDistributionChart: React.FC<{ data: StageDistribution[] }> = ({
   ];
 
   return (
-    <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
+    <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-6">
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
         <Target className="h-5 w-5 text-extended-purple" />
         Signals by Maturity Stage
@@ -436,7 +436,7 @@ const HotTopics: React.FC<{ topics: TrendingTopic[]; title: string }> = ({
 }) => {
   if (topics.length === 0) {
     return (
-      <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
+      <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-6">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
           <Zap className="h-5 w-5 text-extended-orange" />
           {title}
@@ -451,7 +451,7 @@ const HotTopics: React.FC<{ topics: TrendingTopic[]; title: string }> = ({
   }
 
   return (
-    <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
+    <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-6">
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
         <Zap className="h-5 w-5 text-extended-orange" />
         {title}
@@ -460,7 +460,7 @@ const HotTopics: React.FC<{ topics: TrendingTopic[]; title: string }> = ({
         {topics.map((topic, idx) => (
           <div
             key={idx}
-            className="flex items-center justify-between p-3 bg-gray-50 dark:bg-[#1e2048] rounded-lg"
+            className="flex items-center justify-between p-3 bg-gray-50 dark:bg-dark-surface rounded-lg"
           >
             <div className="flex items-center gap-3">
               <span className="w-6 h-6 flex items-center justify-center text-sm font-bold text-white bg-gradient-to-br from-brand-blue to-brand-green rounded-full">
@@ -488,7 +488,7 @@ const HotTopics: React.FC<{ topics: TrendingTopic[]; title: string }> = ({
 const EngagementComparison: React.FC<{
   engagement: UserEngagementComparison;
 }> = ({ engagement }) => (
-  <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
+  <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-6">
     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
       <Users className="h-5 w-5 text-brand-blue" />
       Your Engagement vs Community
@@ -545,7 +545,7 @@ const EngagementComparison: React.FC<{
 const PillarAffinityChart: React.FC<{ affinity: PillarAffinity[] }> = ({
   affinity,
 }) => (
-  <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
+  <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-6">
     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
       <Heart className="h-5 w-5 text-red-500" />
       Your Pillar Interests
@@ -601,7 +601,7 @@ const PopularCardsSection: React.FC<{
 }> = ({ cards, title, subtitle, emptyMessage }) => {
   if (cards.length === 0) {
     return (
-      <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
+      <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-6">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1 flex items-center gap-2">
           <Star className="h-5 w-5 text-amber-500" />
           {title}
@@ -619,7 +619,7 @@ const PopularCardsSection: React.FC<{
   }
 
   return (
-    <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
+    <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-6">
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1 flex items-center gap-2">
         <Star className="h-5 w-5 text-amber-500" />
         {title}
@@ -632,7 +632,7 @@ const PopularCardsSection: React.FC<{
           <Link
             key={card.card_id}
             to={`/signals/${card.card_slug || card.card_id}`}
-            className="block p-3 bg-gray-50 dark:bg-[#1e2048] rounded-lg hover:bg-gray-100 dark:hover:bg-[#252860] transition-colors"
+            className="block p-3 bg-gray-50 dark:bg-dark-surface rounded-lg hover:bg-gray-100 dark:hover:bg-[#252860] transition-colors"
           >
             <div className="flex items-start justify-between">
               <div className="flex-1 min-w-0">
@@ -773,7 +773,7 @@ const AnalyticsV2: React.FC = () => {
           className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
             activeTab === "system"
               ? "bg-brand-blue text-white"
-              : "bg-white dark:bg-[#2d3166] text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#3d4176]"
+              : "bg-white dark:bg-dark-surface text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#3d4176]"
           }`}
         >
           <Globe className="h-4 w-4" />
@@ -784,7 +784,7 @@ const AnalyticsV2: React.FC = () => {
           className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
             activeTab === "personal"
               ? "bg-brand-blue text-white"
-              : "bg-white dark:bg-[#2d3166] text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#3d4176]"
+              : "bg-white dark:bg-dark-surface text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#3d4176]"
           }`}
         >
           <UserCircle className="h-4 w-4" />
@@ -883,7 +883,7 @@ const AnalyticsV2: React.FC = () => {
 
           {/* Most Followed Signals */}
           {systemStats.follow_stats.most_followed_cards.length > 0 && (
-            <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
+            <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-6">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                 <Star className="h-5 w-5 text-amber-500" />
                 Most Followed Signals
@@ -894,7 +894,7 @@ const AnalyticsV2: React.FC = () => {
                     <Link
                       key={card.card_id}
                       to={`/signals/${card.card_slug || card.card_id}`}
-                      className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-[#1e2048] rounded-lg hover:bg-gray-100 dark:hover:bg-[#252860] transition-colors"
+                      className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-dark-surface rounded-lg hover:bg-gray-100 dark:hover:bg-[#252860] transition-colors"
                     >
                       <span className="w-6 h-6 flex items-center justify-center text-sm font-bold text-white bg-amber-500 rounded-full">
                         {idx + 1}
@@ -960,7 +960,7 @@ const AnalyticsV2: React.FC = () => {
             <PillarAffinityChart affinity={personalStats.pillar_affinity} />
 
             {/* Your Following */}
-            <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
+            <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-6">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                 <Eye className="h-5 w-5 text-brand-blue" />
                 Your Followed Signals
@@ -1028,7 +1028,7 @@ const AnalyticsV2: React.FC = () => {
       <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Link
           to="/discover"
-          className="flex items-center justify-between p-4 bg-white dark:bg-[#2d3166] rounded-lg shadow hover:shadow-md transition-shadow group"
+          className="flex items-center justify-between p-4 bg-white dark:bg-dark-surface rounded-lg shadow hover:shadow-md transition-shadow group"
         >
           <div className="flex items-center gap-3">
             <div className="p-2 bg-brand-blue/10 rounded-lg">
@@ -1048,7 +1048,7 @@ const AnalyticsV2: React.FC = () => {
 
         <Link
           to="/workstreams"
-          className="flex items-center justify-between p-4 bg-white dark:bg-[#2d3166] rounded-lg shadow hover:shadow-md transition-shadow group"
+          className="flex items-center justify-between p-4 bg-white dark:bg-dark-surface rounded-lg shadow hover:shadow-md transition-shadow group"
         >
           <div className="flex items-center gap-3">
             <div className="p-2 bg-extended-purple/10 rounded-lg">
@@ -1068,7 +1068,7 @@ const AnalyticsV2: React.FC = () => {
 
         <Link
           to="/discover/queue"
-          className="flex items-center justify-between p-4 bg-white dark:bg-[#2d3166] rounded-lg shadow hover:shadow-md transition-shadow group"
+          className="flex items-center justify-between p-4 bg-white dark:bg-dark-surface rounded-lg shadow hover:shadow-md transition-shadow group"
         >
           <div className="flex items-center gap-3">
             <div className="p-2 bg-extended-orange/10 rounded-lg">

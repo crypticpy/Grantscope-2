@@ -110,13 +110,13 @@ function ProTip({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="my-4 rounded-lg border border-brand-green/30 bg-brand-light-green/20 dark:bg-brand-green/10 dark:border-brand-green/20">
+    <div className="my-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-4">
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-semibold text-brand-compliant-green dark:text-brand-green transition-colors hover:text-brand-green/80"
+        className="flex w-full items-center gap-2 text-left text-sm font-semibold text-amber-600 dark:text-amber-400 transition-colors hover:text-amber-700 dark:hover:text-amber-300"
       >
-        <Lightbulb className="h-4 w-4 flex-shrink-0" />
+        <Lightbulb className="h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
         <span className="flex-1">{title}</span>
         <ChevronDown
           className={cn(
@@ -126,7 +126,7 @@ function ProTip({
         />
       </button>
       {open && (
-        <div className="px-4 pb-3 pt-0 text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+        <div className="mt-2 text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
           {children}
         </div>
       )}
@@ -170,8 +170,8 @@ function QuickStartCard({
         "hover:shadow-md hover:-translate-y-0.5",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue",
         isActive
-          ? "border-brand-blue bg-white dark:bg-[#2d3166] shadow-md ring-1 ring-brand-blue/20"
-          : "border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2d3166]/60",
+          ? "border-brand-blue bg-white dark:bg-dark-surface shadow-md ring-1 ring-brand-blue/20"
+          : "border-gray-200 dark:border-gray-700 bg-white dark:bg-dark-surface/60",
       )}
     >
       <div className="flex items-center gap-3 mb-2">
@@ -485,7 +485,7 @@ export default function GuideDiscover() {
         {/* Hero Header */}
         {/* ---------------------------------------------------------------- */}
         <div className="bg-gradient-to-r from-brand-blue via-brand-blue/90 to-brand-green">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
             <Link
               to="/discover"
               className="inline-flex items-center gap-1.5 text-sm font-medium text-white/80 hover:text-white transition-colors mb-6 no-print"
@@ -494,7 +494,7 @@ export default function GuideDiscover() {
               Back to Discover
             </Link>
             <div className="flex items-center gap-3 mb-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/15 backdrop-blur-sm">
+              <div className="w-12 h-12 rounded-xl bg-white/15 flex items-center justify-center">
                 <Compass className="h-6 w-6 text-white" />
               </div>
               <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">
@@ -509,7 +509,7 @@ export default function GuideDiscover() {
           </div>
         </div>
 
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
           {/* ---------------------------------------------------------------- */}
           {/* Quick Start */}
           {/* ---------------------------------------------------------------- */}
@@ -597,7 +597,7 @@ export default function GuideDiscover() {
                   {SOURCE_CATEGORIES.map((cat) => (
                     <div
                       key={cat.name}
-                      className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2d3166] p-4"
+                      className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-dark-surface p-4"
                     >
                       <div className="flex items-center gap-2 mb-2">
                         <span className="text-brand-blue dark:text-brand-light-blue">
@@ -672,7 +672,7 @@ export default function GuideDiscover() {
 
                 <div className="grid sm:grid-cols-2 gap-4 mb-5">
                   {/* Standard Search */}
-                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2d3166] p-5">
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-dark-surface p-5">
                     <div className="flex items-center gap-2 mb-3">
                       <Search className="h-5 w-5 text-gray-600 dark:text-gray-400" />
                       <h4 className="font-semibold text-gray-900 dark:text-white">
@@ -786,7 +786,7 @@ export default function GuideDiscover() {
                   {FILTER_TYPES.map((ft) => (
                     <div
                       key={ft.name}
-                      className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2d3166] overflow-hidden"
+                      className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-dark-surface overflow-hidden"
                     >
                       <button
                         type="button"
@@ -826,7 +826,7 @@ export default function GuideDiscover() {
                             {ft.items.map((item) => (
                               <div
                                 key={item.code}
-                                className="rounded-md border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-[#3d4176] px-3 py-2 text-xs"
+                                className="rounded-md border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-dark-surface-elevated px-3 py-2 text-xs"
                               >
                                 <span className="font-bold text-brand-blue dark:text-brand-light-blue">
                                   {item.code}
@@ -918,7 +918,7 @@ export default function GuideDiscover() {
                   ].map((chip) => (
                     <span
                       key={chip.label}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 dark:border-gray-600 bg-white dark:bg-[#2d3166] px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 dark:border-gray-600 bg-white dark:bg-dark-surface px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300"
                     >
                       {chip.icon}
                       {chip.label}
@@ -963,7 +963,7 @@ export default function GuideDiscover() {
                   Grid and List Views
                 </h4>
                 <div className="grid sm:grid-cols-2 gap-4 mb-5">
-                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2d3166] p-4">
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-dark-surface p-4">
                     <div className="flex items-center gap-2 mb-2">
                       <Grid3X3 className="h-5 w-5 text-brand-blue dark:text-brand-light-blue" />
                       <span className="font-semibold text-sm text-gray-900 dark:text-white">
@@ -979,7 +979,7 @@ export default function GuideDiscover() {
                       and pillar indicators at a glance.
                     </p>
                   </div>
-                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2d3166] p-4">
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-dark-surface p-4">
                     <div className="flex items-center gap-2 mb-2">
                       <List className="h-5 w-5 text-brand-blue dark:text-brand-light-blue" />
                       <span className="font-semibold text-sm text-gray-900 dark:text-white">
@@ -1288,7 +1288,7 @@ export default function GuideDiscover() {
                         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue",
                         expandedScore === dim.name
                           ? cn(dim.borderColor, dim.bgColor, "shadow-sm")
-                          : "border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2d3166]",
+                          : "border-gray-200 dark:border-gray-700 bg-white dark:bg-dark-surface",
                       )}
                     >
                       <div className="flex items-center gap-3 px-4 py-3">
@@ -1411,7 +1411,7 @@ export default function GuideDiscover() {
                 </p>
 
                 <div className="grid sm:grid-cols-3 gap-3 mb-5">
-                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2d3166] p-4 text-center">
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-dark-surface p-4 text-center">
                     <ThumbsUp className="h-6 w-6 text-brand-green mx-auto mb-2" />
                     <p className="font-semibold text-sm text-gray-900 dark:text-white">
                       Approve
@@ -1420,7 +1420,7 @@ export default function GuideDiscover() {
                       Publish signal to the Discover library
                     </p>
                   </div>
-                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2d3166] p-4 text-center">
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-dark-surface p-4 text-center">
                     <ThumbsDown className="h-6 w-6 text-red-500 mx-auto mb-2" />
                     <p className="font-semibold text-sm text-gray-900 dark:text-white">
                       Dismiss
@@ -1429,7 +1429,7 @@ export default function GuideDiscover() {
                       Remove as irrelevant or low quality
                     </p>
                   </div>
-                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2d3166] p-4 text-center">
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-dark-surface p-4 text-center">
                     <Eye className="h-6 w-6 text-brand-blue mx-auto mb-2" />
                     <p className="font-semibold text-sm text-gray-900 dark:text-white">
                       Review
@@ -1659,7 +1659,7 @@ export default function GuideDiscover() {
               <div className="grid sm:grid-cols-3 gap-3">
                 <Link
                   to="/guide/signals"
-                  className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2d3166] p-4 transition-all hover:shadow-md hover:-translate-y-0.5 hover:border-brand-blue/30"
+                  className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-dark-surface p-4 transition-all hover:shadow-md hover:-translate-y-0.5 hover:border-brand-blue/30"
                 >
                   <Star className="h-5 w-5 text-amber-500 flex-shrink-0" />
                   <div>
@@ -1674,7 +1674,7 @@ export default function GuideDiscover() {
                 </Link>
                 <Link
                   to="/guide/workstreams"
-                  className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2d3166] p-4 transition-all hover:shadow-md hover:-translate-y-0.5 hover:border-brand-blue/30"
+                  className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-dark-surface p-4 transition-all hover:shadow-md hover:-translate-y-0.5 hover:border-brand-blue/30"
                 >
                   <Layers className="h-5 w-5 text-brand-green flex-shrink-0" />
                   <div>
@@ -1688,16 +1688,16 @@ export default function GuideDiscover() {
                   <ArrowRight className="h-4 w-4 text-gray-400 ml-auto" />
                 </Link>
                 <Link
-                  to="/discover"
+                  to="/"
                   className="flex items-center gap-3 rounded-lg border border-brand-blue/30 bg-brand-blue/5 dark:bg-brand-blue/10 p-4 transition-all hover:shadow-md hover:-translate-y-0.5"
                 >
-                  <Compass className="h-5 w-5 text-brand-blue dark:text-brand-light-blue flex-shrink-0" />
+                  <BarChart3 className="h-5 w-5 text-brand-blue dark:text-brand-light-blue flex-shrink-0" />
                   <div>
                     <p className="font-semibold text-sm text-gray-900 dark:text-white">
-                      Go to Discover
+                      Dashboard
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                      Start exploring signals now
+                      View your overview and metrics
                     </p>
                   </div>
                   <ArrowRight className="h-4 w-4 text-gray-400 ml-auto" />
@@ -1708,10 +1708,7 @@ export default function GuideDiscover() {
 
           {/* Footer note */}
           <p className="mt-10 text-sm text-gray-400 dark:text-gray-500 text-center no-print">
-            Questions about using Discover?{" "}
-            <span className="text-brand-blue dark:text-brand-light-blue">
-              Reach out to the Foresight team.
-            </span>
+            Questions about using Discover? Reach out to the Foresight team.
           </p>
         </div>
       </div>

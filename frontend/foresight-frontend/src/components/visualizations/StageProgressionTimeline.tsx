@@ -64,7 +64,7 @@ function getHorizonColorClasses(horizonCode: string): {
   };
 
   return colorMap[horizonCode] || {
-    bg: 'bg-gray-50 dark:bg-gray-800',
+    bg: 'bg-gray-50 dark:bg-dark-surface',
     text: 'text-gray-800 dark:text-gray-200',
     border: 'border-gray-400 dark:border-gray-600',
     dot: 'bg-gray-500 dark:bg-gray-400',
@@ -355,7 +355,7 @@ function EmptyState({ currentStage }: EmptyStateProps) {
         </>
       ) : (
         <>
-          <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+          <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-dark-surface flex items-center justify-center">
             <svg
               className="w-6 h-6 text-gray-400"
               fill="none"

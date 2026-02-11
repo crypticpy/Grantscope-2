@@ -212,12 +212,12 @@ function StepIndicator({ currentStep, onStepClick }: StepIndicatorProps) {
               <div
                 className={cn(
                   "flex items-center justify-center w-7 h-7 rounded-full text-xs font-semibold",
-                  "transition-colors duration-150",
+                  "transition-colors duration-200",
                   isCompleted && "bg-brand-blue text-white",
                   isCurrent &&
                     "bg-brand-blue text-white ring-2 ring-brand-blue/30 ring-offset-1 ring-offset-white dark:ring-offset-[#1e2158]",
                   isUpcoming &&
-                    "bg-gray-200 dark:bg-[#3d4176] text-gray-500 dark:text-gray-400",
+                    "bg-gray-200 dark:bg-dark-surface-elevated text-gray-500 dark:text-gray-400",
                   isClickable &&
                     "group-hover:bg-brand-dark-blue group-hover:text-white",
                 )}
@@ -249,7 +249,7 @@ function StepIndicator({ currentStep, onStepClick }: StepIndicatorProps) {
                   "flex-1 h-0.5 mx-2 rounded-full",
                   step < currentStep
                     ? "bg-brand-blue"
-                    : "bg-gray-200 dark:bg-[#3d4176]",
+                    : "bg-gray-200 dark:bg-dark-surface-elevated",
                 )}
                 aria-hidden="true"
               />
@@ -590,9 +590,9 @@ export function CreateSignalModal({
   /** Get the link path for a created card. */
   const getCreatedCardPath = (): string => {
     if (!createdCard) return "/";
-    if ("card_id" in createdCard) return `/cards/${createdCard.card_id}`;
+    if ("card_id" in createdCard) return `/signals/${createdCard.card_id}`;
     if ("slug" in createdCard)
-      return `/cards/${createdCard.slug || createdCard.id}`;
+      return `/signals/${createdCard.slug || createdCard.id}`;
     return "/";
   };
 
@@ -652,7 +652,7 @@ export function CreateSignalModal({
           ref={modalRef}
           className={cn(
             "relative w-full max-w-2xl mx-4",
-            "bg-white dark:bg-[#1e2158]",
+            "bg-white dark:bg-dark-surface",
             "rounded-xl shadow-2xl",
             "border border-gray-200 dark:border-gray-700",
             "animate-in fade-in-0 zoom-in-95 duration-200",
@@ -675,7 +675,7 @@ export function CreateSignalModal({
                 "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300",
                 "hover:bg-gray-100 dark:hover:bg-gray-700",
                 "focus:outline-none focus:ring-2 focus:ring-brand-blue",
-                "transition-colors duration-150",
+                "transition-colors duration-200",
               )}
               aria-label="Close dialog"
             >
@@ -706,7 +706,7 @@ export function CreateSignalModal({
                   "inline-flex items-center px-4 py-2 text-sm font-medium rounded-md",
                   "bg-brand-blue text-white hover:bg-brand-dark-blue",
                   "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2",
-                  "transition-colors duration-150",
+                  "transition-colors duration-200",
                 )}
               >
                 View Card
@@ -722,9 +722,9 @@ export function CreateSignalModal({
                   "inline-flex items-center px-4 py-2 text-sm font-medium rounded-md",
                   "bg-white text-gray-700 border border-gray-300",
                   "hover:bg-gray-50",
-                  "dark:bg-[#3d4176] dark:text-gray-300 dark:border-gray-600 dark:hover:bg-[#4d5186]",
+                  "dark:bg-dark-surface-elevated dark:text-gray-300 dark:border-gray-600 dark:hover:bg-dark-surface-hover",
                   "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2",
-                  "transition-colors duration-150",
+                  "transition-colors duration-200",
                 )}
               >
                 Create Another
@@ -757,7 +757,7 @@ export function CreateSignalModal({
         ref={modalRef}
         className={cn(
           "relative w-full max-w-2xl mx-4",
-          "bg-white dark:bg-[#1e2158]",
+          "bg-white dark:bg-dark-surface",
           "rounded-xl shadow-2xl",
           "border border-gray-200 dark:border-gray-700",
           "animate-in fade-in-0 zoom-in-95 duration-200",
@@ -780,7 +780,7 @@ export function CreateSignalModal({
               "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300",
               "hover:bg-gray-100 dark:hover:bg-gray-700",
               "focus:outline-none focus:ring-2 focus:ring-brand-blue",
-              "transition-colors duration-150",
+              "transition-colors duration-200",
             )}
             aria-label="Close dialog"
           >
@@ -796,722 +796,728 @@ export function CreateSignalModal({
 
         {/* Step Content */}
         <div className="px-6 py-5 max-h-[60vh] overflow-y-auto">
-          {/* ================================================================
+          <div className="transition-opacity duration-200" key={state.step}>
+            {/* ================================================================
               Step 1: Define Signal
               ================================================================ */}
-          {state.step === 1 && (
-            <div className="space-y-5">
-              {/* Mode toggle */}
-              <div>
-                <div
-                  className="flex rounded-lg bg-gray-100 dark:bg-[#2d3166] p-1"
-                  role="tablist"
-                  aria-label="Signal creation method"
-                >
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={state.mode === "quick"}
-                    onClick={() => updateState({ mode: "quick" })}
-                    className={cn(
-                      "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md",
-                      "transition-all duration-150",
-                      "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-inset",
-                      state.mode === "quick"
-                        ? "bg-white dark:bg-[#3d4176] text-gray-900 dark:text-gray-100 shadow-sm"
-                        : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300",
-                    )}
+            {state.step === 1 && (
+              <div className="space-y-5">
+                {/* Mode toggle */}
+                <div>
+                  <div
+                    className="flex rounded-lg bg-gray-100 dark:bg-dark-surface p-1"
+                    role="tablist"
+                    aria-label="Signal creation method"
                   >
-                    <Zap className="h-4 w-4" aria-hidden="true" />
-                    Quick Create
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={state.mode === "manual"}
-                    onClick={() => updateState({ mode: "manual" })}
-                    className={cn(
-                      "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md",
-                      "transition-all duration-150",
-                      "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-inset",
-                      state.mode === "manual"
-                        ? "bg-white dark:bg-[#3d4176] text-gray-900 dark:text-gray-100 shadow-sm"
-                        : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300",
-                    )}
-                  >
-                    <PenTool className="h-4 w-4" aria-hidden="true" />
-                    Manual Create
-                  </button>
-                </div>
-                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">
-                  {state.mode === "quick"
-                    ? "Enter a topic and let AI do the rest"
-                    : "Full control over all signal fields"}
-                </p>
-              </div>
-
-              {/* Quick Mode Fields */}
-              {state.mode === "quick" && (
-                <div className="space-y-5">
-                  {/* Topic input */}
-                  <div>
-                    <label
-                      htmlFor="quick-create-topic"
-                      className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
-                    >
-                      Topic or Signal Phrase
-                    </label>
-                    <input
-                      id="quick-create-topic"
-                      type="text"
-                      value={state.topic}
-                      onChange={(e) => updateState({ topic: e.target.value })}
-                      placeholder="e.g., forensics technology for law enforcement"
-                      className={cn(
-                        "w-full px-3 py-2.5 text-sm rounded-md border",
-                        "bg-white dark:bg-[#2d3166]",
-                        "text-gray-900 dark:text-gray-100",
-                        "placeholder-gray-400 dark:placeholder-gray-500",
-                        "border-gray-300 dark:border-gray-600",
-                        "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent",
-                      )}
-                    />
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      Describe a trend, technology, or emerging issue in a short
-                      phrase.
-                    </p>
-                  </div>
-
-                  {/* Workstream selector */}
-                  <div>
-                    <label
-                      htmlFor="quick-create-workstream"
-                      className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
-                    >
-                      Workstream{" "}
-                      <span className="text-gray-400 dark:text-gray-500 font-normal">
-                        (optional)
-                      </span>
-                    </label>
-                    <select
-                      id="quick-create-workstream"
-                      value={state.workstreamId}
-                      onChange={(e) =>
-                        updateState({ workstreamId: e.target.value })
-                      }
-                      disabled={loadingWorkstreams}
-                      className={cn(
-                        "w-full px-3 py-2.5 text-sm rounded-md border",
-                        "bg-white dark:bg-[#2d3166]",
-                        "text-gray-900 dark:text-gray-100",
-                        "border-gray-300 dark:border-gray-600",
-                        "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent",
-                        "disabled:opacity-50 disabled:cursor-not-allowed",
-                      )}
-                    >
-                      <option value="">No workstream</option>
-                      {workstreams.map((ws) => (
-                        <option key={ws.id} value={ws.id}>
-                          {ws.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Suggest Keywords */}
-                  <div>
                     <button
                       type="button"
-                      onClick={handleSuggestKeywords}
-                      disabled={!state.topic.trim() || isSuggestingKeywords}
+                      role="tab"
+                      aria-selected={state.mode === "quick"}
+                      onClick={() => updateState({ mode: "quick" })}
                       className={cn(
-                        "inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md",
-                        "bg-white text-gray-700 border border-gray-300",
-                        "hover:bg-gray-50",
-                        "dark:bg-[#3d4176] dark:text-gray-300 dark:border-gray-600 dark:hover:bg-[#4d5186]",
-                        "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2",
-                        "disabled:opacity-50 disabled:cursor-not-allowed",
-                        "transition-colors duration-150",
+                        "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md",
+                        "transition-all duration-200",
+                        "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-inset",
+                        state.mode === "quick"
+                          ? "bg-white dark:bg-dark-surface-elevated text-gray-900 dark:text-gray-100 shadow-sm"
+                          : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300",
                       )}
                     >
-                      {isSuggestingKeywords ? (
-                        <Loader2
-                          className="h-4 w-4 animate-spin"
-                          aria-hidden="true"
-                        />
-                      ) : (
-                        <Sparkles className="h-4 w-4" aria-hidden="true" />
-                      )}
-                      {isSuggestingKeywords
-                        ? "Suggesting..."
-                        : "Suggest Keywords"}
+                      <Zap className="h-4 w-4" aria-hidden="true" />
+                      Quick Create
                     </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={state.mode === "manual"}
+                      onClick={() => updateState({ mode: "manual" })}
+                      className={cn(
+                        "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md",
+                        "transition-all duration-200",
+                        "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-inset",
+                        state.mode === "manual"
+                          ? "bg-white dark:bg-dark-surface-elevated text-gray-900 dark:text-gray-100 shadow-sm"
+                          : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300",
+                      )}
+                    >
+                      <PenTool className="h-4 w-4" aria-hidden="true" />
+                      Manual Create
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">
+                    {state.mode === "quick"
+                      ? "Enter a topic and let AI do the rest"
+                      : "Full control over all signal fields"}
+                  </p>
+                </div>
 
-                    {/* Keyword chips */}
-                    {state.keywords.length > 0 && (
-                      <div
-                        className="mt-3 flex flex-wrap gap-2"
-                        role="list"
-                        aria-label="Suggested keywords"
+                {/* Quick Mode Fields */}
+                {state.mode === "quick" && (
+                  <div className="space-y-5">
+                    {/* Topic input */}
+                    <div>
+                      <label
+                        htmlFor="quick-create-topic"
+                        className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
                       >
-                        {state.keywords.map((keyword) => (
-                          <span
-                            key={keyword}
-                            role="listitem"
+                        Topic or Signal Phrase
+                      </label>
+                      <input
+                        id="quick-create-topic"
+                        type="text"
+                        value={state.topic}
+                        onChange={(e) => updateState({ topic: e.target.value })}
+                        placeholder="e.g., forensics technology for law enforcement"
+                        className={cn(
+                          "w-full px-3 py-2.5 text-sm rounded-md border",
+                          "bg-white dark:bg-dark-surface",
+                          "text-gray-900 dark:text-gray-100",
+                          "placeholder-gray-400 dark:placeholder-gray-500",
+                          "border-gray-300 dark:border-gray-600",
+                          "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent",
+                        )}
+                      />
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        Describe a trend, technology, or emerging issue in a
+                        short phrase.
+                      </p>
+                    </div>
+
+                    {/* Workstream selector */}
+                    <div>
+                      <label
+                        htmlFor="quick-create-workstream"
+                        className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
+                      >
+                        Workstream{" "}
+                        <span className="text-gray-400 dark:text-gray-500 font-normal">
+                          (optional)
+                        </span>
+                      </label>
+                      <select
+                        id="quick-create-workstream"
+                        value={state.workstreamId}
+                        onChange={(e) =>
+                          updateState({ workstreamId: e.target.value })
+                        }
+                        disabled={loadingWorkstreams}
+                        className={cn(
+                          "w-full px-3 py-2.5 text-sm rounded-md border",
+                          "bg-white dark:bg-dark-surface",
+                          "text-gray-900 dark:text-gray-100",
+                          "border-gray-300 dark:border-gray-600",
+                          "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent",
+                          "disabled:opacity-50 disabled:cursor-not-allowed",
+                        )}
+                      >
+                        <option value="">No workstream</option>
+                        {workstreams.map((ws) => (
+                          <option key={ws.id} value={ws.id}>
+                            {ws.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Suggest Keywords */}
+                    <div>
+                      <button
+                        type="button"
+                        onClick={handleSuggestKeywords}
+                        disabled={!state.topic.trim() || isSuggestingKeywords}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md",
+                          "bg-white text-gray-700 border border-gray-300",
+                          "hover:bg-gray-50",
+                          "dark:bg-dark-surface-elevated dark:text-gray-300 dark:border-gray-600 dark:hover:bg-dark-surface-hover",
+                          "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2",
+                          "disabled:opacity-50 disabled:cursor-not-allowed",
+                          "transition-colors duration-200",
+                        )}
+                      >
+                        {isSuggestingKeywords ? (
+                          <Loader2
+                            className="h-4 w-4 animate-spin"
+                            aria-hidden="true"
+                          />
+                        ) : (
+                          <Sparkles className="h-4 w-4" aria-hidden="true" />
+                        )}
+                        {isSuggestingKeywords
+                          ? "Suggesting..."
+                          : "Suggest Keywords"}
+                      </button>
+
+                      {/* Keyword chips */}
+                      {state.keywords.length > 0 && (
+                        <div
+                          className="mt-3 flex flex-wrap gap-2"
+                          role="list"
+                          aria-label="Suggested keywords"
+                        >
+                          {state.keywords.map((keyword) => (
+                            <span
+                              key={keyword}
+                              role="listitem"
+                              className={cn(
+                                "inline-flex items-center gap-1 px-2.5 py-1 rounded-full",
+                                "bg-blue-50 text-blue-700 border border-blue-200",
+                                "dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700",
+                                "text-xs font-medium",
+                              )}
+                            >
+                              {keyword}
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveKeyword(keyword)}
+                                className={cn(
+                                  "p-0.5 rounded-full",
+                                  "text-blue-400 hover:text-blue-600 dark:hover:text-blue-200",
+                                  "hover:bg-blue-100 dark:hover:bg-blue-800",
+                                  "focus:outline-none focus:ring-1 focus:ring-blue-400",
+                                  "transition-colors duration-200",
+                                )}
+                                aria-label={`Remove keyword: ${keyword}`}
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Manual Mode Fields */}
+                {state.mode === "manual" && (
+                  <div className="space-y-5">
+                    {/* Name */}
+                    <div>
+                      <label
+                        htmlFor="manual-create-name"
+                        className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
+                      >
+                        Signal Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        id="manual-create-name"
+                        type="text"
+                        value={state.name}
+                        onChange={(e) => updateState({ name: e.target.value })}
+                        placeholder="e.g., AI-Powered Traffic Signal Optimization"
+                        className={cn(
+                          "w-full px-3 py-2.5 text-sm rounded-md border",
+                          "bg-white dark:bg-dark-surface",
+                          "text-gray-900 dark:text-gray-100",
+                          "placeholder-gray-400 dark:placeholder-gray-500",
+                          "border-gray-300 dark:border-gray-600",
+                          "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent",
+                        )}
+                      />
+                    </div>
+
+                    {/* Description */}
+                    <div>
+                      <label
+                        htmlFor="manual-create-description"
+                        className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
+                      >
+                        Description <span className="text-red-500">*</span>
+                      </label>
+                      <textarea
+                        id="manual-create-description"
+                        value={state.description}
+                        onChange={(e) =>
+                          updateState({ description: e.target.value })
+                        }
+                        placeholder="Describe the trend, technology, or emerging issue..."
+                        rows={3}
+                        className={cn(
+                          "w-full px-3 py-2.5 text-sm rounded-md border resize-y",
+                          "bg-white dark:bg-dark-surface",
+                          "text-gray-900 dark:text-gray-100",
+                          "placeholder-gray-400 dark:placeholder-gray-500",
+                          "border-gray-300 dark:border-gray-600",
+                          "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent",
+                        )}
+                      />
+                    </div>
+
+                    {/* Pillar Multi-Select */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Strategic Pillar(s)
+                      </label>
+
+                      {/* Exploratory checkbox */}
+                      <label
+                        className={cn(
+                          "inline-flex items-center gap-2 mb-3 cursor-pointer",
+                          "text-sm text-gray-700 dark:text-gray-300",
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={state.isExploratory}
+                          onChange={(e) =>
+                            handleExploratoryToggle(e.target.checked)
+                          }
+                          className={cn(
+                            "h-4 w-4 rounded border-gray-300 dark:border-gray-600",
+                            "text-violet-600 focus:ring-violet-500",
+                          )}
+                        />
+                        <span className="text-violet-700 dark:text-violet-400 font-medium">
+                          Exploratory
+                        </span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          (cross-cutting, not pillar-specific)
+                        </span>
+                      </label>
+
+                      {/* Pillar checkboxes */}
+                      {!state.isExploratory && (
+                        <div className="grid grid-cols-2 gap-2">
+                          {PILLAR_OPTIONS.map((pillar) => (
+                            <label
+                              key={pillar.code}
+                              className={cn(
+                                "flex items-center gap-2 px-3 py-2 rounded-md border cursor-pointer",
+                                "transition-colors duration-200",
+                                state.selectedPillars.includes(pillar.code)
+                                  ? "bg-brand-blue/10 border-brand-blue text-brand-blue dark:bg-brand-blue/20 dark:border-brand-blue/60"
+                                  : "bg-white dark:bg-dark-surface border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300",
+                                "hover:border-brand-blue/50",
+                              )}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={state.selectedPillars.includes(
+                                  pillar.code,
+                                )}
+                                onChange={() => handleTogglePillar(pillar.code)}
+                                className="sr-only"
+                              />
+                              <span className="text-xs font-mono font-bold">
+                                {pillar.code}
+                              </span>
+                              <span className="text-sm">{pillar.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Horizon */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                        Horizon
+                      </label>
+                      <div
+                        className="flex gap-2"
+                        role="radiogroup"
+                        aria-label="Horizon selection"
+                      >
+                        {HORIZON_OPTIONS.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() =>
+                              updateState({ horizon: option.value })
+                            }
+                            role="radio"
+                            aria-checked={state.horizon === option.value}
                             className={cn(
-                              "inline-flex items-center gap-1 px-2.5 py-1 rounded-full",
-                              "bg-blue-50 text-blue-700 border border-blue-200",
-                              "dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700",
-                              "text-xs font-medium",
+                              "flex-1 px-3 py-2 text-sm font-medium rounded-md border",
+                              "transition-colors duration-200",
+                              "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2",
+                              state.horizon === option.value
+                                ? "bg-brand-blue text-white border-brand-blue"
+                                : "bg-white dark:bg-dark-surface text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:border-brand-blue/50",
                             )}
                           >
-                            {keyword}
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveKeyword(keyword)}
-                              className={cn(
-                                "p-0.5 rounded-full",
-                                "text-blue-400 hover:text-blue-600 dark:hover:text-blue-200",
-                                "hover:bg-blue-100 dark:hover:bg-blue-800",
-                                "focus:outline-none focus:ring-1 focus:ring-blue-400",
-                                "transition-colors duration-150",
-                              )}
-                              aria-label={`Remove keyword: ${keyword}`}
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </span>
+                            {option.label}
+                          </button>
                         ))}
+                      </div>
+                    </div>
+
+                    {/* Stage */}
+                    <div>
+                      <label
+                        htmlFor="manual-create-stage"
+                        className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
+                      >
+                        Maturity Stage
+                      </label>
+                      <select
+                        id="manual-create-stage"
+                        value={state.stage}
+                        onChange={(e) => updateState({ stage: e.target.value })}
+                        className={cn(
+                          "w-full px-3 py-2.5 text-sm rounded-md border",
+                          "bg-white dark:bg-dark-surface",
+                          "text-gray-900 dark:text-gray-100",
+                          "border-gray-300 dark:border-gray-600",
+                          "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent",
+                        )}
+                      >
+                        {STAGE_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Seed URLs */}
+                    <SeedUrlInput
+                      urls={state.seedUrls}
+                      onChange={(urls) => updateState({ seedUrls: urls })}
+                      max={10}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ================================================================
+              Step 2: Source Preferences
+              ================================================================ */}
+            {state.step === 2 && (
+              <SourcePreferencesStep
+                value={state.sourcePreferences}
+                onChange={(prefs) => updateState({ sourcePreferences: prefs })}
+              />
+            )}
+
+            {/* ================================================================
+              Step 3: Review & Create
+              ================================================================ */}
+            {state.step === 3 && (
+              <div className="space-y-5">
+                {/* Signal Summary */}
+                <div>
+                  <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                    Signal Summary
+                  </h3>
+                  <div
+                    className={cn(
+                      "rounded-xl border p-4 space-y-3",
+                      "bg-gray-50 dark:bg-dark-surface",
+                      "border-gray-200 dark:border-gray-600",
+                    )}
+                  >
+                    {state.mode === "quick" ? (
+                      <>
+                        <div className="flex items-start gap-2">
+                          <Zap
+                            className="h-4 w-4 mt-0.5 text-brand-blue shrink-0"
+                            aria-hidden="true"
+                          />
+                          <div>
+                            <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                              Mode
+                            </div>
+                            <div className="text-sm text-gray-900 dark:text-gray-100">
+                              Quick Create (AI-generated)
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <Search
+                            className="h-4 w-4 mt-0.5 text-gray-400 shrink-0"
+                            aria-hidden="true"
+                          />
+                          <div>
+                            <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                              Topic
+                            </div>
+                            <div className="text-sm text-gray-900 dark:text-gray-100">
+                              {state.topic}
+                            </div>
+                          </div>
+                        </div>
+                        {state.workstreamId && (
+                          <div className="flex items-start gap-2">
+                            <div className="h-4 w-4 mt-0.5 shrink-0" />
+                            <div>
+                              <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                Workstream
+                              </div>
+                              <div className="text-sm text-gray-900 dark:text-gray-100">
+                                {workstreams.find(
+                                  (ws) => ws.id === state.workstreamId,
+                                )?.name || state.workstreamId}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {state.keywords.length > 0 && (
+                          <div className="flex items-start gap-2">
+                            <div className="h-4 w-4 mt-0.5 shrink-0" />
+                            <div>
+                              <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                Keywords
+                              </div>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {state.keywords.map((kw) => (
+                                  <span
+                                    key={kw}
+                                    className={cn(
+                                      "inline-flex items-center px-2 py-0.5 rounded-full",
+                                      "bg-blue-50 text-blue-700 border border-blue-200",
+                                      "dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700",
+                                      "text-xs",
+                                    )}
+                                  >
+                                    {kw}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex items-start gap-2">
+                          <PenTool
+                            className="h-4 w-4 mt-0.5 text-brand-blue shrink-0"
+                            aria-hidden="true"
+                          />
+                          <div>
+                            <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                              Mode
+                            </div>
+                            <div className="text-sm text-gray-900 dark:text-gray-100">
+                              Manual Create
+                            </div>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                              Signal Name
+                            </div>
+                            <div className="text-sm text-gray-900 dark:text-gray-100 mt-0.5">
+                              {state.name}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                              Horizon
+                            </div>
+                            <div className="text-sm text-gray-900 dark:text-gray-100 mt-0.5">
+                              {getHorizonLabel(state.horizon)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                              Stage
+                            </div>
+                            <div className="text-sm text-gray-900 dark:text-gray-100 mt-0.5">
+                              {getStageLabel(state.stage)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                              Pillar(s)
+                            </div>
+                            <div className="text-sm text-gray-900 dark:text-gray-100 mt-0.5">
+                              {state.isExploratory
+                                ? "Exploratory"
+                                : state.selectedPillars.length > 0
+                                  ? state.selectedPillars
+                                      .map(getPillarLabel)
+                                      .join(", ")
+                                  : "None selected"}
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            Description
+                          </div>
+                          <div className="text-sm text-gray-900 dark:text-gray-100 mt-0.5 line-clamp-3">
+                            {state.description}
+                          </div>
+                        </div>
+                        {state.seedUrls.length > 0 && (
+                          <div>
+                            <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                              Seed URLs
+                            </div>
+                            <div className="text-sm text-gray-900 dark:text-gray-100 mt-0.5">
+                              {state.seedUrls.length} URL
+                              {state.seedUrls.length !== 1 ? "s" : ""}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Source Preferences Summary */}
+                <div>
+                  <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                    Source Preferences
+                  </h3>
+                  <div
+                    className={cn(
+                      "rounded-xl border p-4",
+                      "bg-gray-50 dark:bg-dark-surface",
+                      "border-gray-200 dark:border-gray-600",
+                    )}
+                  >
+                    <div className="text-sm text-gray-900 dark:text-gray-100">
+                      {getSourceSummary()}
+                    </div>
+                    {state.sourcePreferences.enabled_categories.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {state.sourcePreferences.enabled_categories.map(
+                          (cat) => (
+                            <span
+                              key={cat}
+                              className={cn(
+                                "inline-flex items-center px-2 py-0.5 rounded-full",
+                                "bg-brand-blue/10 text-brand-blue border border-brand-blue/20",
+                                "dark:bg-brand-blue/20 dark:text-blue-300 dark:border-brand-blue/30",
+                                "text-xs capitalize",
+                              )}
+                            >
+                              {cat.replace("_", " ")}
+                            </span>
+                          ),
+                        )}
+                      </div>
+                    )}
+                    {state.sourcePreferences.preferred_type && (
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                        Preferred type:{" "}
+                        <span className="text-gray-700 dark:text-gray-300">
+                          {state.sourcePreferences.preferred_type.replace(
+                            "_",
+                            " ",
+                          )}
+                        </span>
                       </div>
                     )}
                   </div>
                 </div>
-              )}
 
-              {/* Manual Mode Fields */}
-              {state.mode === "manual" && (
-                <div className="space-y-5">
-                  {/* Name */}
-                  <div>
-                    <label
-                      htmlFor="manual-create-name"
-                      className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
-                    >
-                      Signal Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      id="manual-create-name"
-                      type="text"
-                      value={state.name}
-                      onChange={(e) => updateState({ name: e.target.value })}
-                      placeholder="e.g., AI-Powered Traffic Signal Optimization"
-                      className={cn(
-                        "w-full px-3 py-2.5 text-sm rounded-md border",
-                        "bg-white dark:bg-[#2d3166]",
-                        "text-gray-900 dark:text-gray-100",
-                        "placeholder-gray-400 dark:placeholder-gray-500",
-                        "border-gray-300 dark:border-gray-600",
-                        "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent",
-                      )}
-                    />
-                  </div>
-
-                  {/* Description */}
-                  <div>
-                    <label
-                      htmlFor="manual-create-description"
-                      className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
-                    >
-                      Description <span className="text-red-500">*</span>
-                    </label>
-                    <textarea
-                      id="manual-create-description"
-                      value={state.description}
-                      onChange={(e) =>
-                        updateState({ description: e.target.value })
-                      }
-                      placeholder="Describe the trend, technology, or emerging issue..."
-                      rows={3}
-                      className={cn(
-                        "w-full px-3 py-2.5 text-sm rounded-md border resize-y",
-                        "bg-white dark:bg-[#2d3166]",
-                        "text-gray-900 dark:text-gray-100",
-                        "placeholder-gray-400 dark:placeholder-gray-500",
-                        "border-gray-300 dark:border-gray-600",
-                        "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent",
-                      )}
-                    />
-                  </div>
-
-                  {/* Pillar Multi-Select */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Strategic Pillar(s)
-                    </label>
-
-                    {/* Exploratory checkbox */}
+                {/* Research Depth */}
+                <div>
+                  <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                    Initial Research
+                  </h3>
+                  <div
+                    className="space-y-2"
+                    role="radiogroup"
+                    aria-label="Research depth"
+                  >
                     <label
                       className={cn(
-                        "inline-flex items-center gap-2 mb-3 cursor-pointer",
-                        "text-sm text-gray-700 dark:text-gray-300",
+                        "flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer",
+                        "transition-colors duration-200",
+                        state.researchDepth === "quick"
+                          ? "bg-brand-blue/10 border-brand-blue dark:bg-brand-blue/20 dark:border-brand-blue/60"
+                          : "bg-white dark:bg-dark-surface border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500",
                       )}
                     >
                       <input
-                        type="checkbox"
-                        checked={state.isExploratory}
-                        onChange={(e) =>
-                          handleExploratoryToggle(e.target.checked)
-                        }
+                        type="radio"
+                        name="research_depth"
+                        value="quick"
+                        checked={state.researchDepth === "quick"}
+                        onChange={() => updateState({ researchDepth: "quick" })}
                         className={cn(
-                          "h-4 w-4 rounded border-gray-300 dark:border-gray-600",
-                          "text-violet-600 focus:ring-violet-500",
+                          "h-4 w-4 border-gray-300 dark:border-gray-600",
+                          "text-brand-blue focus:ring-brand-blue",
                         )}
                       />
-                      <span className="text-violet-700 dark:text-violet-400 font-medium">
-                        Exploratory
-                      </span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                        (cross-cutting, not pillar-specific)
-                      </span>
-                    </label>
-
-                    {/* Pillar checkboxes */}
-                    {!state.isExploratory && (
-                      <div className="grid grid-cols-2 gap-2">
-                        {PILLAR_OPTIONS.map((pillar) => (
-                          <label
-                            key={pillar.code}
+                      <div className="flex items-center gap-2.5 flex-1">
+                        <Search
+                          className={cn(
+                            "h-5 w-5 shrink-0",
+                            state.researchDepth === "quick"
+                              ? "text-brand-blue"
+                              : "text-gray-400",
+                          )}
+                          aria-hidden="true"
+                        />
+                        <div>
+                          <div
                             className={cn(
-                              "flex items-center gap-2 px-3 py-2 rounded-md border cursor-pointer",
-                              "transition-colors duration-150",
-                              state.selectedPillars.includes(pillar.code)
-                                ? "bg-brand-blue/10 border-brand-blue text-brand-blue dark:bg-brand-blue/20 dark:border-brand-blue/60"
-                                : "bg-white dark:bg-[#2d3166] border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300",
-                              "hover:border-brand-blue/50",
+                              "text-sm font-medium",
+                              state.researchDepth === "quick"
+                                ? "text-brand-blue dark:text-blue-300"
+                                : "text-gray-900 dark:text-gray-100",
                             )}
                           >
-                            <input
-                              type="checkbox"
-                              checked={state.selectedPillars.includes(
-                                pillar.code,
-                              )}
-                              onChange={() => handleTogglePillar(pillar.code)}
-                              className="sr-only"
-                            />
-                            <span className="text-xs font-mono font-bold">
-                              {pillar.code}
-                            </span>
-                            <span className="text-sm">{pillar.label}</span>
-                          </label>
-                        ))}
+                            Quick scan
+                          </div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                            ~5 sources, faster results
+                          </div>
+                        </div>
                       </div>
-                    )}
-                  </div>
-
-                  {/* Horizon */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                      Horizon
                     </label>
-                    <div
-                      className="flex gap-2"
-                      role="radiogroup"
-                      aria-label="Horizon selection"
-                    >
-                      {HORIZON_OPTIONS.map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => updateState({ horizon: option.value })}
-                          role="radio"
-                          aria-checked={state.horizon === option.value}
-                          className={cn(
-                            "flex-1 px-3 py-2 text-sm font-medium rounded-md border",
-                            "transition-colors duration-150",
-                            "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2",
-                            state.horizon === option.value
-                              ? "bg-brand-blue text-white border-brand-blue"
-                              : "bg-white dark:bg-[#2d3166] text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:border-brand-blue/50",
-                          )}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
 
-                  {/* Stage */}
-                  <div>
                     <label
-                      htmlFor="manual-create-stage"
-                      className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
-                    >
-                      Maturity Stage
-                    </label>
-                    <select
-                      id="manual-create-stage"
-                      value={state.stage}
-                      onChange={(e) => updateState({ stage: e.target.value })}
                       className={cn(
-                        "w-full px-3 py-2.5 text-sm rounded-md border",
-                        "bg-white dark:bg-[#2d3166]",
-                        "text-gray-900 dark:text-gray-100",
-                        "border-gray-300 dark:border-gray-600",
-                        "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent",
+                        "flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer",
+                        "transition-colors duration-200",
+                        state.researchDepth === "deep"
+                          ? "bg-brand-blue/10 border-brand-blue dark:bg-brand-blue/20 dark:border-brand-blue/60"
+                          : "bg-white dark:bg-dark-surface border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500",
                       )}
                     >
-                      {STAGE_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Seed URLs */}
-                  <SeedUrlInput
-                    urls={state.seedUrls}
-                    onChange={(urls) => updateState({ seedUrls: urls })}
-                    max={10}
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ================================================================
-              Step 2: Source Preferences
-              ================================================================ */}
-          {state.step === 2 && (
-            <SourcePreferencesStep
-              value={state.sourcePreferences}
-              onChange={(prefs) => updateState({ sourcePreferences: prefs })}
-            />
-          )}
-
-          {/* ================================================================
-              Step 3: Review & Create
-              ================================================================ */}
-          {state.step === 3 && (
-            <div className="space-y-5">
-              {/* Signal Summary */}
-              <div>
-                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                  Signal Summary
-                </h3>
-                <div
-                  className={cn(
-                    "rounded-xl border p-4 space-y-3",
-                    "bg-gray-50 dark:bg-[#2d3166]",
-                    "border-gray-200 dark:border-gray-600",
-                  )}
-                >
-                  {state.mode === "quick" ? (
-                    <>
-                      <div className="flex items-start gap-2">
-                        <Zap
-                          className="h-4 w-4 mt-0.5 text-brand-blue shrink-0"
-                          aria-hidden="true"
-                        />
-                        <div>
-                          <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Mode
-                          </div>
-                          <div className="text-sm text-gray-900 dark:text-gray-100">
-                            Quick Create (AI-generated)
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-start gap-2">
-                        <Search
-                          className="h-4 w-4 mt-0.5 text-gray-400 shrink-0"
-                          aria-hidden="true"
-                        />
-                        <div>
-                          <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Topic
-                          </div>
-                          <div className="text-sm text-gray-900 dark:text-gray-100">
-                            {state.topic}
-                          </div>
-                        </div>
-                      </div>
-                      {state.workstreamId && (
-                        <div className="flex items-start gap-2">
-                          <div className="h-4 w-4 mt-0.5 shrink-0" />
-                          <div>
-                            <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                              Workstream
-                            </div>
-                            <div className="text-sm text-gray-900 dark:text-gray-100">
-                              {workstreams.find(
-                                (ws) => ws.id === state.workstreamId,
-                              )?.name || state.workstreamId}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                      {state.keywords.length > 0 && (
-                        <div className="flex items-start gap-2">
-                          <div className="h-4 w-4 mt-0.5 shrink-0" />
-                          <div>
-                            <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                              Keywords
-                            </div>
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {state.keywords.map((kw) => (
-                                <span
-                                  key={kw}
-                                  className={cn(
-                                    "inline-flex items-center px-2 py-0.5 rounded-full",
-                                    "bg-blue-50 text-blue-700 border border-blue-200",
-                                    "dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700",
-                                    "text-xs",
-                                  )}
-                                >
-                                  {kw}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <div className="flex items-start gap-2">
-                        <PenTool
-                          className="h-4 w-4 mt-0.5 text-brand-blue shrink-0"
-                          aria-hidden="true"
-                        />
-                        <div>
-                          <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Mode
-                          </div>
-                          <div className="text-sm text-gray-900 dark:text-gray-100">
-                            Manual Create
-                          </div>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Signal Name
-                          </div>
-                          <div className="text-sm text-gray-900 dark:text-gray-100 mt-0.5">
-                            {state.name}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Horizon
-                          </div>
-                          <div className="text-sm text-gray-900 dark:text-gray-100 mt-0.5">
-                            {getHorizonLabel(state.horizon)}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Stage
-                          </div>
-                          <div className="text-sm text-gray-900 dark:text-gray-100 mt-0.5">
-                            {getStageLabel(state.stage)}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Pillar(s)
-                          </div>
-                          <div className="text-sm text-gray-900 dark:text-gray-100 mt-0.5">
-                            {state.isExploratory
-                              ? "Exploratory"
-                              : state.selectedPillars.length > 0
-                                ? state.selectedPillars
-                                    .map(getPillarLabel)
-                                    .join(", ")
-                                : "None selected"}
-                          </div>
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                          Description
-                        </div>
-                        <div className="text-sm text-gray-900 dark:text-gray-100 mt-0.5 line-clamp-3">
-                          {state.description}
-                        </div>
-                      </div>
-                      {state.seedUrls.length > 0 && (
-                        <div>
-                          <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Seed URLs
-                          </div>
-                          <div className="text-sm text-gray-900 dark:text-gray-100 mt-0.5">
-                            {state.seedUrls.length} URL
-                            {state.seedUrls.length !== 1 ? "s" : ""}
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Source Preferences Summary */}
-              <div>
-                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                  Source Preferences
-                </h3>
-                <div
-                  className={cn(
-                    "rounded-xl border p-4",
-                    "bg-gray-50 dark:bg-[#2d3166]",
-                    "border-gray-200 dark:border-gray-600",
-                  )}
-                >
-                  <div className="text-sm text-gray-900 dark:text-gray-100">
-                    {getSourceSummary()}
-                  </div>
-                  {state.sourcePreferences.enabled_categories.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {state.sourcePreferences.enabled_categories.map((cat) => (
-                        <span
-                          key={cat}
-                          className={cn(
-                            "inline-flex items-center px-2 py-0.5 rounded-full",
-                            "bg-brand-blue/10 text-brand-blue border border-brand-blue/20",
-                            "dark:bg-brand-blue/20 dark:text-blue-300 dark:border-brand-blue/30",
-                            "text-xs capitalize",
-                          )}
-                        >
-                          {cat.replace("_", " ")}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {state.sourcePreferences.preferred_type && (
-                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                      Preferred type:{" "}
-                      <span className="text-gray-700 dark:text-gray-300">
-                        {state.sourcePreferences.preferred_type.replace(
-                          "_",
-                          " ",
-                        )}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Research Depth */}
-              <div>
-                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                  Initial Research
-                </h3>
-                <div
-                  className="space-y-2"
-                  role="radiogroup"
-                  aria-label="Research depth"
-                >
-                  <label
-                    className={cn(
-                      "flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer",
-                      "transition-colors duration-150",
-                      state.researchDepth === "quick"
-                        ? "bg-brand-blue/10 border-brand-blue dark:bg-brand-blue/20 dark:border-brand-blue/60"
-                        : "bg-white dark:bg-[#2d3166] border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500",
-                    )}
-                  >
-                    <input
-                      type="radio"
-                      name="research_depth"
-                      value="quick"
-                      checked={state.researchDepth === "quick"}
-                      onChange={() => updateState({ researchDepth: "quick" })}
-                      className={cn(
-                        "h-4 w-4 border-gray-300 dark:border-gray-600",
-                        "text-brand-blue focus:ring-brand-blue",
-                      )}
-                    />
-                    <div className="flex items-center gap-2.5 flex-1">
-                      <Search
+                      <input
+                        type="radio"
+                        name="research_depth"
+                        value="deep"
+                        checked={state.researchDepth === "deep"}
+                        onChange={() => updateState({ researchDepth: "deep" })}
                         className={cn(
-                          "h-5 w-5 shrink-0",
-                          state.researchDepth === "quick"
-                            ? "text-brand-blue"
-                            : "text-gray-400",
+                          "h-4 w-4 border-gray-300 dark:border-gray-600",
+                          "text-brand-blue focus:ring-brand-blue",
                         )}
-                        aria-hidden="true"
                       />
-                      <div>
-                        <div
+                      <div className="flex items-center gap-2.5 flex-1">
+                        <Telescope
                           className={cn(
-                            "text-sm font-medium",
-                            state.researchDepth === "quick"
-                              ? "text-brand-blue dark:text-blue-300"
-                              : "text-gray-900 dark:text-gray-100",
-                          )}
-                        >
-                          Quick scan
-                        </div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                          ~5 sources, faster results
-                        </div>
-                      </div>
-                    </div>
-                  </label>
-
-                  <label
-                    className={cn(
-                      "flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer",
-                      "transition-colors duration-150",
-                      state.researchDepth === "deep"
-                        ? "bg-brand-blue/10 border-brand-blue dark:bg-brand-blue/20 dark:border-brand-blue/60"
-                        : "bg-white dark:bg-[#2d3166] border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500",
-                    )}
-                  >
-                    <input
-                      type="radio"
-                      name="research_depth"
-                      value="deep"
-                      checked={state.researchDepth === "deep"}
-                      onChange={() => updateState({ researchDepth: "deep" })}
-                      className={cn(
-                        "h-4 w-4 border-gray-300 dark:border-gray-600",
-                        "text-brand-blue focus:ring-brand-blue",
-                      )}
-                    />
-                    <div className="flex items-center gap-2.5 flex-1">
-                      <Telescope
-                        className={cn(
-                          "h-5 w-5 shrink-0",
-                          state.researchDepth === "deep"
-                            ? "text-brand-blue"
-                            : "text-gray-400",
-                        )}
-                        aria-hidden="true"
-                      />
-                      <div>
-                        <div
-                          className={cn(
-                            "text-sm font-medium",
+                            "h-5 w-5 shrink-0",
                             state.researchDepth === "deep"
-                              ? "text-brand-blue dark:text-blue-300"
-                              : "text-gray-900 dark:text-gray-100",
+                              ? "text-brand-blue"
+                              : "text-gray-400",
                           )}
-                        >
-                          Deep dive
-                        </div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                          ~15 sources, comprehensive analysis
+                          aria-hidden="true"
+                        />
+                        <div>
+                          <div
+                            className={cn(
+                              "text-sm font-medium",
+                              state.researchDepth === "deep"
+                                ? "text-brand-blue dark:text-blue-300"
+                                : "text-gray-900 dark:text-gray-100",
+                            )}
+                          >
+                            Deep dive
+                          </div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                            ~15 sources, comprehensive analysis
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </label>
+                    </label>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Error */}
@@ -1547,10 +1553,10 @@ export function CreateSignalModal({
                   "inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md",
                   "bg-white text-gray-700 border border-gray-300",
                   "hover:bg-gray-50",
-                  "dark:bg-[#3d4176] dark:text-gray-300 dark:border-gray-600 dark:hover:bg-[#4d5186]",
+                  "dark:bg-dark-surface-elevated dark:text-gray-300 dark:border-gray-600 dark:hover:bg-dark-surface-hover",
                   "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2",
                   "disabled:opacity-50 disabled:cursor-not-allowed",
-                  "transition-colors duration-150",
+                  "transition-colors duration-200",
                 )}
               >
                 <ChevronLeft className="h-4 w-4" aria-hidden="true" />
@@ -1571,7 +1577,7 @@ export function CreateSignalModal({
                   "bg-brand-blue text-white hover:bg-brand-dark-blue",
                   "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2",
                   "disabled:opacity-50 disabled:cursor-not-allowed",
-                  "transition-colors duration-150",
+                  "transition-colors duration-200",
                 )}
               >
                 Next: Configure Sources
@@ -1587,7 +1593,7 @@ export function CreateSignalModal({
                   "inline-flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium rounded-md",
                   "bg-brand-blue text-white hover:bg-brand-dark-blue",
                   "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2",
-                  "transition-colors duration-150",
+                  "transition-colors duration-200",
                 )}
               >
                 Next: Review
@@ -1605,7 +1611,7 @@ export function CreateSignalModal({
                   "bg-brand-blue text-white hover:bg-brand-dark-blue",
                   "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2",
                   "disabled:opacity-50 disabled:cursor-not-allowed",
-                  "transition-colors duration-150",
+                  "transition-colors duration-200",
                 )}
               >
                 {isCreating ? (

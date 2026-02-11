@@ -219,12 +219,12 @@ export function ManualCreateTab({ onCreated }: ManualCreateTabProps) {
         </div>
         <div className="flex items-center gap-3">
           <Link
-            to={`/cards/${createdCard.slug || createdCard.id}`}
+            to={`/signals/${createdCard.slug || createdCard.id}`}
             className={cn(
               "inline-flex items-center px-4 py-2 text-sm font-medium rounded-md",
               "bg-brand-blue text-white hover:bg-brand-dark-blue",
               "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2",
-              "transition-colors duration-150",
+              "transition-colors duration-200",
             )}
           >
             View Card
@@ -236,9 +236,9 @@ export function ManualCreateTab({ onCreated }: ManualCreateTabProps) {
               "inline-flex items-center px-4 py-2 text-sm font-medium rounded-md",
               "bg-white text-gray-700 border border-gray-300",
               "hover:bg-gray-50",
-              "dark:bg-[#3d4176] dark:text-gray-300 dark:border-gray-600 dark:hover:bg-[#4d5186]",
+              "dark:bg-dark-surface-elevated dark:text-gray-300 dark:border-gray-600 dark:hover:bg-dark-surface-hover",
               "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2",
-              "transition-colors duration-150",
+              "transition-colors duration-200",
             )}
           >
             Create Another
@@ -271,7 +271,7 @@ export function ManualCreateTab({ onCreated }: ManualCreateTabProps) {
           disabled={isSubmitting}
           className={cn(
             "w-full px-3 py-2.5 text-sm rounded-md border",
-            "bg-white dark:bg-[#2d3166]",
+            "bg-white dark:bg-dark-surface",
             "text-gray-900 dark:text-gray-100",
             "placeholder-gray-400 dark:placeholder-gray-500",
             "border-gray-300 dark:border-gray-600",
@@ -298,7 +298,7 @@ export function ManualCreateTab({ onCreated }: ManualCreateTabProps) {
           disabled={isSubmitting}
           className={cn(
             "w-full px-3 py-2.5 text-sm rounded-md border resize-y",
-            "bg-white dark:bg-[#2d3166]",
+            "bg-white dark:bg-dark-surface",
             "text-gray-900 dark:text-gray-100",
             "placeholder-gray-400 dark:placeholder-gray-500",
             "border-gray-300 dark:border-gray-600",
@@ -348,10 +348,10 @@ export function ManualCreateTab({ onCreated }: ManualCreateTabProps) {
                 key={pillar.code}
                 className={cn(
                   "flex items-center gap-2 px-3 py-2 rounded-md border cursor-pointer",
-                  "transition-colors duration-150",
+                  "transition-colors duration-200",
                   selectedPillars.includes(pillar.code)
                     ? "bg-brand-blue/10 border-brand-blue text-brand-blue dark:bg-brand-blue/20 dark:border-brand-blue/60"
-                    : "bg-white dark:bg-[#2d3166] border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300",
+                    : "bg-white dark:bg-dark-surface border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300",
                   "hover:border-brand-blue/50",
                   isSubmitting && "opacity-50 cursor-not-allowed",
                 )}
@@ -396,12 +396,12 @@ export function ManualCreateTab({ onCreated }: ManualCreateTabProps) {
               aria-checked={horizon === option.value}
               className={cn(
                 "flex-1 px-3 py-2 text-sm font-medium rounded-md border",
-                "transition-colors duration-150",
+                "transition-colors duration-200",
                 "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2",
                 "disabled:opacity-50 disabled:cursor-not-allowed",
                 horizon === option.value
                   ? "bg-brand-blue text-white border-brand-blue"
-                  : "bg-white dark:bg-[#2d3166] text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:border-brand-blue/50",
+                  : "bg-white dark:bg-dark-surface text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:border-brand-blue/50",
               )}
             >
               {option.label}
@@ -425,7 +425,7 @@ export function ManualCreateTab({ onCreated }: ManualCreateTabProps) {
           disabled={isSubmitting}
           className={cn(
             "w-full px-3 py-2.5 text-sm rounded-md border",
-            "bg-white dark:bg-[#2d3166]",
+            "bg-white dark:bg-dark-surface",
             "text-gray-900 dark:text-gray-100",
             "border-gray-300 dark:border-gray-600",
             "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent",
@@ -471,7 +471,7 @@ export function ManualCreateTab({ onCreated }: ManualCreateTabProps) {
           "bg-brand-blue text-white hover:bg-brand-dark-blue",
           "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2",
           "disabled:opacity-50 disabled:cursor-not-allowed",
-          "transition-colors duration-150",
+          "transition-colors duration-200",
         )}
       >
         {isSubmitting ? (

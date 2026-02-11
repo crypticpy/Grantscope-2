@@ -123,7 +123,7 @@ function getHorizonColors(horizon?: "H1" | "H2" | "H3" | null): {
 
   return (
     colorMap[horizon || ""] || {
-      bg: "bg-gray-50 dark:bg-gray-800",
+      bg: "bg-gray-50 dark:bg-dark-surface",
       border: "border-gray-300 dark:border-gray-600",
       text: "text-gray-800 dark:text-gray-200",
       fill: "#6b7280",
@@ -516,7 +516,7 @@ export function ConceptNetworkDiagram({
     return (
       <div
         className={cn(
-          "bg-white dark:bg-[#2d3166] rounded-lg shadow p-6",
+          "bg-white dark:bg-dark-surface rounded-lg shadow p-6",
           className,
         )}
       >
@@ -538,7 +538,7 @@ export function ConceptNetworkDiagram({
     return (
       <div
         className={cn(
-          "bg-white dark:bg-[#2d3166] rounded-lg shadow p-6",
+          "bg-white dark:bg-dark-surface rounded-lg shadow p-6",
           className,
         )}
       >
@@ -560,7 +560,7 @@ export function ConceptNetworkDiagram({
     return (
       <div
         className={cn(
-          "bg-white dark:bg-[#2d3166] rounded-lg shadow p-6",
+          "bg-white dark:bg-dark-surface rounded-lg shadow p-6",
           className,
         )}
       >
@@ -580,7 +580,7 @@ export function ConceptNetworkDiagram({
   return (
     <div
       className={cn(
-        "bg-white dark:bg-[#2d3166] rounded-lg shadow p-6",
+        "bg-white dark:bg-dark-surface rounded-lg shadow p-6",
         className,
       )}
     >

@@ -720,21 +720,29 @@ const Discover: React.FC = () => {
 
   // Render card item
   const renderCardItem = useCallback(
-    (card: Card) => {
+    (card: Card, index?: number) => {
       const isSelectedForCompare = selectedForCompare.some(
         (c) => c.id === card.id,
       );
 
       return (
-        <DiscoverCard
-          card={card}
-          compareMode={compareMode}
-          isSelectedForCompare={isSelectedForCompare}
-          isFollowed={followedCardIds.has(card.id)}
-          searchTerm={searchTerm}
-          onToggleCompare={toggleCardForCompare}
-          onToggleFollow={toggleFollowCard}
-        />
+        <div
+          className="animate-in fade-in slide-in-from-bottom-2 duration-300"
+          style={{
+            animationDelay: `${Math.min(index ?? 0, 5) * 50}ms`,
+            animationFillMode: "both",
+          }}
+        >
+          <DiscoverCard
+            card={card}
+            compareMode={compareMode}
+            isSelectedForCompare={isSelectedForCompare}
+            isFollowed={followedCardIds.has(card.id)}
+            searchTerm={searchTerm}
+            onToggleCompare={toggleCardForCompare}
+            onToggleFollow={toggleFollowCard}
+          />
+        </div>
       );
     },
     [
@@ -773,7 +781,7 @@ const Discover: React.FC = () => {
             <div className="flex items-center gap-2">
               <Link
                 to="/guide/discover"
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-dark-surface border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 <BookOpen className="w-4 h-4" />
                 How to use
@@ -797,7 +805,7 @@ const Discover: React.FC = () => {
                 className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
                   isSidebarOpen
                     ? "text-brand-blue bg-brand-light-blue dark:bg-brand-blue/20 border border-brand-blue/30"
-                    : "text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+                    : "text-gray-700 dark:text-gray-300 bg-white dark:bg-dark-surface border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
                 }`}
                 aria-pressed={isSidebarOpen}
               >
@@ -806,14 +814,14 @@ const Discover: React.FC = () => {
               </button>
               <Link
                 to="/discover/queue"
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-dark-surface border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 <Inbox className="w-4 h-4" />
                 Review Queue
               </Link>
               <Link
                 to="/discover/history"
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-dark-surface border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 <History className="w-4 h-4" />
                 Run History
@@ -902,7 +910,7 @@ const Discover: React.FC = () => {
         </div>
 
         {/* Filters */}
-        <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 mb-6">
+        <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-6 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
             {/* Search */}
             <div className="lg:col-span-2">
@@ -917,7 +925,7 @@ const Discover: React.FC = () => {
                 <input
                   type="text"
                   id="search"
-                  className="pl-10 block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                  className="pl-10 block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
                   placeholder={
                     useSemanticSearch
                       ? "Semantic search (finds related concepts)..."
@@ -977,7 +985,7 @@ const Discover: React.FC = () => {
               </label>
               <select
                 id="pillar"
-                className="block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
                 value={selectedPillar}
                 onChange={(e) => setSelectedPillar(e.target.value)}
               >
@@ -1000,7 +1008,7 @@ const Discover: React.FC = () => {
               </label>
               <select
                 id="stage"
-                className="block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
                 value={selectedStage}
                 onChange={(e) => setSelectedStage(e.target.value)}
               >
@@ -1023,7 +1031,7 @@ const Discover: React.FC = () => {
               </label>
               <select
                 id="horizon"
-                className="block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
                 value={selectedHorizon}
                 onChange={(e) => setSelectedHorizon(e.target.value)}
               >
@@ -1044,7 +1052,7 @@ const Discover: React.FC = () => {
               </label>
               <select
                 id="sort"
-                className="block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
                 value={sortOption}
                 onChange={(e) => setSortOption(e.target.value as SortOption)}
               >
@@ -1077,7 +1085,7 @@ const Discover: React.FC = () => {
               <input
                 type="date"
                 id="dateFrom"
-                className="block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
               />
@@ -1092,7 +1100,7 @@ const Discover: React.FC = () => {
               <input
                 type="date"
                 id="dateTo"
-                className="block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
                 value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
               />
@@ -1400,7 +1408,7 @@ const Discover: React.FC = () => {
                 {selectedForCompare.map((card, index) => (
                   <span
                     key={card.id}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-gray-800 rounded-full text-sm border border-extended-purple/30"
+                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-dark-surface rounded-full text-sm border border-extended-purple/30"
                   >
                     <span className="font-medium text-extended-purple">
                       {index + 1}.
@@ -1462,7 +1470,7 @@ const Discover: React.FC = () => {
             )}
           </div>
         ) : filteredCards.length === 0 && !error ? (
-          <div className="text-center py-12 bg-white dark:bg-[#2d3166] rounded-lg shadow">
+          <div className="text-center py-12 bg-white dark:bg-dark-surface rounded-lg shadow">
             {useSemanticSearch && searchTerm ? (
               <Sparkles className="mx-auto h-12 w-12 text-gray-400" />
             ) : searchTerm ||
@@ -1541,7 +1549,7 @@ const Discover: React.FC = () => {
                       setNoveltyMin(0);
                       setUseSemanticSearch(false);
                     }}
-                    className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                    className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-dark-surface hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                   >
                     <X className="h-4 w-4 mr-2" />
                     Clear All Filters
@@ -1550,7 +1558,7 @@ const Discover: React.FC = () => {
               {useSemanticSearch && searchTerm && (
                 <button
                   onClick={() => setUseSemanticSearch(false)}
-                  className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-dark-surface hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                 >
                   <Search className="h-4 w-4 mr-2" />
                   Try Standard Search
@@ -1581,8 +1589,8 @@ const Discover: React.FC = () => {
                 gap={24}
                 columns={{ sm: 1, md: 2, lg: 3 }}
                 overscan={3}
-                renderItem={(card) => (
-                  <div className="h-full">{renderCardItem(card)}</div>
+                renderItem={(card, index) => (
+                  <div className="h-full">{renderCardItem(card, index)}</div>
                 )}
               />
             </div>

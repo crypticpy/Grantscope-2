@@ -174,7 +174,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
                   <summary className="text-xs text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-700 dark:hover:text-gray-300">
                     Technical details
                   </summary>
-                  <pre className="mt-2 p-3 text-xs text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded overflow-auto max-h-48">
+                  <pre className="mt-2 p-3 text-xs text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-dark-surface rounded overflow-auto max-h-48">
                     {serializeError(error)}
                   </pre>
                 </details>

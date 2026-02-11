@@ -217,7 +217,7 @@ const AnalyticsFiltersComponent: React.FC<AnalyticsFiltersProps> = ({
   ];
 
   return (
-    <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 mb-6">
+    <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-4 mb-6">
       <div className="flex items-center gap-2 mb-4">
         <Filter className="h-5 w-5 text-gray-500 dark:text-gray-400" />
         <h3 className="font-semibold text-gray-900 dark:text-white">Filters</h3>
@@ -339,7 +339,7 @@ const StatsCard: React.FC<StatsCardProps> = ({
   colorClass = "text-brand-blue",
 }) => {
   const content = (
-    <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg group">
+    <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg group">
       <div className="flex items-center justify-between">
         <div className="flex items-center">
           <div
@@ -726,7 +726,7 @@ const Analytics: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Velocity Chart - Full Width on Mobile, 2/3 on Desktop */}
         <div className="lg:col-span-2">
-          <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow">
+          <div className="bg-white dark:bg-dark-surface rounded-lg shadow">
             <TrendVelocityChart
               data={velocityData}
               isLoading={loadingVelocity}
@@ -776,7 +776,7 @@ const Analytics: React.FC = () => {
       <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <Link
           to="/discover"
-          className="flex items-center justify-between p-4 bg-white dark:bg-[#2d3166] rounded-lg shadow hover:shadow-md transition-shadow group"
+          className="flex items-center justify-between p-4 bg-white dark:bg-dark-surface rounded-lg shadow hover:shadow-md transition-shadow group"
         >
           <div className="flex items-center gap-3">
             <div className="p-2 bg-brand-blue/10 rounded-lg">
@@ -796,7 +796,7 @@ const Analytics: React.FC = () => {
 
         <Link
           to="/workstreams"
-          className="flex items-center justify-between p-4 bg-white dark:bg-[#2d3166] rounded-lg shadow hover:shadow-md transition-shadow group"
+          className="flex items-center justify-between p-4 bg-white dark:bg-dark-surface rounded-lg shadow hover:shadow-md transition-shadow group"
         >
           <div className="flex items-center gap-3">
             <div className="p-2 bg-extended-purple/10 rounded-lg">
@@ -816,7 +816,7 @@ const Analytics: React.FC = () => {
 
         <Link
           to="/"
-          className="flex items-center justify-between p-4 bg-white dark:bg-[#2d3166] rounded-lg shadow hover:shadow-md transition-shadow group"
+          className="flex items-center justify-between p-4 bg-white dark:bg-dark-surface rounded-lg shadow hover:shadow-md transition-shadow group"
         >
           <div className="flex items-center gap-3">
             <div className="p-2 bg-extended-orange/10 rounded-lg">

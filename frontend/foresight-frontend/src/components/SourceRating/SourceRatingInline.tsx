@@ -350,7 +350,7 @@ export const SourceRatingInline: React.FC<SourceRatingInlineProps> = ({
             className={cn(
               "flex-1 text-sm px-2 py-1 rounded border transition-colors",
               "border-gray-200 bg-white text-gray-700 placeholder-gray-400",
-              "dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:placeholder-gray-500",
+              "dark:border-gray-600 dark:bg-dark-surface dark:text-gray-200 dark:placeholder-gray-500",
               "focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400",
               "disabled:opacity-50",
             )}

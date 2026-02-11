@@ -116,7 +116,9 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = "" }) => {
     ? "Back to Review Queue"
     : fromPath === "/signals"
       ? "Back to Signals"
-      : "Back to Discover";
+      : fromPath === "/"
+        ? "Back to Dashboard"
+        : "Back to Discover";
 
   // Core card data
   const [card, setCard] = useState<Card | null>(null);
@@ -435,7 +437,7 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = "" }) => {
   // Handle related card click
   const handleRelatedCardClick = useCallback(
     (cardId: string, cardSlug: string) => {
-      if (cardSlug) navigate(`/cards/${cardSlug}`);
+      if (cardSlug) navigate(`/signals/${cardSlug}`);
     },
     [navigate],
   );

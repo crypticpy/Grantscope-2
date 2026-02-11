@@ -7,9 +7,9 @@
  * throughout the Foresight app (PillarBadge, HorizonBadge, etc.).
  *
  * Visual design:
- * - High Confidence (>= 75): green background
- * - Moderate (50-74): amber background
- * - Needs Verification (0-49): red background
+ * - High Confidence (>= 80): green background
+ * - Moderate (60-79): amber background
+ * - Needs Verification (0-59): red background
  * - No Sources (null/undefined): gray background
  *
  * Integrates with the shared Tooltip component for hover detail and reuses
@@ -70,7 +70,7 @@ export interface QualityBadgeProps {
 // =============================================================================
 
 /** Quality tier classification. */
-type QualityTier = "high" | "moderate" | "low" | "none";
+type QualityTier = "high" | "moderate" | "fair" | "low" | "none";
 
 /**
  * Tier visual configuration: label + Tailwind color classes (light & dark mode).
@@ -90,10 +90,16 @@ const TIER_CONFIGS: Record<QualityTier, TierConfig> = {
     border: "border-green-200 dark:border-green-700",
   },
   moderate: {
-    label: "Moderate",
+    label: "Good",
     bg: "bg-amber-100 dark:bg-amber-900",
     text: "text-amber-800 dark:text-amber-200",
     border: "border-amber-200 dark:border-amber-700",
+  },
+  fair: {
+    label: "Fair",
+    bg: "bg-orange-100 dark:bg-orange-900",
+    text: "text-orange-800 dark:text-orange-200",
+    border: "border-orange-200 dark:border-orange-700",
   },
   low: {
     label: "Needs Verification",
@@ -103,7 +109,7 @@ const TIER_CONFIGS: Record<QualityTier, TierConfig> = {
   },
   none: {
     label: "No Sources",
-    bg: "bg-gray-100 dark:bg-gray-800",
+    bg: "bg-gray-100 dark:bg-dark-surface",
     text: "text-gray-500 dark:text-gray-400",
     border: "border-gray-200 dark:border-gray-700",
   },
@@ -117,8 +123,9 @@ const TIER_CONFIGS: Record<QualityTier, TierConfig> = {
  */
 function getQualityTier(score: number | null | undefined): QualityTier {
   if (score == null) return "none";
-  if (score >= 75) return "high";
-  if (score >= 50) return "moderate";
+  if (score >= 80) return "high";
+  if (score >= 60) return "moderate";
+  if (score >= 40) return "fair";
   return "low";
 }
 

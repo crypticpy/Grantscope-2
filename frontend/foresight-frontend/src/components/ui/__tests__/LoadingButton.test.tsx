@@ -167,7 +167,7 @@ describe('LoadingButton', () => {
       render(<LoadingButton variant="secondary">Secondary</LoadingButton>);
 
       const button = screen.getByRole('button');
-      expect(button).toHaveClass('dark:bg-[#3d4176]');
+      expect(button).toHaveClass('dark:bg-dark-surface-elevated');
       expect(button).toHaveClass('dark:text-gray-300');
     });
 
@@ -346,7 +346,7 @@ describe('LoadingButton', () => {
       render(<LoadingButton>Submit</LoadingButton>);
 
       const button = screen.getByRole('button');
-      expect(button).toHaveClass('dark:focus:ring-offset-[#2d3166]');
+      expect(button).toHaveClass('dark:focus:ring-offset-dark-surface');
     });
   });
 
@@ -403,17 +403,17 @@ describe('LoadingButton', () => {
       render(<LoadingButton variant="primary">Submit</LoadingButton>);
 
       const button = screen.getByRole('button');
-      expect(button).toHaveClass('dark:focus:ring-offset-[#2d3166]');
+      expect(button).toHaveClass('dark:focus:ring-offset-dark-surface');
     });
 
     it('has dark mode styles for secondary variant', () => {
       render(<LoadingButton variant="secondary">Cancel</LoadingButton>);
 
       const button = screen.getByRole('button');
-      expect(button).toHaveClass('dark:bg-[#3d4176]');
+      expect(button).toHaveClass('dark:bg-dark-surface-elevated');
       expect(button).toHaveClass('dark:text-gray-300');
       expect(button).toHaveClass('dark:border-gray-600');
-      expect(button).toHaveClass('dark:hover:bg-[#4d5186]');
+      expect(button).toHaveClass('dark:hover:bg-dark-surface-hover');
     });
 
     it('has dark mode styles for danger variant', () => {

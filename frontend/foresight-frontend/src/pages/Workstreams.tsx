@@ -47,7 +47,7 @@ function DeleteConfirmModal({
 }: DeleteConfirmModalProps) {
   return (
     <div className="fixed inset-0 bg-gray-600/50 dark:bg-black/60 flex items-center justify-center p-4 z-50">
-      <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow-xl max-w-md w-full p-6">
+      <div className="bg-white dark:bg-dark-surface rounded-lg shadow-xl max-w-md w-full p-6">
         <div className="flex items-start gap-4">
           <div className="flex-shrink-0 w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
             <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
@@ -69,7 +69,7 @@ function DeleteConfirmModal({
             type="button"
             onClick={onCancel}
             disabled={isDeleting}
-            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-[#3d4176] border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue disabled:opacity-50 transition-colors"
+            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-dark-surface-elevated border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-dark-surface-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue disabled:opacity-50 transition-colors"
           >
             Cancel
           </button>
@@ -100,8 +100,8 @@ interface FormModalProps {
 function FormModal({ workstream, onSuccess, onCancel }: FormModalProps) {
   return (
     <div className="fixed inset-0 bg-gray-600/50 dark:bg-black/60 flex items-center justify-center p-4 z-50 overflow-y-auto">
-      <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto my-8">
-        <div className="sticky top-0 bg-white dark:bg-[#2d3166] border-b border-gray-200 dark:border-gray-700 px-6 py-4 rounded-t-lg">
+      <div className="bg-white dark:bg-dark-surface rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto my-8">
+        <div className="sticky top-0 bg-white dark:bg-dark-surface border-b border-gray-200 dark:border-gray-700 px-6 py-4 rounded-t-lg">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white">
             {workstream ? "Edit Workstream" : "Create New Workstream"}
           </h3>
@@ -140,43 +140,43 @@ function WorkstreamHelpBanner({ onDismiss }: WorkstreamHelpBannerProps) {
     {
       name: "Inbox",
       icon: Inbox,
-      color: "bg-gray-100 dark:bg-gray-700",
+      color: "bg-blue-100 dark:bg-blue-900/30",
       description: "New signals awaiting triage",
     },
     {
       name: "Screening",
       icon: Filter,
-      color: "bg-yellow-100 dark:bg-yellow-900/30",
+      color: "bg-amber-100 dark:bg-amber-900/30",
       description: "Evaluating relevance",
     },
     {
       name: "Research",
       icon: Search,
-      color: "bg-blue-100 dark:bg-blue-900/30",
+      color: "bg-purple-100 dark:bg-purple-900/30",
       description: "Active investigation",
     },
     {
       name: "Brief",
       icon: FileText,
-      color: "bg-purple-100 dark:bg-purple-900/30",
+      color: "bg-green-100 dark:bg-green-900/30",
       description: "Ready for leadership",
     },
     {
       name: "Watching",
       icon: Eye,
-      color: "bg-green-100 dark:bg-green-900/30",
+      color: "bg-cyan-100 dark:bg-cyan-900/30",
       description: "Monitoring developments",
     },
     {
       name: "Archived",
       icon: Archive,
-      color: "bg-gray-100 dark:bg-gray-600",
+      color: "bg-gray-100 dark:bg-gray-800/50",
       description: "Completed or dismissed",
     },
   ];
 
   return (
-    <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden mb-6">
+    <div className="bg-white dark:bg-dark-surface rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden mb-6">
       {/* Gradient accent strip */}
       <div className="bg-gradient-to-r from-brand-blue to-brand-green h-1 rounded-t-lg" />
 
@@ -234,7 +234,7 @@ function WorkstreamHelpBanner({ onDismiss }: WorkstreamHelpBannerProps) {
                 Creating a Workstream
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+                <div className="bg-gray-50 dark:bg-dark-surface/50 rounded-lg p-3">
                   <h4 className="font-medium text-gray-900 dark:text-white text-sm mb-1">
                     1. Define Your Focus
                   </h4>
@@ -243,7 +243,7 @@ function WorkstreamHelpBanner({ onDismiss }: WorkstreamHelpBannerProps) {
                     Initiatives" or "Climate Resilience Tech"
                   </p>
                 </div>
-                <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+                <div className="bg-gray-50 dark:bg-dark-surface/50 rounded-lg p-3">
                   <h4 className="font-medium text-gray-900 dark:text-white text-sm mb-1">
                     2. Set Filter Criteria
                   </h4>
@@ -432,7 +432,7 @@ function WorkstreamCard({ workstream, onEdit, onDelete }: WorkstreamCardProps) {
   return (
     <Link
       to={`/workstreams/${workstream.id}/board`}
-      className="block bg-white dark:bg-[#2d3166] overflow-hidden rounded-xl shadow transition-all duration-200 hover:-translate-y-1 hover:shadow-lg cursor-pointer"
+      className="block bg-white dark:bg-dark-surface overflow-hidden rounded-xl shadow transition-all duration-200 hover:-translate-y-1 hover:shadow-lg cursor-pointer"
     >
       {/* Gradient accent bar */}
       <div className="bg-gradient-to-r from-brand-blue to-brand-green h-1" />
@@ -557,7 +557,7 @@ function WorkstreamCard({ workstream, onEdit, onDelete }: WorkstreamCardProps) {
             <div className="flex items-center gap-2">
               <button
                 onClick={handleEditClick}
-                className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-[#3d4176] border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-brand-blue transition-colors"
+                className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-dark-surface-elevated border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-dark-surface-hover focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-brand-blue transition-colors"
                 aria-label={`Edit ${workstream.name}`}
               >
                 <Pencil className="h-3.5 w-3.5 mr-1" />
@@ -565,7 +565,7 @@ function WorkstreamCard({ workstream, onEdit, onDelete }: WorkstreamCardProps) {
               </button>
               <button
                 onClick={handleDeleteClick}
-                className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-red-700 dark:text-red-400 bg-white dark:bg-[#3d4176] border border-red-300 dark:border-red-500/50 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-red-500 transition-colors"
+                className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-red-700 dark:text-red-400 bg-white dark:bg-dark-surface-elevated border border-red-300 dark:border-red-500/50 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-red-500 transition-colors"
                 aria-label={`Delete ${workstream.name}`}
               >
                 <Trash2 className="h-3.5 w-3.5 mr-1" />
@@ -587,6 +587,9 @@ const Workstreams: React.FC = () => {
   const { user } = useAuthContext();
   const [workstreams, setWorkstreams] = useState<Workstream[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Error state (replaces alert())
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Modal states
   const [showForm, setShowForm] = useState(false);
@@ -682,7 +685,7 @@ const Workstreams: React.FC = () => {
       loadWorkstreams();
     } catch (error) {
       console.error("Error deleting workstream:", error);
-      alert("Failed to delete workstream. Please try again.");
+      setErrorMessage("Failed to delete workstream. Please try again.");
     } finally {
       setIsDeleting(false);
     }
@@ -745,6 +748,20 @@ const Workstreams: React.FC = () => {
         </button>
       </div>
 
+      {/* Error Banner */}
+      {errorMessage && (
+        <div className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm flex items-center justify-between">
+          <span>{errorMessage}</span>
+          <button
+            type="button"
+            onClick={() => setErrorMessage(null)}
+            className="ml-2 text-red-500 hover:text-red-700"
+          >
+            &#x2715;
+          </button>
+        </div>
+      )}
+
       {/* Help Banner */}
       {!bannerDismissed && (
         <WorkstreamHelpBanner onDismiss={handleDismissBanner} />
@@ -752,7 +769,7 @@ const Workstreams: React.FC = () => {
 
       {/* Workstreams List */}
       {workstreams.length === 0 ? (
-        <div className="text-center py-12 bg-white dark:bg-[#2d3166] rounded-lg shadow">
+        <div className="text-center py-12 bg-white dark:bg-dark-surface rounded-lg shadow">
           <FolderOpen className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">
             No workstreams yet

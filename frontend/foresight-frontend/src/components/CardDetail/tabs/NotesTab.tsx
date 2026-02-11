@@ -85,14 +85,14 @@ export const NotesTab: React.FC<NotesTabProps> = ({
   return (
     <div className={`space-y-4 sm:space-y-6 ${className}`}>
       {/* Add Note Form */}
-      <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6">
+      <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-4 sm:p-6">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
           Add Note
         </h3>
         <div className="space-y-4">
           <textarea
             rows={3}
-            className="block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-white rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+            className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-white rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
             placeholder="Add your thoughts and analysis..."
             value={newNoteValue}
             onChange={(e) => onNewNoteChange(e.target.value)}
@@ -145,7 +145,7 @@ interface NoteCardProps {
 const NoteCard: React.FC<NoteCardProps> = ({ note }) => {
   return (
     <div
-      className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6 border-l-4 border-transparent transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-l-brand-blue"
+      className="bg-white dark:bg-dark-surface rounded-lg shadow p-4 sm:p-6 border-l-4 border-transparent transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-l-brand-blue"
     >
       <p className="text-gray-700 dark:text-gray-300 mb-3 break-words">
         {note.content}
@@ -181,7 +181,7 @@ const PrivateBadge: React.FC = () => {
  */
 const EmptyNotesState: React.FC = () => {
   return (
-    <div className="text-center py-12 bg-white dark:bg-[#2d3166] rounded-lg shadow">
+    <div className="text-center py-12 bg-white dark:bg-dark-surface rounded-lg shadow">
       <TrendingUp className="mx-auto h-12 w-12 text-gray-400" aria-hidden="true" />
       <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">
         No notes yet

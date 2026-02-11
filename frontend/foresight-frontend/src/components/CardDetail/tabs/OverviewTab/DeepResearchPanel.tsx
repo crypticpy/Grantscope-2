@@ -203,7 +203,7 @@ export const DeepResearchPanel: React.FC<DeepResearchPanelProps> = ({
   return (
     <div
       className={cn(
-        'bg-white dark:bg-[#2d3166] rounded-xl shadow-lg overflow-hidden border border-brand-blue/20',
+        'bg-white dark:bg-dark-surface rounded-xl shadow-lg overflow-hidden border border-brand-blue/20',
         className
       )}
     >
@@ -275,12 +275,12 @@ export const DeepResearchPanel: React.FC<DeepResearchPanelProps> = ({
         {/* Report preview or full content */}
         {expandedReportId === latestReport.id ? (
           <div className="mt-4 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <div className="max-h-[70vh] overflow-y-auto p-4 sm:p-6 bg-gray-50 dark:bg-gray-800">
+            <div className="max-h-[70vh] overflow-y-auto p-4 sm:p-6 bg-gray-50 dark:bg-dark-surface">
               <MarkdownReport content={latestReport.result_summary!.report_preview!} />
             </div>
           </div>
         ) : (
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+          <div className="bg-gray-50 dark:bg-dark-surface rounded-lg p-4">
             <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
               {extractMarkdownPreview(latestReport.result_summary?.report_preview || '', 350)}
             </p>
@@ -315,7 +315,7 @@ export const DeepResearchPanel: React.FC<DeepResearchPanelProps> = ({
                 {previousReports.map((task) => (
                   <div
                     key={task.id}
-                    className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                    className="flex items-center justify-between p-3 bg-gray-50 dark:bg-dark-surface rounded-lg"
                   >
                     <div className="flex items-center gap-2">
                       <FileText className="h-4 w-4 text-gray-400" />
@@ -341,7 +341,7 @@ export const DeepResearchPanel: React.FC<DeepResearchPanelProps> = ({
                 {/* Expanded previous report */}
                 {previousReports.some((t) => expandedReportId === t.id) && (
                   <div className="mt-3 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-                    <div className="max-h-[50vh] overflow-y-auto p-4 bg-gray-50 dark:bg-gray-800">
+                    <div className="max-h-[50vh] overflow-y-auto p-4 bg-gray-50 dark:bg-dark-surface">
                       <MarkdownReport
                         content={
                           previousReports.find((t) => t.id === expandedReportId)?.result_summary

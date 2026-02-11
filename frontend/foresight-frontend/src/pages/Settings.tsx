@@ -88,7 +88,7 @@ const Settings: React.FC = () => {
       {/* Settings Sections */}
       <div className="space-y-6">
         {/* Profile Settings */}
-        <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow">
+        <div className="bg-white dark:bg-dark-surface rounded-lg shadow">
           <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-center">
               <User className="h-5 w-5 text-gray-400 mr-2" />
@@ -112,7 +112,7 @@ const Settings: React.FC = () => {
                     id="email"
                     value={user?.email || ""}
                     disabled
-                    className="mt-1 block w-full border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm bg-gray-50 dark:bg-[#3d4176] dark:text-gray-300"
+                    className="mt-1 block w-full border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm bg-gray-50 dark:bg-dark-surface-elevated dark:text-gray-300"
                   />
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                     Email cannot be changed. Contact your administrator if
@@ -134,7 +134,7 @@ const Settings: React.FC = () => {
                     onChange={(e) =>
                       setProfile({ ...profile, display_name: e.target.value })
                     }
-                    className="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-white rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                    className="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-white rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
                     placeholder="Your name"
                   />
                 </div>
@@ -152,7 +152,7 @@ const Settings: React.FC = () => {
                     onChange={(e) =>
                       setProfile({ ...profile, department: e.target.value })
                     }
-                    className="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-white rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                    className="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-white rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
                   >
                     <option value="">Select Department</option>
                     <option value="Community Health">Community Health</option>
@@ -191,7 +191,7 @@ const Settings: React.FC = () => {
                     onChange={(e) =>
                       setProfile({ ...profile, role: e.target.value })
                     }
-                    className="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-white rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                    className="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-white rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
                   >
                     <option value="">Select Role</option>
                     <option value="Strategic Planner">Strategic Planner</option>
@@ -227,7 +227,7 @@ const Settings: React.FC = () => {
         </div>
 
         {/* Notification Settings */}
-        <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow">
+        <div className="bg-white dark:bg-dark-surface rounded-lg shadow">
           <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-center">
               <Bell className="h-5 w-5 text-gray-400 mr-2" />
@@ -292,7 +292,7 @@ const Settings: React.FC = () => {
         </div>
 
         {/* Privacy & Security */}
-        <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow">
+        <div className="bg-white dark:bg-dark-surface rounded-lg shadow">
           <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-center">
               <Shield className="h-5 w-5 text-gray-400 mr-2" />
@@ -339,7 +339,7 @@ const Settings: React.FC = () => {
         </div>
 
         {/* System Information */}
-        <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow">
+        <div className="bg-white dark:bg-dark-surface rounded-lg shadow">
           <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-center">
               <Database className="h-5 w-5 text-gray-400 mr-2" />
@@ -379,7 +379,7 @@ const Settings: React.FC = () => {
         </div>
 
         {/* Account Actions */}
-        <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow">
+        <div className="bg-white dark:bg-dark-surface rounded-lg shadow">
           <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
             <h2 className="text-lg font-medium text-gray-900 dark:text-white">
               Account Actions

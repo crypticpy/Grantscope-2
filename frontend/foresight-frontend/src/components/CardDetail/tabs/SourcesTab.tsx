@@ -81,7 +81,7 @@ export const SourcesTab: React.FC<SourcesTabProps> = ({
     return (
       <div
         className={cn(
-          'text-center py-12 bg-white dark:bg-[#2d3166] rounded-lg shadow',
+          'text-center py-12 bg-white dark:bg-dark-surface rounded-lg shadow',
           className
         )}
       >
@@ -121,7 +121,7 @@ export const SourcesTab: React.FC<SourcesTabProps> = ({
         return (
           <div
             key={source.id}
-            className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6 border-l-4 border-transparent transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-l-brand-blue"
+            className="bg-white dark:bg-dark-surface rounded-lg shadow p-4 sm:p-6 border-l-4 border-transparent transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-l-brand-blue"
           >
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
               <div className="flex-1 min-w-0">

@@ -97,7 +97,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
     return (
       <div
         className={cn(
-          'bg-white dark:bg-[#2d3166] rounded-lg shadow',
+          'bg-white dark:bg-dark-surface rounded-lg shadow',
           className
         )}
       >
@@ -117,7 +117,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
   return (
     <div
       className={cn(
-        'bg-white dark:bg-[#2d3166] rounded-lg shadow',
+        'bg-white dark:bg-dark-surface rounded-lg shadow',
         className
       )}
     >

@@ -136,10 +136,10 @@ export const RelevanceSelector: React.FC<RelevanceSelectorProps> = ({
             onClick={() => handleSelect(option.value)}
             onKeyDown={(e) => handleKeyDown(e, option.value)}
             className={cn(
-              "px-2.5 py-1 rounded-full text-xs font-medium border transition-all duration-150",
+              "px-2.5 py-1 rounded-full text-xs font-medium border transition-all duration-200",
               isSelected
                 ? option.selectedClasses
-                : "bg-white text-gray-500 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-600",
+                : "bg-white text-gray-500 border-gray-200 dark:bg-dark-surface dark:text-gray-400 dark:border-gray-600",
               !readonly &&
                 !isSelected &&
                 "hover:bg-gray-50 hover:border-gray-300 dark:hover:bg-gray-700 dark:hover:border-gray-500",

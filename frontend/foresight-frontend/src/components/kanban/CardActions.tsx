@@ -189,7 +189,7 @@ const NotesModal = memo(function NotesModal({
       {/* Modal Content */}
       <div
         ref={modalRef}
-        className="relative bg-white dark:bg-[#2d3166] rounded-lg shadow-xl w-full max-w-lg transform transition-all"
+        className="relative bg-white dark:bg-dark-surface rounded-lg shadow-xl w-full max-w-lg transform transition-all"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-600">
@@ -242,7 +242,7 @@ const NotesModal = memo(function NotesModal({
               className={cn(
                 "w-full px-3 py-2 border rounded-md shadow-sm text-sm resize-none",
                 "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-brand-blue",
-                "dark:bg-[#3d4176] dark:text-white dark:placeholder-gray-400",
+                "dark:bg-dark-surface-elevated dark:text-white dark:placeholder-gray-400",
                 "border-gray-300 bg-white dark:border-gray-600",
                 "disabled:opacity-50 disabled:cursor-not-allowed",
               )}
@@ -259,7 +259,7 @@ const NotesModal = memo(function NotesModal({
             type="button"
             onClick={onClose}
             disabled={isSaving}
-            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-[#3d4176] border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-[#2d3166] disabled:opacity-50 transition-colors"
+            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-dark-surface-elevated border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-dark-surface-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-dark-surface disabled:opacity-50 transition-colors"
           >
             Cancel
           </button>
@@ -270,7 +270,7 @@ const NotesModal = memo(function NotesModal({
             disabled={isSaving}
             className={cn(
               "inline-flex items-center px-4 py-2 text-sm font-medium text-white rounded-md",
-              "focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-[#2d3166]",
+              "focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-dark-surface",
               "transition-colors",
               isSaving
                 ? "bg-brand-blue/60 cursor-not-allowed"
@@ -325,7 +325,7 @@ const MoveSubmenu = memo(function MoveSubmenu({
             className={cn(
               "w-full flex items-center gap-2 px-4 py-2 text-sm text-left transition-colors",
               isCurrentColumn
-                ? "text-gray-400 dark:text-gray-500 cursor-not-allowed bg-gray-50 dark:bg-gray-800/50"
+                ? "text-gray-400 dark:text-gray-500 cursor-not-allowed bg-gray-50 dark:bg-dark-surface/50"
                 : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700",
             )}
           >
@@ -687,7 +687,7 @@ export const CardActions = memo(function CardActions({
           <div
             className={cn(
               "absolute right-0 mt-1 w-52 z-50",
-              "bg-white dark:bg-gray-800 rounded-lg shadow-lg",
+              "bg-white dark:bg-dark-surface rounded-lg shadow-lg",
               "border border-gray-200 dark:border-gray-700",
               "py-1 overflow-hidden",
             )}
@@ -789,7 +789,7 @@ export const CardActions = memo(function CardActions({
                 <div
                   className={cn(
                     "absolute left-full top-0 ml-1 w-44",
-                    "bg-white dark:bg-gray-800 rounded-lg shadow-lg",
+                    "bg-white dark:bg-dark-surface rounded-lg shadow-lg",
                     "border border-gray-200 dark:border-gray-700",
                     "overflow-hidden",
                   )}

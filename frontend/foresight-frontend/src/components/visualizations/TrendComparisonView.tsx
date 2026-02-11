@@ -306,7 +306,7 @@ function CardHeader({ card, label, onCardClick }: CardHeaderProps) {
   const stageNumber = parseStageNumber(card.stage_id);
 
   return (
-    <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-4">
+    <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-4">
       <div className="flex items-start justify-between mb-3">
         <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
           {label}
@@ -358,7 +358,7 @@ function ScoreComparison({
   card2Name,
 }: ScoreComparisonProps) {
   return (
-    <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
+    <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-6">
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
         <ArrowLeftRight className="h-5 w-5 text-brand-blue" />
         Score Comparison
@@ -483,7 +483,7 @@ function SynchronizedTimeline({
 
   if (data.length < 2) {
     return (
-      <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
+      <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-6">
         <div className="flex flex-col items-center justify-center h-64 text-center">
           <TrendingUp className="h-12 w-12 text-gray-300 dark:text-gray-600 mb-3" />
           <p className="text-gray-500 dark:text-gray-400">
@@ -495,7 +495,7 @@ function SynchronizedTimeline({
   }
 
   return (
-    <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
+    <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
           <TrendingUp className="h-5 w-5 text-brand-blue" />
@@ -506,7 +506,7 @@ function SynchronizedTimeline({
         <select
           value={selectedScore}
           onChange={(e) => onScoreChange(e.target.value as ScoreType)}
-          className="px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-[#3d4176] text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-blue focus:border-transparent"
+          className="px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-dark-surface-elevated text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-blue focus:border-transparent"
         >
           {SCORE_CONFIGS.map((config) => (
             <option key={config.key} value={config.key}>
@@ -551,7 +551,7 @@ function SynchronizedTimeline({
               content={({ active, payload, label }) => {
                 if (!active || !payload) return null;
                 return (
-                  <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3">
+                  <div className="bg-white dark:bg-dark-surface border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3">
                     <div className="font-medium text-gray-900 dark:text-gray-100 text-sm mb-2 pb-2 border-b border-gray-200 dark:border-gray-700">
                       {format(parseISO(label), "MMM d, yyyy")}
                     </div>

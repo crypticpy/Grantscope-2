@@ -96,7 +96,7 @@ export const CardClassification: React.FC<CardClassificationProps> = ({
   const goal: Goal | undefined = card.goal_id ? getGoalByCode(card.goal_id) : undefined;
 
   return (
-    <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6">
+    <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-4 sm:p-6">
       <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white mb-3 sm:mb-4">
         Classification
       </h2>
@@ -153,7 +153,7 @@ export const CardClassification: React.FC<CardClassificationProps> = ({
                       Stage History
                     </h4>
                     {stageHistoryLoading ? (
-                      <div className="animate-pulse bg-gray-100 dark:bg-gray-800 rounded-lg h-24" />
+                      <div className="animate-pulse bg-gray-100 dark:bg-dark-surface rounded-lg h-24" />
                     ) : (
                       <StageProgressionTimeline
                         stageHistory={stageHistory}

@@ -265,7 +265,7 @@ export const KanbanCard = memo(function KanbanCard({
       {...listeners}
       className={cn(
         // Base card styles
-        "group relative bg-white dark:bg-[#2d3166] rounded-lg shadow-sm",
+        "group relative bg-white dark:bg-dark-surface rounded-lg shadow-sm",
         "border border-gray-200 dark:border-gray-700",
         "border-l-4",
         getAccentBorderClass(embeddedCard.horizon),
@@ -461,7 +461,7 @@ export const KanbanCard = memo(function KanbanCard({
                 card.added_from === "auto" &&
                   "bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400",
                 card.added_from === "manual" &&
-                  "bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
+                  "bg-gray-50 text-gray-500 dark:bg-dark-surface dark:text-gray-400",
                 card.added_from === "follow" &&
                   "bg-pink-50 text-pink-600 dark:bg-pink-900/30 dark:text-pink-400",
               )}
