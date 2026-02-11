@@ -86,6 +86,9 @@ class WorkstreamScanConfig:
     # Auto-add to workstream inbox
     auto_add_to_workstream: bool = True
 
+    # Card-level source preferences (merged from cards in the workstream)
+    source_preferences: dict = field(default_factory=dict)
+
 
 @dataclass
 class ScanResult:
@@ -402,7 +405,7 @@ class WorkstreamScanService:
     async def _fetch_sources(
         self, queries: List[str], config: WorkstreamScanConfig
     ) -> Tuple[List[RawSource], Dict[str, int]]:
-        """Fetch sources from all 5 categories."""
+        """Fetch sources from all 5 categories, respecting source_preferences."""
         all_sources = []
         sources_by_category = {
             "news": 0,
@@ -412,63 +415,90 @@ class WorkstreamScanService:
             "rss": 0,
         }
 
+        # Determine which categories are enabled via source_preferences
+        enabled = (
+            config.source_preferences.get("enabled_categories")
+            if config.source_preferences
+            else None
+        )
+
+        # If enabled_categories is specified, only fetch from those; otherwise fetch all
+        def is_enabled(cat: str) -> bool:
+            if not enabled:
+                return True
+            return cat in enabled
+
         # Distribute queries across categories
         query_subset = queries[:5] if len(queries) >= 5 else queries
 
-        try:
-            # News articles
-            news_sources = await self._fetch_news(
-                query_subset, config.max_sources_per_category
-            )
-            all_sources.extend(news_sources)
-            sources_by_category["news"] = len(news_sources)
-            logger.info(f"News: {len(news_sources)} sources")
-        except Exception as e:
-            logger.warning(f"News fetch failed: {e}", exc_info=True)
+        # Inject keywords from source_preferences into queries
+        extra_keywords = (
+            config.source_preferences.get("keywords", [])
+            if config.source_preferences
+            else []
+        )
+        if extra_keywords:
+            query_subset = list(set(query_subset + extra_keywords[:3]))
 
-        try:
-            # Tech blogs
-            tech_sources = await self._fetch_tech_blogs(
-                query_subset, config.max_sources_per_category
-            )
-            all_sources.extend(tech_sources)
-            sources_by_category["tech_blog"] = len(tech_sources)
-            logger.info(f"Tech blogs: {len(tech_sources)} sources")
-        except Exception as e:
-            logger.warning(f"Tech blog fetch failed: {e}", exc_info=True)
+        if is_enabled("news"):
+            try:
+                # News articles
+                news_sources = await self._fetch_news(
+                    query_subset, config.max_sources_per_category
+                )
+                all_sources.extend(news_sources)
+                sources_by_category["news"] = len(news_sources)
+                logger.info(f"News: {len(news_sources)} sources")
+            except Exception as e:
+                logger.warning(f"News fetch failed: {e}", exc_info=True)
 
-        try:
-            # Academic papers
-            academic_sources = await self._fetch_academic(
-                query_subset, config.max_sources_per_category
-            )
-            all_sources.extend(academic_sources)
-            sources_by_category["academic"] = len(academic_sources)
-            logger.info(f"Academic: {len(academic_sources)} sources")
-        except Exception as e:
-            logger.warning(f"Academic fetch failed: {e}", exc_info=True)
+        if is_enabled("tech_blog"):
+            try:
+                # Tech blogs
+                tech_sources = await self._fetch_tech_blogs(
+                    query_subset, config.max_sources_per_category
+                )
+                all_sources.extend(tech_sources)
+                sources_by_category["tech_blog"] = len(tech_sources)
+                logger.info(f"Tech blogs: {len(tech_sources)} sources")
+            except Exception as e:
+                logger.warning(f"Tech blog fetch failed: {e}", exc_info=True)
 
-        try:
-            # Government sources
-            gov_sources = await self._fetch_government(
-                query_subset, config.max_sources_per_category
-            )
-            all_sources.extend(gov_sources)
-            sources_by_category["government"] = len(gov_sources)
-            logger.info(f"Government: {len(gov_sources)} sources")
-        except Exception as e:
-            logger.warning(f"Government fetch failed: {e}", exc_info=True)
+        if is_enabled("academic"):
+            try:
+                # Academic papers
+                academic_sources = await self._fetch_academic(
+                    query_subset, config.max_sources_per_category
+                )
+                all_sources.extend(academic_sources)
+                sources_by_category["academic"] = len(academic_sources)
+                logger.info(f"Academic: {len(academic_sources)} sources")
+            except Exception as e:
+                logger.warning(f"Academic fetch failed: {e}", exc_info=True)
 
-        try:
-            # RSS feeds
-            rss_sources = await self._fetch_rss(
-                query_subset, config.max_sources_per_category
-            )
-            all_sources.extend(rss_sources)
-            sources_by_category["rss"] = len(rss_sources)
-            logger.info(f"RSS: {len(rss_sources)} sources")
-        except Exception as e:
-            logger.warning(f"RSS fetch failed: {e}", exc_info=True)
+        if is_enabled("government"):
+            try:
+                # Government sources
+                gov_sources = await self._fetch_government(
+                    query_subset, config.max_sources_per_category
+                )
+                all_sources.extend(gov_sources)
+                sources_by_category["government"] = len(gov_sources)
+                logger.info(f"Government: {len(gov_sources)} sources")
+            except Exception as e:
+                logger.warning(f"Government fetch failed: {e}", exc_info=True)
+
+        if is_enabled("rss"):
+            try:
+                # RSS feeds
+                rss_sources = await self._fetch_rss(
+                    query_subset, config.max_sources_per_category
+                )
+                all_sources.extend(rss_sources)
+                sources_by_category["rss"] = len(rss_sources)
+                logger.info(f"RSS: {len(rss_sources)} sources")
+            except Exception as e:
+                logger.warning(f"RSS fetch failed: {e}", exc_info=True)
 
         logger.info(f"Total sources collected: {len(all_sources)}")
         return all_sources, sources_by_category

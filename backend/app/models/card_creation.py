@@ -17,6 +17,74 @@ from pydantic import BaseModel, Field, validator
 
 
 # ============================================================================
+# Source Preferences Model
+# ============================================================================
+
+
+class SourcePreferences(BaseModel):
+    """
+    User preferences for source discovery on a card.
+
+    Controls which source categories, types, domains, RSS feeds, and
+    keywords are used when scanning for relevant content.
+    """
+
+    enabled_categories: Optional[List[str]] = Field(
+        None,
+        description="Enabled source categories: news, academic, government, tech_blog, rss",
+    )
+    preferred_type: Optional[str] = Field(
+        None,
+        description="Preferred source type: news, blogs, academic, federal, pdf",
+    )
+    priority_domains: Optional[List[str]] = Field(
+        None, description="Priority domain strings for source discovery"
+    )
+    custom_rss_feeds: Optional[List[str]] = Field(
+        None, description="Custom RSS feed URLs"
+    )
+    keywords: Optional[List[str]] = Field(
+        None, description="Keywords to guide source discovery"
+    )
+
+    @validator("enabled_categories")
+    def validate_enabled_categories(cls, v):
+        """Validate enabled category values if provided."""
+        if v is not None:
+            valid_categories = {"news", "academic", "government", "tech_blog", "rss"}
+            for cat in v:
+                if cat not in valid_categories:
+                    raise ValueError(
+                        f'Invalid category "{cat}". '
+                        f'Must be one of: {", ".join(sorted(valid_categories))}'
+                    )
+        return v
+
+    @validator("preferred_type")
+    def validate_preferred_type(cls, v):
+        """Validate preferred type value if provided."""
+        if v is not None:
+            valid_types = {"news", "blogs", "academic", "federal", "pdf"}
+            if v not in valid_types:
+                raise ValueError(
+                    f'Invalid preferred type "{v}". '
+                    f'Must be one of: {", ".join(sorted(valid_types))}'
+                )
+        return v
+
+    @validator("custom_rss_feeds")
+    def validate_custom_rss_feeds(cls, v):
+        """Validate custom RSS feed URLs if provided."""
+        if v is not None:
+            for url in v:
+                if not url.startswith(("http://", "https://")):
+                    raise ValueError(
+                        f"Invalid RSS feed URL: {url}. Must start with http:// or https://"
+                    )
+        return v
+
+
+# ============================================================================
 # Quick Card Creation Models
 # ============================================================================
 
@@ -41,6 +109,9 @@ class CreateCardFromTopicRequest(BaseModel):
     )
     pillar_hints: Optional[List[str]] = Field(
         None, description="Optional pillar code hints (e.g., ['CH', 'MC'])"
+    )
+    source_preferences: Optional[SourcePreferences] = Field(
+        None, description="Optional source discovery preferences"
     )
 
     @validator("topic")
@@ -113,6 +184,9 @@ class ManualCardCreateRequest(BaseModel):
     )
     is_exploratory: bool = Field(
         False, description="Whether this card is exploratory (less structured)"
+    )
+    source_preferences: Optional[SourcePreferences] = Field(
+        None, description="Optional source discovery preferences"
     )
 
     @validator("name")

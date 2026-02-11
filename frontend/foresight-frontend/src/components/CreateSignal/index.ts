@@ -27,3 +27,9 @@ export type { ManualCreateTabProps } from "./ManualCreateTab";
 
 export { SeedUrlInput } from "./SeedUrlInput";
 export type { SeedUrlInputProps } from "./SeedUrlInput";
+
+export { SourcePreferencesStep } from "./SourcePreferencesStep";
+export type {
+  SourcePreferences,
+  SourcePreferencesStepProps,
+} from "./SourcePreferencesStep";

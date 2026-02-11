@@ -37,6 +37,11 @@ const Analytics = lazy(() => import("./pages/AnalyticsV2"));
 const Methodology = lazy(() => import("./pages/Methodology"));
 const Signals = lazy(() => import("./pages/Signals"));
 
+// Guide pages
+const GuideSignals = lazy(() => import("./pages/GuideSignals"));
+const GuideDiscover = lazy(() => import("./pages/GuideDiscover"));
+const GuideWorkstreams = lazy(() => import("./pages/GuideWorkstreams"));
+
 // Supabase configuration
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -267,6 +272,35 @@ function App() {
                     <ProtectedRoute
                       element={<Methodology />}
                       loadingMessage="Loading methodology..."
+                    />
+                  }
+                />
+
+                {/* Guide pages */}
+                <Route
+                  path="/guide/signals"
+                  element={
+                    <ProtectedRoute
+                      element={<GuideSignals />}
+                      loadingMessage="Loading guide..."
+                    />
+                  }
+                />
+                <Route
+                  path="/guide/discover"
+                  element={
+                    <ProtectedRoute
+                      element={<GuideDiscover />}
+                      loadingMessage="Loading guide..."
+                    />
+                  }
+                />
+                <Route
+                  path="/guide/workstreams"
+                  element={
+                    <ProtectedRoute
+                      element={<GuideWorkstreams />}
+                      loadingMessage="Loading guide..."
                     />
                   }
                 />
