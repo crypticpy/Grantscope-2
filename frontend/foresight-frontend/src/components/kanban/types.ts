@@ -8,6 +8,9 @@
 
 import type { LucideIcon } from "lucide-react";
 import { RefreshCw, Search, FileDown, Presentation, Bell } from "lucide-react";
+import type { EmbeddedCard } from "../../types/card";
+
+export type { EmbeddedCard };
 
 // =============================================================================
 // Status and Column Types
@@ -29,41 +32,6 @@ export type KanbanStatus =
  * Describes how a card was added to a workstream.
  */
 export type AddedFrom = "manual" | "auto" | "follow";
-
-// =============================================================================
-// Card and Data Types
-// =============================================================================
-
-/**
- * The embedded card data within a workstream card.
- * Contains the core research card information.
- */
-export interface EmbeddedCard {
-  /** Unique card identifier */
-  id: string;
-  /** Display name of the research card */
-  name: string;
-  /** URL-friendly slug for routing */
-  slug: string;
-  /** Brief description or summary */
-  summary: string;
-  /** Associated pillar code (e.g., 'CH', 'MC') */
-  pillar_id: string;
-  /** Maturity stage number (1-8) */
-  stage_id: number;
-  /** Technology horizon classification */
-  horizon: "H1" | "H2" | "H3";
-  /** Novelty score (0-100) */
-  novelty_score: number;
-  /** Maturity score (0-100) */
-  maturity_score: number;
-  /** Optional Top 25 priority alignment codes */
-  top25_relevance?: string[];
-  /** Source Quality Index score (0-100) */
-  signal_quality_score?: number | null;
-  /** Whether this card is exploratory (not tied to a specific pillar) */
-  is_exploratory?: boolean;
-}
 
 /**
  * Research status for a card in the workstream.

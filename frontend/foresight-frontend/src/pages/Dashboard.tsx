@@ -22,24 +22,9 @@ import { QualityBadge } from "../components/QualityBadge";
 import { fetchPendingCount } from "../lib/discovery-api";
 import { parseStageNumber } from "../lib/stage-utils";
 import { logger } from "../lib/logger";
+import type { BaseCard } from "../types/card";
 
-interface Card {
-  id: string;
-  name: string;
-  slug: string;
-  summary: string;
-  pillar_id: string;
-  stage_id: string;
-  horizon: "H1" | "H2" | "H3";
-  novelty_score: number;
-  maturity_score: number;
-  impact_score: number;
-  relevance_score: number;
-  velocity_score: number;
-  created_at: string;
-  top25_relevance?: string[];
-  signal_quality_score?: number | null;
-}
+type Card = BaseCard;
 
 interface FollowingCard {
   id: string;

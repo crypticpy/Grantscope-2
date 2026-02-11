@@ -8,74 +8,22 @@
  * @module pages/Discover/types
  */
 
+import type {
+  FullCard,
+  DiscoveryMetadata as SharedDiscoveryMetadata,
+} from "../../types/card";
+
 /**
  * Card data structure for display on the Discover page.
- *
- * Represents an intelligence card with all metadata needed for rendering,
- * filtering, and sorting in the card grid. Includes quality-related fields
- * from the Information Quality system.
+ * Re-exported from the shared card types for backward compatibility.
  */
-export interface Card {
-  /** Unique card identifier (UUID) */
-  id: string;
-  /** Display name of the intelligence card */
-  name: string;
-  /** URL-friendly slug for routing */
-  slug: string;
-  /** Brief text summary of the card topic */
-  summary: string;
-  /** Associated strategic pillar code (e.g., 'CH', 'MC', 'HS') */
-  pillar_id: string;
-  /** Maturity stage identifier (1-8) */
-  stage_id: string;
-  /** Technology horizon classification */
-  horizon: "H1" | "H2" | "H3";
-  /** Novelty score (0-100) */
-  novelty_score: number;
-  /** Maturity score (0-100) */
-  maturity_score: number;
-  /** Impact score (0-100) */
-  impact_score: number;
-  /** Relevance score (0-100) */
-  relevance_score: number;
-  /** Velocity score (0-100) */
-  velocity_score: number;
-  /** Risk score (0-100) */
-  risk_score: number;
-  /** Opportunity score (0-100) */
-  opportunity_score: number;
-  /** ISO 8601 timestamp when the card was created */
-  created_at: string;
-  /** ISO 8601 timestamp when the card was last updated */
-  updated_at?: string;
-  /** Reference to an anchor card for derived cards */
-  anchor_id?: string;
-  /** CMO Top 25 priority alignment codes */
-  top25_relevance?: string[];
-  /** Vector similarity score (0-1) -- populated when semantic search is used */
-  search_relevance?: number;
-  /** Source Quality Index composite score (0-100), null if not yet calculated */
-  signal_quality_score?: number | null;
-  /** Origin of the card: how it was created */
-  origin?: "discovery" | "user_created" | "workstream_scan" | "manual";
-  /** Whether this card is exploratory (not tied to a specific strategic pillar) */
-  is_exploratory?: boolean;
-  /** Discovery metadata including score verification info */
-  discovery_metadata?: DiscoveryMetadata;
-}
+export type Card = FullCard;
 
 /**
  * Metadata attached to cards by the discovery pipeline.
- *
- * Contains flags and contextual information about how the card was
- * created and whether its scores have been verified by AI analysis.
+ * Re-exported from the shared card types for backward compatibility.
  */
-export interface DiscoveryMetadata {
-  /** Whether the card's scores are AI-assigned defaults that have not been verified */
-  scores_are_defaults?: boolean;
-  /** Additional metadata properties from the discovery pipeline */
-  [key: string]: unknown;
-}
+export type DiscoveryMetadata = SharedDiscoveryMetadata;
 
 /**
  * Strategic pillar data structure.
