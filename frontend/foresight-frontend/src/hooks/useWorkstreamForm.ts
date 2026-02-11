@@ -4,21 +4,24 @@
  * Extracts all state management, handlers, effects, and validation
  * from WorkstreamForm into a reusable hook. Used by both the flat
  * WorkstreamForm (edit mode) and WorkstreamWizard (create mode).
+ *
+ * Composes sub-hooks:
+ * - useWorkstreamPreview: filter preview state and fetching
+ * - useKeywordSuggestions: AI keyword suggestion state and fetching
  */
 
-import { useState, useEffect, useCallback, useRef, KeyboardEvent } from "react";
+import { useState, useEffect, useCallback, KeyboardEvent } from "react";
 import { supabase } from "../App";
 import { useAuthContext } from "./useAuthContext";
+import { useWorkstreamPreview } from "./useWorkstreamPreview";
+import { useKeywordSuggestions } from "./useKeywordSuggestions";
 import { getGoalsByPillar } from "../data/taxonomy";
-import { suggestKeywords } from "../lib/discovery-api";
 import type {
   Workstream,
   FormData,
   FormErrors,
-  FilterPreviewResult,
   WorkstreamTemplate,
 } from "../types/workstream";
-import { fetchFilterPreview } from "../types/workstream";
 
 interface UseWorkstreamFormProps {
   workstream?: Workstream;
@@ -53,20 +56,11 @@ export function useWorkstreamForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [keywordInput, setKeywordInput] = useState("");
 
-  // Suggest keywords state
-  const [suggestedKeywords, setSuggestedKeywords] = useState<string[]>([]);
-  const [isSuggestingKeywords, setIsSuggestingKeywords] = useState(false);
-
   // Post-creation zero-match prompt state
   const [showZeroMatchPrompt, setShowZeroMatchPrompt] = useState(false);
   const [createdWorkstreamId, setCreatedWorkstreamId] = useState<string | null>(
     null,
   );
-
-  // Filter preview state
-  const [preview, setPreview] = useState<FilterPreviewResult | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const previewDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Derived state: available goals based on selected pillars
   const availableGoals = formData.pillar_ids.flatMap((pillarCode) =>
@@ -81,54 +75,50 @@ export function useWorkstreamForm({
     formData.horizon !== "ALL" ||
     formData.keywords.length > 0;
 
-  // Fetch filter preview when filters change
-  useEffect(() => {
-    if (previewDebounceRef.current) {
-      clearTimeout(previewDebounceRef.current);
-    }
+  // ============================================================================
+  // Sub-hooks
+  // ============================================================================
 
-    if (!hasFilters) {
-      setPreview(null);
-      return;
-    }
+  // Helper to get auth token
+  const getAuthToken = useCallback(async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    return session?.access_token;
+  }, []);
 
-    previewDebounceRef.current = setTimeout(async () => {
-      setPreviewLoading(true);
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        if (!session?.access_token) return;
-
-        const result = await fetchFilterPreview(session.access_token, {
-          pillar_ids: formData.pillar_ids,
-          goal_ids: formData.goal_ids,
-          stage_ids: formData.stage_ids,
-          horizon: formData.horizon,
-          keywords: formData.keywords,
-        });
-        setPreview(result);
-      } catch (error) {
-        console.error("Failed to fetch filter preview:", error);
-        setPreview(null);
-      } finally {
-        setPreviewLoading(false);
-      }
-    }, 500);
-
-    return () => {
-      if (previewDebounceRef.current) {
-        clearTimeout(previewDebounceRef.current);
-      }
-    };
-  }, [
-    formData.pillar_ids,
-    formData.goal_ids,
-    formData.stage_ids,
-    formData.horizon,
-    formData.keywords,
+  // Preview sub-hook
+  const { preview, previewLoading, triggerPreviewFetch } = useWorkstreamPreview(
+    formData,
     hasFilters,
-  ]);
+  );
+
+  // Keyword suggestions sub-hook
+  const getTopicContext = useCallback(
+    () => ({
+      name: formData.name,
+      description: formData.description,
+      keywords: formData.keywords,
+    }),
+    [formData.name, formData.description, formData.keywords],
+  );
+
+  const {
+    suggestedKeywords,
+    isSuggestingKeywords,
+    handleSuggestKeywords: suggestKeywordsFromHook,
+    removeSuggestion,
+    setSuggestedKeywords,
+  } = useKeywordSuggestions(getTopicContext, getAuthToken);
+
+  // Wrap handleSuggestKeywords to pass keywordInput as topicOverride
+  const handleSuggestKeywords = useCallback(async () => {
+    await suggestKeywordsFromHook(keywordInput);
+  }, [suggestKeywordsFromHook, keywordInput]);
+
+  // ============================================================================
+  // Effects
+  // ============================================================================
 
   // When pillars change, filter out goals that are no longer valid
   useEffect(() => {
@@ -165,25 +155,6 @@ export function useWorkstreamForm({
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   }, [formData]);
-
-  /**
-   * Validate only the current step (for wizard per-step gates)
-   */
-  const validateStep = useCallback(
-    (step: number): boolean => {
-      const newErrors: FormErrors = {};
-
-      if (step === 2) {
-        if (!formData.name.trim()) {
-          newErrors.name = "Name is required";
-        }
-      }
-
-      setErrors(newErrors);
-      return Object.keys(newErrors).length === 0;
-    },
-    [formData],
-  );
 
   // ============================================================================
   // Handlers
@@ -264,40 +235,7 @@ export function useWorkstreamForm({
     }));
   };
 
-  // Helper to get auth token
-  const getAuthToken = async () => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    return session?.access_token;
-  };
-
-  // Suggest related keywords using AI
-  const handleSuggestKeywords = async () => {
-    const topic =
-      keywordInput.trim() ||
-      formData.name.trim() ||
-      formData.description.trim();
-    if (!topic) return;
-
-    setIsSuggestingKeywords(true);
-    setSuggestedKeywords([]);
-    try {
-      const token = await getAuthToken();
-      if (!token) return;
-      const result = await suggestKeywords(topic, token);
-      const newSuggestions = result.suggestions.filter(
-        (kw) => !formData.keywords.includes(kw),
-      );
-      setSuggestedKeywords(newSuggestions);
-    } catch (error) {
-      console.error("Failed to suggest keywords:", error);
-    } finally {
-      setIsSuggestingKeywords(false);
-    }
-  };
-
-  // Add a suggested keyword to the form
+  // Add a suggested keyword to the form and remove from suggestions
   const handleAddSuggestedKeyword = (keyword: string) => {
     if (!formData.keywords.includes(keyword)) {
       setFormData((prev) => ({
@@ -308,7 +246,7 @@ export function useWorkstreamForm({
         setErrors((prev) => ({ ...prev, filters: undefined }));
       }
     }
-    setSuggestedKeywords((prev) => prev.filter((kw) => kw !== keyword));
+    removeSuggestion(keyword);
   };
 
   // Apply a template to the form
@@ -375,6 +313,7 @@ export function useWorkstreamForm({
       };
 
       if (isEditMode && workstream) {
+        // EDIT mode: direct Supabase update (no special backend logic needed)
         const { error } = await supabase
           .from("workstreams")
           .update(payload)
@@ -383,17 +322,28 @@ export function useWorkstreamForm({
 
         if (error) throw error;
       } else {
-        const { data, error } = await supabase
-          .from("workstreams")
-          .insert({
-            ...payload,
-            user_id: user?.id,
-            auto_add: false,
-          })
-          .select("id")
-          .single();
+        // CREATE mode: use backend API so auto-populate and auto-scan queueing runs
+        const API_BASE_URL =
+          import.meta.env.VITE_API_URL || "http://localhost:8000";
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
 
-        if (error) throw error;
+        const response = await fetch(`${API_BASE_URL}/api/v1/me/workstreams`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          const errBody = await response.json().catch(() => ({}));
+          throw new Error(errBody.detail || "Failed to create workstream");
+        }
+
+        const data = await response.json();
 
         if (formData.analyze_now && data?.id) {
           await triggerWorkstreamAnalysis(data.id);
@@ -421,44 +371,6 @@ export function useWorkstreamForm({
       setIsSubmitting(false);
     }
   };
-
-  /**
-   * Manually trigger the filter preview fetch (used by wizard's StepPreview)
-   */
-  const triggerPreviewFetch = useCallback(async () => {
-    if (!hasFilters) {
-      setPreview(null);
-      return;
-    }
-    setPreviewLoading(true);
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.access_token) return;
-
-      const result = await fetchFilterPreview(session.access_token, {
-        pillar_ids: formData.pillar_ids,
-        goal_ids: formData.goal_ids,
-        stage_ids: formData.stage_ids,
-        horizon: formData.horizon,
-        keywords: formData.keywords,
-      });
-      setPreview(result);
-    } catch (error) {
-      console.error("Failed to fetch filter preview:", error);
-      setPreview(null);
-    } finally {
-      setPreviewLoading(false);
-    }
-  }, [
-    hasFilters,
-    formData.pillar_ids,
-    formData.goal_ids,
-    formData.stage_ids,
-    formData.horizon,
-    formData.keywords,
-  ]);
 
   return {
     // State
@@ -498,7 +410,6 @@ export function useWorkstreamForm({
 
     // Validation
     validateForm,
-    validateStep,
 
     // Utilities
     getAuthToken,

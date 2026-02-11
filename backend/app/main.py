@@ -435,6 +435,22 @@ class WorkstreamUpdate(BaseModel):
     auto_scan: Optional[bool] = None
 
 
+class WorkstreamCreateResponse(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    pillar_ids: Optional[List[str]] = []
+    goal_ids: Optional[List[str]] = []
+    stage_ids: Optional[List[str]] = []
+    horizon: Optional[str] = "ALL"
+    keywords: Optional[List[str]] = []
+    is_active: bool = True
+    auto_scan: bool = False
+    auto_add: bool = False
+    auto_populated_count: int = 0
+    scan_queued: bool = False
+
+
 # ============================================================================
 # Workstream Kanban Card Models
 # ============================================================================
@@ -4254,6 +4270,70 @@ async def get_user_workstreams(current_user: dict = Depends(get_current_user)):
     return [Workstream(**ws) for ws in response.data]
 
 
+def _filter_cards_for_workstream(
+    workstream: dict,
+    cards: List[dict],
+) -> List[dict]:
+    """Apply pillar/goal/horizon/stage/keyword filters for a workstream."""
+    filtered = cards
+
+    ws_pillar_ids = workstream.get("pillar_ids") or []
+    if ws_pillar_ids:
+        filtered = [c for c in filtered if c.get("pillar_id") in ws_pillar_ids]
+
+    ws_goal_ids = workstream.get("goal_ids") or []
+    if ws_goal_ids:
+        filtered = [c for c in filtered if c.get("goal_id") in ws_goal_ids]
+
+    ws_horizon = workstream.get("horizon")
+    if ws_horizon and ws_horizon != "ALL":
+        filtered = [c for c in filtered if c.get("horizon") == ws_horizon]
+
+    ws_stage_ids = workstream.get("stage_ids") or []
+    if ws_stage_ids:
+
+        def _stage_num(card_stage_id: str) -> str:
+            return (
+                card_stage_id.split("_", 1)[0]
+                if "_" in card_stage_id
+                else card_stage_id
+            )
+
+        filtered = [
+            c for c in filtered if _stage_num((c.get("stage_id") or "")) in ws_stage_ids
+        ]
+
+    ws_keywords = [k.lower() for k in (workstream.get("keywords") or [])]
+    if ws_keywords:
+
+        def _card_text(card: dict) -> str:
+            return " ".join(
+                [
+                    (card.get("name") or "").lower(),
+                    (card.get("summary") or "").lower(),
+                    (card.get("description") or "").lower(),
+                ]
+            )
+
+        filtered = [
+            c for c in filtered if any(kw in _card_text(c) for kw in ws_keywords)
+        ]
+
+    return filtered
+
+
+def _build_workstream_scan_config(ws: dict, triggered_by: str) -> dict:
+    """Build a standardized workstream scan config dict."""
+    return {
+        "workstream_id": ws["id"],
+        "user_id": ws.get("user_id"),
+        "keywords": ws.get("keywords") or [],
+        "pillar_ids": ws.get("pillar_ids") or [],
+        "horizon": ws.get("horizon") or "ALL",
+        "triggered_by": triggered_by,
+    }
+
+
 def _auto_queue_workstream_scan(workstream_id: str, user_id: str, config: dict) -> bool:
     """Queue a workstream scan directly into the workstream_scans table.
 
@@ -4289,7 +4369,7 @@ def _auto_queue_workstream_scan(workstream_id: str, user_id: str, config: dict) 
         return False
 
 
-@app.post("/api/v1/me/workstreams")
+@app.post("/api/v1/me/workstreams", response_model=WorkstreamCreateResponse)
 async def create_workstream(
     workstream_data: WorkstreamCreate, current_user: dict = Depends(get_current_user)
 ):
@@ -4321,49 +4401,13 @@ async def create_workstream(
     scan_queued = False
 
     try:
-        # Build filter query for matching cards
+        # Fetch candidate cards from DB (broad filter via SQL where possible)
         query = supabase.table("cards").select("*").eq("status", "active")
-
-        if workstream.get("pillar_ids"):
-            query = query.in_("pillar_id", workstream["pillar_ids"])
-        if workstream.get("goal_ids"):
-            query = query.in_("goal_id", workstream["goal_ids"])
-        if workstream.get("horizon") and workstream["horizon"] != "ALL":
-            query = query.eq("horizon", workstream["horizon"])
-
         cards_response = query.order("created_at", desc=True).limit(60).execute()
         cards = cards_response.data or []
 
-        # Apply stage filtering
-        stage_ids = workstream.get("stage_ids") or []
-        if stage_ids:
-            filtered = []
-            for card in cards:
-                card_stage_id = card.get("stage_id") or ""
-                stage_num = (
-                    card_stage_id.split("_")[0]
-                    if "_" in card_stage_id
-                    else card_stage_id
-                )
-                if stage_num in stage_ids:
-                    filtered.append(card)
-            cards = filtered
-
-        # Apply keyword filtering
-        keywords = workstream.get("keywords") or []
-        if keywords:
-            filtered = []
-            for card in cards:
-                card_text = " ".join(
-                    [
-                        (card.get("name") or "").lower(),
-                        (card.get("summary") or "").lower(),
-                        (card.get("description") or "").lower(),
-                    ]
-                )
-                if any(kw.lower() in card_text for kw in keywords):
-                    filtered.append(card)
-            cards = filtered
+        # Apply workstream filters via shared helper
+        cards = _filter_cards_for_workstream(workstream, cards)
 
         # Limit to 20 cards
         candidates = cards[:20]
@@ -4406,14 +4450,7 @@ async def create_workstream(
             ws_pillar_ids = workstream.get("pillar_ids") or []
 
             if ws_keywords or ws_pillar_ids:
-                scan_config = {
-                    "workstream_id": workstream_id,
-                    "user_id": user_id,
-                    "keywords": ws_keywords,
-                    "pillar_ids": ws_pillar_ids,
-                    "horizon": workstream.get("horizon") or "ALL",
-                    "triggered_by": "post_creation",
-                }
+                scan_config = _build_workstream_scan_config(workstream, "post_creation")
                 scan_queued = _auto_queue_workstream_scan(
                     workstream_id, user_id, scan_config
                 )
@@ -4422,12 +4459,21 @@ async def create_workstream(
             f"Post-creation scan queue failed for workstream {workstream_id}: {e}"
         )
 
-    return {
-        "id": workstream_id,
-        "auto_populated_count": auto_populated_count,
-        "scan_queued": scan_queued,
-        **{k: v for k, v in workstream.items() if k != "id"},
-    }
+    return WorkstreamCreateResponse(
+        id=workstream_id,
+        name=workstream.get("name", ""),
+        description=workstream.get("description"),
+        pillar_ids=workstream.get("pillar_ids") or [],
+        goal_ids=workstream.get("goal_ids") or [],
+        stage_ids=workstream.get("stage_ids") or [],
+        horizon=workstream.get("horizon") or "ALL",
+        keywords=workstream.get("keywords") or [],
+        is_active=workstream.get("is_active", True),
+        auto_scan=workstream.get("auto_scan", False),
+        auto_add=workstream.get("auto_add", False),
+        auto_populated_count=auto_populated_count,
+        scan_queued=scan_queued,
+    )
 
 
 @app.patch("/api/v1/me/workstreams/{workstream_id}", response_model=Workstream)
@@ -7775,57 +7821,11 @@ async def _distribute_cards_to_auto_add_workstreams(new_card_ids: List[str]):
                 item["card_id"] for item in existing_response.data or []
             }
 
-            # Filter new cards against workstream criteria
-            matching_cards = []
-            for card in new_cards:
-                if card["id"] in existing_card_ids:
-                    continue
-
-                # Check pillar filter
-                ws_pillar_ids = ws.get("pillar_ids") or []
-                if ws_pillar_ids and card.get("pillar_id") not in ws_pillar_ids:
-                    continue
-
-                # Check goal filter
-                ws_goal_ids = ws.get("goal_ids") or []
-                if ws_goal_ids and card.get("goal_id") not in ws_goal_ids:
-                    continue
-
-                # Check horizon filter
-                ws_horizon = ws.get("horizon")
-                if (
-                    ws_horizon
-                    and ws_horizon != "ALL"
-                    and card.get("horizon") != ws_horizon
-                ):
-                    continue
-
-                # Check stage filter
-                ws_stage_ids = ws.get("stage_ids") or []
-                if ws_stage_ids:
-                    card_stage_id = card.get("stage_id") or ""
-                    stage_num = (
-                        card_stage_id.split("_")[0]
-                        if "_" in card_stage_id
-                        else card_stage_id
-                    )
-                    if stage_num not in ws_stage_ids:
-                        continue
-
-                # Check keyword filter
-                ws_keywords = ws.get("keywords") or []
-                if ws_keywords:
-                    card_text = " ".join(
-                        [
-                            (card.get("name") or "").lower(),
-                            (card.get("summary") or "").lower(),
-                            (card.get("description") or "").lower(),
-                        ]
-                    )
-                    if not any(kw.lower() in card_text for kw in ws_keywords):
-                        continue
-
-                matching_cards.append(card)
+            # Filter new cards against workstream criteria using shared helper
+            non_duplicate_cards = [
+                c for c in new_cards if c["id"] not in existing_card_ids
+            ]
+            matching_cards = _filter_cards_for_workstream(ws, non_duplicate_cards)
 
             if not matching_cards:
                 continue
@@ -8380,12 +8380,14 @@ async def run_scheduled_workstream_scans():
 
         for ws in workstreams:
             try:
-                # Check if this workstream has been scanned in the last 7 days
+                # Check if this workstream has a successful scan in the last 7 days
+                # (failed scans should not block the next auto-scan attempt)
                 recent_scans = (
                     supabase.table("workstream_scans")
                     .select("id")
                     .eq("workstream_id", ws["id"])
                     .gte("created_at", cutoff)
+                    .neq("status", "failed")
                     .limit(1)
                     .execute()
                 )
@@ -8397,36 +8399,22 @@ async def run_scheduled_workstream_scans():
                     continue
 
                 # Validate workstream has keywords or pillars to scan
-                keywords = ws.get("keywords") or []
-                pillar_ids = ws.get("pillar_ids") or []
-                if not keywords and not pillar_ids:
+                ws_keywords = ws.get("keywords") or []
+                ws_pillar_ids = ws.get("pillar_ids") or []
+                if not ws_keywords and not ws_pillar_ids:
                     logger.debug(
                         f"Workstream '{ws['name']}' ({ws['id']}) has no keywords/pillars, skipping"
                     )
                     continue
 
-                # Build scan config snapshot
-                config = {
-                    "workstream_id": ws["id"],
-                    "user_id": ws["user_id"],
-                    "keywords": keywords,
-                    "pillar_ids": pillar_ids,
-                    "horizon": ws.get("horizon") or "ALL",
-                    "triggered_by": "auto_scan_scheduler",
-                }
-
-                # Insert scan record directly (bypasses rate limit)
-                scan_record = {
-                    "workstream_id": ws["id"],
-                    "user_id": ws["user_id"],
-                    "status": "queued",
-                    "config": config,
-                }
-                supabase.table("workstream_scans").insert(scan_record).execute()
-                scans_queued += 1
-                logger.info(
-                    f"Queued auto-scan for workstream '{ws['name']}' ({ws['id']})"
-                )
+                # Build scan config via shared helper and queue
+                config = _build_workstream_scan_config(ws, "auto_scan_scheduler")
+                queued = _auto_queue_workstream_scan(ws["id"], ws["user_id"], config)
+                if queued:
+                    scans_queued += 1
+                    logger.info(
+                        f"Queued auto-scan for workstream '{ws['name']}' ({ws['id']})"
+                    )
 
             except Exception as e:
                 logger.error(

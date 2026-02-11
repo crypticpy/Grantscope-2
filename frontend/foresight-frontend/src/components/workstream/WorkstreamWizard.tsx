@@ -42,6 +42,24 @@ export function WorkstreamWizard({
   });
 
   // ============================================================================
+  // Wizard-specific step validation (not generic form logic)
+  // ============================================================================
+
+  const validateStep = useCallback(
+    (stepNum: number): boolean => {
+      if (stepNum === 2) {
+        if (!form.formData.name.trim()) {
+          form.setErrors({ name: "Name is required" });
+          return false;
+        }
+        form.setErrors({});
+      }
+      return true;
+    },
+    [form],
+  );
+
+  // ============================================================================
   // Navigation
   // ============================================================================
 
@@ -55,13 +73,13 @@ export function WorkstreamWizard({
 
   const handleNext = useCallback(() => {
     // Per-step validation gate
-    if (step === 2 && !form.validateStep(2)) {
+    if (step === 2 && !validateStep(2)) {
       return;
     }
     if (step < TOTAL_STEPS) {
       goToStep(step + 1, "forward");
     }
-  }, [step, form, goToStep]);
+  }, [step, validateStep, goToStep]);
 
   const handleBack = useCallback(() => {
     if (step > 1) {
