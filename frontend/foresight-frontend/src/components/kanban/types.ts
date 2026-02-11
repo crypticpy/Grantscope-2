@@ -60,7 +60,7 @@ export interface EmbeddedCard {
   /** Optional Top 25 priority alignment codes */
   top25_relevance?: string[];
   /** Source Quality Index score (0-100) */
-  quality_score?: number | null;
+  signal_quality_score?: number | null;
   /** Whether this card is exploratory (not tied to a specific pillar) */
   is_exploratory?: boolean;
 }

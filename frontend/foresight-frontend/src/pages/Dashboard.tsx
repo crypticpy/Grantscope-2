@@ -38,7 +38,7 @@ interface Card {
   velocity_score: number;
   created_at: string;
   top25_relevance?: string[];
-  quality_score?: number | null;
+  signal_quality_score?: number | null;
 }
 
 interface FollowingCard {
@@ -159,18 +159,18 @@ const Dashboard: React.FC = () => {
           .from("cards")
           .select("id", { count: "exact", head: true })
           .eq("status", "active")
-          .gte("quality_score", 75),
+          .gte("signal_quality_score", 75),
         supabase
           .from("cards")
           .select("id", { count: "exact", head: true })
           .eq("status", "active")
-          .gte("quality_score", 50)
-          .lt("quality_score", 75),
+          .gte("signal_quality_score", 50)
+          .lt("signal_quality_score", 75),
         supabase
           .from("cards")
           .select("id", { count: "exact", head: true })
           .eq("status", "active")
-          .lt("quality_score", 50),
+          .lt("signal_quality_score", 50),
       ]);
 
       // Log errors for debugging (non-blocking)
@@ -585,7 +585,10 @@ const Dashboard: React.FC = () => {
                           {card.name}
                         </Link>
                       </h3>
-                      <QualityBadge score={card.quality_score} size="sm" />
+                      <QualityBadge
+                        score={card.signal_quality_score}
+                        size="sm"
+                      />
                       <PillarBadge
                         pillarId={card.pillar_id}
                         showIcon={true}

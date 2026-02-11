@@ -55,7 +55,7 @@ export interface Card {
   /** Vector similarity score (0-1) -- populated when semantic search is used */
   search_relevance?: number;
   /** Source Quality Index composite score (0-100), null if not yet calculated */
-  quality_score?: number | null;
+  signal_quality_score?: number | null;
   /** Origin of the card: how it was created */
   origin?: "discovery" | "user_created" | "workstream_scan" | "manual";
   /** Whether this card is exploratory (not tied to a specific strategic pillar) */
@@ -118,7 +118,7 @@ export type SortOption =
   | "oldest"
   | "recently_updated"
   | "least_recently_updated"
-  | "quality_score";
+  | "signal_quality_score";
 
 /**
  * Filter state object used for debounced search and score filtering.

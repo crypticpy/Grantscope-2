@@ -625,7 +625,7 @@ def calculate_sqi(supabase_client: Client, card_id: str) -> dict:
     try:
         supabase_client.table("cards").update(
             {
-                "quality_score": composite,
+                "signal_quality_score": composite,
                 "quality_breakdown": breakdown,
             }
         ).eq("id", card_id).execute()

@@ -9690,7 +9690,7 @@ async def create_card_from_topic(
             "is_exploratory": not body.pillar_hints,
             "created_by": user["id"],
             "review_status": "approved",
-            "quality_score": 0,
+            "signal_quality_score": 0,
             "quality_breakdown": {},
         }
 
@@ -9781,7 +9781,7 @@ async def create_manual_card(
             "is_exploratory": body.is_exploratory or (not primary_pillar),
             "created_by": user["id"],
             "review_status": "approved",
-            "quality_score": 0,
+            "signal_quality_score": 0,
             "quality_breakdown": {},
             "horizon": body.horizon or "H1",
             "stage_id": body.stage or "1",

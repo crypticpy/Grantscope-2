@@ -16,6 +16,7 @@ import {
   User,
   BookOpen,
   Radio,
+  HelpCircle,
 } from "lucide-react";
 import { useAuthContext } from "../hooks/useAuthContext";
 
@@ -81,6 +82,13 @@ const Header: React.FC = () => {
   const moreNavigation = [
     { name: "Analytics", href: "/analytics", icon: BarChart3 },
     { name: "Methodology", href: "/methodology", icon: BookOpen },
+  ];
+
+  // Guide pages in the "More" dropdown
+  const guideNavigation = [
+    { name: "Signals Guide", href: "/guide/signals", icon: HelpCircle },
+    { name: "Discover Guide", href: "/guide/discover", icon: HelpCircle },
+    { name: "Workstreams Guide", href: "/guide/workstreams", icon: HelpCircle },
   ];
 
   const handleSignOut = async () => {
@@ -149,7 +157,9 @@ const Header: React.FC = () => {
               <button
                 onClick={() => setIsMoreDropdownOpen(!isMoreDropdownOpen)}
                 className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150 ${
-                  moreNavigation.some((item) => location.pathname === item.href)
+                  [...moreNavigation, ...guideNavigation].some(
+                    (item) => location.pathname === item.href,
+                  )
                     ? "text-brand-blue bg-brand-blue/10"
                     : "text-gray-600 hover:text-brand-dark-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10"
                 }`}
@@ -163,6 +173,31 @@ const Header: React.FC = () => {
               {isMoreDropdownOpen && (
                 <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
                   {moreNavigation.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = location.pathname === item.href;
+                    return (
+                      <Link
+                        key={item.name}
+                        to={item.href}
+                        onClick={() => setIsMoreDropdownOpen(false)}
+                        className={`flex items-center px-4 py-2 text-sm transition-colors ${
+                          isActive
+                            ? "text-brand-blue bg-brand-blue/10"
+                            : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                        }`}
+                      >
+                        <Icon className="w-4 h-4 mr-3" />
+                        {item.name}
+                      </Link>
+                    );
+                  })}
+                  <div className="border-t border-gray-200 dark:border-gray-700 my-1" />
+                  <div className="px-4 py-1">
+                    <span className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                      Guides
+                    </span>
+                  </div>
+                  {guideNavigation.map((item) => {
                     const Icon = item.icon;
                     const isActive = location.pathname === item.href;
                     return (
@@ -335,6 +370,35 @@ const Header: React.FC = () => {
                 </Link>
               );
             })}
+
+            {/* Guide Pages */}
+            <div className="border-t border-gray-200/50 dark:border-gray-700/50 pt-2 mt-2">
+              <div className="px-3 py-1">
+                <span className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                  Guides
+                </span>
+              </div>
+              {guideNavigation.map((item) => {
+                const Icon = item.icon;
+                const isActive = location.pathname === item.href;
+                return (
+                  <Link
+                    key={item.name}
+                    to={item.href}
+                    onClick={() => setIsMenuOpen(false)}
+                    aria-current={isActive ? "page" : undefined}
+                    className={`flex items-center min-h-[44px] px-3 py-2 text-base font-medium rounded-md active:scale-[0.98] transition-all duration-150 ${
+                      isActive
+                        ? "text-brand-blue bg-brand-blue/10"
+                        : "text-gray-600 hover:text-brand-dark-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10"
+                    }`}
+                  >
+                    <Icon className="w-5 h-5 mr-3 flex-shrink-0" />
+                    <span className="flex-grow">{item.name}</span>
+                  </Link>
+                );
+              })}
+            </div>
 
             {/* Settings */}
             <Link
