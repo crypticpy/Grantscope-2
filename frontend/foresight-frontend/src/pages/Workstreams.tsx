@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import {
   Plus,
   FolderOpen,
@@ -8,7 +8,6 @@ import {
   AlertTriangle,
   HelpCircle,
   X,
-  Kanban,
   Sparkles,
   FileText,
   Filter,
@@ -18,13 +17,15 @@ import {
   ClipboardList,
   Eye,
   Archive,
-} from 'lucide-react';
-import { supabase } from '../App';
-import { useAuthContext } from '../hooks/useAuthContext';
-import { WorkstreamForm, type Workstream } from '../components/WorkstreamForm';
-import { PillarBadgeGroup } from '../components/PillarBadge';
-import { getGoalByCode } from '../data/taxonomy';
-import { cn } from '../lib/utils';
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
+import { supabase } from "../App";
+import { useAuthContext } from "../hooks/useAuthContext";
+import { WorkstreamForm, type Workstream } from "../components/WorkstreamForm";
+import { PillarBadgeGroup } from "../components/PillarBadge";
+import { getGoalByCode } from "../data/taxonomy";
+import { cn } from "../lib/utils";
 
 // ============================================================================
 // Delete Confirmation Modal
@@ -55,7 +56,7 @@ function DeleteConfirmModal({
               Delete Workstream
             </h3>
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-              Are you sure you want to delete{' '}
+              Are you sure you want to delete{" "}
               <span className="font-semibold">"{workstream.name}"</span>? This
               action cannot be undone.
             </p>
@@ -77,7 +78,7 @@ function DeleteConfirmModal({
             disabled={isDeleting}
             className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 transition-colors"
           >
-            {isDeleting ? 'Deleting...' : 'Delete'}
+            {isDeleting ? "Deleting..." : "Delete"}
           </button>
         </div>
       </div>
@@ -101,12 +102,12 @@ function FormModal({ workstream, onSuccess, onCancel }: FormModalProps) {
       <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto my-8">
         <div className="sticky top-0 bg-white dark:bg-[#2d3166] border-b border-gray-200 dark:border-gray-700 px-6 py-4 rounded-t-lg">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white">
-            {workstream ? 'Edit Workstream' : 'Create New Workstream'}
+            {workstream ? "Edit Workstream" : "Create New Workstream"}
           </h3>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             {workstream
-              ? 'Update the filters and settings for this workstream.'
-              : 'Define filters to curate a personalized intelligence feed.'}
+              ? "Update the filters and settings for this workstream."
+              : "Define filters to curate a personalized intelligence feed."}
           </p>
         </div>
         <div className="px-6 py-4">
@@ -122,198 +123,269 @@ function FormModal({ workstream, onSuccess, onCancel }: FormModalProps) {
 }
 
 // ============================================================================
-// Workstream Info Modal
+// Workstream Help Banner
 // ============================================================================
 
-interface WorkstreamInfoModalProps {
-  onClose: () => void;
+const BANNER_DISMISSED_KEY = "workstream-banner-dismissed";
+
+interface WorkstreamHelpBannerProps {
+  onDismiss: () => void;
 }
 
-function WorkstreamInfoModal({ onClose }: WorkstreamInfoModalProps) {
-  // Kanban column data for the visual
+function WorkstreamHelpBanner({ onDismiss }: WorkstreamHelpBannerProps) {
+  const [expanded, setExpanded] = useState(false);
+
   const kanbanColumns = [
-    { name: 'Inbox', icon: Inbox, color: 'bg-gray-100 dark:bg-gray-700', description: 'New cards awaiting triage' },
-    { name: 'Screening', icon: Filter, color: 'bg-yellow-100 dark:bg-yellow-900/30', description: 'Evaluating relevance' },
-    { name: 'Research', icon: Search, color: 'bg-blue-100 dark:bg-blue-900/30', description: 'Active investigation' },
-    { name: 'Brief', icon: FileText, color: 'bg-purple-100 dark:bg-purple-900/30', description: 'Ready for leadership' },
-    { name: 'Watching', icon: Eye, color: 'bg-green-100 dark:bg-green-900/30', description: 'Monitoring developments' },
-    { name: 'Archived', icon: Archive, color: 'bg-gray-100 dark:bg-gray-600', description: 'Completed or dismissed' },
+    {
+      name: "Inbox",
+      icon: Inbox,
+      color: "bg-gray-100 dark:bg-gray-700",
+      description: "New signals awaiting triage",
+    },
+    {
+      name: "Screening",
+      icon: Filter,
+      color: "bg-yellow-100 dark:bg-yellow-900/30",
+      description: "Evaluating relevance",
+    },
+    {
+      name: "Research",
+      icon: Search,
+      color: "bg-blue-100 dark:bg-blue-900/30",
+      description: "Active investigation",
+    },
+    {
+      name: "Brief",
+      icon: FileText,
+      color: "bg-purple-100 dark:bg-purple-900/30",
+      description: "Ready for leadership",
+    },
+    {
+      name: "Watching",
+      icon: Eye,
+      color: "bg-green-100 dark:bg-green-900/30",
+      description: "Monitoring developments",
+    },
+    {
+      name: "Archived",
+      icon: Archive,
+      color: "bg-gray-100 dark:bg-gray-600",
+      description: "Completed or dismissed",
+    },
   ];
 
   return (
-    <div className="fixed inset-0 bg-gray-600/50 dark:bg-black/60 flex items-center justify-center p-4 z-50 overflow-y-auto">
-      <div className="bg-white dark:bg-[#2d3166] rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto my-8">
-        {/* Header - Austin brand colors */}
-        <div className="sticky top-0 bg-gradient-to-r from-brand-blue to-brand-green p-6 rounded-t-xl">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-white/20 rounded-lg">
-                <Kanban className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-white">What are Workstreams?</h2>
-                <p className="text-white/80 text-sm mt-1">Your personalized research workspace</p>
-              </div>
-            </div>
+    <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden mb-6">
+      {/* Gradient accent strip */}
+      <div className="bg-gradient-to-r from-brand-blue to-brand-green h-1 rounded-t-lg" />
+
+      {/* Collapsed content: description + learn more + dismiss */}
+      <div className="px-5 py-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+              Workstreams are personalized research workspaces. Define filter
+              criteria to automatically collect and track relevant signals
+              through a structured research workflow.
+            </p>
             <button
-              onClick={onClose}
-              className="p-2 hover:bg-white/20 rounded-lg transition-colors"
-              aria-label="Close"
+              onClick={() => setExpanded(!expanded)}
+              className="inline-flex items-center gap-1 mt-2 text-sm font-medium text-brand-blue hover:text-brand-dark-blue dark:text-brand-light-blue dark:hover:text-white transition-colors"
             >
-              <X className="h-5 w-5 text-white" />
+              {expanded ? "Show less" : "Learn more"}
+              {expanded ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
             </button>
           </div>
+          <button
+            onClick={onDismiss}
+            className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded transition-colors flex-shrink-0"
+            aria-label="Dismiss banner"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
 
-        {/* Content */}
-        <div className="p-6 space-y-8">
-          {/* Introduction */}
-          <div className="bg-brand-light-blue/30 dark:bg-brand-blue/10 rounded-lg p-4 border border-brand-blue/20">
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              A <strong className="text-brand-dark-blue dark:text-brand-light-blue">Workstream</strong> is 
-              a personalized research workspace that helps you organize and track intelligence cards 
-              relevant to a specific focus area. Think of it as a customized feed combined with a 
-              Kanban board for topics you care about.
-            </p>
-          </div>
+        {/* Expanded content */}
+        {expanded && (
+          <div className="mt-5 space-y-6 border-t border-gray-200 dark:border-gray-700 pt-5">
+            {/* Introduction */}
+            <div className="bg-brand-light-blue/30 dark:bg-brand-blue/10 rounded-lg p-4 border border-brand-blue/20">
+              <p className="text-gray-700 dark:text-gray-300 leading-relaxed text-sm">
+                A{" "}
+                <strong className="text-brand-dark-blue dark:text-brand-light-blue">
+                  Workstream
+                </strong>{" "}
+                is a personalized research workspace that helps you organize and
+                track intelligence signals relevant to a specific focus area.
+                Think of it as a customized feed combined with a Kanban board
+                for topics you care about.
+              </p>
+            </div>
 
-          {/* How to Create Section */}
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-              <Plus className="h-5 w-5 text-brand-blue" />
-              Creating a Workstream
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
-                <h4 className="font-medium text-gray-900 dark:text-white mb-2">1. Define Your Focus</h4>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Give your workstream a name like "Smart Mobility Initiatives" or "Climate Resilience Tech"
-                </p>
-              </div>
-              <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
-                <h4 className="font-medium text-gray-900 dark:text-white mb-2">2. Set Filter Criteria</h4>
-                <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                  <li className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-brand-blue" />
-                    Strategic Pillars & Goals
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-brand-blue" />
-                    Maturity Stages (1-8)
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-brand-blue" />
-                    Time Horizon (H1, H2, H3)
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-brand-blue" />
-                    Keywords
-                  </li>
-                </ul>
+            {/* How to Create Section */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                <Plus className="h-4 w-4 text-brand-blue" />
+                Creating a Workstream
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+                  <h4 className="font-medium text-gray-900 dark:text-white text-sm mb-1">
+                    1. Define Your Focus
+                  </h4>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    Give your workstream a name like "Smart Mobility
+                    Initiatives" or "Climate Resilience Tech"
+                  </p>
+                </div>
+                <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+                  <h4 className="font-medium text-gray-900 dark:text-white text-sm mb-1">
+                    2. Set Filter Criteria
+                  </h4>
+                  <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
+                    <li className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-brand-blue" />
+                      Strategic Pillars & Goals
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-brand-blue" />
+                      Maturity Stages (1-8)
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-brand-blue" />
+                      Time Horizon (H1, H2, H3)
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-brand-blue" />
+                      Keywords
+                    </li>
+                  </ul>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Kanban Workflow Section */}
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-              <ClipboardList className="h-5 w-5 text-brand-blue" />
-              Research Workflow
-            </h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              Cards in your workstream flow through a Kanban board as you research them:
-            </p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-              {kanbanColumns.map((col, idx) => (
-                <div key={col.name} className="relative">
-                  <div className={cn('rounded-lg p-3 text-center', col.color)}>
-                    <col.icon className="h-5 w-5 mx-auto mb-1 text-gray-600 dark:text-gray-300" />
-                    <div className="text-xs font-medium text-gray-900 dark:text-white">{col.name}</div>
-                    <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-1 leading-tight">
-                      {col.description}
+            {/* Kanban Workflow Section */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                <ClipboardList className="h-4 w-4 text-brand-blue" />
+                Research Workflow
+              </h3>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+                Signals in your workstream flow through a Kanban board as you
+                research them:
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                {kanbanColumns.map((col, idx) => (
+                  <div key={col.name} className="relative">
+                    <div
+                      className={cn("rounded-lg p-3 text-center", col.color)}
+                    >
+                      <col.icon className="h-4 w-4 mx-auto mb-1 text-gray-600 dark:text-gray-300" />
+                      <div className="text-xs font-medium text-gray-900 dark:text-white">
+                        {col.name}
+                      </div>
+                      <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-1 leading-tight">
+                        {col.description}
+                      </div>
                     </div>
+                    {idx < kanbanColumns.length - 1 && (
+                      <ArrowRight className="hidden lg:block absolute -right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 z-10" />
+                    )}
                   </div>
-                  {idx < kanbanColumns.length - 1 && (
-                    <ArrowRight className="hidden lg:block absolute -right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 z-10" />
-                  )}
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
 
-          {/* Features Section */}
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-brand-blue" />
-              What You Can Do
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
-                <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                  <Sparkles className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            {/* Features Section */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-brand-blue" />
+                What You Can Do
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+                  <div className="p-1.5 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                    <Sparkles className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-gray-900 dark:text-white text-xs">
+                      Auto-Populate
+                    </h4>
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                      AI finds and adds matching signals to your inbox
+                      automatically
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="font-medium text-gray-900 dark:text-white text-sm">Auto-Populate</h4>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                    AI finds and adds matching cards to your inbox automatically
-                  </p>
+                <div className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+                  <div className="p-1.5 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                    <Search className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-gray-900 dark:text-white text-xs">
+                      Deep Dive Research
+                    </h4>
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                      Trigger comprehensive AI analysis on any signal
+                    </p>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
-                <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                  <Search className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                <div className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+                  <div className="p-1.5 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                    <FileText className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-gray-900 dark:text-white text-xs">
+                      Executive Briefs
+                    </h4>
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                      Generate leadership-ready summaries with version history
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="font-medium text-gray-900 dark:text-white text-sm">Deep Dive Research</h4>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                    Trigger comprehensive AI analysis on any card
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
-                <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                  <FileText className="h-4 w-4 text-green-600 dark:text-green-400" />
-                </div>
-                <div>
-                  <h4 className="font-medium text-gray-900 dark:text-white text-sm">Executive Briefs</h4>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                    Generate leadership-ready summaries with version history
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
-                <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
-                  <ClipboardList className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-                </div>
-                <div>
-                  <h4 className="font-medium text-gray-900 dark:text-white text-sm">Notes & Reminders</h4>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                    Add context-specific notes and set follow-up reminders
-                  </p>
+                <div className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+                  <div className="p-1.5 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
+                    <ClipboardList className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-gray-900 dark:text-white text-xs">
+                      Notes & Reminders
+                    </h4>
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                      Add context-specific notes and set follow-up reminders
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* Getting Started CTA */}
-          <div className="bg-gradient-to-r from-brand-blue/10 to-brand-green/10 rounded-lg p-5 border border-brand-blue/20">
-            <div className="flex items-center justify-between">
-              <div>
-                <h4 className="font-semibold text-gray-900 dark:text-white">Ready to get started?</h4>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  Create your first workstream to begin organizing your research.
-                </p>
+            {/* Getting Started CTA */}
+            <div className="bg-gradient-to-r from-brand-blue/10 to-brand-green/10 rounded-lg p-4 border border-brand-blue/20">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-semibold text-gray-900 dark:text-white text-sm">
+                    Ready to get started?
+                  </h4>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    Create your first workstream to begin organizing your
+                    research.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setExpanded(false)}
+                  className="inline-flex items-center px-3 py-1.5 bg-brand-blue text-white text-xs font-medium rounded-lg hover:bg-brand-dark-blue transition-colors"
+                >
+                  Got it
+                  <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+                </button>
               </div>
-              <button
-                onClick={onClose}
-                className="inline-flex items-center px-4 py-2 bg-brand-blue text-white text-sm font-medium rounded-lg hover:bg-brand-dark-blue transition-colors"
-              >
-                Got it
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </button>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -332,7 +404,7 @@ interface WorkstreamCardProps {
 function WorkstreamCard({ workstream, onEdit, onDelete }: WorkstreamCardProps) {
   // Format stage IDs for display
   const formatStages = (stageIds: string[]): string => {
-    if (stageIds.length === 0) return '';
+    if (stageIds.length === 0) return "";
     const nums = stageIds.map(Number).sort((a, b) => a - b);
     // Check if consecutive range
     if (
@@ -341,7 +413,7 @@ function WorkstreamCard({ workstream, onEdit, onDelete }: WorkstreamCardProps) {
     ) {
       return `${nums[0]}-${nums[nums.length - 1]}`;
     }
-    return nums.join(', ');
+    return nums.join(", ");
   };
 
   const handleEditClick = (e: React.MouseEvent) => {
@@ -359,139 +431,146 @@ function WorkstreamCard({ workstream, onEdit, onDelete }: WorkstreamCardProps) {
   return (
     <Link
       to={`/workstreams/${workstream.id}/board`}
-      className="block bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 border-l-4 border-transparent transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-l-brand-blue cursor-pointer"
+      className="block bg-white dark:bg-[#2d3166] overflow-hidden rounded-xl shadow transition-all duration-200 hover:-translate-y-1 hover:shadow-lg cursor-pointer"
     >
-      {/* Header */}
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex-1 min-w-0">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white truncate">
-            {workstream.name}
-          </h3>
-          {workstream.description && (
-            <p className="text-gray-600 dark:text-gray-300 text-sm mt-1 line-clamp-2">
-              {workstream.description}
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-2 ml-4">
-          {workstream.is_active ? (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400">
-              Active
-            </span>
-          ) : (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300">
-              Inactive
-            </span>
-          )}
-        </div>
-      </div>
+      {/* Gradient accent bar */}
+      <div className="bg-gradient-to-r from-brand-blue to-brand-green h-1" />
 
-      {/* Filter Summary */}
-      <div className="space-y-3 text-sm">
-        {/* Pillars */}
-        {workstream.pillar_ids.length > 0 && (
-          <div>
-            <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide block mb-1.5">
-              Pillars
-            </span>
-            <PillarBadgeGroup
-              pillarIds={workstream.pillar_ids}
-              size="sm"
-              maxVisible={6}
-            />
+      <div className="p-6">
+        {/* Header */}
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-white truncate">
+              {workstream.name}
+            </h3>
+            {workstream.description && (
+              <p className="text-gray-600 dark:text-gray-300 text-sm mt-1 line-clamp-2">
+                {workstream.description}
+              </p>
+            )}
           </div>
-        )}
+          <div className="flex items-center gap-2 ml-4">
+            {workstream.is_active ? (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                Active
+              </span>
+            ) : (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+                Inactive
+              </span>
+            )}
+          </div>
+        </div>
 
-        {/* Goals */}
-        {workstream.goal_ids.length > 0 && (
-          <div>
-            <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide block mb-1">
-              Goals
-            </span>
-            <div className="text-gray-600 dark:text-gray-300 text-sm">
-              {workstream.goal_ids.length <= 3
-                ? workstream.goal_ids
-                    .map((id) => {
-                      const goal = getGoalByCode(id);
-                      return goal ? `${goal.code}` : id;
-                    })
-                    .join(', ')
-                : `${workstream.goal_ids.length} goals selected`}
+        {/* Filter Summary */}
+        <div className="space-y-3 text-sm">
+          {/* Pillars */}
+          {workstream.pillar_ids.length > 0 && (
+            <div>
+              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide block mb-1.5">
+                Pillars
+              </span>
+              <PillarBadgeGroup
+                pillarIds={workstream.pillar_ids}
+                size="sm"
+                maxVisible={6}
+              />
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Stages and Horizon */}
-        <div className="flex flex-wrap gap-4">
-          {workstream.stage_ids.length > 0 && (
+          {/* Goals */}
+          {workstream.goal_ids.length > 0 && (
             <div>
               <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide block mb-1">
-                Stages
+                Goals
               </span>
-              <span className="text-gray-600 dark:text-gray-300">
-                {formatStages(workstream.stage_ids)}
-              </span>
+              <div className="text-gray-600 dark:text-gray-300 text-sm">
+                {workstream.goal_ids.length <= 3
+                  ? workstream.goal_ids
+                      .map((id) => {
+                        const goal = getGoalByCode(id);
+                        return goal ? `${goal.code}` : id;
+                      })
+                      .join(", ")
+                  : `${workstream.goal_ids.length} goals selected`}
+              </div>
             </div>
           )}
 
-          {workstream.horizon && workstream.horizon !== 'ALL' && (
+          {/* Stages and Horizon */}
+          <div className="flex flex-wrap gap-4">
+            {workstream.stage_ids.length > 0 && (
+              <div>
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide block mb-1">
+                  Stages
+                </span>
+                <span className="text-gray-600 dark:text-gray-300">
+                  {formatStages(workstream.stage_ids)}
+                </span>
+              </div>
+            )}
+
+            {workstream.horizon && workstream.horizon !== "ALL" && (
+              <div>
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide block mb-1">
+                  Horizon
+                </span>
+                <span className="text-gray-600 dark:text-gray-300">
+                  {workstream.horizon}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Keywords */}
+          {workstream.keywords.length > 0 && (
             <div>
-              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide block mb-1">
-                Horizon
+              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide block mb-1.5">
+                Keywords
               </span>
-              <span className="text-gray-600 dark:text-gray-300">{workstream.horizon}</span>
+              <div className="flex flex-wrap gap-1.5">
+                {workstream.keywords.slice(0, 5).map((keyword) => (
+                  <span
+                    key={keyword}
+                    className="inline-flex px-2 py-0.5 rounded-full bg-brand-light-blue text-brand-blue dark:bg-brand-blue/20 dark:text-brand-light-blue text-xs font-medium"
+                  >
+                    {keyword}
+                  </span>
+                ))}
+                {workstream.keywords.length > 5 && (
+                  <span className="inline-flex px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-xs">
+                    +{workstream.keywords.length - 5} more
+                  </span>
+                )}
+              </div>
             </div>
           )}
         </div>
 
-        {/* Keywords */}
-        {workstream.keywords.length > 0 && (
-          <div>
-            <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide block mb-1.5">
-              Keywords
+        {/* Footer */}
+        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              Created {new Date(workstream.created_at).toLocaleDateString()}
             </span>
-            <div className="flex flex-wrap gap-1.5">
-              {workstream.keywords.slice(0, 5).map((keyword) => (
-                <span
-                  key={keyword}
-                  className="inline-flex px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs"
-                >
-                  {keyword}
-                </span>
-              ))}
-              {workstream.keywords.length > 5 && (
-                <span className="inline-flex px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-xs">
-                  +{workstream.keywords.length - 5} more
-                </span>
-              )}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleEditClick}
+                className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-[#3d4176] border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-brand-blue transition-colors"
+                aria-label={`Edit ${workstream.name}`}
+              >
+                <Pencil className="h-3.5 w-3.5 mr-1" />
+                Edit
+              </button>
+              <button
+                onClick={handleDeleteClick}
+                className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-red-700 dark:text-red-400 bg-white dark:bg-[#3d4176] border border-red-300 dark:border-red-500/50 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-red-500 transition-colors"
+                aria-label={`Delete ${workstream.name}`}
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-1" />
+                Delete
+              </button>
             </div>
-          </div>
-        )}
-      </div>
-
-      {/* Footer */}
-      <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-gray-500 dark:text-gray-400">
-            Created {new Date(workstream.created_at).toLocaleDateString()}
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleEditClick}
-              className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-[#3d4176] border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-brand-blue transition-colors"
-              aria-label={`Edit ${workstream.name}`}
-            >
-              <Pencil className="h-3.5 w-3.5 mr-1" />
-              Edit
-            </button>
-            <button
-              onClick={handleDeleteClick}
-              className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-red-700 dark:text-red-400 bg-white dark:bg-[#3d4176] border border-red-300 dark:border-red-500/50 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-red-500 transition-colors"
-              aria-label={`Delete ${workstream.name}`}
-            >
-              <Trash2 className="h-3.5 w-3.5 mr-1" />
-              Delete
-            </button>
           </div>
         </div>
       </div>
@@ -510,7 +589,6 @@ const Workstreams: React.FC = () => {
 
   // Modal states
   const [showForm, setShowForm] = useState(false);
-  const [showInfoModal, setShowInfoModal] = useState(false);
   const [editingWorkstream, setEditingWorkstream] = useState<
     Workstream | undefined
   >(undefined);
@@ -519,6 +597,33 @@ const Workstreams: React.FC = () => {
   >(undefined);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Banner dismissed state (persisted in localStorage)
+  const [bannerDismissed, setBannerDismissed] = useState(() => {
+    try {
+      return localStorage.getItem(BANNER_DISMISSED_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  const handleDismissBanner = () => {
+    setBannerDismissed(true);
+    try {
+      localStorage.setItem(BANNER_DISMISSED_KEY, "true");
+    } catch {
+      // localStorage may be unavailable
+    }
+  };
+
+  const handleRestoreBanner = () => {
+    setBannerDismissed(false);
+    try {
+      localStorage.removeItem(BANNER_DISMISSED_KEY);
+    } catch {
+      // localStorage may be unavailable
+    }
+  };
+
   useEffect(() => {
     loadWorkstreams();
   }, []);
@@ -526,14 +631,14 @@ const Workstreams: React.FC = () => {
   const loadWorkstreams = async () => {
     try {
       const { data } = await supabase
-        .from('workstreams')
-        .select('*')
-        .eq('user_id', user?.id)
-        .order('created_at', { ascending: false });
+        .from("workstreams")
+        .select("*")
+        .eq("user_id", user?.id)
+        .order("created_at", { ascending: false });
 
       setWorkstreams(data || []);
     } catch (error) {
-      console.error('Error loading workstreams:', error);
+      console.error("Error loading workstreams:", error);
     } finally {
       setLoading(false);
     }
@@ -565,18 +670,18 @@ const Workstreams: React.FC = () => {
     setIsDeleting(true);
     try {
       const { error } = await supabase
-        .from('workstreams')
+        .from("workstreams")
         .delete()
-        .eq('id', deletingWorkstream.id)
-        .eq('user_id', user?.id);
+        .eq("id", deletingWorkstream.id)
+        .eq("user_id", user?.id);
 
       if (error) throw error;
 
       setDeletingWorkstream(undefined);
       loadWorkstreams();
     } catch (error) {
-      console.error('Error deleting workstream:', error);
-      alert('Failed to delete workstream. Please try again.');
+      console.error("Error deleting workstream:", error);
+      alert("Failed to delete workstream. Please try again.");
     } finally {
       setIsDeleting(false);
     }
@@ -600,19 +705,23 @@ const Workstreams: React.FC = () => {
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
           <div>
-            <h1 className="text-3xl font-bold text-brand-dark-blue dark:text-white">Workstreams</h1>
+            <h1 className="text-3xl font-bold text-brand-dark-blue dark:text-white">
+              Workstreams
+            </h1>
             <p className="mt-2 text-gray-600 dark:text-gray-400">
               Create custom research streams based on your strategic priorities.
             </p>
           </div>
-          <button
-            onClick={() => setShowInfoModal(true)}
-            className="p-2 text-gray-400 hover:text-brand-blue hover:bg-brand-light-blue/30 dark:hover:bg-brand-blue/20 rounded-lg transition-colors"
-            aria-label="Learn about Workstreams"
-            title="Learn about Workstreams"
-          >
-            <HelpCircle className="h-5 w-5" />
-          </button>
+          {bannerDismissed && (
+            <button
+              onClick={handleRestoreBanner}
+              className="p-2 text-gray-400 hover:text-brand-blue hover:bg-brand-light-blue/30 dark:hover:bg-brand-blue/20 rounded-lg transition-colors"
+              aria-label="Show workstream help"
+              title="Show workstream help"
+            >
+              <HelpCircle className="h-5 w-5" />
+            </button>
+          )}
         </div>
         <button
           onClick={() => {
@@ -625,6 +734,11 @@ const Workstreams: React.FC = () => {
           New Workstream
         </button>
       </div>
+
+      {/* Help Banner */}
+      {!bannerDismissed && (
+        <WorkstreamHelpBanner onDismiss={handleDismissBanner} />
+      )}
 
       {/* Workstreams List */}
       {workstreams.length === 0 ? (
@@ -680,11 +794,6 @@ const Workstreams: React.FC = () => {
           onCancel={handleDeleteCancel}
           isDeleting={isDeleting}
         />
-      )}
-
-      {/* Workstream Info Modal */}
-      {showInfoModal && (
-        <WorkstreamInfoModal onClose={() => setShowInfoModal(false)} />
       )}
     </div>
   );

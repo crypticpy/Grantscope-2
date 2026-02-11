@@ -15,7 +15,7 @@
  * - Auto-layout for node positioning
  */
 
-import React, { useMemo, useCallback, memo } from 'react';
+import React, { useMemo, useCallback, memo } from "react";
 import {
   ReactFlow,
   Node,
@@ -29,11 +29,11 @@ import {
   Position,
   BackgroundVariant,
   NodeProps,
-} from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
-import { GitBranch, ExternalLink, AlertCircle } from 'lucide-react';
-import { cn } from '../../lib/utils';
-import type { RelatedCard } from '../../lib/discovery-api';
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
+import { GitBranch, ExternalLink, AlertCircle } from "lucide-react";
+import { cn } from "../../lib/utils";
+import type { RelatedCard } from "../../lib/discovery-api";
 
 // ============================================================================
 // Type Definitions
@@ -47,7 +47,7 @@ export interface ConceptNetworkDiagramProps {
   /** Optional summary of the source card */
   sourceCardSummary?: string | null;
   /** Horizon of the source card */
-  sourceCardHorizon?: 'H1' | 'H2' | 'H3' | null;
+  sourceCardHorizon?: "H1" | "H2" | "H3" | null;
   /** Related cards data */
   relatedCards: RelatedCard[];
   /** Height of the diagram container */
@@ -76,7 +76,7 @@ interface CardNodeData {
   name: string;
   slug: string;
   summary?: string | null;
-  horizon?: 'H1' | 'H2' | 'H3' | null;
+  horizon?: "H1" | "H2" | "H3" | null;
   relationshipType?: string | null;
   relationshipStrength?: number | null;
   isSource: boolean;
@@ -91,47 +91,52 @@ interface CardNodeData {
  * Get color classes based on horizon alignment
  * Matches StageBadge.tsx patterns for consistency
  */
-function getHorizonColors(horizon?: 'H1' | 'H2' | 'H3' | null): {
+function getHorizonColors(horizon?: "H1" | "H2" | "H3" | null): {
   bg: string;
   border: string;
   text: string;
   fill: string;
 } {
-  const colorMap: Record<string, { bg: string; border: string; text: string; fill: string }> = {
+  const colorMap: Record<
+    string,
+    { bg: string; border: string; text: string; fill: string }
+  > = {
     H1: {
-      bg: 'bg-green-50 dark:bg-green-900/30',
-      border: 'border-green-400 dark:border-green-500',
-      text: 'text-green-800 dark:text-green-200',
-      fill: '#22c55e',
+      bg: "bg-green-50 dark:bg-green-900/30",
+      border: "border-green-400 dark:border-green-500",
+      text: "text-green-800 dark:text-green-200",
+      fill: "#22c55e",
     },
     H2: {
-      bg: 'bg-amber-50 dark:bg-amber-900/30',
-      border: 'border-amber-400 dark:border-amber-500',
-      text: 'text-amber-800 dark:text-amber-200',
-      fill: '#f59e0b',
+      bg: "bg-amber-50 dark:bg-amber-900/30",
+      border: "border-amber-400 dark:border-amber-500",
+      text: "text-amber-800 dark:text-amber-200",
+      fill: "#f59e0b",
     },
     H3: {
-      bg: 'bg-purple-50 dark:bg-purple-900/30',
-      border: 'border-purple-400 dark:border-purple-500',
-      text: 'text-purple-800 dark:text-purple-200',
-      fill: '#a855f7',
+      bg: "bg-purple-50 dark:bg-purple-900/30",
+      border: "border-purple-400 dark:border-purple-500",
+      text: "text-purple-800 dark:text-purple-200",
+      fill: "#a855f7",
     },
   };
 
-  return colorMap[horizon || ''] || {
-    bg: 'bg-gray-50 dark:bg-gray-800',
-    border: 'border-gray-300 dark:border-gray-600',
-    text: 'text-gray-800 dark:text-gray-200',
-    fill: '#6b7280',
-  };
+  return (
+    colorMap[horizon || ""] || {
+      bg: "bg-gray-50 dark:bg-gray-800",
+      border: "border-gray-300 dark:border-gray-600",
+      text: "text-gray-800 dark:text-gray-200",
+      fill: "#6b7280",
+    }
+  );
 }
 
 /**
  * Format relationship type for display
  */
 function formatRelationshipType(type?: string | null): string {
-  if (!type) return '';
-  return type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  if (!type) return "";
+  return type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 // ============================================================================
@@ -177,18 +182,18 @@ const CardNode = memo(({ data }: NodeProps<Node<CardNodeData>>) => {
       <div
         onClick={handleClick}
         className={cn(
-          'px-4 py-3 rounded-lg border-2 shadow-md cursor-pointer transition-all',
-          'hover:shadow-lg hover:scale-[1.02]',
-          'min-w-[180px] max-w-[240px]',
+          "px-4 py-3 rounded-lg border-2 shadow-md cursor-pointer transition-all",
+          "hover:shadow-lg hover:scale-[1.02]",
+          "min-w-[180px] max-w-[240px]",
           colors.bg,
           colors.border,
-          isSource && 'ring-2 ring-offset-2 ring-blue-500 dark:ring-blue-400'
+          isSource && "ring-2 ring-offset-2 ring-blue-500 dark:ring-blue-400",
         )}
         role="button"
         tabIndex={0}
-        aria-label={`View ${data.name} card details`}
+        aria-label={`View ${data.name} signal details`}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
+          if (e.key === "Enter" || e.key === " ") {
             handleClick();
           }
         }}
@@ -202,10 +207,7 @@ const CardNode = memo(({ data }: NodeProps<Node<CardNodeData>>) => {
 
         {/* Card name */}
         <div
-          className={cn(
-            'font-semibold text-sm truncate',
-            colors.text
-          )}
+          className={cn("font-semibold text-sm truncate", colors.text)}
           title={data.name}
         >
           {data.name}
@@ -226,9 +228,9 @@ const CardNode = memo(({ data }: NodeProps<Node<CardNodeData>>) => {
           {data.horizon && (
             <span
               className={cn(
-                'px-1.5 py-0.5 rounded text-[10px] font-medium',
+                "px-1.5 py-0.5 rounded text-[10px] font-medium",
                 colors.bg,
-                colors.text
+                colors.text,
               )}
             >
               {data.horizon}
@@ -246,7 +248,7 @@ const CardNode = memo(({ data }: NodeProps<Node<CardNodeData>>) => {
   );
 });
 
-CardNode.displayName = 'CardNode';
+CardNode.displayName = "CardNode";
 
 // Register custom node types
 const nodeTypes = {
@@ -264,7 +266,7 @@ function calculateRadialLayout(
   centerX: number,
   centerY: number,
   radius: number,
-  nodeCount: number
+  nodeCount: number,
 ): { x: number; y: number }[] {
   if (nodeCount === 0) return [];
   if (nodeCount === 1) return [{ x: centerX + radius, y: centerY }];
@@ -305,26 +307,31 @@ function transformToGraphData(
   sourceCardId: string,
   sourceCardName: string,
   sourceCardSummary: string | null | undefined,
-  sourceCardHorizon: 'H1' | 'H2' | 'H3' | null | undefined,
+  sourceCardHorizon: "H1" | "H2" | "H3" | null | undefined,
   relatedCards: RelatedCard[],
-  onCardClick?: (cardId: string, cardSlug: string) => void
+  onCardClick?: (cardId: string, cardSlug: string) => void,
 ): { nodes: Node<CardNodeData>[]; edges: Edge[] } {
   const centerX = 400;
   const centerY = 300;
   const radius = 250;
 
   // Calculate positions for related cards
-  const positions = calculateRadialLayout(centerX, centerY, radius, relatedCards.length);
+  const positions = calculateRadialLayout(
+    centerX,
+    centerY,
+    radius,
+    relatedCards.length,
+  );
 
   // Create source node (center)
   const sourceNode: Node<CardNodeData> = {
     id: sourceCardId,
-    type: 'cardNode',
+    type: "cardNode",
     position: { x: centerX - 100, y: centerY - 50 },
     data: {
       id: sourceCardId,
       name: sourceCardName,
-      slug: '', // Source card already on this page
+      slug: "", // Source card already on this page
       summary: sourceCardSummary,
       horizon: sourceCardHorizon,
       isSource: true,
@@ -334,23 +341,27 @@ function transformToGraphData(
   };
 
   // Create related card nodes
-  const relatedNodes: Node<CardNodeData>[] = relatedCards.map((card, index) => ({
-    id: card.id,
-    type: 'cardNode',
-    position: positions[index] ? { x: positions[index].x - 100, y: positions[index].y - 50 } : { x: 0, y: 0 },
-    data: {
+  const relatedNodes: Node<CardNodeData>[] = relatedCards.map(
+    (card, index) => ({
       id: card.id,
-      name: card.name,
-      slug: card.slug,
-      summary: card.summary,
-      horizon: card.horizon,
-      relationshipType: card.relationship_type,
-      relationshipStrength: card.relationship_strength,
-      isSource: false,
-      onCardClick,
-    },
-    draggable: true,
-  }));
+      type: "cardNode",
+      position: positions[index]
+        ? { x: positions[index].x - 100, y: positions[index].y - 50 }
+        : { x: 0, y: 0 },
+      data: {
+        id: card.id,
+        name: card.name,
+        slug: card.slug,
+        summary: card.summary,
+        horizon: card.horizon,
+        relationshipType: card.relationship_type,
+        relationshipStrength: card.relationship_strength,
+        isSource: false,
+        onCardClick,
+      },
+      draggable: true,
+    }),
+  );
 
   // Create edges connecting source to related cards
   const edges: Edge[] = relatedCards.map((card) => {
@@ -359,12 +370,12 @@ function transformToGraphData(
       id: `e-${sourceCardId}-${card.id}`,
       source: sourceCardId,
       target: card.id,
-      type: 'default',
+      type: "default",
       animated: false,
       label: formatRelationshipType(card.relationship_type),
-      labelStyle: { fontSize: 10, fill: '#6b7280' },
+      labelStyle: { fontSize: 10, fill: "#6b7280" },
       labelBgStyle: {
-        fill: 'white',
+        fill: "white",
         fillOpacity: 0.8,
       },
       style: {
@@ -402,12 +413,20 @@ function LoadingState() {
   return (
     <div className="flex flex-col items-center justify-center h-full min-h-[300px]">
       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue mb-3" />
-      <p className="text-gray-500 dark:text-gray-400 text-sm">Loading network...</p>
+      <p className="text-gray-500 dark:text-gray-400 text-sm">
+        Loading network...
+      </p>
     </div>
   );
 }
 
-function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+function ErrorState({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry?: () => void;
+}) {
   return (
     <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-center px-4">
       <AlertCircle className="h-12 w-12 text-red-400 mb-3" />
@@ -431,12 +450,12 @@ function ErrorState({ message, onRetry }: { message: string; onRetry?: () => voi
 // ============================================================================
 
 function minimapNodeColor(node: Node<CardNodeData>): string {
-  if (node.data?.isSource) return '#3b82f6';
+  if (node.data?.isSource) return "#3b82f6";
   const horizon = node.data?.horizon;
-  if (horizon === 'H1') return '#22c55e';
-  if (horizon === 'H2') return '#f59e0b';
-  if (horizon === 'H3') return '#a855f7';
-  return '#6b7280';
+  if (horizon === "H1") return "#22c55e";
+  if (horizon === "H2") return "#f59e0b";
+  if (horizon === "H3") return "#a855f7";
+  return "#6b7280";
 }
 
 // ============================================================================
@@ -460,7 +479,7 @@ export function ConceptNetworkDiagram({
   onCardClick,
   showMinimap = true,
   showBackground = true,
-  title = 'Related Trends Network',
+  title = "Related Trends Network",
 }: ConceptNetworkDiagramProps) {
   // Transform data to React Flow format
   const { initialNodes, initialEdges } = useMemo(() => {
@@ -470,10 +489,17 @@ export function ConceptNetworkDiagram({
       sourceCardSummary,
       sourceCardHorizon,
       relatedCards,
-      onCardClick
+      onCardClick,
     );
     return { initialNodes: nodes, initialEdges: edges };
-  }, [sourceCardId, sourceCardName, sourceCardSummary, sourceCardHorizon, relatedCards, onCardClick]);
+  }, [
+    sourceCardId,
+    sourceCardName,
+    sourceCardSummary,
+    sourceCardHorizon,
+    relatedCards,
+    onCardClick,
+  ]);
 
   // React Flow state
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
@@ -488,7 +514,12 @@ export function ConceptNetworkDiagram({
   // Show loading state
   if (loading) {
     return (
-      <div className={cn('bg-white dark:bg-[#2d3166] rounded-lg shadow p-6', className)}>
+      <div
+        className={cn(
+          "bg-white dark:bg-[#2d3166] rounded-lg shadow p-6",
+          className,
+        )}
+      >
         {title && (
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
             <GitBranch className="h-5 w-5 text-brand-blue" />
@@ -505,7 +536,12 @@ export function ConceptNetworkDiagram({
   // Show error state
   if (error) {
     return (
-      <div className={cn('bg-white dark:bg-[#2d3166] rounded-lg shadow p-6', className)}>
+      <div
+        className={cn(
+          "bg-white dark:bg-[#2d3166] rounded-lg shadow p-6",
+          className,
+        )}
+      >
         {title && (
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
             <GitBranch className="h-5 w-5 text-brand-blue" />
@@ -522,7 +558,12 @@ export function ConceptNetworkDiagram({
   // Show empty state if no related cards
   if (relatedCards.length === 0) {
     return (
-      <div className={cn('bg-white dark:bg-[#2d3166] rounded-lg shadow p-6', className)}>
+      <div
+        className={cn(
+          "bg-white dark:bg-[#2d3166] rounded-lg shadow p-6",
+          className,
+        )}
+      >
         {title && (
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
             <GitBranch className="h-5 w-5 text-brand-blue" />
@@ -537,7 +578,12 @@ export function ConceptNetworkDiagram({
   }
 
   return (
-    <div className={cn('bg-white dark:bg-[#2d3166] rounded-lg shadow p-6', className)}>
+    <div
+      className={cn(
+        "bg-white dark:bg-[#2d3166] rounded-lg shadow p-6",
+        className,
+      )}
+    >
       {title && (
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
           <GitBranch className="h-5 w-5 text-brand-blue" />
@@ -549,7 +595,7 @@ export function ConceptNetworkDiagram({
       <div className="flex flex-wrap items-center gap-4 mb-4 text-xs text-gray-500 dark:text-gray-400">
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded bg-blue-500" />
-          <span>Current Card</span>
+          <span>Current Signal</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded bg-green-500" />
@@ -611,8 +657,11 @@ export function ConceptNetworkDiagram({
 
       {/* Footer with card count */}
       <div className="flex items-center justify-between mt-3 text-xs text-gray-500 dark:text-gray-400">
-        <span>{relatedCards.length} related trend{relatedCards.length !== 1 ? 's' : ''}</span>
-        <span>Click a card to view details</span>
+        <span>
+          {relatedCards.length} related trend
+          {relatedCards.length !== 1 ? "s" : ""}
+        </span>
+        <span>Click a signal to view details</span>
       </div>
     </div>
   );

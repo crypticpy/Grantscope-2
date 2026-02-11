@@ -26,8 +26,8 @@
  * ```
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../../../App';
+import { useState, useEffect, useCallback } from "react";
+import { supabase } from "../../../App";
 import {
   getScoreHistory,
   getStageHistory,
@@ -35,9 +35,9 @@ import {
   type ScoreHistory,
   type StageHistory,
   type RelatedCard,
-} from '../../../lib/discovery-api';
-import type { Card, Source, TimelineEvent, Note, ResearchTask } from '../types';
-import type { User } from '@supabase/supabase-js';
+} from "../../../lib/discovery-api";
+import type { Card, Source, TimelineEvent, Note, ResearchTask } from "../types";
+import type { User } from "@supabase/supabase-js";
 
 /**
  * Return type for the useCardData hook
@@ -107,7 +107,7 @@ export interface UseCardDataReturn {
  */
 export function useCardData(
   slug: string | undefined,
-  user: User | null
+  user: User | null,
 ): UseCardDataReturn {
   // Core card data state
   const [card, setCard] = useState<Card | null>(null);
@@ -121,14 +121,18 @@ export function useCardData(
   // Score and stage history state
   const [scoreHistory, setScoreHistory] = useState<ScoreHistory[]>([]);
   const [scoreHistoryLoading, setScoreHistoryLoading] = useState(false);
-  const [scoreHistoryError, setScoreHistoryError] = useState<string | null>(null);
+  const [scoreHistoryError, setScoreHistoryError] = useState<string | null>(
+    null,
+  );
   const [stageHistory, setStageHistory] = useState<StageHistory[]>([]);
   const [stageHistoryLoading, setStageHistoryLoading] = useState(false);
 
   // Related cards state
   const [relatedCards, setRelatedCards] = useState<RelatedCard[]>([]);
   const [relatedCardsLoading, setRelatedCardsLoading] = useState(false);
-  const [relatedCardsError, setRelatedCardsError] = useState<string | null>(null);
+  const [relatedCardsError, setRelatedCardsError] = useState<string | null>(
+    null,
+  );
 
   /**
    * Get the current authentication token for API requests
@@ -148,41 +152,42 @@ export function useCardData(
 
     try {
       const { data: cardData } = await supabase
-        .from('cards')
-        .select('*')
-        .eq('slug', slug)
-        .eq('status', 'active')
+        .from("cards")
+        .select("*")
+        .eq("slug", slug)
+        .eq("status", "active")
         .single();
 
       if (cardData) {
         setCard(cardData);
 
         // Load related data in parallel
-        const [sourcesRes, timelineRes, notesRes, researchRes] = await Promise.all([
-          supabase
-            .from('sources')
-            .select('*')
-            .eq('card_id', cardData.id)
-            .order('relevance_score', { ascending: false }),
-          supabase
-            .from('card_timeline')
-            .select('*')
-            .eq('card_id', cardData.id)
-            .order('created_at', { ascending: false }),
-          supabase
-            .from('card_notes')
-            .select('*')
-            .eq('card_id', cardData.id)
-            .or(`user_id.eq.${user?.id},is_private.eq.false`)
-            .order('created_at', { ascending: false }),
-          supabase
-            .from('research_tasks')
-            .select('*')
-            .eq('card_id', cardData.id)
-            .eq('status', 'completed')
-            .order('completed_at', { ascending: false })
-            .limit(10),
-        ]);
+        const [sourcesRes, timelineRes, notesRes, researchRes] =
+          await Promise.all([
+            supabase
+              .from("sources")
+              .select("*")
+              .eq("card_id", cardData.id)
+              .order("relevance_score", { ascending: false }),
+            supabase
+              .from("card_timeline")
+              .select("*")
+              .eq("card_id", cardData.id)
+              .order("created_at", { ascending: false }),
+            supabase
+              .from("card_notes")
+              .select("*")
+              .eq("card_id", cardData.id)
+              .or(`user_id.eq.${user?.id},is_private.eq.false`)
+              .order("created_at", { ascending: false }),
+            supabase
+              .from("research_tasks")
+              .select("*")
+              .eq("card_id", cardData.id)
+              .eq("status", "completed")
+              .order("completed_at", { ascending: false })
+              .limit(10),
+          ]);
 
         setSources(sourcesRes.data || []);
         setTimeline(timelineRes.data || []);
@@ -211,7 +216,7 @@ export function useCardData(
       }
     } catch (error: unknown) {
       setScoreHistoryError(
-        error instanceof Error ? error.message : 'Failed to load score history'
+        error instanceof Error ? error.message : "Failed to load score history",
       );
     } finally {
       setScoreHistoryLoading(false);
@@ -254,7 +259,9 @@ export function useCardData(
       }
     } catch (error: unknown) {
       setRelatedCardsError(
-        error instanceof Error ? error.message : 'Failed to load related cards'
+        error instanceof Error
+          ? error.message
+          : "Failed to load related signals",
       );
     } finally {
       setRelatedCardsLoading(false);
@@ -269,10 +276,10 @@ export function useCardData(
 
     try {
       const { data } = await supabase
-        .from('card_follows')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('card_id', card.id)
+        .from("card_follows")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("card_id", card.id)
         .maybeSingle();
 
       setIsFollowing(!!data);
@@ -290,16 +297,16 @@ export function useCardData(
     try {
       if (isFollowing) {
         await supabase
-          .from('card_follows')
+          .from("card_follows")
           .delete()
-          .eq('user_id', user.id)
-          .eq('card_id', card.id);
+          .eq("user_id", user.id)
+          .eq("card_id", card.id);
         setIsFollowing(false);
       } else {
-        await supabase.from('card_follows').insert({
+        await supabase.from("card_follows").insert({
           user_id: user.id,
           card_id: card.id,
-          priority: 'medium',
+          priority: "medium",
         });
         setIsFollowing(true);
       }
@@ -320,7 +327,7 @@ export function useCardData(
 
       try {
         const { data } = await supabase
-          .from('card_notes')
+          .from("card_notes")
           .insert({
             user_id: user.id,
             card_id: card.id,
@@ -339,7 +346,7 @@ export function useCardData(
         return false;
       }
     },
-    [user, card]
+    [user, card],
   );
 
   /**

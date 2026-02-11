@@ -6,9 +6,9 @@
  * Provides interactive filtering by pillar, maturity stage, and time period.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
-import { format, subDays, subMonths } from 'date-fns';
+import React, { useState, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
+import { format, subDays, subMonths } from "date-fns";
 import {
   BarChart3,
   TrendingUp,
@@ -21,13 +21,19 @@ import {
   Activity,
   Target,
   Layers,
-} from 'lucide-react';
-import { supabase } from '../App';
-import { useAuthContext } from '../hooks/useAuthContext';
-import { pillars, stages } from '../data/taxonomy';
-import TrendVelocityChart, { type VelocityDataPoint } from '../components/analytics/TrendVelocityChart';
-import PillarHeatmap, { type PillarCoverageItem } from '../components/analytics/PillarHeatmap';
-import InsightsPanel, { type InsightsResponse } from '../components/analytics/InsightsPanel';
+} from "lucide-react";
+import { supabase } from "../App";
+import { useAuthContext } from "../hooks/useAuthContext";
+import { pillars, stages } from "../data/taxonomy";
+import TrendVelocityChart, {
+  type VelocityDataPoint,
+} from "../components/analytics/TrendVelocityChart";
+import PillarHeatmap, {
+  type PillarCoverageItem,
+} from "../components/analytics/PillarHeatmap";
+import InsightsPanel, {
+  type InsightsResponse,
+} from "../components/analytics/InsightsPanel";
 
 // ============================================================================
 // Type Definitions
@@ -36,7 +42,7 @@ import InsightsPanel, { type InsightsResponse } from '../components/analytics/In
 interface AnalyticsFilters {
   pillarId: string | null;
   stageId: string | null;
-  timePeriod: '7d' | '30d' | '90d' | '1y';
+  timePeriod: "7d" | "30d" | "90d" | "1y";
 }
 
 interface AnalyticsStats {
@@ -50,7 +56,7 @@ interface AnalyticsStats {
 // API Constants
 // ============================================================================
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 // ============================================================================
 // API Helper Functions
@@ -59,19 +65,21 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 async function apiRequest<T>(
   endpoint: string,
   token: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
 ): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
       ...options.headers,
     },
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Request failed' }));
+    const error = await response
+      .json()
+      .catch(() => ({ message: "Request failed" }));
     throw new Error(error.message || `API error: ${response.status}`);
   }
 
@@ -102,16 +110,16 @@ async function fetchVelocityData(
     stage_id?: string;
     start_date?: string;
     end_date?: string;
-  }
+  },
 ): Promise<VelocityResponse> {
   const params = new URLSearchParams();
-  if (filters.pillar_id) params.append('pillar_id', filters.pillar_id);
-  if (filters.stage_id) params.append('stage_id', filters.stage_id);
-  if (filters.start_date) params.append('start_date', filters.start_date);
-  if (filters.end_date) params.append('end_date', filters.end_date);
+  if (filters.pillar_id) params.append("pillar_id", filters.pillar_id);
+  if (filters.stage_id) params.append("stage_id", filters.stage_id);
+  if (filters.start_date) params.append("start_date", filters.start_date);
+  if (filters.end_date) params.append("end_date", filters.end_date);
 
   const queryString = params.toString();
-  const endpoint = `/api/v1/analytics/velocity${queryString ? `?${queryString}` : ''}`;
+  const endpoint = `/api/v1/analytics/velocity${queryString ? `?${queryString}` : ""}`;
 
   return apiRequest<VelocityResponse>(endpoint, token);
 }
@@ -122,15 +130,15 @@ async function fetchPillarCoverage(
     stage_id?: string;
     start_date?: string;
     end_date?: string;
-  }
+  },
 ): Promise<PillarCoverageResponse> {
   const params = new URLSearchParams();
-  if (filters.stage_id) params.append('stage_id', filters.stage_id);
-  if (filters.start_date) params.append('start_date', filters.start_date);
-  if (filters.end_date) params.append('end_date', filters.end_date);
+  if (filters.stage_id) params.append("stage_id", filters.stage_id);
+  if (filters.start_date) params.append("start_date", filters.start_date);
+  if (filters.end_date) params.append("end_date", filters.end_date);
 
   const queryString = params.toString();
-  const endpoint = `/api/v1/analytics/pillar-coverage${queryString ? `?${queryString}` : ''}`;
+  const endpoint = `/api/v1/analytics/pillar-coverage${queryString ? `?${queryString}` : ""}`;
 
   return apiRequest<PillarCoverageResponse>(endpoint, token);
 }
@@ -140,14 +148,14 @@ async function fetchInsights(
   filters: {
     pillar_id?: string;
     limit?: number;
-  }
+  },
 ): Promise<InsightsResponse> {
   const params = new URLSearchParams();
-  if (filters.pillar_id) params.append('pillar_id', filters.pillar_id);
-  if (filters.limit) params.append('limit', String(filters.limit));
+  if (filters.pillar_id) params.append("pillar_id", filters.pillar_id);
+  if (filters.limit) params.append("limit", String(filters.limit));
 
   const queryString = params.toString();
-  const endpoint = `/api/v1/analytics/insights${queryString ? `?${queryString}` : ''}`;
+  const endpoint = `/api/v1/analytics/insights${queryString ? `?${queryString}` : ""}`;
 
   return apiRequest<InsightsResponse>(endpoint, token);
 }
@@ -156,21 +164,24 @@ async function fetchInsights(
 // Time Period Helper
 // ============================================================================
 
-function getDateRangeFromPeriod(period: '7d' | '30d' | '90d' | '1y'): { start: Date; end: Date } {
+function getDateRangeFromPeriod(period: "7d" | "30d" | "90d" | "1y"): {
+  start: Date;
+  end: Date;
+} {
   const end = new Date();
   let start: Date;
 
   switch (period) {
-    case '7d':
+    case "7d":
       start = subDays(end, 7);
       break;
-    case '30d':
+    case "30d":
       start = subDays(end, 30);
       break;
-    case '90d':
+    case "90d":
       start = subDays(end, 90);
       break;
-    case '1y':
+    case "1y":
       start = subMonths(end, 12);
       break;
     default:
@@ -195,11 +206,14 @@ const AnalyticsFiltersComponent: React.FC<AnalyticsFiltersProps> = ({
   onFiltersChange,
   loading = false,
 }) => {
-  const timePeriodOptions: { value: '7d' | '30d' | '90d' | '1y'; label: string }[] = [
-    { value: '7d', label: 'Last 7 days' },
-    { value: '30d', label: 'Last 30 days' },
-    { value: '90d', label: 'Last 90 days' },
-    { value: '1y', label: 'Last year' },
+  const timePeriodOptions: {
+    value: "7d" | "30d" | "90d" | "1y";
+    label: string;
+  }[] = [
+    { value: "7d", label: "Last 7 days" },
+    { value: "30d", label: "Last 30 days" },
+    { value: "90d", label: "Last 90 days" },
+    { value: "1y", label: "Last year" },
   ];
 
   return (
@@ -219,13 +233,15 @@ const AnalyticsFiltersComponent: React.FC<AnalyticsFiltersProps> = ({
             {timePeriodOptions.map((option) => (
               <button
                 key={option.value}
-                onClick={() => onFiltersChange({ ...filters, timePeriod: option.value })}
+                onClick={() =>
+                  onFiltersChange({ ...filters, timePeriod: option.value })
+                }
                 disabled={loading}
                 className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
                   filters.timePeriod === option.value
-                    ? 'bg-brand-blue text-white'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    ? "bg-brand-blue text-white"
+                    : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                } ${loading ? "opacity-50 cursor-not-allowed" : ""}`}
               >
                 {option.label}
               </button>
@@ -239,8 +255,10 @@ const AnalyticsFiltersComponent: React.FC<AnalyticsFiltersProps> = ({
             Pillar
           </label>
           <select
-            value={filters.pillarId || ''}
-            onChange={(e) => onFiltersChange({ ...filters, pillarId: e.target.value || null })}
+            value={filters.pillarId || ""}
+            onChange={(e) =>
+              onFiltersChange({ ...filters, pillarId: e.target.value || null })
+            }
             disabled={loading}
             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-brand-blue focus:border-brand-blue disabled:opacity-50"
           >
@@ -259,8 +277,10 @@ const AnalyticsFiltersComponent: React.FC<AnalyticsFiltersProps> = ({
             Maturity Stage
           </label>
           <select
-            value={filters.stageId || ''}
-            onChange={(e) => onFiltersChange({ ...filters, stageId: e.target.value || null })}
+            value={filters.stageId || ""}
+            onChange={(e) =>
+              onFiltersChange({ ...filters, stageId: e.target.value || null })
+            }
             disabled={loading}
             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-brand-blue focus:border-brand-blue disabled:opacity-50"
           >
@@ -280,7 +300,7 @@ const AnalyticsFiltersComponent: React.FC<AnalyticsFiltersProps> = ({
               onFiltersChange({
                 pillarId: null,
                 stageId: null,
-                timePeriod: '30d',
+                timePeriod: "30d",
               })
             }
             disabled={loading}
@@ -316,22 +336,28 @@ const StatsCard: React.FC<StatsCardProps> = ({
   icon,
   trend,
   linkTo,
-  colorClass = 'text-brand-blue',
+  colorClass = "text-brand-blue",
 }) => {
   const content = (
     <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg group">
       <div className="flex items-center justify-between">
         <div className="flex items-center">
-          <div className={`flex-shrink-0 ${colorClass} group-hover:scale-110 transition-transform`}>
+          <div
+            className={`flex-shrink-0 ${colorClass} group-hover:scale-110 transition-transform`}
+          >
             {icon}
           </div>
           <div className="ml-4">
-            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{title}</p>
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+              {title}
+            </p>
             <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-              {typeof value === 'number' ? value.toLocaleString() : value}
+              {typeof value === "number" ? value.toLocaleString() : value}
             </p>
             {subtitle && (
-              <p className="text-xs text-gray-400 dark:text-gray-500">{subtitle}</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">
+                {subtitle}
+              </p>
             )}
           </div>
         </div>
@@ -339,10 +365,10 @@ const StatsCard: React.FC<StatsCardProps> = ({
           <div
             className={`flex items-center gap-1 text-sm font-medium ${
               trend > 0
-                ? 'text-emerald-600 dark:text-emerald-400'
+                ? "text-emerald-600 dark:text-emerald-400"
                 : trend < 0
-                ? 'text-red-600 dark:text-red-400'
-                : 'text-gray-500 dark:text-gray-400'
+                  ? "text-red-600 dark:text-red-400"
+                  : "text-gray-500 dark:text-gray-400"
             }`}
           >
             {trend > 0 ? (
@@ -352,7 +378,10 @@ const StatsCard: React.FC<StatsCardProps> = ({
             ) : (
               <Minus className="h-4 w-4" />
             )}
-            <span>{trend > 0 ? '+' : ''}{trend.toFixed(1)}%</span>
+            <span>
+              {trend > 0 ? "+" : ""}
+              {trend.toFixed(1)}%
+            </span>
           </div>
         )}
       </div>
@@ -377,16 +406,22 @@ const Analytics: React.FC = () => {
   const [filters, setFilters] = useState<AnalyticsFilters>({
     pillarId: null,
     stageId: null,
-    timePeriod: '30d',
+    timePeriod: "30d",
   });
 
   // Data states
   const [velocityData, setVelocityData] = useState<VelocityDataPoint[]>([]);
-  const [weekOverWeekChange, setWeekOverWeekChange] = useState<number | null>(null);
+  const [weekOverWeekChange, setWeekOverWeekChange] = useState<number | null>(
+    null,
+  );
   const [periodStart, setPeriodStart] = useState<string | null>(null);
   const [periodEnd, setPeriodEnd] = useState<string | null>(null);
-  const [pillarCoverage, setPillarCoverage] = useState<PillarCoverageItem[]>([]);
-  const [insightsData, setInsightsData] = useState<InsightsResponse | null>(null);
+  const [pillarCoverage, setPillarCoverage] = useState<PillarCoverageItem[]>(
+    [],
+  );
+  const [insightsData, setInsightsData] = useState<InsightsResponse | null>(
+    null,
+  );
   const [stats, setStats] = useState<AnalyticsStats>({
     totalCards: 0,
     activeCards: 0,
@@ -411,8 +446,8 @@ const Analytics: React.FC = () => {
     return {
       pillar_id: filters.pillarId || undefined,
       stage_id: filters.stageId || undefined,
-      start_date: format(start, 'yyyy-MM-dd'),
-      end_date: format(end, 'yyyy-MM-dd'),
+      start_date: format(start, "yyyy-MM-dd"),
+      end_date: format(end, "yyyy-MM-dd"),
     };
   }, [filters]);
 
@@ -424,12 +459,14 @@ const Analytics: React.FC = () => {
       const oneWeekAgo = subDays(new Date(), 7);
 
       // Build base query
-      let baseQuery = supabase.from('cards').select('*', { count: 'exact', head: true });
+      let baseQuery = supabase
+        .from("cards")
+        .select("*", { count: "exact", head: true });
       if (filters.pillarId) {
-        baseQuery = baseQuery.eq('pillar_id', filters.pillarId);
+        baseQuery = baseQuery.eq("pillar_id", filters.pillarId);
       }
       if (filters.stageId) {
-        baseQuery = baseQuery.eq('stage_id', filters.stageId);
+        baseQuery = baseQuery.eq("stage_id", filters.stageId);
       }
 
       // Total cards count
@@ -437,49 +474,51 @@ const Analytics: React.FC = () => {
 
       // Active cards count
       let activeQuery = supabase
-        .from('cards')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'active');
+        .from("cards")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "active");
       if (filters.pillarId) {
-        activeQuery = activeQuery.eq('pillar_id', filters.pillarId);
+        activeQuery = activeQuery.eq("pillar_id", filters.pillarId);
       }
       if (filters.stageId) {
-        activeQuery = activeQuery.eq('stage_id', filters.stageId);
+        activeQuery = activeQuery.eq("stage_id", filters.stageId);
       }
       const { count: activeCount } = await activeQuery;
 
       // New this week count
       let newWeekQuery = supabase
-        .from('cards')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'active')
-        .gte('created_at', oneWeekAgo.toISOString());
+        .from("cards")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "active")
+        .gte("created_at", oneWeekAgo.toISOString());
       if (filters.pillarId) {
-        newWeekQuery = newWeekQuery.eq('pillar_id', filters.pillarId);
+        newWeekQuery = newWeekQuery.eq("pillar_id", filters.pillarId);
       }
       if (filters.stageId) {
-        newWeekQuery = newWeekQuery.eq('stage_id', filters.stageId);
+        newWeekQuery = newWeekQuery.eq("stage_id", filters.stageId);
       }
       const { count: newCount } = await newWeekQuery;
 
       // Average velocity score
       let velocityQuery = supabase
-        .from('cards')
-        .select('velocity_score')
-        .eq('status', 'active')
-        .not('velocity_score', 'is', null);
+        .from("cards")
+        .select("velocity_score")
+        .eq("status", "active")
+        .not("velocity_score", "is", null);
       if (filters.pillarId) {
-        velocityQuery = velocityQuery.eq('pillar_id', filters.pillarId);
+        velocityQuery = velocityQuery.eq("pillar_id", filters.pillarId);
       }
       if (filters.stageId) {
-        velocityQuery = velocityQuery.eq('stage_id', filters.stageId);
+        velocityQuery = velocityQuery.eq("stage_id", filters.stageId);
       }
       const { data: velocityCards } = await velocityQuery;
 
       const avgVelocity =
         velocityCards && velocityCards.length > 0
-          ? velocityCards.reduce((sum, card) => sum + (card.velocity_score || 0), 0) /
-            velocityCards.length
+          ? velocityCards.reduce(
+              (sum, card) => sum + (card.velocity_score || 0),
+              0,
+            ) / velocityCards.length
           : 0;
 
       setStats({
@@ -500,9 +539,11 @@ const Analytics: React.FC = () => {
     setLoadingVelocity(true);
     setVelocityError(null);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        throw new Error('Not authenticated');
+        throw new Error("Not authenticated");
       }
 
       const params = getFilterParams();
@@ -513,7 +554,8 @@ const Analytics: React.FC = () => {
       setPeriodStart(response.period_start);
       setPeriodEnd(response.period_end);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to load velocity data';
+      const message =
+        error instanceof Error ? error.message : "Failed to load velocity data";
       setVelocityError(message);
       setVelocityData([]);
     } finally {
@@ -526,19 +568,27 @@ const Analytics: React.FC = () => {
     setLoadingCoverage(true);
     setCoverageError(null);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        throw new Error('Not authenticated');
+        throw new Error("Not authenticated");
       }
 
       const params = getFilterParams();
       // Don't pass pillar_id for coverage - we want all pillars
       const { pillar_id: _pillar_id, ...coverageParams } = params;
-      const response = await fetchPillarCoverage(session.access_token, coverageParams);
+      const response = await fetchPillarCoverage(
+        session.access_token,
+        coverageParams,
+      );
 
       setPillarCoverage(response.data || []);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to load pillar coverage';
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to load pillar coverage";
       setCoverageError(message);
       setPillarCoverage([]);
     } finally {
@@ -551,9 +601,11 @@ const Analytics: React.FC = () => {
     setLoadingInsights(true);
     setInsightsError(null);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        throw new Error('Not authenticated');
+        throw new Error("Not authenticated");
       }
 
       const response = await fetchInsights(session.access_token, {
@@ -563,7 +615,8 @@ const Analytics: React.FC = () => {
 
       setInsightsData(response);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to load insights';
+      const message =
+        error instanceof Error ? error.message : "Failed to load insights";
       setInsightsError(message);
       setInsightsData(null);
     } finally {
@@ -598,7 +651,8 @@ const Analytics: React.FC = () => {
     : null;
 
   // Overall loading state
-  const isLoading = loadingVelocity || loadingCoverage || loadingInsights || loadingStats;
+  const isLoading =
+    loadingVelocity || loadingCoverage || loadingInsights || loadingStats;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -638,14 +692,14 @@ const Analytics: React.FC = () => {
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <StatsCard
-          title="Total Cards"
+          title="Total Signals"
           value={stats.totalCards}
           icon={<Layers className="h-8 w-8" />}
           linkTo="/discover"
           colorClass="text-brand-blue"
         />
         <StatsCard
-          title="Active Cards"
+          title="Active Signals"
           value={stats.activeCards}
           icon={<Target className="h-8 w-8" />}
           linkTo="/discover?status=active"
@@ -729,9 +783,11 @@ const Analytics: React.FC = () => {
               <Target className="h-5 w-5 text-brand-blue" />
             </div>
             <div>
-              <h3 className="font-medium text-gray-900 dark:text-white">Discover Cards</h3>
+              <h3 className="font-medium text-gray-900 dark:text-white">
+                Discover Signals
+              </h3>
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                Browse all intelligence cards
+                Browse all intelligence signals
               </p>
             </div>
           </div>
@@ -747,7 +803,9 @@ const Analytics: React.FC = () => {
               <Layers className="h-5 w-5 text-extended-purple" />
             </div>
             <div>
-              <h3 className="font-medium text-gray-900 dark:text-white">Workstreams</h3>
+              <h3 className="font-medium text-gray-900 dark:text-white">
+                Workstreams
+              </h3>
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 Manage your focused collections
               </p>
@@ -765,7 +823,9 @@ const Analytics: React.FC = () => {
               <BarChart3 className="h-5 w-5 text-extended-orange" />
             </div>
             <div>
-              <h3 className="font-medium text-gray-900 dark:text-white">Dashboard</h3>
+              <h3 className="font-medium text-gray-900 dark:text-white">
+                Dashboard
+              </h3>
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 Return to main dashboard
               </p>

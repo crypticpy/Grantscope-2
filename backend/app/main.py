@@ -333,6 +333,7 @@ class Card(BaseModel):
     velocity_score: Optional[int] = None
     risk_score: Optional[int] = None
     opportunity_score: Optional[int] = None
+    signal_quality_score: Optional[int] = None
     status: str = "active"
     created_at: datetime
     updated_at: datetime
@@ -2619,6 +2620,17 @@ async def review_card(
                 trigger="review",
                 reason=review_data.reason,
             )
+
+        # Update signal quality score after approval
+        if review_data.action in ("approve", "edit_approve"):
+            try:
+                from app.signal_quality import update_signal_quality_score
+
+                update_signal_quality_score(supabase, card_id)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to update signal quality score for {card_id}: {e}"
+                )
 
         return updated_card
     else:
@@ -6947,6 +6959,17 @@ async def execute_research_task_background(
             }
         ).eq("id", task_id).execute()
 
+        # Update signal quality score after research completion
+        if task_data.card_id:
+            try:
+                from app.signal_quality import update_signal_quality_score
+
+                update_signal_quality_score(supabase, task_data.card_id)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to update signal quality score for {task_data.card_id}: {e}"
+                )
+
     except asyncio.TimeoutError:
         # Update as failed (timeout)
         supabase.table("research_tasks").update(
@@ -9215,6 +9238,24 @@ async def recalculate_all_quality(user=Depends(get_current_user)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("batch quality recalculation", e),
         )
+
+
+@app.get("/api/v1/cards/{card_id}/quality-score")
+async def get_signal_quality_score(card_id: str):
+    """Get computed signal quality score for a card."""
+    from app.signal_quality import compute_signal_quality_score
+
+    result = compute_signal_quality_score(supabase, card_id)
+    return result
+
+
+@app.post("/api/v1/cards/{card_id}/quality-score/refresh")
+async def refresh_signal_quality_score(card_id: str):
+    """Recompute and store the signal quality score."""
+    from app.signal_quality import update_signal_quality_score
+
+    score = update_signal_quality_score(supabase, card_id)
+    return {"card_id": card_id, "signal_quality_score": score}
 
 
 # ============================================================================

@@ -12,7 +12,7 @@
  * - Keyboard navigation (Escape to close)
  */
 
-import React, { useState, useEffect, useCallback, memo } from 'react';
+import React, { useState, useEffect, useCallback, memo } from "react";
 import {
   X,
   Loader2,
@@ -20,11 +20,11 @@ import {
   Plus,
   ChevronRight,
   AlertCircle,
-} from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { cn } from '../../lib/utils';
-import { supabase } from '../../App';
-import { addCardToWorkstream } from '../../lib/workstream-api';
+} from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { cn } from "../../lib/utils";
+import { supabase } from "../../App";
+import { addCardToWorkstream } from "../../lib/workstream-api";
 
 // =============================================================================
 // Types
@@ -83,10 +83,10 @@ export const AddToWorkstreamModal = memo(function AddToWorkstreamModal({
 
       try {
         const { data, error: fetchError } = await supabase
-          .from('workstreams')
-          .select('id, name, description, is_active, created_at')
-          .order('is_active', { ascending: false })
-          .order('name');
+          .from("workstreams")
+          .select("id, name, description, is_active, created_at")
+          .order("is_active", { ascending: false })
+          .order("name");
 
         if (fetchError) {
           throw new Error(fetchError.message);
@@ -94,7 +94,9 @@ export const AddToWorkstreamModal = memo(function AddToWorkstreamModal({
 
         setWorkstreams(data || []);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load workstreams');
+        setError(
+          err instanceof Error ? err.message : "Failed to load workstreams",
+        );
       } finally {
         setIsLoading(false);
       }
@@ -106,13 +108,13 @@ export const AddToWorkstreamModal = memo(function AddToWorkstreamModal({
   // Handle escape key to close
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen && !isAdding) {
+      if (e.key === "Escape" && isOpen && !isAdding) {
         onClose();
       }
     };
 
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
   }, [isOpen, isAdding, onClose]);
 
   // Handle adding card to workstream
@@ -126,33 +128,35 @@ export const AddToWorkstreamModal = memo(function AddToWorkstreamModal({
       try {
         const token = await getAuthToken();
         if (!token) {
-          throw new Error('Authentication required');
+          throw new Error("Authentication required");
         }
 
         // Add to screening column by default
-        await addCardToWorkstream(token, workstream.id, cardId, 'screening');
+        await addCardToWorkstream(token, workstream.id, cardId, "screening");
 
         onSuccess?.(workstream.name);
         onClose();
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : 'Failed to add card to workstream'
+          err instanceof Error
+            ? err.message
+            : "Failed to add signal to workstream",
         );
         setIsAdding(null);
       }
     },
-    [cardId, getAuthToken, isAdding, onClose, onSuccess]
+    [cardId, getAuthToken, isAdding, onClose, onSuccess],
   );
 
   // Handle create new workstream
   const handleCreateNew = useCallback(() => {
     // Store card info in session storage for after workstream creation
     sessionStorage.setItem(
-      'pendingWorkstreamCard',
-      JSON.stringify({ cardId, cardName })
+      "pendingWorkstreamCard",
+      JSON.stringify({ cardId, cardName }),
     );
     onClose();
-    navigate('/workstreams?create=true');
+    navigate("/workstreams?create=true");
   }, [cardId, cardName, navigate, onClose]);
 
   if (!isOpen) return null;
@@ -198,7 +202,10 @@ export const AddToWorkstreamModal = memo(function AddToWorkstreamModal({
         {/* Card Reference */}
         <div className="px-6 py-3 bg-gray-50 dark:bg-[#252850] border-b border-gray-200 dark:border-gray-600">
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            Adding <span className="font-medium text-gray-900 dark:text-white">{cardName}</span>
+            Adding{" "}
+            <span className="font-medium text-gray-900 dark:text-white">
+              {cardName}
+            </span>
           </p>
         </div>
 
@@ -209,7 +216,9 @@ export const AddToWorkstreamModal = memo(function AddToWorkstreamModal({
             <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-2">
               <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+                <p className="text-sm text-red-800 dark:text-red-200">
+                  {error}
+                </p>
               </div>
               <button
                 onClick={() => setError(null)}
@@ -239,11 +248,11 @@ export const AddToWorkstreamModal = memo(function AddToWorkstreamModal({
                   onClick={() => handleAddToWorkstream(ws)}
                   disabled={!!isAdding}
                   className={cn(
-                    'w-full flex items-center gap-3 p-3 rounded-lg border transition-colors text-left',
-                    'hover:bg-gray-50 dark:hover:bg-[#3d4176]',
-                    'border-gray-200 dark:border-gray-600',
-                    'disabled:opacity-50 disabled:cursor-not-allowed',
-                    isAdding === ws.id && 'bg-brand-blue/5 border-brand-blue'
+                    "w-full flex items-center gap-3 p-3 rounded-lg border transition-colors text-left",
+                    "hover:bg-gray-50 dark:hover:bg-[#3d4176]",
+                    "border-gray-200 dark:border-gray-600",
+                    "disabled:opacity-50 disabled:cursor-not-allowed",
+                    isAdding === ws.id && "bg-brand-blue/5 border-brand-blue",
                   )}
                 >
                   <div className="flex-1 min-w-0">
@@ -281,7 +290,7 @@ export const AddToWorkstreamModal = memo(function AddToWorkstreamModal({
                 No workstreams yet
               </p>
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                Create your first workstream to organize research cards
+                Create your first workstream to organize research signals
               </p>
             </div>
           )}

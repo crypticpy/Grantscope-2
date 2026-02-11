@@ -351,7 +351,7 @@ const PillarDistribution: React.FC<{ data: PillarCoverageItem[] }> = ({
     <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
         <Layers className="h-5 w-5 text-brand-blue" />
-        Cards by Pillar
+        Signals by Pillar
       </h3>
       <div className="space-y-3">
         {data.map((pillar) => (
@@ -364,7 +364,7 @@ const PillarDistribution: React.FC<{ data: PillarCoverageItem[] }> = ({
                 </span>
               </div>
               <div className="flex items-center gap-3 text-gray-500 dark:text-gray-400">
-                <span>{pillar.count} cards</span>
+                <span>{pillar.count} signals</span>
                 <span className="text-xs">({pillar.percentage}%)</span>
               </div>
             </div>
@@ -400,7 +400,7 @@ const StageDistributionChart: React.FC<{ data: StageDistribution[] }> = ({
     <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
         <Target className="h-5 w-5 text-extended-purple" />
-        Cards by Maturity Stage
+        Signals by Maturity Stage
       </h3>
       <div className="space-y-2">
         {data.map((stage, idx) => (
@@ -443,7 +443,7 @@ const HotTopics: React.FC<{ topics: TrendingTopic[]; title: string }> = ({
         </h3>
         <EmptyState
           title="No trending topics"
-          description="Trending topics will appear as more cards gain velocity."
+          description="Trending topics will appear as more signals gain velocity."
           icon={<Zap className="h-6 w-6 text-gray-400" />}
         />
       </div>
@@ -500,7 +500,7 @@ const EngagementComparison: React.FC<{
             {engagement.user_follow_count}
           </div>
           <div className="text-sm text-gray-500 dark:text-gray-400">
-            Cards Following
+            Signals Following
           </div>
         </div>
         <div className="text-center text-xs text-gray-400">
@@ -631,7 +631,7 @@ const PopularCardsSection: React.FC<{
         {cards.map((card) => (
           <Link
             key={card.card_id}
-            to={`/cards/${card.card_slug || card.card_id}`}
+            to={`/signals/${card.card_slug || card.card_id}`}
             className="block p-3 bg-gray-50 dark:bg-[#1e2048] rounded-lg hover:bg-gray-100 dark:hover:bg-[#252860] transition-colors"
           >
             <div className="flex items-start justify-between">
@@ -798,7 +798,7 @@ const AnalyticsV2: React.FC = () => {
           {/* Top Stats */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
-              title="Total Cards"
+              title="Total Signals"
               value={systemStats.active_cards}
               subtitle={`${systemStats.cards_this_week} new this week`}
               icon={<Eye className="h-6 w-6" />}
@@ -815,7 +815,7 @@ const AnalyticsV2: React.FC = () => {
             <StatCard
               title="Discovery Runs"
               value={systemStats.discovery_stats.total_discovery_runs}
-              subtitle={`${systemStats.discovery_stats.cards_discovered} cards discovered`}
+              subtitle={`${systemStats.discovery_stats.cards_discovered} signals discovered`}
               icon={<Search className="h-6 w-6" />}
               colorClass="text-emerald-500"
             />
@@ -839,7 +839,7 @@ const AnalyticsV2: React.FC = () => {
               colorClass="text-brand-blue"
             />
             <StatCard
-              title="Cards in Workstreams"
+              title="Signals in Workstreams"
               value={
                 systemStats.workstream_engagement.unique_cards_in_workstreams
               }
@@ -848,9 +848,9 @@ const AnalyticsV2: React.FC = () => {
               colorClass="text-extended-purple"
             />
             <StatCard
-              title="Cards Followed"
+              title="Signals Followed"
               value={systemStats.follow_stats.unique_cards_followed}
-              subtitle="Unique cards being tracked"
+              subtitle="Unique signals being tracked"
               icon={<Heart className="h-6 w-6" />}
               colorClass="text-red-500"
             />
@@ -877,23 +877,23 @@ const AnalyticsV2: React.FC = () => {
             />
             <HotTopics
               topics={systemStats.hot_topics}
-              title="High Velocity Cards"
+              title="High Velocity Signals"
             />
           </div>
 
-          {/* Most Followed Cards */}
+          {/* Most Followed Signals */}
           {systemStats.follow_stats.most_followed_cards.length > 0 && (
             <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                 <Star className="h-5 w-5 text-amber-500" />
-                Most Followed Cards
+                Most Followed Signals
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {systemStats.follow_stats.most_followed_cards.map(
                   (card, idx) => (
                     <Link
                       key={card.card_id}
-                      to={`/cards/${card.card_slug || card.card_id}`}
+                      to={`/signals/${card.card_slug || card.card_id}`}
                       className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-[#1e2048] rounded-lg hover:bg-gray-100 dark:hover:bg-[#252860] transition-colors"
                     >
                       <span className="w-6 h-6 flex items-center justify-center text-sm font-bold text-white bg-amber-500 rounded-full">
@@ -942,7 +942,7 @@ const AnalyticsV2: React.FC = () => {
               colorClass="text-brand-blue"
             />
             <StatCard
-              title="Cards in Workstreams"
+              title="Signals in Workstreams"
               value={personalStats.cards_in_workstreams}
               icon={<Layers className="h-6 w-6" />}
               colorClass="text-extended-purple"
@@ -963,12 +963,12 @@ const AnalyticsV2: React.FC = () => {
             <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                 <Eye className="h-5 w-5 text-brand-blue" />
-                Your Followed Cards
+                Your Followed Signals
               </h3>
               {personalStats.following.length === 0 ? (
                 <EmptyState
-                  title="Not following any cards yet"
-                  description="Browse the Discover page to find and follow cards that interest you."
+                  title="Not following any signals yet"
+                  description="Browse the Discover page to find and follow signals that interest you."
                   icon={<Eye className="h-6 w-6 text-gray-400" />}
                 />
               ) : (
@@ -976,7 +976,7 @@ const AnalyticsV2: React.FC = () => {
                   {personalStats.following.slice(0, 10).map((item) => (
                     <Link
                       key={item.card_id}
-                      to={`/cards/${item.card_slug || item.card_id}`}
+                      to={`/signals/${item.card_slug || item.card_id}`}
                       className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-[#1e2048] transition-colors"
                     >
                       <div className="flex items-center gap-2 min-w-0">
@@ -998,7 +998,7 @@ const AnalyticsV2: React.FC = () => {
                       to="/discover?filter=following"
                       className="block text-center text-sm text-brand-blue hover:underline py-2"
                     >
-                      View all {personalStats.following.length} cards
+                      View all {personalStats.following.length} signals
                     </Link>
                   )}
                 </div>
@@ -1010,15 +1010,15 @@ const AnalyticsV2: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <PopularCardsSection
               cards={personalStats.popular_not_followed}
-              title="Popular Cards You're Missing"
-              subtitle="Cards others are following that you haven't discovered yet"
-              emptyMessage="You're already following the most popular cards!"
+              title="Popular Signals You're Missing"
+              subtitle="Signals others are following that you haven't discovered yet"
+              emptyMessage="You're already following the most popular signals!"
             />
             <PopularCardsSection
               cards={personalStats.recently_popular}
               title="Trending This Week"
-              subtitle="Cards gaining followers recently"
-              emptyMessage="No new trending cards this week."
+              subtitle="Signals gaining followers recently"
+              emptyMessage="No new trending signals this week."
             />
           </div>
         </div>
@@ -1036,7 +1036,7 @@ const AnalyticsV2: React.FC = () => {
             </div>
             <div>
               <h3 className="font-medium text-gray-900 dark:text-white">
-                Discover Cards
+                Discover Signals
               </h3>
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 Browse intelligence
@@ -1079,7 +1079,7 @@ const AnalyticsV2: React.FC = () => {
                 Discovery Queue
               </h3>
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                Review new cards
+                Review new signals
               </p>
             </div>
           </div>

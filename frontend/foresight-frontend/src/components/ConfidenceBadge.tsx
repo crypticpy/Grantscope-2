@@ -7,21 +7,21 @@
  * - Optional percentage display
  */
 
-import React from 'react';
-import { Brain, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
-import { Tooltip } from './ui/Tooltip';
-import { cn } from '../lib/utils';
+import React from "react";
+import { Brain, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
+import { Tooltip } from "./ui/Tooltip";
+import { cn } from "../lib/utils";
 import {
   getSizeClasses as getSharedSizeClasses,
   getIconSize,
   BadgeSize,
-} from '../lib/badge-utils';
+} from "../lib/badge-utils";
 
 export interface ConfidenceBadgeProps {
   /** Confidence score between 0 and 1 */
   confidence: number;
   /** Size variant */
-  size?: 'sm' | 'md' | 'lg';
+  size?: "sm" | "md" | "lg";
   /** Whether to show the percentage value */
   showValue?: boolean;
   /** Whether to show an icon */
@@ -31,22 +31,22 @@ export interface ConfidenceBadgeProps {
   /** Whether tooltip is disabled */
   disableTooltip?: boolean;
   /** Display variant */
-  variant?: 'badge' | 'pill' | 'minimal';
+  variant?: "badge" | "pill" | "minimal";
 }
 
 /**
  * Get confidence level category
  */
-function getConfidenceLevel(confidence: number): 'high' | 'medium' | 'low' {
-  if (confidence >= 0.9) return 'high';
-  if (confidence >= 0.7) return 'medium';
-  return 'low';
+function getConfidenceLevel(confidence: number): "high" | "medium" | "low" {
+  if (confidence >= 0.9) return "high";
+  if (confidence >= 0.7) return "medium";
+  return "low";
 }
 
 /**
  * Get color classes based on confidence level
  */
-function getConfidenceColorClasses(level: 'high' | 'medium' | 'low'): {
+function getConfidenceColorClasses(level: "high" | "medium" | "low"): {
   bg: string;
   text: string;
   border: string;
@@ -54,22 +54,22 @@ function getConfidenceColorClasses(level: 'high' | 'medium' | 'low'): {
 } {
   const colorMap = {
     high: {
-      bg: 'bg-green-100 dark:bg-green-900/30',
-      text: 'text-green-700 dark:text-green-300',
-      border: 'border-green-300 dark:border-green-700',
-      iconBg: 'bg-green-200 dark:bg-green-800',
+      bg: "bg-green-100 dark:bg-green-900/30",
+      text: "text-green-700 dark:text-green-300",
+      border: "border-green-300 dark:border-green-700",
+      iconBg: "bg-green-200 dark:bg-green-800",
     },
     medium: {
-      bg: 'bg-amber-100 dark:bg-amber-900/30',
-      text: 'text-amber-700 dark:text-amber-300',
-      border: 'border-amber-300 dark:border-amber-700',
-      iconBg: 'bg-amber-200 dark:bg-amber-800',
+      bg: "bg-amber-100 dark:bg-amber-900/30",
+      text: "text-amber-700 dark:text-amber-300",
+      border: "border-amber-300 dark:border-amber-700",
+      iconBg: "bg-amber-200 dark:bg-amber-800",
     },
     low: {
-      bg: 'bg-red-100 dark:bg-red-900/30',
-      text: 'text-red-700 dark:text-red-300',
-      border: 'border-red-300 dark:border-red-700',
-      iconBg: 'bg-red-200 dark:bg-red-800',
+      bg: "bg-red-100 dark:bg-red-900/30",
+      text: "text-red-700 dark:text-red-300",
+      border: "border-red-300 dark:border-red-700",
+      iconBg: "bg-red-200 dark:bg-red-800",
     },
   };
 
@@ -79,7 +79,7 @@ function getConfidenceColorClasses(level: 'high' | 'medium' | 'low'): {
 /**
  * Get the appropriate icon for confidence level
  */
-function getConfidenceIcon(level: 'high' | 'medium' | 'low') {
+function getConfidenceIcon(level: "high" | "medium" | "low") {
   const iconMap = {
     high: CheckCircle,
     medium: AlertTriangle,
@@ -93,13 +93,16 @@ function getConfidenceIcon(level: 'high' | 'medium' | 'low') {
  * Uses shared getSizeClasses utility for badge/pill variants.
  * Minimal variant only needs text size classes.
  */
-function getSizeClasses(size: BadgeSize, variant: 'badge' | 'pill' | 'minimal'): string {
-  if (variant === 'minimal') {
+function getSizeClasses(
+  size: BadgeSize,
+  variant: "badge" | "pill" | "minimal",
+): string {
+  if (variant === "minimal") {
     // Minimal variant: text size only (no padding)
     const textSizeMap: Record<BadgeSize, string> = {
-      sm: 'text-xs',
-      md: 'text-sm',
-      lg: 'text-base',
+      sm: "text-xs",
+      md: "text-sm",
+      lg: "text-base",
     };
     return textSizeMap[size];
   }
@@ -107,7 +110,7 @@ function getSizeClasses(size: BadgeSize, variant: 'badge' | 'pill' | 'minimal'):
   // Badge/pill variants: use shared utility with gap included
   return getSharedSizeClasses(size, {
     includeGap: true,
-    variant: variant === 'pill' ? 'pill' : 'badge',
+    variant: variant === "pill" ? "pill" : "badge",
   });
 }
 
@@ -116,7 +119,7 @@ function getSizeClasses(size: BadgeSize, variant: 'badge' | 'pill' | 'minimal'):
  * for ConfidenceBadge (10/12/14 pixels for sm/md/lg)
  */
 function getConfidenceIconSize(size: BadgeSize): number {
-  return getIconSize(size, 'small');
+  return getIconSize(size, "small");
 }
 
 /**
@@ -129,11 +132,11 @@ function formatConfidence(confidence: number): string {
 /**
  * Get confidence level label
  */
-function getConfidenceLabel(level: 'high' | 'medium' | 'low'): string {
+function getConfidenceLabel(level: "high" | "medium" | "low"): string {
   const labels = {
-    high: 'High Confidence',
-    medium: 'Medium Confidence',
-    low: 'Low Confidence',
+    high: "High Confidence",
+    medium: "Medium Confidence",
+    low: "Low Confidence",
   };
   return labels[level];
 }
@@ -146,29 +149,31 @@ function ConfidenceTooltipContent({
   level,
 }: {
   confidence: number;
-  level: 'high' | 'medium' | 'low';
+  level: "high" | "medium" | "low";
 }) {
   const colors = getConfidenceColorClasses(level);
   const Icon = getConfidenceIcon(level);
 
   const descriptions = {
-    high: 'The AI system has high confidence in the accuracy and relevance of this discovery. Minimal review may be needed.',
-    medium: 'The AI system has moderate confidence. Some aspects may need verification or additional context.',
-    low: 'The AI system has lower confidence in this discovery. Careful review is recommended before approval.',
+    high: "The AI system has high confidence in the accuracy and relevance of this discovery. Minimal review may be needed.",
+    medium:
+      "The AI system has moderate confidence. Some aspects may need verification or additional context.",
+    low: "The AI system has lower confidence in this discovery. Careful review is recommended before approval.",
   };
 
   const recommendations = {
-    high: 'This card is likely ready for quick approval with minimal changes.',
-    medium: 'Consider reviewing the summary and classification before approval.',
-    low: 'Carefully review all fields and consider if this card should be dismissed.',
+    high: "This signal is likely ready for quick approval with minimal changes.",
+    medium:
+      "Consider reviewing the summary and classification before approval.",
+    low: "Carefully review all fields and consider if this signal should be dismissed.",
   };
 
   return (
     <div className="space-y-3 min-w-[220px] max-w-[280px]">
       {/* Header */}
       <div className="flex items-center gap-2">
-        <div className={cn('p-1.5 rounded-md', colors.iconBg)}>
-          <Icon className={cn('h-4 w-4', colors.text)} />
+        <div className={cn("p-1.5 rounded-md", colors.iconBg)}>
+          <Icon className={cn("h-4 w-4", colors.text)} />
         </div>
         <div>
           <div className="font-semibold text-gray-900 dark:text-gray-100">
@@ -200,10 +205,10 @@ function ConfidenceTooltipContent({
         <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
           <div
             className={cn(
-              'h-full rounded-full transition-all',
-              level === 'high' && 'bg-green-500 dark:bg-green-400',
-              level === 'medium' && 'bg-amber-500 dark:bg-amber-400',
-              level === 'low' && 'bg-red-500 dark:bg-red-400'
+              "h-full rounded-full transition-all",
+              level === "high" && "bg-green-500 dark:bg-green-400",
+              level === "medium" && "bg-amber-500 dark:bg-amber-400",
+              level === "low" && "bg-red-500 dark:bg-red-400",
             )}
             style={{ width: `${confidence * 100}%` }}
           />
@@ -222,12 +227,12 @@ function ConfidenceTooltipContent({
  */
 export function ConfidenceBadge({
   confidence,
-  size = 'md',
+  size = "md",
   showValue = true,
   showIcon = true,
   className,
   disableTooltip = false,
-  variant = 'badge',
+  variant = "badge",
 }: ConfidenceBadgeProps) {
   // Clamp confidence to 0-1 range
   const clampedConfidence = Math.max(0, Math.min(1, confidence));
@@ -237,15 +242,15 @@ export function ConfidenceBadge({
   const iconSize = getConfidenceIconSize(size);
 
   // Minimal variant - just colored text
-  if (variant === 'minimal') {
+  if (variant === "minimal") {
     const badge = (
       <span
         className={cn(
-          'inline-flex items-center gap-1 font-medium cursor-default',
+          "inline-flex items-center gap-1 font-medium cursor-default",
           colors.text,
           getSizeClasses(size, variant),
-          !disableTooltip && 'cursor-pointer',
-          className
+          !disableTooltip && "cursor-pointer",
+          className,
         )}
         role="status"
         aria-label={`${getConfidenceLabel(level)}: ${formatConfidence(clampedConfidence)}`}
@@ -261,7 +266,12 @@ export function ConfidenceBadge({
 
     return (
       <Tooltip
-        content={<ConfidenceTooltipContent confidence={clampedConfidence} level={level} />}
+        content={
+          <ConfidenceTooltipContent
+            confidence={clampedConfidence}
+            level={level}
+          />
+        }
         side="top"
         align="center"
         contentClassName="p-3"
@@ -275,14 +285,14 @@ export function ConfidenceBadge({
   const badge = (
     <span
       className={cn(
-        'inline-flex items-center font-medium border cursor-default',
+        "inline-flex items-center font-medium border cursor-default",
         colors.bg,
         colors.text,
         colors.border,
-        variant === 'pill' ? 'rounded-full' : 'rounded',
+        variant === "pill" ? "rounded-full" : "rounded",
         getSizeClasses(size, variant),
-        !disableTooltip && 'cursor-pointer',
-        className
+        !disableTooltip && "cursor-pointer",
+        className,
       )}
       role="status"
       aria-label={`${getConfidenceLabel(level)}: ${formatConfidence(clampedConfidence)}`}
@@ -298,7 +308,12 @@ export function ConfidenceBadge({
 
   return (
     <Tooltip
-      content={<ConfidenceTooltipContent confidence={clampedConfidence} level={level} />}
+      content={
+        <ConfidenceTooltipContent
+          confidence={clampedConfidence}
+          level={level}
+        />
+      }
       side="top"
       align="center"
       contentClassName="p-3"
@@ -316,24 +331,27 @@ export interface ConfidenceIndicatorProps {
   className?: string;
 }
 
-export function ConfidenceIndicator({ confidence, className }: ConfidenceIndicatorProps) {
+export function ConfidenceIndicator({
+  confidence,
+  className,
+}: ConfidenceIndicatorProps) {
   const level = getConfidenceLevel(confidence);
   const colors = getConfidenceColorClasses(level);
 
   return (
     <div
-      className={cn('flex items-center gap-1', className)}
+      className={cn("flex items-center gap-1", className)}
       title={`${getConfidenceLabel(level)}: ${formatConfidence(confidence)}`}
     >
       <div
         className={cn(
-          'w-2 h-2 rounded-full',
-          level === 'high' && 'bg-green-500',
-          level === 'medium' && 'bg-amber-500',
-          level === 'low' && 'bg-red-500'
+          "w-2 h-2 rounded-full",
+          level === "high" && "bg-green-500",
+          level === "medium" && "bg-amber-500",
+          level === "low" && "bg-red-500",
         )}
       />
-      <span className={cn('text-xs font-medium', colors.text)}>
+      <span className={cn("text-xs font-medium", colors.text)}>
         {formatConfidence(confidence)}
       </span>
     </div>

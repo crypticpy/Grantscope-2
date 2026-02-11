@@ -113,12 +113,12 @@ function getHistoryDescription(config: SavedSearchQueryConfig): string {
   }
 
   if (parts.length === 0 && !config.use_vector_search) {
-    return "All cards";
+    return "All signals";
   }
 
   return (
     parts.join(" • ") ||
-    (config.use_vector_search ? "Semantic search" : "All cards")
+    (config.use_vector_search ? "Semantic search" : "All signals")
   );
 }
 
@@ -588,7 +588,7 @@ const Discover: React.FC = () => {
       } else if (errorMessage.includes("timeout")) {
         setError("Request timeout: Try narrowing your filters.");
       } else {
-        setError(`Failed to load cards: ${errorMessage}`);
+        setError(`Failed to load signals: ${errorMessage}`);
       }
     } finally {
       setLoading(false);
@@ -840,7 +840,7 @@ const Discover: React.FC = () => {
             }`}
           >
             <Eye className="h-4 w-4 mr-1.5" />
-            All Cards
+            All Signals
           </button>
           <button
             onClick={() => setSearchParams({ filter: "new" })}
@@ -929,7 +929,7 @@ const Discover: React.FC = () => {
                   placeholder={
                     useSemanticSearch
                       ? "Semantic search (finds related concepts)..."
-                      : "Search cards..."
+                      : "Search signals..."
                   }
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -969,7 +969,7 @@ const Discover: React.FC = () => {
                 </label>
                 {useSemanticSearch && (
                   <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
-                    (finds conceptually related cards)
+                    (finds conceptually related signals)
                   </span>
                 )}
               </div>
@@ -1311,7 +1311,7 @@ const Discover: React.FC = () => {
             <div className="flex items-center gap-2">
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 Showing {filteredCards.length}
-                {qualityFilter !== "all" ? ` of ${cards.length}` : ""} cards
+                {qualityFilter !== "all" ? ` of ${cards.length}` : ""} signals
               </p>
               {isFilterPending && (
                 <span className="inline-flex items-center gap-1 text-xs text-brand-blue">
@@ -1370,10 +1370,10 @@ const Discover: React.FC = () => {
                   </p>
                   <p className="text-sm text-gray-600 dark:text-gray-300">
                     {selectedForCompare.length === 0
-                      ? "Click on cards to select them for comparison (max 2)"
+                      ? "Click on signals to select them for comparison (max 2)"
                       : selectedForCompare.length === 1
-                        ? `Selected: ${selectedForCompare[0]?.name ?? "card"} — Click another card to compare`
-                        : `Ready to compare: ${selectedForCompare[0]?.name ?? "card"} vs ${selectedForCompare[1]?.name ?? "card"}`}
+                        ? `Selected: ${selectedForCompare[0]?.name ?? "signal"} — Click another signal to compare`
+                        : `Ready to compare: ${selectedForCompare[0]?.name ?? "signal"} vs ${selectedForCompare[1]?.name ?? "signal"}`}
                   </p>
                 </div>
               </div>
@@ -1392,7 +1392,7 @@ const Discover: React.FC = () => {
                   className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-extended-purple text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-extended-purple/90 transition-colors"
                 >
                   <ArrowLeftRight className="h-4 w-4" />
-                  Compare Cards
+                  Compare Signals
                 </button>
                 <button
                   onClick={exitCompareMode}
@@ -1491,9 +1491,9 @@ const Discover: React.FC = () => {
 
             <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
               {quickFilter === "following"
-                ? "You're Not Following Any Cards"
+                ? "You're Not Following Any Signals"
                 : quickFilter === "new"
-                  ? "No New Cards This Week"
+                  ? "No New Signals This Week"
                   : useSemanticSearch && searchTerm
                     ? "No Semantic Matches Found"
                     : searchTerm ||
@@ -1505,19 +1505,19 @@ const Discover: React.FC = () => {
                         impactMin > 0 ||
                         relevanceMin > 0 ||
                         noveltyMin > 0
-                      ? "No Cards Match Your Filters"
-                      : "No Cards Available"}
+                      ? "No Signals Match Your Filters"
+                      : "No Signals Available"}
             </h3>
 
             <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto">
               {quickFilter === "following"
-                ? "Start following cards to build your personalized feed. Click the heart icon on any card to follow it."
+                ? "Start following signals to build your personalized feed. Click the heart icon on any signal to follow it."
                 : quickFilter === "new"
-                  ? "Check back soon for newly discovered intelligence cards."
+                  ? "Check back soon for newly discovered intelligence signals."
                   : useSemanticSearch && searchTerm
-                    ? `No cards matched your semantic search for "${searchTerm}". Try different keywords, or switch to standard text search.`
+                    ? `No signals matched your semantic search for "${searchTerm}". Try different keywords, or switch to standard text search.`
                     : searchTerm
-                      ? `No cards matched your search for "${searchTerm}". Try different keywords or enable semantic search for broader matches.`
+                      ? `No signals matched your search for "${searchTerm}". Try different keywords or enable semantic search for broader matches.`
                       : selectedPillar ||
                           selectedStage ||
                           selectedHorizon ||
@@ -1527,7 +1527,7 @@ const Discover: React.FC = () => {
                           relevanceMin > 0 ||
                           noveltyMin > 0
                         ? "Your current filter combination returned no results. Try removing some filters or adjusting score thresholds."
-                        : "The intelligence library is empty. Cards will appear here as they are discovered."}
+                        : "The intelligence library is empty. Signals will appear here as they are discovered."}
             </p>
 
             <div className="mt-6 flex flex-wrap justify-center gap-3">
@@ -1537,7 +1537,7 @@ const Discover: React.FC = () => {
                   className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-brand-dark-blue transition-colors"
                 >
                   <Eye className="h-4 w-4 mr-2" />
-                  Browse All Cards
+                  Browse All Signals
                 </Link>
               )}
               {(searchTerm ||
@@ -1591,7 +1591,7 @@ const Discover: React.FC = () => {
               gap={16}
               overscan={3}
               scrollContainerClassName="h-[calc(100vh-280px)]"
-              ariaLabel="Intelligence cards list"
+              ariaLabel="Intelligence signals list"
             />
           ) : (
             <div className="h-[calc(100vh-400px)] min-h-[500px]">

@@ -22,14 +22,14 @@
  * ```
  */
 
-import { useState, useCallback } from 'react';
-import { API_BASE_URL } from '../utils';
-import type { Card } from '../types';
+import { useState, useCallback } from "react";
+import { API_BASE_URL } from "../utils";
+import type { Card } from "../types";
 
 /**
  * Supported export format types
  */
-export type ExportFormat = 'pdf' | 'pptx' | 'csv';
+export type ExportFormat = "pdf" | "pptx" | "csv";
 
 /**
  * Return type for the useCardExport hook
@@ -63,9 +63,9 @@ export interface ExportOptions {
  * File extension mapping for each format
  */
 const FORMAT_EXTENSIONS: Record<ExportFormat, string> = {
-  pdf: 'pdf',
-  pptx: 'pptx',
-  csv: 'csv',
+  pdf: "pdf",
+  pptx: "pptx",
+  csv: "csv",
 };
 
 /**
@@ -89,7 +89,7 @@ const FORMAT_EXTENSIONS: Record<ExportFormat, string> = {
 export function useCardExport(
   card: Card | null,
   getAuthToken: () => Promise<string | undefined>,
-  options?: ExportOptions
+  options?: ExportOptions,
 ): UseCardExportReturn {
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -116,7 +116,7 @@ export function useCardExport(
       try {
         const token = await getAuthToken();
         if (!token) {
-          throw new Error('Not authenticated');
+          throw new Error("Not authenticated");
         }
 
         const response = await fetch(
@@ -125,13 +125,13 @@ export function useCardExport(
             headers: {
               Authorization: `Bearer ${token}`,
             },
-          }
+          },
         );
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(
-            errorData.detail || `Export failed: ${response.statusText}`
+            errorData.detail || `Export failed: ${response.statusText}`,
           );
         }
 
@@ -139,7 +139,7 @@ export function useCardExport(
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
 
-        const a = document.createElement('a');
+        const a = document.createElement("a");
         a.href = url;
         a.download = `${card.slug}-export.${FORMAT_EXTENSIONS[format]}`;
         document.body.appendChild(a);
@@ -153,7 +153,7 @@ export function useCardExport(
         return true;
       } catch (error: unknown) {
         const errorMessage =
-          error instanceof Error ? error.message : 'Failed to export card';
+          error instanceof Error ? error.message : "Failed to export signal";
         setExportError(errorMessage);
         options?.onExportError?.(format, errorMessage);
         return false;
@@ -162,7 +162,7 @@ export function useCardExport(
         setExportFormat(null);
       }
     },
-    [card, isExporting, getAuthToken, options]
+    [card, isExporting, getAuthToken, options],
   );
 
   /**

@@ -16,7 +16,7 @@
  * ```
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Download,
   ChevronDown,
@@ -24,14 +24,14 @@ import {
   FileText,
   Presentation,
   FileSpreadsheet,
-} from 'lucide-react';
-import { Tooltip } from '../ui/Tooltip';
-import { API_BASE_URL } from './utils';
+} from "lucide-react";
+import { Tooltip } from "../ui/Tooltip";
+import { API_BASE_URL } from "./utils";
 
 /**
  * Supported export format types
  */
-export type ExportFormat = 'pdf' | 'pptx' | 'csv';
+export type ExportFormat = "pdf" | "pptx" | "csv";
 
 /**
  * Props for the ExportDropdown component
@@ -72,22 +72,22 @@ interface ExportOption {
  */
 const exportOptions: ExportOption[] = [
   {
-    format: 'pdf',
-    label: 'Export as PDF',
+    format: "pdf",
+    label: "Export as PDF",
     icon: FileText,
-    iconColor: 'text-red-500',
+    iconColor: "text-red-500",
   },
   {
-    format: 'pptx',
-    label: 'Export as PowerPoint',
+    format: "pptx",
+    label: "Export as PowerPoint",
     icon: Presentation,
-    iconColor: 'text-orange-500',
+    iconColor: "text-orange-500",
   },
   {
-    format: 'csv',
-    label: 'Export as CSV',
+    format: "csv",
+    label: "Export as CSV",
     icon: FileSpreadsheet,
-    iconColor: 'text-green-500',
+    iconColor: "text-green-500",
   },
 ];
 
@@ -132,9 +132,9 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
     };
 
     if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener("mousedown", handleClickOutside);
       return () => {
-        document.removeEventListener('mousedown', handleClickOutside);
+        document.removeEventListener("mousedown", handleClickOutside);
       };
     }
   }, [isOpen]);
@@ -144,15 +144,15 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
    */
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && isOpen) {
+      if (event.key === "Escape" && isOpen) {
         setIsOpen(false);
       }
     };
 
     if (isOpen) {
-      document.addEventListener('keydown', handleKeyDown);
+      document.addEventListener("keydown", handleKeyDown);
       return () => {
-        document.removeEventListener('keydown', handleKeyDown);
+        document.removeEventListener("keydown", handleKeyDown);
       };
     }
   }, [isOpen]);
@@ -171,7 +171,7 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
       try {
         const token = await getAuthToken();
         if (!token) {
-          throw new Error('Not authenticated');
+          throw new Error("Not authenticated");
         }
 
         const response = await fetch(
@@ -180,20 +180,20 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
             headers: {
               Authorization: `Bearer ${token}`,
             },
-          }
+          },
         );
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(
-            errorData.detail || `Export failed: ${response.statusText}`
+            errorData.detail || `Export failed: ${response.statusText}`,
           );
         }
 
         // Create blob from response and trigger download
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
+        const a = document.createElement("a");
         a.href = url;
         a.download = `${cardSlug}-export.${format}`;
         document.body.appendChild(a);
@@ -204,7 +204,7 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
         onExportComplete?.(format);
       } catch (error: unknown) {
         const errorMessage =
-          error instanceof Error ? error.message : 'Failed to export card';
+          error instanceof Error ? error.message : "Failed to export signal";
         onError?.(errorMessage);
       } finally {
         setIsExporting(false);
@@ -218,7 +218,7 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
       onError,
       onExportStart,
       onExportComplete,
-    ]
+    ],
   );
 
   /**
@@ -231,13 +231,13 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
   }, [isExporting]);
 
   return (
-    <div ref={dropdownRef} className={`relative ${className || ''}`}>
+    <div ref={dropdownRef} className={`relative ${className || ""}`}>
       <Tooltip
         content={
           <div className="max-w-[200px]">
-            <p className="font-medium">Export Card</p>
+            <p className="font-medium">Export Signal</p>
             <p className="text-xs text-gray-500">
-              Download this card in various formats for sharing and analysis
+              Download this signal in various formats for sharing and analysis
             </p>
           </div>
         }
@@ -248,7 +248,7 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
           disabled={isExporting}
           aria-expanded={isOpen}
           aria-haspopup="menu"
-          aria-label="Export card options"
+          aria-label="Export signal options"
           className="inline-flex items-center justify-center min-h-[44px] sm:min-h-0 px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors active:scale-95 dark:bg-[#3d4176] dark:border-gray-600 dark:text-gray-200 dark:hover:bg-[#4d5186]"
         >
           {isExporting ? (
@@ -258,7 +258,7 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
           )}
           Export
           <ChevronDown
-            className={`h-4 w-4 ml-1 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+            className={`h-4 w-4 ml-1 transition-transform ${isOpen ? "rotate-180" : ""}`}
           />
         </button>
       </Tooltip>

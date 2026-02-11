@@ -1126,7 +1126,7 @@ export function WorkstreamForm({
       {/* Keywords Input */}
       <FormSection
         title="Keywords"
-        description="Add keywords to match against card content (press Enter or comma to add)"
+        description="Add keywords to match against signal content (press Enter or comma to add)"
       >
         <div className="space-y-2">
           <div className="flex gap-2">
@@ -1224,7 +1224,7 @@ export function WorkstreamForm({
             setFormData((prev) => ({ ...prev, is_active: checked }))
           }
           label="Active"
-          description="Active workstreams will appear in your feed and receive new cards"
+          description="Active workstreams will appear in your feed and receive new signals"
         />
       </div>
 
@@ -1237,7 +1237,7 @@ export function WorkstreamForm({
               setFormData((prev) => ({ ...prev, analyze_now: checked }))
             }
             label="Analyze Now"
-            description="Immediately run AI research to find matching cards and discover new technologies based on your keywords"
+            description="Immediately run AI research to find matching signals and discover new technologies based on your keywords"
           />
         </div>
       )}
@@ -1277,7 +1277,7 @@ export function WorkstreamForm({
               <>
                 <Loader2 className="h-5 w-5 text-gray-400 animate-spin" />
                 <span className="text-sm text-gray-600 dark:text-gray-400">
-                  Searching for matching cards...
+                  Searching for matching signals...
                 </span>
               </>
             ) : preview ? (
@@ -1308,8 +1308,8 @@ export function WorkstreamForm({
                       )}
                     >
                       {preview.estimated_count === 1
-                        ? "card matches"
-                        : "cards match"}{" "}
+                        ? "signal matches"
+                        : "signals match"}{" "}
                       these filters
                     </span>
                   </div>
@@ -1347,7 +1347,7 @@ export function WorkstreamForm({
               <>
                 <Sparkles className="h-5 w-5 text-gray-400" />
                 <span className="text-sm text-gray-600 dark:text-gray-400">
-                  Add filters to see matching cards
+                  Add filters to see matching signals
                 </span>
               </>
             )}

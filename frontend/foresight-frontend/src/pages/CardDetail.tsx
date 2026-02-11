@@ -7,8 +7,8 @@
  * @module pages/CardDetail
  */
 
-import React from 'react';
-import { CardDetail as CardDetailComponent } from '../components/CardDetail';
+import React from "react";
+import { CardDetail as CardDetailComponent } from "../components/CardDetail";
 
 /**
  * CardDetail page component.
@@ -22,7 +22,7 @@ import { CardDetail as CardDetailComponent } from '../components/CardDetail';
  * @example
  * ```tsx
  * // Route configuration
- * <Route path="/cards/:slug" element={<CardDetail />} />
+ * <Route path="/signals/:slug" element={<CardDetail />} />
  * ```
  */
 const CardDetail: React.FC = () => {

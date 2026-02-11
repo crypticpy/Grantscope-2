@@ -308,8 +308,8 @@ const Dashboard: React.FC = () => {
                     {pendingReviewCount !== 1 ? "ies" : ""} Pending Review
                   </h3>
                   <p className="text-sm text-gray-600 dark:text-gray-400">
-                    AI has found new intelligence cards. Review and approve them
-                    to add to your library.
+                    AI has found new intelligence signals. Review and approve
+                    them to add to your library.
                   </p>
                 </div>
               </div>
@@ -334,7 +334,7 @@ const Dashboard: React.FC = () => {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                Total Cards
+                Total Signals
               </p>
               <p className="text-2xl font-semibold text-gray-900 dark:text-white">
                 {stats.totalCards}
@@ -450,7 +450,7 @@ const Dashboard: React.FC = () => {
         <div className="flex items-center gap-2 mb-4">
           <Star className="h-5 w-5 text-amber-500 fill-amber-500" />
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            Your Followed Cards
+            Your Followed Signals
           </h2>
         </div>
         {followingCards.length > 0 ? (
@@ -468,7 +468,7 @@ const Dashboard: React.FC = () => {
                         <Star className="h-4 w-4 text-amber-500 fill-amber-500 flex-shrink-0" />
                         <h3 className="text-lg font-medium text-gray-900 dark:text-white">
                           <Link
-                            to={`/cards/${following.cards.slug}`}
+                            to={`/signals/${following.cards.slug}`}
                             className="hover:text-brand-blue transition-colors"
                           >
                             {following.cards.name}
@@ -528,14 +528,14 @@ const Dashboard: React.FC = () => {
           <div className="text-center py-12 bg-white dark:bg-[#2d3166] rounded-lg shadow">
             <Star className="mx-auto h-12 w-12 text-gray-400" />
             <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
-              Start Following Cards
+              Start Following Signals
             </h3>
             <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto">
-              Follow cards to build your personalized intelligence feed.
+              Follow signals to build your personalized intelligence feed.
               <br />
               <span className="text-gray-400">
-                Browse the Discover page and click the heart icon on any card to
-                start following it.
+                Browse the Discover page and click the heart icon on any signal
+                to start following it.
               </span>
             </p>
             <div className="mt-6">
@@ -544,7 +544,7 @@ const Dashboard: React.FC = () => {
                 className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-brand-dark-blue transition-colors"
               >
                 <Eye className="h-4 w-4 mr-2" />
-                Explore Cards
+                Explore Signals
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Link>
             </div>
@@ -579,7 +579,7 @@ const Dashboard: React.FC = () => {
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
                       <h3 className="text-lg font-medium text-gray-900 dark:text-white">
                         <Link
-                          to={`/cards/${card.slug}`}
+                          to={`/signals/${card.slug}`}
                           className="hover:text-brand-blue transition-colors"
                         >
                           {card.name}
@@ -620,7 +620,7 @@ const Dashboard: React.FC = () => {
                   </div>
                   <div className="ml-4 flex-shrink-0">
                     <Link
-                      to={`/cards/${card.slug}`}
+                      to={`/signals/${card.slug}`}
                       className="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue transition-colors"
                     >
                       View Details
