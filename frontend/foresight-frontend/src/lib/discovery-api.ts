@@ -1247,10 +1247,10 @@ export async function createCardFromTopic(
 export async function suggestKeywords(
   topic: string,
   token: string,
-): Promise<{ keywords: string[] }> {
+): Promise<{ topic: string; suggestions: string[] }> {
   const params = new URLSearchParams();
   params.append("topic", topic);
-  return apiRequest<{ keywords: string[] }>(
+  return apiRequest<{ topic: string; suggestions: string[] }>(
     `/api/v1/ai/suggest-keywords?${params.toString()}`,
     token,
     { method: "POST" },

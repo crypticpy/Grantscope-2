@@ -203,7 +203,7 @@ function QuickStartCard({
       <div
         className={cn(
           "mt-3 overflow-hidden transition-all duration-300",
-          isActive ? "max-h-40 opacity-100" : "max-h-0 opacity-0",
+          isActive ? "max-h-96 opacity-100" : "max-h-0 opacity-0",
         )}
       >
         <div className="border-t border-gray-200 dark:border-gray-600 pt-3 text-sm text-gray-700 dark:text-gray-300 leading-relaxed">

@@ -718,7 +718,7 @@ export function WorkstreamForm({
       if (!token) return;
       const result = await suggestKeywords(topic, token);
       // Filter out keywords already in the form
-      const newSuggestions = result.keywords.filter(
+      const newSuggestions = result.suggestions.filter(
         (kw) => !formData.keywords.includes(kw),
       );
       setSuggestedKeywords(newSuggestions);
