@@ -463,7 +463,7 @@ export function CreateSignalModal({
         state.topic.trim(),
         session.access_token,
       );
-      updateState({ keywords: result.keywords || [] });
+      updateState({ keywords: result.suggestions || [] });
     } catch (err) {
       setError(
         err instanceof Error

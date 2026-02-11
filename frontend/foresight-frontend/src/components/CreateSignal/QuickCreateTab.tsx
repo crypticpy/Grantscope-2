@@ -127,7 +127,7 @@ export function QuickCreateTab({
       }
 
       const result = await suggestKeywords(topic.trim(), session.access_token);
-      setKeywords(result.keywords || []);
+      setKeywords(result.suggestions || []);
     } catch (err) {
       setError(
         err instanceof Error

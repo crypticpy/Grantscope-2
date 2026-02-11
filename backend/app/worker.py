@@ -76,12 +76,26 @@ def _get_float_env(name: str, default: float) -> float:
 class ForesightWorker:
     def __init__(self) -> None:
         self.worker_id = os.getenv("FORESIGHT_WORKER_ID") or str(uuid.uuid4())
-        self.poll_interval_seconds = _get_float_env("FORESIGHT_WORKER_POLL_INTERVAL_SECONDS", 5.0)
-        self.brief_timeout_seconds = _get_int_env("FORESIGHT_BRIEF_TIMEOUT_SECONDS", 30 * 60)
-        self.discovery_timeout_seconds = _get_int_env("FORESIGHT_DISCOVERY_TIMEOUT_SECONDS", 90 * 60)
-        self.workstream_scan_timeout_seconds = _get_int_env("FORESIGHT_WORKSTREAM_SCAN_TIMEOUT_SECONDS", 5 * 60)
-        self.enable_scheduler = _truthy(os.getenv("FORESIGHT_ENABLE_SCHEDULER", "false"))
+        self.poll_interval_seconds = _get_float_env(
+            "FORESIGHT_WORKER_POLL_INTERVAL_SECONDS", 5.0
+        )
+        self.max_poll_interval_seconds = _get_float_env(
+            "FORESIGHT_WORKER_MAX_POLL_INTERVAL_SECONDS", 30.0
+        )
+        self.brief_timeout_seconds = _get_int_env(
+            "FORESIGHT_BRIEF_TIMEOUT_SECONDS", 30 * 60
+        )
+        self.discovery_timeout_seconds = _get_int_env(
+            "FORESIGHT_DISCOVERY_TIMEOUT_SECONDS", 90 * 60
+        )
+        self.workstream_scan_timeout_seconds = _get_int_env(
+            "FORESIGHT_WORKSTREAM_SCAN_TIMEOUT_SECONDS", 5 * 60
+        )
+        self.enable_scheduler = _truthy(
+            os.getenv("FORESIGHT_ENABLE_SCHEDULER", "false")
+        )
         self._stop_event = asyncio.Event()
+        self._current_interval = self.poll_interval_seconds
 
     def request_stop(self) -> None:
         self._stop_event.set()
@@ -92,6 +106,7 @@ class ForesightWorker:
             extra={
                 "worker_id": self.worker_id,
                 "poll_interval_seconds": self.poll_interval_seconds,
+                "max_poll_interval_seconds": self.max_poll_interval_seconds,
                 "enable_scheduler": self.enable_scheduler,
             },
         )
@@ -113,11 +128,21 @@ class ForesightWorker:
             except Exception as e:
                 logger.exception(f"Worker loop error: {e}")
 
-            if not did_work:
+            if did_work:
+                self._current_interval = self.poll_interval_seconds
+            else:
                 try:
-                    await asyncio.wait_for(self._stop_event.wait(), timeout=self.poll_interval_seconds)
+                    await asyncio.wait_for(
+                        self._stop_event.wait(), timeout=self._current_interval
+                    )
                 except asyncio.TimeoutError:
                     pass
+                # Backoff *after* sleeping so the first idle wait uses the
+                # base interval, not 2x.
+                self._current_interval = min(
+                    self._current_interval * 2,
+                    self.max_poll_interval_seconds,
+                )
 
         logger.info("Worker stopping", extra={"worker_id": self.worker_id})
 
@@ -211,7 +236,9 @@ class ForesightWorker:
         since_timestamp: Optional[str] = None
         sources_since_previous = brief.get("sources_since_previous") or {}
         if isinstance(sources_since_previous, dict):
-            since_timestamp = sources_since_previous.get("since_date") or sources_since_previous.get("since_timestamp")
+            since_timestamp = sources_since_previous.get(
+                "since_date"
+            ) or sources_since_previous.get("since_timestamp")
 
         logger.info(
             "Processing executive brief",
@@ -285,7 +312,9 @@ class ForesightWorker:
         if not claimed:
             return False
 
-        config_data = summary_report.get("config") if isinstance(summary_report, dict) else None
+        config_data = (
+            summary_report.get("config") if isinstance(summary_report, dict) else None
+        )
         if not isinstance(config_data, dict):
             config_data = {}
 
@@ -293,11 +322,15 @@ class ForesightWorker:
 
         if not triggered_by_user:
             # Defensive fallback: pick any system user.
-            system_user = supabase.table("users").select("id").limit(1).execute().data or []
+            system_user = (
+                supabase.table("users").select("id").limit(1).execute().data or []
+            )
             triggered_by_user = system_user[0]["id"] if system_user else None
 
         if not triggered_by_user:
-            raise RuntimeError("Discovery run has no triggered_by_user and no users exist to run as.")
+            raise RuntimeError(
+                "Discovery run has no triggered_by_user and no users exist to run as."
+            )
 
         logger.info(
             "Processing discovery run",
@@ -342,14 +375,23 @@ class ForesightWorker:
     async def _process_one_workstream_scan(self) -> bool:
         """Process one queued workstream scan job."""
         try:
-            result = supabase.table("workstream_scans").select("id,workstream_id,user_id,config,status").eq("status", "queued").order("created_at", desc=False).limit(1).execute()
+            result = (
+                supabase.table("workstream_scans")
+                .select("id,workstream_id,user_id,config,status")
+                .eq("status", "queued")
+                .order("created_at", desc=False)
+                .limit(1)
+                .execute()
+            )
             scans = result.data or []
             if scans:
-                logger.info(f"Found {len(scans)} queued workstream scan(s): {[s['id'] for s in scans]}")
+                logger.info(
+                    f"Found {len(scans)} queued workstream scan(s): {[s['id'] for s in scans]}"
+                )
         except Exception as e:
             logger.error(f"Error querying workstream_scans: {e}")
             return False
-        
+
         if not scans:
             return False
 
@@ -373,6 +415,7 @@ class ForesightWorker:
         # Parse config if it's a JSON string (Supabase behavior)
         if isinstance(config, str):
             import json
+
             try:
                 config = json.loads(config)
             except json.JSONDecodeError:
@@ -421,7 +464,9 @@ async def _main() -> None:
 
     port_env = os.getenv("PORT")
     enable_health_server_default = "true" if port_env else "false"
-    enable_health_server = _truthy(os.getenv("FORESIGHT_WORKER_HEALTH_SERVER", enable_health_server_default))
+    enable_health_server = _truthy(
+        os.getenv("FORESIGHT_WORKER_HEALTH_SERVER", enable_health_server_default)
+    )
 
     server: Optional[uvicorn.Server] = None
 
@@ -450,7 +495,9 @@ async def _main() -> None:
         async def worker_health() -> Dict[str, Any]:
             return {"status": "ok", "worker_id": worker.worker_id}
 
-        config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info", loop="asyncio")
+        config = uvicorn.Config(
+            app, host="0.0.0.0", port=port, log_level="info", loop="asyncio"
+        )
         server = uvicorn.Server(config)
 
         server_task = asyncio.create_task(server.serve())

@@ -1206,6 +1206,130 @@ async def get_pending_review_cards(
     return response.data
 
 
+# NOTE: This route MUST be before /cards/{card_id} to avoid route matching issues
+@app.get("/api/v1/cards/compare", response_model=CardComparisonResponse)
+async def compare_cards(
+    card_ids: str,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Compare two cards side-by-side with their historical data.
+
+    Returns parallel data for both cards including metadata, score history,
+    and stage history to enable synchronized timeline charts and comparative
+    metrics visualization.
+
+    Args:
+        card_ids: Comma-separated list of exactly 2 card UUIDs (e.g., "id1,id2")
+        start_date: Optional filter for score history start date
+        end_date: Optional filter for score history end date
+
+    Returns:
+        CardComparisonResponse with parallel data for both cards
+
+    Raises:
+        400: If card_ids doesn't contain exactly 2 IDs
+        404: If either card is not found
+    """
+    # Parse and validate card_ids
+    ids = [id.strip() for id in card_ids.split(",") if id.strip()]
+    if len(ids) != 2:
+        raise HTTPException(
+            status_code=400,
+            detail="Exactly 2 card IDs must be provided (comma-separated)",
+        )
+
+    card_id_1, card_id_2 = ids
+
+    # Helper function to fetch all data for a single card (synchronous)
+    def fetch_card_comparison_data(card_id: str) -> CardComparisonItem:
+        # Fetch card data
+        card_response = (
+            supabase.table("cards")
+            .select(
+                "id, name, slug, summary, pillar_id, goal_id, stage_id, horizon, "
+                "maturity_score, velocity_score, novelty_score, impact_score, "
+                "relevance_score, risk_score, opportunity_score, created_at, updated_at"
+            )
+            .eq("id", card_id)
+            .execute()
+        )
+
+        if not card_response.data:
+            raise HTTPException(status_code=404, detail=f"Card not found: {card_id}")
+
+        card_data = CardData(**card_response.data[0])
+
+        # Fetch score history
+        score_query = (
+            supabase.table("card_score_history").select("*").eq("card_id", card_id)
+        )
+        if start_date:
+            score_query = score_query.gte("recorded_at", start_date.isoformat())
+        if end_date:
+            score_query = score_query.lte("recorded_at", end_date.isoformat())
+        score_response = score_query.order("recorded_at", desc=True).execute()
+
+        score_history = (
+            [ScoreHistory(**record) for record in score_response.data]
+            if score_response.data
+            else []
+        )
+
+        # Fetch stage history from card_timeline
+        stage_response = (
+            supabase.table("card_timeline")
+            .select(
+                "id, card_id, created_at, old_stage_id, new_stage_id, old_horizon, new_horizon, trigger, reason"
+            )
+            .eq("card_id", card_id)
+            .eq("event_type", "stage_changed")
+            .order("created_at", desc=True)
+            .execute()
+        )
+
+        stage_history = []
+        if stage_response.data:
+            for record in stage_response.data:
+                if record.get("new_stage_id") is None:
+                    continue
+                stage_history.append(
+                    StageHistory(
+                        id=record["id"],
+                        card_id=record["card_id"],
+                        changed_at=record["created_at"],
+                        old_stage_id=record.get("old_stage_id"),
+                        new_stage_id=record["new_stage_id"],
+                        old_horizon=record.get("old_horizon"),
+                        new_horizon=record.get("new_horizon", "H3"),
+                        trigger=record.get("trigger"),
+                        reason=record.get("reason"),
+                    )
+                )
+
+        return CardComparisonItem(
+            card=card_data, score_history=score_history, stage_history=stage_history
+        )
+
+    # Fetch data for both cards in parallel using asyncio.gather with to_thread
+    try:
+        card1_data, card2_data = await asyncio.gather(
+            asyncio.to_thread(fetch_card_comparison_data, card_id_1),
+            asyncio.to_thread(fetch_card_comparison_data, card_id_2),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching comparison data: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch comparison data")
+
+    return CardComparisonResponse(
+        card1=card1_data, card2=card2_data, comparison_generated_at=datetime.now()
+    )
+
+
 @app.get("/api/v1/cards/{card_id}", response_model=Card)
 async def get_card(card_id: uuid.UUID):
     """Get specific card"""
@@ -1268,9 +1392,11 @@ async def search_cards(request: AdvancedSearchRequest):
                 )
                 query_embedding = embedding_response.data[0].embedding
 
-                # Search using vector similarity
+                # Vector similarity search returns id, name, summary,
+                # pillar_id, horizon, similarity.  We hydrate the matched
+                # IDs with only the columns needed for SearchResultItem.
                 search_response = supabase.rpc(
-                    "search_cards",
+                    "find_similar_cards",
                     {
                         "query_embedding": query_embedding,
                         "match_threshold": 0.5,
@@ -1280,10 +1406,32 @@ async def search_cards(request: AdvancedSearchRequest):
                     },
                 ).execute()
 
-                # Process results with similarity scores
-                for item in search_response.data or []:
-                    item["search_relevance"] = item.get("similarity", 0.0)
-                results = search_response.data or []
+                matched = search_response.data or []
+                if matched:
+                    similarity_map = {
+                        item["id"]: item.get("similarity", 0.0) for item in matched
+                    }
+                    matched_ids = list(similarity_map.keys())
+                    _SEARCH_HYDRATE_COLS = (
+                        "id, name, slug, summary, description, pillar_id, goal_id, "
+                        "anchor_id, stage_id, horizon, novelty_score, maturity_score, "
+                        "impact_score, relevance_score, velocity_score, risk_score, "
+                        "opportunity_score, status, created_at, updated_at, "
+                        "signal_quality_score, top25_relevance, origin, is_exploratory"
+                    )
+                    cards_response = (
+                        supabase.table("cards")
+                        .select(_SEARCH_HYDRATE_COLS)
+                        .in_("id", matched_ids)
+                        .execute()
+                    )
+                    results = cards_response.data or []
+                    for item in results:
+                        item["search_relevance"] = similarity_map.get(item["id"], 0.0)
+                    # Preserve similarity ordering
+                    results.sort(
+                        key=lambda x: x.get("search_relevance", 0), reverse=True
+                    )
 
             except Exception as vector_error:
                 logger.warning(
@@ -1897,131 +2045,6 @@ async def get_related_cards(
         related_cards=related_cards,
         total_count=len(related_cards),
         source_card_id=card_id,
-    )
-
-
-@app.get("/api/v1/cards/compare", response_model=CardComparisonResponse)
-async def compare_cards(
-    card_ids: str,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
-    current_user: dict = Depends(get_current_user),
-):
-    """
-    Compare two cards side-by-side with their historical data.
-
-    Returns parallel data for both cards including metadata, score history,
-    and stage history to enable synchronized timeline charts and comparative
-    metrics visualization.
-
-    Args:
-        card_ids: Comma-separated list of exactly 2 card UUIDs (e.g., "id1,id2")
-        start_date: Optional filter for score history start date
-        end_date: Optional filter for score history end date
-
-    Returns:
-        CardComparisonResponse with parallel data for both cards
-
-    Raises:
-        400: If card_ids doesn't contain exactly 2 IDs
-        404: If either card is not found
-    """
-    # Parse and validate card_ids
-    ids = [id.strip() for id in card_ids.split(",") if id.strip()]
-    if len(ids) != 2:
-        raise HTTPException(
-            status_code=400,
-            detail="Exactly 2 card IDs must be provided (comma-separated)",
-        )
-
-    card_id_1, card_id_2 = ids
-
-    # Helper function to fetch all data for a single card (synchronous)
-    def fetch_card_comparison_data(card_id: str) -> CardComparisonItem:
-        # Fetch card data
-        card_response = (
-            supabase.table("cards")
-            .select(
-                "id, name, slug, summary, pillar_id, goal_id, stage_id, horizon, "
-                "maturity_score, velocity_score, novelty_score, impact_score, "
-                "relevance_score, risk_score, opportunity_score, created_at, updated_at"
-            )
-            .eq("id", card_id)
-            .execute()
-        )
-
-        if not card_response.data:
-            raise HTTPException(status_code=404, detail=f"Card not found: {card_id}")
-
-        card_data = CardData(**card_response.data[0])
-
-        # Fetch score history
-        score_query = (
-            supabase.table("card_score_history").select("*").eq("card_id", card_id)
-        )
-        if start_date:
-            score_query = score_query.gte("recorded_at", start_date.isoformat())
-        if end_date:
-            score_query = score_query.lte("recorded_at", end_date.isoformat())
-        score_response = score_query.order("recorded_at", desc=True).execute()
-
-        score_history = (
-            [ScoreHistory(**record) for record in score_response.data]
-            if score_response.data
-            else []
-        )
-
-        # Fetch stage history from card_timeline
-        stage_response = (
-            supabase.table("card_timeline")
-            .select(
-                "id, card_id, created_at, old_stage_id, new_stage_id, old_horizon, new_horizon, trigger, reason"
-            )
-            .eq("card_id", card_id)
-            .eq("event_type", "stage_changed")
-            .order("created_at", desc=True)
-            .execute()
-        )
-
-        stage_history = []
-        if stage_response.data:
-            for record in stage_response.data:
-                if record.get("new_stage_id") is None:
-                    continue
-                stage_history.append(
-                    StageHistory(
-                        id=record["id"],
-                        card_id=record["card_id"],
-                        changed_at=record["created_at"],
-                        old_stage_id=record.get("old_stage_id"),
-                        new_stage_id=record["new_stage_id"],
-                        old_horizon=record.get("old_horizon"),
-                        new_horizon=record.get("new_horizon", "H3"),
-                        trigger=record.get("trigger"),
-                        reason=record.get("reason"),
-                    )
-                )
-
-        return CardComparisonItem(
-            card=card_data, score_history=score_history, stage_history=stage_history
-        )
-
-    # Fetch data for both cards in parallel using asyncio.gather with to_thread
-    # This allows concurrent execution of the synchronous Supabase operations
-    try:
-        card1_data, card2_data = await asyncio.gather(
-            asyncio.to_thread(fetch_card_comparison_data, card_id_1),
-            asyncio.to_thread(fetch_card_comparison_data, card_id_2),
-        )
-    except HTTPException:
-        # Re-raise HTTP exceptions as-is
-        raise
-    except Exception as e:
-        logger.error(f"Error fetching comparison data: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch comparison data")
-
-    return CardComparisonResponse(
-        card1=card1_data, card2=card2_data, comparison_generated_at=datetime.now()
     )
 
 
