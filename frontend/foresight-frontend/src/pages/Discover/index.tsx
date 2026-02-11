@@ -309,7 +309,7 @@ const Discover: React.FC = () => {
   const filteredCards = useMemo(() => {
     if (qualityFilter === "all") return cards;
     return cards.filter((card) => {
-      const score = card.quality_score;
+      const score = card.signal_quality_score;
       switch (qualityFilter) {
         case "high":
           return score != null && score >= 75;
@@ -1054,7 +1054,7 @@ const Discover: React.FC = () => {
                 <option value="least_recently_updated">
                   Least Recently Updated
                 </option>
-                <option value="quality_score">Quality Score</option>
+                <option value="signal_quality_score">Quality Score</option>
               </select>
             </div>
           </div>

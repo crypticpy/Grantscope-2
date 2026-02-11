@@ -22,24 +22,9 @@ import { QualityBadge } from "../components/QualityBadge";
 import { fetchPendingCount } from "../lib/discovery-api";
 import { parseStageNumber } from "../lib/stage-utils";
 import { logger } from "../lib/logger";
+import type { BaseCard } from "../types/card";
 
-interface Card {
-  id: string;
-  name: string;
-  slug: string;
-  summary: string;
-  pillar_id: string;
-  stage_id: string;
-  horizon: "H1" | "H2" | "H3";
-  novelty_score: number;
-  maturity_score: number;
-  impact_score: number;
-  relevance_score: number;
-  velocity_score: number;
-  created_at: string;
-  top25_relevance?: string[];
-  quality_score?: number | null;
-}
+type Card = BaseCard;
 
 interface FollowingCard {
   id: string;
@@ -159,18 +144,18 @@ const Dashboard: React.FC = () => {
           .from("cards")
           .select("id", { count: "exact", head: true })
           .eq("status", "active")
-          .gte("quality_score", 75),
+          .gte("signal_quality_score", 75),
         supabase
           .from("cards")
           .select("id", { count: "exact", head: true })
           .eq("status", "active")
-          .gte("quality_score", 50)
-          .lt("quality_score", 75),
+          .gte("signal_quality_score", 50)
+          .lt("signal_quality_score", 75),
         supabase
           .from("cards")
           .select("id", { count: "exact", head: true })
           .eq("status", "active")
-          .lt("quality_score", 50),
+          .or("signal_quality_score.lt.50,signal_quality_score.is.null"),
       ]);
 
       // Log errors for debugging (non-blocking)
@@ -585,7 +570,10 @@ const Dashboard: React.FC = () => {
                           {card.name}
                         </Link>
                       </h3>
-                      <QualityBadge score={card.quality_score} size="sm" />
+                      <QualityBadge
+                        score={card.signal_quality_score}
+                        size="sm"
+                      />
                       <PillarBadge
                         pillarId={card.pillar_id}
                         showIcon={true}

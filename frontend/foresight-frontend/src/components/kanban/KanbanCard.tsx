@@ -341,8 +341,8 @@ export const KanbanCard = memo(function KanbanCard({
               disableTooltip={isDragOverlay}
             />
           )}
-          {embeddedCard.quality_score != null && (
-            <QualityBadge score={embeddedCard.quality_score} size="sm" />
+          {embeddedCard.signal_quality_score != null && (
+            <QualityBadge score={embeddedCard.signal_quality_score} size="sm" />
           )}
         </div>
 

@@ -186,7 +186,9 @@ ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
 # Configure allowed origins based on environment
 if ENVIRONMENT == "production":
     # Production: strict HTTPS origins only
-    default_origins = "https://foresight.vercel.app"
+    default_origins = (
+        "https://foresight.vercel.app,https://foresight-frontend-beta.vercel.app"
+    )
     ALLOWED_ORIGINS_RAW = os.getenv("ALLOWED_ORIGINS", default_origins).split(",")
 
     # Validate production origins: must be HTTPS, no localhost
@@ -9690,7 +9692,7 @@ async def create_card_from_topic(
             "is_exploratory": not body.pillar_hints,
             "created_by": user["id"],
             "review_status": "approved",
-            "quality_score": 0,
+            "signal_quality_score": 0,
             "quality_breakdown": {},
         }
 
@@ -9781,7 +9783,7 @@ async def create_manual_card(
             "is_exploratory": body.is_exploratory or (not primary_pillar),
             "created_by": user["id"],
             "review_status": "approved",
-            "quality_score": 0,
+            "signal_quality_score": 0,
             "quality_breakdown": {},
             "horizon": body.horizon or "H1",
             "stage_id": body.stage or "1",

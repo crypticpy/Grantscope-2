@@ -36,25 +36,11 @@ import { CreateSignalModal } from "../components/CreateSignal";
 // Types
 // ---------------------------------------------------------------------------
 
-interface Signal {
-  id: string;
-  name: string;
-  slug: string;
-  summary: string;
-  pillar_id: string;
-  stage_id: string;
-  horizon: "H1" | "H2" | "H3";
-  impact_score: number;
-  relevance_score: number;
-  novelty_score: number;
-  velocity_score: number;
-  risk_score: number;
-  opportunity_score: number;
-  signal_quality_score: number | null;
-  top25_relevance?: string[];
-  created_at: string;
+import type { FullCard } from "../types/card";
+
+interface Signal extends FullCard {
+  /** Required on the Signals page (API always returns it). */
   updated_at: string;
-  source_count?: number;
 }
 
 interface PersonalSignal extends Signal {

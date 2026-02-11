@@ -30,8 +30,8 @@ export const getSortConfig = (
       return { column: "updated_at", ascending: false };
     case "least_recently_updated":
       return { column: "updated_at", ascending: true };
-    case "quality_score":
-      return { column: "quality_score", ascending: false };
+    case "signal_quality_score":
+      return { column: "signal_quality_score", ascending: false };
     case "newest":
     default:
       return { column: "created_at", ascending: false };
