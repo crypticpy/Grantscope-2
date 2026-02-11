@@ -1168,6 +1168,31 @@ class ResearchService:
             name=card["name"], summary=card.get("summary", "")
         )
 
+        # Steer research via source_preferences if available on the card
+        source_prefs = card.get("source_preferences") or {}
+        if source_prefs:
+            steer_parts = []
+            priority_domains = source_prefs.get("priority_domains")
+            if priority_domains:
+                steer_parts.append(
+                    f"Focus on sources from: {', '.join(priority_domains)}."
+                )
+            preferred_type = source_prefs.get("preferred_type")
+            type_labels = {
+                "federal": "federal government reports and .gov publications",
+                "academic": "academic papers and research publications",
+                "news": "news articles from reputable outlets",
+                "blogs": "technology blog posts and analysis",
+                "pdf": "PDF reports and whitepapers",
+            }
+            if preferred_type and preferred_type in type_labels:
+                steer_parts.append(f"Prefer {type_labels[preferred_type]}.")
+            keywords = source_prefs.get("keywords")
+            if keywords:
+                steer_parts.append(f"Key topics to emphasize: {', '.join(keywords)}.")
+            if steer_parts:
+                query += "\n\n" + " ".join(steer_parts)
+
         # Step 2: Discover sources (GPT Researcher + Exa - detailed report for more depth)
         sources, report, cost = await self._discover_sources(
             query=query, report_type="detailed_report"

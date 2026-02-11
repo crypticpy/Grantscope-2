@@ -1256,3 +1256,79 @@ export async function suggestKeywords(
     { method: "POST" },
   );
 }
+
+// ============================================================================
+// Source Preferences Types
+// ============================================================================
+
+export interface SourcePreferences {
+  enabled_categories?: string[];
+  preferred_type?: string;
+  priority_domains?: string[];
+  custom_rss_feeds?: string[];
+  keywords?: string[];
+}
+
+// ============================================================================
+// My Signals API (Personal Intelligence Hub)
+// ============================================================================
+
+export interface MySignalCard extends Card {
+  is_followed: boolean;
+  is_created: boolean;
+  is_pinned: boolean;
+  personal_notes: string | null;
+  follow_priority: string | null;
+  followed_at: string | null;
+  workstream_names: string[];
+  source_preferences?: SourcePreferences;
+}
+
+export interface MySignalsStats {
+  total: number;
+  followed_count: number;
+  created_count: number;
+  workstream_count: number;
+  updates_this_week: number;
+  needs_research: number;
+}
+
+export interface MySignalsResponse {
+  signals: MySignalCard[];
+  stats: MySignalsStats;
+  workstreams: Array<{ id: string; name: string }>;
+}
+
+export async function fetchMySignals(
+  token: string,
+  options?: {
+    sort_by?: string;
+    search?: string;
+    pillar?: string;
+    horizon?: string;
+    quality_min?: number;
+  },
+): Promise<MySignalsResponse> {
+  const params = new URLSearchParams();
+  if (options?.sort_by) params.append("sort_by", options.sort_by);
+  if (options?.search) params.append("search", options.search);
+  if (options?.pillar) params.append("pillar", options.pillar);
+  if (options?.horizon) params.append("horizon", options.horizon);
+  if (options?.quality_min !== undefined && options.quality_min > 0)
+    params.append("quality_min", String(options.quality_min));
+
+  const queryString = params.toString();
+  const endpoint = `/api/v1/me/signals${queryString ? `?${queryString}` : ""}`;
+  return apiRequest<MySignalsResponse>(endpoint, token);
+}
+
+export async function pinSignal(
+  token: string,
+  cardId: string,
+): Promise<{ is_pinned: boolean }> {
+  return apiRequest<{ is_pinned: boolean }>(
+    `/api/v1/me/signals/${cardId}/pin`,
+    token,
+    { method: "POST" },
+  );
+}

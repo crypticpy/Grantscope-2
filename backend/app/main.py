@@ -2076,6 +2076,204 @@ async def get_following_cards(current_user: dict = Depends(get_current_user)):
     return response.data
 
 
+@app.get("/api/v1/me/signals")
+async def get_my_signals(
+    group_by: Optional[str] = Query(
+        None, description="Group by: pillar, horizon, workstream"
+    ),
+    sort_by: str = Query(
+        "updated", description="Sort: updated, followed, quality, name"
+    ),
+    search: Optional[str] = Query(None, description="Search term"),
+    pillar: Optional[str] = Query(None, description="Filter by pillar"),
+    horizon: Optional[str] = Query(None, description="Filter by horizon"),
+    quality_min: Optional[int] = Query(None, ge=0, le=100),
+    current_user: dict = Depends(get_current_user),
+):
+    """Get user's personal intelligence hub: followed, created, and workstream signals."""
+    from datetime import timedelta
+
+    user_id = current_user["id"]
+
+    # 1. Get followed card IDs
+    follows_resp = (
+        supabase.table("card_follows")
+        .select("card_id, created_at, priority, notes")
+        .eq("user_id", user_id)
+        .execute()
+    )
+    followed_map = {f["card_id"]: f for f in (follows_resp.data or [])}
+    followed_ids = list(followed_map.keys())
+
+    # 2. Get user-created card IDs
+    created_resp = (
+        supabase.table("cards")
+        .select("id")
+        .eq("created_by", user_id)
+        .eq("status", "active")
+        .execute()
+    )
+    created_ids = [c["id"] for c in (created_resp.data or [])]
+
+    # 3. Get cards in user's workstreams
+    ws_resp = (
+        supabase.table("workstreams")
+        .select("id, name")
+        .eq("user_id", user_id)
+        .execute()
+    )
+    workstreams = ws_resp.data or []
+    ws_ids = [ws["id"] for ws in workstreams]
+    ws_card_ids = []
+    ws_card_map = {}  # card_id -> list of workstream names
+    if ws_ids:
+        wc_resp = (
+            supabase.table("workstream_cards")
+            .select("card_id, workstream_id")
+            .in_("workstream_id", ws_ids)
+            .execute()
+        )
+        ws_name_map = {ws["id"]: ws["name"] for ws in workstreams}
+        for wc in wc_resp.data or []:
+            cid = wc["card_id"]
+            ws_card_ids.append(cid)
+            if cid not in ws_card_map:
+                ws_card_map[cid] = []
+            ws_card_map[cid].append(ws_name_map.get(wc["workstream_id"], "Unknown"))
+
+    # 4. Union all unique card IDs
+    all_ids = list(set(followed_ids + created_ids + ws_card_ids))
+
+    if not all_ids:
+        return {
+            "signals": [],
+            "stats": {
+                "total": 0,
+                "followed_count": 0,
+                "created_count": 0,
+                "workstream_count": len(workstreams),
+                "updates_this_week": 0,
+                "needs_research": 0,
+            },
+            "workstreams": workstreams,
+        }
+
+    # 5. Fetch full card data for all IDs
+    cards_query = (
+        supabase.table("cards").select("*").in_("id", all_ids).eq("status", "active")
+    )
+
+    if search:
+        cards_query = cards_query.or_(f"name.ilike.%{search}%,summary.ilike.%{search}%")
+    if pillar:
+        cards_query = cards_query.eq("pillar_id", pillar)
+    if horizon:
+        cards_query = cards_query.eq("horizon", horizon)
+    if quality_min is not None and quality_min > 0:
+        cards_query = cards_query.gte("signal_quality_score", quality_min)
+
+    cards_resp = cards_query.execute()
+    cards = cards_resp.data or []
+
+    # 6. Get user signal preferences (pins)
+    prefs_resp = (
+        supabase.table("user_signal_preferences")
+        .select("*")
+        .eq("user_id", user_id)
+        .execute()
+    )
+    prefs_map = {p["card_id"]: p for p in (prefs_resp.data or [])}
+
+    # 7. Enrich cards with personal metadata
+    one_week_ago = (datetime.now() - timedelta(days=7)).isoformat()
+    enriched = []
+    for card in cards:
+        cid = card["id"]
+        pref = prefs_map.get(cid, {})
+        follow_data = followed_map.get(cid)
+        enriched.append(
+            {
+                **card,
+                "is_followed": cid in followed_ids,
+                "is_created": cid in created_ids,
+                "is_pinned": pref.get("is_pinned", False),
+                "personal_notes": pref.get("notes"),
+                "follow_priority": follow_data.get("priority") if follow_data else None,
+                "followed_at": follow_data.get("created_at") if follow_data else None,
+                "workstream_names": ws_card_map.get(cid, []),
+            }
+        )
+
+    # 8. Sort
+    if sort_by == "quality":
+        enriched.sort(key=lambda c: c.get("signal_quality_score") or 0, reverse=True)
+    elif sort_by == "followed":
+        enriched.sort(key=lambda c: c.get("followed_at") or "", reverse=True)
+    elif sort_by == "name":
+        enriched.sort(key=lambda c: c.get("name", "").lower())
+    else:  # default: updated
+        enriched.sort(
+            key=lambda c: c.get("updated_at") or c.get("created_at") or "", reverse=True
+        )
+
+    # Pinned first
+    enriched.sort(key=lambda c: 0 if c.get("is_pinned") else 1)
+
+    # 9. Stats
+    updates_this_week = sum(
+        1 for c in enriched if (c.get("updated_at") or "") >= one_week_ago
+    )
+    needs_research = sum(
+        1 for c in enriched if (c.get("signal_quality_score") or 0) < 30
+    )
+
+    return {
+        "signals": enriched,
+        "stats": {
+            "total": len(enriched),
+            "followed_count": sum(1 for c in enriched if c.get("is_followed")),
+            "created_count": sum(1 for c in enriched if c.get("is_created")),
+            "workstream_count": len(workstreams),
+            "updates_this_week": updates_this_week,
+            "needs_research": needs_research,
+        },
+        "workstreams": workstreams,
+    }
+
+
+@app.post("/api/v1/me/signals/{card_id}/pin")
+async def pin_signal(card_id: str, current_user: dict = Depends(get_current_user)):
+    """Pin/unpin a signal in the user's personal hub."""
+    user_id = current_user["id"]
+
+    # Check if preference exists
+    existing = (
+        supabase.table("user_signal_preferences")
+        .select("id, is_pinned")
+        .eq("user_id", user_id)
+        .eq("card_id", card_id)
+        .execute()
+    )
+
+    if existing.data:
+        # Toggle pin
+        new_val = not existing.data[0].get("is_pinned", False)
+        supabase.table("user_signal_preferences").update(
+            {"is_pinned": new_val, "updated_at": datetime.now().isoformat()}
+        ).eq("id", existing.data[0]["id"]).execute()
+        return {"is_pinned": new_val}
+    else:
+        # Create with pinned=True
+        supabase.table("user_signal_preferences").insert(
+            {
+                "user_id": user_id,
+                "card_id": card_id,
+                "is_pinned": True,
+            }
+        ).execute()
+        return {"is_pinned": True}
+
+
 # Notes endpoints
 @app.get("/api/v1/cards/{card_id}/notes")
 async def get_card_notes(card_id: str, current_user: dict = Depends(get_current_user)):
@@ -2634,9 +2832,7 @@ async def review_card(
 
             update_signal_quality_score(supabase, card_id)
         except Exception as e:
-            logger.warning(
-                f"Failed to update signal quality score for {card_id}: {e}"
-            )
+            logger.warning(f"Failed to update signal quality score for {card_id}: {e}")
 
     return updated_card
 
@@ -9483,6 +9679,11 @@ async def create_card_from_topic(
         if body.pillar_hints and len(body.pillar_hints) > 0:
             card_data["pillar_id"] = body.pillar_hints[0]
 
+        if body.source_preferences:
+            card_data["source_preferences"] = body.source_preferences.dict(
+                exclude_none=True
+            )
+
         result = supabase.table("cards").insert(card_data).execute()
 
         if not result.data:
@@ -9570,6 +9771,11 @@ async def create_manual_card(
 
         if primary_pillar:
             card_data["pillar_id"] = primary_pillar
+
+        if body.source_preferences:
+            card_data["source_preferences"] = body.source_preferences.dict(
+                exclude_none=True
+            )
 
         result = supabase.table("cards").insert(card_data).execute()
 

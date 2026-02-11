@@ -216,6 +216,58 @@ class DiscoveryConfig:
             self.search_topics = DEFAULT_SEARCH_TOPICS.copy()
 
 
+def apply_source_preferences(
+    config: DiscoveryConfig, source_prefs: dict
+) -> DiscoveryConfig:
+    """
+    Apply card-level source_preferences to a DiscoveryConfig.
+
+    Reads the source_preferences JSONB from a card and overrides
+    the config's source category toggles, custom RSS feeds,
+    search topics (keywords), and priority domains.
+
+    Args:
+        config: Base discovery configuration to modify
+        source_prefs: Dict from cards.source_preferences column
+
+    Returns:
+        Modified DiscoveryConfig with preferences applied
+    """
+    if not source_prefs:
+        return config
+
+    # Map frontend category names to SourceCategory enum values
+    category_map = {
+        "news": SourceCategory.NEWS.value,
+        "academic": SourceCategory.ACADEMIC.value,
+        "government": SourceCategory.GOVERNMENT.value,
+        "tech_blog": SourceCategory.TECH_BLOG.value,
+        "rss": SourceCategory.RSS.value,
+    }
+
+    # Apply enabled_categories: disable any category not in the list
+    enabled = source_prefs.get("enabled_categories")
+    if enabled and isinstance(enabled, list):
+        enabled_values = {category_map.get(c) for c in enabled if c in category_map}
+        for cat_key, cat_config in config.source_categories.items():
+            cat_config.enabled = cat_key in enabled_values
+
+    # Apply custom_rss_feeds: add to RSS category config
+    custom_feeds = source_prefs.get("custom_rss_feeds")
+    if custom_feeds and isinstance(custom_feeds, list):
+        rss_config = config.source_categories.get(SourceCategory.RSS.value)
+        if rss_config:
+            rss_config.rss_feeds = list(set(rss_config.rss_feeds + custom_feeds))
+            rss_config.enabled = True
+
+    # Apply keywords as search topics
+    keywords = source_prefs.get("keywords")
+    if keywords and isinstance(keywords, list):
+        config.search_topics = list(set(config.search_topics + keywords))
+
+    return config
+
+
 class DiscoveryStatus(Enum):
     """Status of a discovery run."""
 

@@ -19,6 +19,7 @@ import {
   Archive,
   ChevronDown,
   ChevronUp,
+  BookOpen,
 } from "lucide-react";
 import { supabase } from "../App";
 import { useAuthContext } from "../hooks/useAuthContext";
@@ -712,16 +713,25 @@ const Workstreams: React.FC = () => {
               Create custom research streams based on your strategic priorities.
             </p>
           </div>
-          {bannerDismissed && (
-            <button
-              onClick={handleRestoreBanner}
-              className="p-2 text-gray-400 hover:text-brand-blue hover:bg-brand-light-blue/30 dark:hover:bg-brand-blue/20 rounded-lg transition-colors"
-              aria-label="Show workstream help"
-              title="Show workstream help"
+          <div className="flex items-center gap-2">
+            {bannerDismissed && (
+              <button
+                onClick={handleRestoreBanner}
+                className="p-2 text-gray-400 hover:text-brand-blue hover:bg-brand-light-blue/30 dark:hover:bg-brand-blue/20 rounded-lg transition-colors"
+                aria-label="Show workstream help"
+                title="Show workstream help"
+              >
+                <HelpCircle className="h-5 w-5" />
+              </button>
+            )}
+            <Link
+              to="/guide/workstreams"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-brand-blue dark:hover:text-brand-light-blue hover:bg-brand-light-blue/30 dark:hover:bg-brand-blue/20 rounded-lg transition-colors"
             >
-              <HelpCircle className="h-5 w-5" />
-            </button>
-          )}
+              <BookOpen className="h-4 w-4" />
+              How to use
+            </Link>
+          </div>
         </div>
         <button
           onClick={() => {

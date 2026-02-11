@@ -48,6 +48,7 @@ import {
   RefreshCw,
   ArrowLeftRight,
   ShieldCheck,
+  BookOpen,
 } from "lucide-react";
 import { supabase } from "../../App";
 import { useAuthContext } from "../../hooks/useAuthContext";
@@ -770,6 +771,13 @@ const Discover: React.FC = () => {
               </p>
             </div>
             <div className="flex items-center gap-2">
+              <Link
+                to="/guide/discover"
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                <BookOpen className="w-4 h-4" />
+                How to use
+              </Link>
               <button
                 onClick={() =>
                   compareMode ? exitCompareMode() : setCompareMode(true)
@@ -852,17 +860,13 @@ const Discover: React.FC = () => {
             <RefreshCw className="h-4 w-4 mr-1.5" />
             Updated This Week
           </button>
-          <button
-            onClick={() => setSearchParams({ filter: "following" })}
-            className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-              quickFilter === "following"
-                ? "bg-extended-purple text-white"
-                : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
-            }`}
+          <Link
+            to="/signals"
+            className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium transition-colors bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-extended-purple/10 hover:text-extended-purple dark:hover:text-extended-purple"
           >
             <Star className="h-4 w-4 mr-1.5" />
-            Following
-          </button>
+            My Signals &rarr;
+          </Link>
 
           {/* Quality Tier Filter */}
           <div className="ml-auto flex items-center gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-0.5">
@@ -1459,9 +1463,7 @@ const Discover: React.FC = () => {
           </div>
         ) : filteredCards.length === 0 && !error ? (
           <div className="text-center py-12 bg-white dark:bg-[#2d3166] rounded-lg shadow">
-            {quickFilter === "following" ? (
-              <Star className="mx-auto h-12 w-12 text-gray-400" />
-            ) : useSemanticSearch && searchTerm ? (
+            {useSemanticSearch && searchTerm ? (
               <Sparkles className="mx-auto h-12 w-12 text-gray-400" />
             ) : searchTerm ||
               selectedPillar ||
@@ -1478,14 +1480,31 @@ const Discover: React.FC = () => {
             )}
 
             <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
-              {quickFilter === "following"
-                ? "You're Not Following Any Signals"
-                : quickFilter === "new"
-                  ? "No New Signals This Week"
-                  : useSemanticSearch && searchTerm
-                    ? "No Semantic Matches Found"
-                    : searchTerm ||
-                        selectedPillar ||
+              {quickFilter === "new"
+                ? "No New Signals This Week"
+                : useSemanticSearch && searchTerm
+                  ? "No Semantic Matches Found"
+                  : searchTerm ||
+                      selectedPillar ||
+                      selectedStage ||
+                      selectedHorizon ||
+                      dateFrom ||
+                      dateTo ||
+                      impactMin > 0 ||
+                      relevanceMin > 0 ||
+                      noveltyMin > 0
+                    ? "No Signals Match Your Filters"
+                    : "No Signals Available"}
+            </h3>
+
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto">
+              {quickFilter === "new"
+                ? "Check back soon for newly discovered intelligence signals."
+                : useSemanticSearch && searchTerm
+                  ? `No signals matched your semantic search for "${searchTerm}". Try different keywords, or switch to standard text search.`
+                  : searchTerm
+                    ? `No signals matched your search for "${searchTerm}". Try different keywords or enable semantic search for broader matches.`
+                    : selectedPillar ||
                         selectedStage ||
                         selectedHorizon ||
                         dateFrom ||
@@ -1493,41 +1512,12 @@ const Discover: React.FC = () => {
                         impactMin > 0 ||
                         relevanceMin > 0 ||
                         noveltyMin > 0
-                      ? "No Signals Match Your Filters"
-                      : "No Signals Available"}
-            </h3>
-
-            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto">
-              {quickFilter === "following"
-                ? "Start following signals to build your personalized feed. Click the heart icon on any signal to follow it."
-                : quickFilter === "new"
-                  ? "Check back soon for newly discovered intelligence signals."
-                  : useSemanticSearch && searchTerm
-                    ? `No signals matched your semantic search for "${searchTerm}". Try different keywords, or switch to standard text search.`
-                    : searchTerm
-                      ? `No signals matched your search for "${searchTerm}". Try different keywords or enable semantic search for broader matches.`
-                      : selectedPillar ||
-                          selectedStage ||
-                          selectedHorizon ||
-                          dateFrom ||
-                          dateTo ||
-                          impactMin > 0 ||
-                          relevanceMin > 0 ||
-                          noveltyMin > 0
-                        ? "Your current filter combination returned no results. Try removing some filters or adjusting score thresholds."
-                        : "The intelligence library is empty. Signals will appear here as they are discovered."}
+                      ? "Your current filter combination returned no results. Try removing some filters or adjusting score thresholds."
+                      : "The intelligence library is empty. Signals will appear here as they are discovered."}
             </p>
 
             <div className="mt-6 flex flex-wrap justify-center gap-3">
-              {quickFilter === "following" && (
-                <Link
-                  to="/discover"
-                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-brand-dark-blue transition-colors"
-                >
-                  <Eye className="h-4 w-4 mr-2" />
-                  Browse All Signals
-                </Link>
-              )}
+              {/* Link to My Signals page */}
               {(searchTerm ||
                 selectedPillar ||
                 selectedStage ||

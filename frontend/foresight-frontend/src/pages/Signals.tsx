@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import {
   Search,
@@ -8,13 +8,18 @@ import {
   Radio,
   Loader2,
   Filter,
-  Calendar,
-  TrendingUp,
-  Sparkles,
-  BarChart3,
+  Star,
   AlertTriangle,
   RefreshCw,
   X,
+  Eye,
+  PenTool,
+  Layers,
+  Bell,
+  Microscope,
+  ChevronDown,
+  Compass,
+  BookOpen,
 } from "lucide-react";
 import { supabase } from "../App";
 import { useAuthContext } from "../hooks/useAuthContext";
@@ -26,6 +31,10 @@ import { QualityScoreBadge } from "../components/QualityScoreBadge";
 import { Top25Badge } from "../components/Top25Badge";
 import { parseStageNumber } from "../lib/stage-utils";
 import { CreateSignalModal } from "../components/CreateSignal";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 interface Signal {
   id: string;
@@ -48,31 +57,112 @@ interface Signal {
   source_count?: number;
 }
 
-interface Pillar {
-  id: string;
-  name: string;
-  code: string;
+interface PersonalSignal extends Signal {
+  is_followed: boolean;
+  is_created: boolean;
+  is_pinned: boolean;
+  personal_notes: string | null;
+  follow_priority: string | null;
+  followed_at: string | null;
+  workstream_names: string[];
 }
 
-interface Stage {
-  id: string;
-  name: string;
-  sort_order: number;
+interface SignalStats {
+  total: number;
+  followed_count: number;
+  created_count: number;
+  workstream_count: number;
+  updates_this_week: number;
+  needs_research: number;
 }
 
+interface WorkstreamRef {
+  id: string;
+  name: string;
+}
+
+interface MySignalsResponse {
+  signals: PersonalSignal[];
+  stats: SignalStats;
+  workstreams: WorkstreamRef[];
+}
+
+type SourceFilter = "" | "followed" | "created" | "workstream";
 type SortOption =
-  | "quality_desc"
-  | "quality_asc"
-  | "newest"
   | "recently_updated"
-  | "impact"
-  | "relevance";
+  | "date_followed"
+  | "quality_desc"
+  | "name_asc";
+type GroupBy = "none" | "pillar" | "horizon" | "workstream";
+
+// ---------------------------------------------------------------------------
+// API helper
+// ---------------------------------------------------------------------------
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+async function fetchMySignals(
+  params: Record<string, string>,
+): Promise<MySignalsResponse> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) {
+    throw new Error("You must be signed in to view your signals.");
+  }
+  const qs = new URLSearchParams(params).toString();
+  const response = await fetch(`${API_BASE_URL}/api/v1/me/signals?${qs}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Failed to load signals (${response.status}): ${body}`);
+  }
+  return response.json();
+}
+
+async function togglePin(cardId: string, pin: boolean): Promise<void> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error("Not authenticated");
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/me/signals/${cardId}/pin`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ pinned: pin }),
+    },
+  );
+  if (!response.ok) {
+    throw new Error("Failed to update pin status");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Main Page Component
+// ---------------------------------------------------------------------------
 
 const Signals: React.FC = () => {
-  useAuthContext(); // ensure authenticated
-  const [signals, setSignals] = useState<Signal[]>([]);
-  const [pillars, setPillars] = useState<Pillar[]>([]);
-  const [stages, setStages] = useState<Stage[]>([]);
+  useAuthContext();
+
+  const [signals, setSignals] = useState<PersonalSignal[]>([]);
+  const [stats, setStats] = useState<SignalStats>({
+    total: 0,
+    followed_count: 0,
+    created_count: 0,
+    workstream_count: 0,
+    updates_this_week: 0,
+    needs_research: 0,
+  });
+  // Stored for potential filter enhancements; currently workstream grouping
+  // reads workstream_names from each signal directly.
+  const [_workstreams, setWorkstreams] = useState<WorkstreamRef[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreateSignal, setShowCreateSignal] = useState(false);
@@ -81,142 +171,176 @@ const Signals: React.FC = () => {
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedPillar, setSelectedPillar] = useState("");
-  const [selectedStage, setSelectedStage] = useState("");
   const [selectedHorizon, setSelectedHorizon] = useState("");
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>("");
   const [qualityMin, setQualityMin] = useState(0);
-  const [sortOption, setSortOption] = useState<SortOption>("quality_desc");
+  const [sortOption, setSortOption] = useState<SortOption>("recently_updated");
+  const [groupBy, setGroupBy] = useState<GroupBy>("none");
 
   const { debouncedValue: debouncedSearch } = useDebouncedValue(
     searchTerm,
     300,
   );
 
-  // Stats
-  const [stats, setStats] = useState({
-    total: 0,
-    avgQuality: 0,
-    newThisWeek: 0,
-  });
+  // Derived pillar list from the signals themselves
+  const uniquePillars = React.useMemo(() => {
+    const set = new Set<string>();
+    signals.forEach((s) => {
+      if (s.pillar_id) set.add(s.pillar_id);
+    });
+    return Array.from(set).sort();
+  }, [signals]);
 
-  useEffect(() => {
-    loadFilters();
-  }, []);
+  // -------------------------------------------
+  // Data loading
+  // -------------------------------------------
 
-  useEffect(() => {
-    loadSignals();
-  }, [
-    debouncedSearch,
-    selectedPillar,
-    selectedStage,
-    selectedHorizon,
-    qualityMin,
-    sortOption,
-  ]);
-
-  const loadFilters = async () => {
-    try {
-      const [pillarsRes, stagesRes] = await Promise.all([
-        supabase.from("pillars").select("*").order("name"),
-        supabase.from("stages").select("*").order("sort_order"),
-      ]);
-      setPillars(pillarsRes.data || []);
-      setStages(stagesRes.data || []);
-    } catch (err) {
-      console.error("Error loading filters:", err);
-    }
-  };
-
-  const loadSignals = async () => {
+  const loadSignals = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      let query = supabase.from("cards").select("*").eq("status", "active");
+      const params: Record<string, string> = {};
+      if (debouncedSearch) params.search = debouncedSearch;
+      if (selectedPillar) params.pillar = selectedPillar;
+      if (selectedHorizon) params.horizon = selectedHorizon;
+      if (sourceFilter) params.source = sourceFilter;
+      if (qualityMin > 0) params.quality_min = String(qualityMin);
+      if (sortOption) params.sort = sortOption;
 
-      if (debouncedSearch) {
-        query = query.or(
-          `name.ilike.%${debouncedSearch}%,summary.ilike.%${debouncedSearch}%`,
-        );
-      }
-      if (selectedPillar) query = query.eq("pillar_id", selectedPillar);
-      if (selectedStage) query = query.eq("stage_id", selectedStage);
-      if (selectedHorizon) query = query.eq("horizon", selectedHorizon);
-      if (qualityMin > 0) query = query.gte("signal_quality_score", qualityMin);
-
-      // Sort
-      switch (sortOption) {
-        case "quality_desc":
-          query = query.order("signal_quality_score", {
-            ascending: false,
-            nullsFirst: false,
-          });
-          break;
-        case "quality_asc":
-          query = query.order("signal_quality_score", {
-            ascending: true,
-            nullsFirst: false,
-          });
-          break;
-        case "newest":
-          query = query.order("created_at", { ascending: false });
-          break;
-        case "recently_updated":
-          query = query.order("updated_at", { ascending: false });
-          break;
-        case "impact":
-          query = query.order("impact_score", { ascending: false });
-          break;
-        case "relevance":
-          query = query.order("relevance_score", { ascending: false });
-          break;
-      }
-
-      const { data, error: queryError } = await query.limit(200);
-
-      if (queryError) {
-        setError(`Failed to load signals: ${queryError.message}`);
-        return;
-      }
-
-      const signalData = (data || []) as Signal[];
-      setSignals(signalData);
-
-      // Compute stats
-      const oneWeekAgo = new Date();
-      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-      const scored = signalData.filter((s) => s.signal_quality_score != null);
-      const avgQ =
-        scored.length > 0
-          ? Math.round(
-              scored.reduce(
-                (sum, s) => sum + (s.signal_quality_score || 0),
-                0,
-              ) / scored.length,
-            )
-          : 0;
-      const newCount = signalData.filter(
-        (s) => new Date(s.created_at) >= oneWeekAgo,
-      ).length;
-
-      setStats({
-        total: signalData.length,
-        avgQuality: avgQ,
-        newThisWeek: newCount,
-      });
+      const data = await fetchMySignals(params);
+      setSignals(data.signals);
+      setStats(data.stats);
+      setWorkstreams(data.workstreams);
     } catch (err) {
       console.error("Error loading signals:", err);
       setError(
         err instanceof Error
-          ? `Failed to load signals: ${err.message}`
+          ? err.message
           : "Failed to load signals. Please try again.",
       );
     } finally {
       setLoading(false);
     }
+  }, [
+    debouncedSearch,
+    selectedPillar,
+    selectedHorizon,
+    sourceFilter,
+    qualityMin,
+    sortOption,
+  ]);
+
+  useEffect(() => {
+    loadSignals();
+  }, [loadSignals]);
+
+  // -------------------------------------------
+  // Pin handler
+  // -------------------------------------------
+
+  const handleTogglePin = useCallback(
+    async (cardId: string, currentlyPinned: boolean) => {
+      // Optimistic update
+      setSignals((prev) =>
+        prev.map((s) =>
+          s.id === cardId ? { ...s, is_pinned: !currentlyPinned } : s,
+        ),
+      );
+      try {
+        await togglePin(cardId, !currentlyPinned);
+      } catch {
+        // Revert on failure
+        setSignals((prev) =>
+          prev.map((s) =>
+            s.id === cardId ? { ...s, is_pinned: currentlyPinned } : s,
+          ),
+        );
+      }
+    },
+    [],
+  );
+
+  // -------------------------------------------
+  // Client-side sorting for pinned-first + grouping
+  // -------------------------------------------
+
+  const sortedSignals = React.useMemo(() => {
+    const copy = [...signals];
+    // Pinned signals always come first within their group
+    copy.sort((a, b) => {
+      if (a.is_pinned && !b.is_pinned) return -1;
+      if (!a.is_pinned && b.is_pinned) return 1;
+      return 0;
+    });
+    return copy;
+  }, [signals]);
+
+  // -------------------------------------------
+  // Grouping logic
+  // -------------------------------------------
+
+  const groupedSignals = React.useMemo<
+    { key: string; label: string; signals: PersonalSignal[] }[]
+  >(() => {
+    if (groupBy === "none") {
+      return [{ key: "all", label: "", signals: sortedSignals }];
+    }
+
+    const groups = new Map<string, PersonalSignal[]>();
+
+    sortedSignals.forEach((signal) => {
+      let keys: string[] = [];
+      if (groupBy === "pillar") {
+        keys = [signal.pillar_id || "Unknown"];
+      } else if (groupBy === "horizon") {
+        keys = [signal.horizon || "Unknown"];
+      } else if (groupBy === "workstream") {
+        keys =
+          signal.workstream_names.length > 0
+            ? signal.workstream_names
+            : ["No Workstream"];
+      }
+      keys.forEach((k) => {
+        if (!groups.has(k)) groups.set(k, []);
+        groups.get(k)!.push(signal);
+      });
+    });
+
+    return Array.from(groups.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, sigs]) => ({
+        key,
+        label: key,
+        signals: sigs,
+      }));
+  }, [sortedSignals, groupBy]);
+
+  // -------------------------------------------
+  // Active-filter check
+  // -------------------------------------------
+
+  const hasActiveFilters =
+    searchTerm !== "" ||
+    selectedPillar !== "" ||
+    selectedHorizon !== "" ||
+    sourceFilter !== "" ||
+    qualityMin > 0;
+
+  const clearFilters = () => {
+    setSearchTerm("");
+    setSelectedPillar("");
+    setSelectedHorizon("");
+    setSourceFilter("");
+    setQualityMin(0);
   };
+
+  // -------------------------------------------
+  // Render
+  // -------------------------------------------
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Hero Header */}
+      {/* ── Hero Header ────────────────────────────────────── */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-brand-blue via-brand-blue/90 to-brand-green mb-8 p-8 md:p-10">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PGNpcmNsZSBjeD0iMzAiIGN5PSIzMCIgcj0iMiIvPjwvZz48L2c+PC9zdmc+')] opacity-50" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -224,27 +348,36 @@ const Signals: React.FC = () => {
             <div className="flex items-center gap-3 mb-2">
               <Radio className="w-7 h-7 text-white/90" />
               <h1 className="text-3xl md:text-4xl font-bold text-white">
-                Signals
+                My Signals
               </h1>
             </div>
             <p className="text-white/80 text-lg max-w-2xl">
-              Strategic intelligence signals tracked by Foresight. Each signal
-              represents a trend, technology, or issue that could impact
-              Austin&apos;s municipal operations.
+              Your personal intelligence hub &mdash; followed, created, and
+              workstream signals in one place.
             </p>
           </div>
-          <button
-            onClick={() => setShowCreateSignal(true)}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-white/20 hover:bg-white/30 text-white font-medium rounded-xl backdrop-blur-sm border border-white/20 transition-colors shrink-0"
-          >
-            <Plus className="w-5 h-5" />
-            New Signal
-          </button>
+          <div className="flex items-center gap-3 shrink-0">
+            <Link
+              to="/guide/signals"
+              className="inline-flex items-center gap-2 px-4 py-2.5 text-white/80 hover:text-white hover:bg-white/10 font-medium rounded-xl border border-white/10 transition-colors text-sm"
+            >
+              <BookOpen className="w-4 h-4" />
+              How to use
+            </Link>
+            <button
+              onClick={() => setShowCreateSignal(true)}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-white/20 hover:bg-white/30 text-white font-medium rounded-xl backdrop-blur-sm border border-white/20 transition-colors"
+            >
+              <Plus className="w-5 h-5" />
+              New Signal
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Stats Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+      {/* ── Stats Row ──────────────────────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {/* Tracking */}
         <div className="bg-white dark:bg-[#2d3166] rounded-xl shadow-sm p-5 flex items-center gap-4">
           <div className="p-3 bg-brand-blue/10 rounded-xl">
             <Radio className="w-6 h-6 text-brand-blue" />
@@ -254,39 +387,66 @@ const Signals: React.FC = () => {
               {stats.total}
             </p>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Total Signals
+              Signals across{" "}
+              <span className="font-medium text-gray-700 dark:text-gray-300">
+                {stats.workstream_count}
+              </span>{" "}
+              workstreams
             </p>
           </div>
         </div>
+
+        {/* Followed / Created breakdown */}
         <div className="bg-white dark:bg-[#2d3166] rounded-xl shadow-sm p-5 flex items-center gap-4">
           <div className="p-3 bg-brand-green/10 rounded-xl">
-            <BarChart3 className="w-6 h-6 text-brand-green" />
+            <Eye className="w-6 h-6 text-brand-green" />
           </div>
           <div>
             <p className="text-2xl font-bold text-gray-900 dark:text-white">
-              {stats.avgQuality > 0 ? stats.avgQuality : "—"}
+              {stats.followed_count}
+              <span className="text-base font-normal text-gray-400 dark:text-gray-500">
+                {" "}
+                / {stats.created_count}
+              </span>
             </p>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Avg Quality Score
+              Followed / Created
             </p>
           </div>
         </div>
+
+        {/* Updates this week */}
         <div className="bg-white dark:bg-[#2d3166] rounded-xl shadow-sm p-5 flex items-center gap-4">
           <div className="p-3 bg-extended-purple/10 rounded-xl">
-            <Sparkles className="w-6 h-6 text-extended-purple" />
+            <Bell className="w-6 h-6 text-extended-purple" />
           </div>
           <div>
             <p className="text-2xl font-bold text-gray-900 dark:text-white">
-              {stats.newThisWeek}
+              {stats.updates_this_week}
             </p>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              New This Week
+              Updated this week
+            </p>
+          </div>
+        </div>
+
+        {/* Needs research */}
+        <div className="bg-white dark:bg-[#2d3166] rounded-xl shadow-sm p-5 flex items-center gap-4">
+          <div className="p-3 bg-amber-500/10 rounded-xl">
+            <Microscope className="w-6 h-6 text-amber-500" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">
+              {stats.needs_research}
+            </p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Need deeper research
             </p>
           </div>
         </div>
       </div>
 
-      {/* Filter Bar */}
+      {/* ── Filter / Sort Bar ──────────────────────────────── */}
       <div className="bg-white dark:bg-[#2d3166] rounded-xl shadow-sm p-6 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
           {/* Search */}
@@ -303,7 +463,7 @@ const Signals: React.FC = () => {
                 type="text"
                 id="signal-search"
                 className="pl-10 block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
-                placeholder="Search signals..."
+                placeholder="Search your signals..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -325,32 +485,9 @@ const Signals: React.FC = () => {
               onChange={(e) => setSelectedPillar(e.target.value)}
             >
               <option value="">All Pillars</option>
-              {pillars.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Stage */}
-          <div>
-            <label
-              htmlFor="signal-stage"
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-            >
-              Stage
-            </label>
-            <select
-              id="signal-stage"
-              className="block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
-              value={selectedStage}
-              onChange={(e) => setSelectedStage(e.target.value)}
-            >
-              <option value="">All Stages</option>
-              {stages.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
+              {uniquePillars.map((p) => (
+                <option key={p} value={p}>
+                  {p}
                 </option>
               ))}
             </select>
@@ -377,8 +514,29 @@ const Signals: React.FC = () => {
             </select>
           </div>
 
+          {/* Source (followed / created / workstream) */}
+          <div>
+            <label
+              htmlFor="signal-source"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+            >
+              Source
+            </label>
+            <select
+              id="signal-source"
+              className="block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+              value={sourceFilter}
+              onChange={(e) => setSourceFilter(e.target.value as SourceFilter)}
+            >
+              <option value="">All Sources</option>
+              <option value="followed">Followed</option>
+              <option value="created">Created by Me</option>
+              <option value="workstream">In Workstreams</option>
+            </select>
+          </div>
+
           {/* Sort */}
-          <div className="lg:col-span-2">
+          <div>
             <label
               htmlFor="signal-sort"
               className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
@@ -391,23 +549,24 @@ const Signals: React.FC = () => {
               value={sortOption}
               onChange={(e) => setSortOption(e.target.value as SortOption)}
             >
-              <option value="quality_desc">Highest Quality</option>
-              <option value="quality_asc">Lowest Quality</option>
-              <option value="newest">Newest</option>
-              <option value="recently_updated">Recently Updated</option>
-              <option value="impact">Highest Impact</option>
-              <option value="relevance">Highest Relevance</option>
+              <option value="recently_updated">Last Updated</option>
+              <option value="date_followed">Date Followed</option>
+              <option value="quality_desc">Quality Score</option>
+              <option value="name_asc">Name (A-Z)</option>
             </select>
           </div>
+        </div>
 
+        {/* Second row: Quality min, Group by, View toggle */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
           {/* Quality Score Range */}
-          <div className="lg:col-span-2">
+          <div>
             <div className="flex items-center justify-between mb-1">
               <label
                 htmlFor="quality-min"
                 className="text-sm font-medium text-gray-700 dark:text-gray-300"
               >
-                Min Quality Score
+                Min Quality
               </label>
               <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
                 {qualityMin > 0 ? `>= ${qualityMin}` : "Any"}
@@ -425,7 +584,31 @@ const Signals: React.FC = () => {
             />
           </div>
 
-          {/* View Toggle */}
+          {/* Group by */}
+          <div>
+            <label
+              htmlFor="signal-group"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+            >
+              Group By
+            </label>
+            <div className="relative">
+              <Layers className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <select
+                id="signal-group"
+                className="pl-10 block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                value={groupBy}
+                onChange={(e) => setGroupBy(e.target.value as GroupBy)}
+              >
+                <option value="none">No Grouping</option>
+                <option value="pillar">Pillar</option>
+                <option value="horizon">Horizon</option>
+                <option value="workstream">Workstream</option>
+              </select>
+            </div>
+          </div>
+
+          {/* View toggle */}
           <div className="flex items-end gap-2">
             <button
               onClick={() => setViewMode("grid")}
@@ -454,23 +637,15 @@ const Signals: React.FC = () => {
           </div>
         </div>
 
+        {/* Filter summary */}
         <div className="mt-3 flex items-center justify-between">
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            Showing {signals.length} signals
+            Showing {sortedSignals.length} signal
+            {sortedSignals.length !== 1 ? "s" : ""}
           </p>
-          {(searchTerm ||
-            selectedPillar ||
-            selectedStage ||
-            selectedHorizon ||
-            qualityMin > 0) && (
+          {hasActiveFilters && (
             <button
-              onClick={() => {
-                setSearchTerm("");
-                setSelectedPillar("");
-                setSelectedStage("");
-                setSelectedHorizon("");
-                setQualityMin(0);
-              }}
+              onClick={clearFilters}
               className="text-sm text-brand-blue hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue focus-visible:ring-offset-2"
             >
               Clear filters
@@ -479,7 +654,7 @@ const Signals: React.FC = () => {
         </div>
       </div>
 
-      {/* Error Banner */}
+      {/* ── Error Banner ───────────────────────────────────── */}
       {error && (
         <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
           <div className="flex items-start gap-3">
@@ -509,44 +684,32 @@ const Signals: React.FC = () => {
         </div>
       )}
 
-      {/* Content */}
+      {/* ── Content ────────────────────────────────────────── */}
       {loading ? (
         <div className="flex flex-col items-center justify-center py-16">
           <Loader2 className="h-8 w-8 text-brand-blue animate-spin" />
           <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
-            Loading signals...
+            Loading your signals...
           </p>
         </div>
-      ) : signals.length === 0 ? (
-        <div className="text-center py-16 bg-white dark:bg-[#2d3166] rounded-xl shadow-sm">
-          <Filter className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
-            No Signals Found
-          </h3>
-          <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto">
-            {searchTerm ||
-            selectedPillar ||
-            selectedStage ||
-            selectedHorizon ||
-            qualityMin > 0
-              ? "Try adjusting your filters to see more results."
-              : "No signals have been created yet. Run a discovery scan to populate signals."}
-          </p>
-        </div>
-      ) : viewMode === "grid" ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {signals.map((signal) => (
-            <SignalCard key={signal.id} signal={signal} />
-          ))}
-        </div>
+      ) : sortedSignals.length === 0 ? (
+        <EmptyState hasFilters={hasActiveFilters} />
       ) : (
-        <div className="space-y-3">
-          {signals.map((signal) => (
-            <SignalListItem key={signal.id} signal={signal} />
+        <div className="space-y-8">
+          {groupedSignals.map((group) => (
+            <SignalGroup
+              key={group.key}
+              label={group.label}
+              groupBy={groupBy}
+              signals={group.signals}
+              viewMode={viewMode}
+              onTogglePin={handleTogglePin}
+            />
           ))}
         </div>
       )}
 
+      {/* ── Create Signal Modal ────────────────────────────── */}
       <CreateSignalModal
         isOpen={showCreateSignal}
         onClose={() => setShowCreateSignal(false)}
@@ -559,92 +722,327 @@ const Signals: React.FC = () => {
   );
 };
 
-const SignalCard: React.FC<{ signal: Signal }> = React.memo(({ signal }) => {
-  const stageNumber = parseStageNumber(signal.stage_id);
+// ---------------------------------------------------------------------------
+// Empty state
+// ---------------------------------------------------------------------------
+
+const EmptyState: React.FC<{ hasFilters: boolean }> = ({ hasFilters }) => (
+  <div className="text-center py-16 bg-white dark:bg-[#2d3166] rounded-xl shadow-sm">
+    {hasFilters ? (
+      <>
+        <Filter className="mx-auto h-12 w-12 text-gray-400" />
+        <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
+          No Matching Signals
+        </h3>
+        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto">
+          Try adjusting your filters to see more results.
+        </p>
+      </>
+    ) : (
+      <>
+        <Compass className="mx-auto h-12 w-12 text-gray-400" />
+        <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
+          No Signals Yet
+        </h3>
+        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto">
+          You haven&apos;t followed any signals yet. Discover signals to start
+          building your intelligence hub.
+        </p>
+        <Link
+          to="/discover"
+          className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 bg-brand-blue hover:bg-brand-blue/90 text-white font-medium rounded-xl transition-colors"
+        >
+          <Compass className="w-5 h-5" />
+          Discover Signals
+        </Link>
+      </>
+    )}
+  </div>
+);
+
+// ---------------------------------------------------------------------------
+// Signal group wrapper (for grouped view)
+// ---------------------------------------------------------------------------
+
+interface SignalGroupProps {
+  label: string;
+  groupBy: GroupBy;
+  signals: PersonalSignal[];
+  viewMode: "grid" | "list";
+  onTogglePin: (cardId: string, currentlyPinned: boolean) => void;
+}
+
+const SignalGroup: React.FC<SignalGroupProps> = ({
+  label,
+  groupBy,
+  signals,
+  viewMode,
+  onTogglePin,
+}) => {
+  const [collapsed, setCollapsed] = useState(false);
 
   return (
-    <Link
-      to={`/signals/${signal.slug}`}
-      state={{ from: "/signals" }}
-      aria-label={`View signal: ${signal.name}`}
-      className="block bg-white dark:bg-[#2d3166] rounded-lg shadow-sm border border-gray-100 dark:border-gray-700/50 hover:-translate-y-1 hover:shadow-lg transition-all duration-200 overflow-hidden group"
-    >
-      {/* Gradient accent bar */}
-      <div className="h-1 bg-gradient-to-r from-brand-blue to-brand-green" />
-
-      <div className="p-5">
-        {/* Title + Quality Score */}
-        <div className="flex items-start justify-between gap-3 mb-3">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white group-hover:text-brand-blue transition-colors line-clamp-2">
-            {signal.name}
-          </h3>
-          <QualityScoreBadge score={signal.signal_quality_score} size="sm" />
-        </div>
-
-        {/* Summary */}
-        <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 mb-4">
-          {signal.summary}
-        </p>
-
-        {/* Badges */}
-        <div className="flex flex-wrap items-center gap-2 mb-4">
-          <PillarBadge pillarId={signal.pillar_id} size="sm" />
-          <HorizonBadge horizon={signal.horizon} size="sm" />
-          {stageNumber && <StageBadge stage={stageNumber} size="sm" />}
-          {signal.top25_relevance && signal.top25_relevance.length > 0 && (
-            <Top25Badge priorities={signal.top25_relevance} size="sm" />
+    <div>
+      {/* Group header (only when groupBy is active) */}
+      {groupBy !== "none" && (
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className="flex items-center gap-2 mb-3 group w-full text-left"
+        >
+          <ChevronDown
+            className={`h-4 w-4 text-gray-400 transition-transform ${
+              collapsed ? "-rotate-90" : ""
+            }`}
+          />
+          {groupBy === "pillar" ? (
+            <PillarBadge pillarId={label} size="sm" disableTooltip />
+          ) : groupBy === "horizon" &&
+            (label === "H1" || label === "H2" || label === "H3") ? (
+            <HorizonBadge horizon={label} size="sm" disableTooltip />
+          ) : (
+            <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+              {label}
+            </span>
           )}
-        </div>
+          <span className="text-xs text-gray-400 dark:text-gray-500">
+            ({signals.length})
+          </span>
+        </button>
+      )}
 
-        {/* Scores Row */}
-        <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
-          <span className="flex items-center gap-1">
-            <TrendingUp className="w-3.5 h-3.5" />
-            Impact {signal.impact_score}
-          </span>
-          <span className="flex items-center gap-1">
-            <Sparkles className="w-3.5 h-3.5" />
-            Relevance {signal.relevance_score}
-          </span>
-          <span className="flex items-center gap-1">
-            <Calendar className="w-3.5 h-3.5" />
-            {new Date(signal.created_at).toLocaleDateString()}
-          </span>
-        </div>
-      </div>
-    </Link>
+      {/* Cards */}
+      {!collapsed &&
+        (viewMode === "grid" ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {signals.map((signal) => (
+              <SignalCard
+                key={signal.id}
+                signal={signal}
+                onTogglePin={onTogglePin}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {signals.map((signal) => (
+              <SignalListItem
+                key={signal.id}
+                signal={signal}
+                onTogglePin={onTogglePin}
+              />
+            ))}
+          </div>
+        ))}
+    </div>
   );
-});
+};
 
-SignalCard.displayName = "SignalCard";
+// ---------------------------------------------------------------------------
+// Personal tag badges (followed / created / workstream)
+// ---------------------------------------------------------------------------
 
-const SignalListItem: React.FC<{ signal: Signal }> = React.memo(
-  ({ signal }) => {
+const SourceBadge: React.FC<{
+  type: "followed" | "created" | "workstream";
+  label?: string;
+}> = ({ type, label }) => {
+  const configs = {
+    followed: {
+      icon: Eye,
+      text: "Followed",
+      className:
+        "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800",
+    },
+    created: {
+      icon: PenTool,
+      text: "Created",
+      className:
+        "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800",
+    },
+    workstream: {
+      icon: Layers,
+      text: label || "Workstream",
+      className:
+        "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800",
+    },
+  };
+
+  const config = configs[type];
+  const Icon = config.icon;
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded border ${config.className}`}
+    >
+      <Icon className="w-3 h-3" />
+      {config.text}
+    </span>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Signal Card (grid view)
+// ---------------------------------------------------------------------------
+
+interface SignalCardProps {
+  signal: PersonalSignal;
+  onTogglePin: (cardId: string, currentlyPinned: boolean) => void;
+}
+
+const SignalCard: React.FC<SignalCardProps> = React.memo(
+  ({ signal, onTogglePin }) => {
     const stageNumber = parseStageNumber(signal.stage_id);
 
     return (
-      <Link
-        to={`/signals/${signal.slug}`}
-        state={{ from: "/signals" }}
-        aria-label={`View signal: ${signal.name}`}
-        className="flex items-center gap-4 bg-white dark:bg-[#2d3166] rounded-lg shadow-sm border border-gray-100 dark:border-gray-700/50 p-4 hover:shadow-md hover:border-brand-blue/30 transition-all group"
-      >
+      <div className="relative bg-white dark:bg-[#2d3166] rounded-lg shadow-sm border border-gray-100 dark:border-gray-700/50 hover:-translate-y-1 hover:shadow-lg transition-all duration-200 overflow-hidden group">
+        {/* Gradient accent bar */}
+        <div className="h-1 bg-gradient-to-r from-brand-blue to-brand-green" />
+
+        {/* Pin button */}
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onTogglePin(signal.id, signal.is_pinned);
+          }}
+          className={`absolute top-3 right-3 z-10 p-1.5 rounded-lg transition-colors ${
+            signal.is_pinned
+              ? "text-amber-500 bg-amber-50 dark:bg-amber-900/30"
+              : "text-gray-300 hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 opacity-0 group-hover:opacity-100"
+          }`}
+          aria-label={signal.is_pinned ? "Unpin signal" : "Pin signal"}
+          title={signal.is_pinned ? "Unpin" : "Pin"}
+        >
+          <Star
+            className={`w-4 h-4 ${signal.is_pinned ? "fill-amber-400" : ""}`}
+          />
+        </button>
+
+        <Link
+          to={`/signals/${signal.slug}`}
+          state={{ from: "/signals" }}
+          aria-label={`View signal: ${signal.name}`}
+          className="block"
+        >
+          <div className="p-5">
+            {/* Title + Quality Score */}
+            <div className="flex items-start justify-between gap-3 mb-3 pr-8">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white group-hover:text-brand-blue transition-colors line-clamp-2">
+                {signal.name}
+              </h3>
+              <QualityScoreBadge
+                score={signal.signal_quality_score}
+                size="sm"
+              />
+            </div>
+
+            {/* Summary */}
+            <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 mb-4">
+              {signal.summary}
+            </p>
+
+            {/* Taxonomy badges */}
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <PillarBadge pillarId={signal.pillar_id} size="sm" />
+              <HorizonBadge horizon={signal.horizon} size="sm" />
+              {stageNumber && <StageBadge stage={stageNumber} size="sm" />}
+              {signal.top25_relevance && signal.top25_relevance.length > 0 && (
+                <Top25Badge priorities={signal.top25_relevance} size="sm" />
+              )}
+            </div>
+
+            {/* Personal source badges */}
+            <div className="flex flex-wrap items-center gap-1.5 mb-3">
+              {signal.is_followed && <SourceBadge type="followed" />}
+              {signal.is_created && <SourceBadge type="created" />}
+              {signal.workstream_names.map((ws) => (
+                <SourceBadge key={ws} type="workstream" label={ws} />
+              ))}
+            </div>
+
+            {/* Bottom meta */}
+            <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+              <span>Impact {signal.impact_score}</span>
+              <span>Rel. {signal.relevance_score}</span>
+              <span className="ml-auto">
+                {new Date(signal.updated_at).toLocaleDateString()}
+              </span>
+            </div>
+          </div>
+        </Link>
+      </div>
+    );
+  },
+);
+
+SignalCard.displayName = "SignalCard";
+
+// ---------------------------------------------------------------------------
+// Signal List Item (list view)
+// ---------------------------------------------------------------------------
+
+const SignalListItem: React.FC<SignalCardProps> = React.memo(
+  ({ signal, onTogglePin }) => {
+    const stageNumber = parseStageNumber(signal.stage_id);
+
+    return (
+      <div className="flex items-center gap-4 bg-white dark:bg-[#2d3166] rounded-lg shadow-sm border border-gray-100 dark:border-gray-700/50 p-4 hover:shadow-md hover:border-brand-blue/30 transition-all group">
+        {/* Pin */}
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onTogglePin(signal.id, signal.is_pinned);
+          }}
+          className={`shrink-0 p-1.5 rounded-lg transition-colors ${
+            signal.is_pinned
+              ? "text-amber-500 bg-amber-50 dark:bg-amber-900/30"
+              : "text-gray-300 hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 opacity-0 group-hover:opacity-100"
+          }`}
+          aria-label={signal.is_pinned ? "Unpin signal" : "Pin signal"}
+          title={signal.is_pinned ? "Unpin" : "Pin"}
+        >
+          <Star
+            className={`w-4 h-4 ${signal.is_pinned ? "fill-amber-400" : ""}`}
+          />
+        </button>
+
         {/* Quality Score */}
         <div className="shrink-0">
           <QualityScoreBadge score={signal.signal_quality_score} size="lg" />
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 min-w-0">
+        <Link
+          to={`/signals/${signal.slug}`}
+          state={{ from: "/signals" }}
+          aria-label={`View signal: ${signal.name}`}
+          className="flex-1 min-w-0"
+        >
           <h3 className="font-semibold text-gray-900 dark:text-white group-hover:text-brand-blue transition-colors truncate">
             {signal.name}
           </h3>
           <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
             {signal.summary}
           </p>
+        </Link>
+
+        {/* Source badges */}
+        <div className="hidden md:flex items-center gap-1.5 shrink-0">
+          {signal.is_followed && <SourceBadge type="followed" />}
+          {signal.is_created && <SourceBadge type="created" />}
+          {signal.workstream_names.length > 0 && (
+            <SourceBadge
+              type="workstream"
+              label={
+                signal.workstream_names.length === 1
+                  ? signal.workstream_names[0]
+                  : `${signal.workstream_names.length} workstreams`
+              }
+            />
+          )}
         </div>
 
-        {/* Badges */}
+        {/* Taxonomy badges */}
         <div className="hidden sm:flex items-center gap-2 shrink-0">
           <PillarBadge pillarId={signal.pillar_id} size="sm" />
           <HorizonBadge horizon={signal.horizon} size="sm" />
@@ -662,9 +1060,9 @@ const SignalListItem: React.FC<{ signal: Signal }> = React.memo(
 
         {/* Date */}
         <div className="text-xs text-gray-400 shrink-0 hidden lg:block">
-          {new Date(signal.created_at).toLocaleDateString()}
+          {new Date(signal.updated_at).toLocaleDateString()}
         </div>
-      </Link>
+      </div>
     );
   },
 );
