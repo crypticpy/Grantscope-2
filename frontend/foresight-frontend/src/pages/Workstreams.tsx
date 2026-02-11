@@ -24,6 +24,7 @@ import {
 import { supabase } from "../App";
 import { useAuthContext } from "../hooks/useAuthContext";
 import { WorkstreamForm, type Workstream } from "../components/WorkstreamForm";
+import { WorkstreamWizard } from "../components/workstream/WorkstreamWizard";
 import { PillarBadgeGroup } from "../components/PillarBadge";
 import { getGoalByCode } from "../data/taxonomy";
 import { cn } from "../lib/utils";
@@ -98,26 +99,41 @@ interface FormModalProps {
 }
 
 function FormModal({ workstream, onSuccess, onCancel }: FormModalProps) {
+  const isCreateMode = !workstream;
+
   return (
     <div className="fixed inset-0 bg-gray-600/50 dark:bg-black/60 flex items-center justify-center p-4 z-50 overflow-y-auto">
-      <div className="bg-white dark:bg-dark-surface rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto my-8">
-        <div className="sticky top-0 bg-white dark:bg-dark-surface border-b border-gray-200 dark:border-gray-700 px-6 py-4 rounded-t-lg">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white">
-            {workstream ? "Edit Workstream" : "Create New Workstream"}
-          </h3>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            {workstream
-              ? "Update the filters and settings for this workstream."
-              : "Define filters to curate a personalized intelligence feed."}
-          </p>
-        </div>
-        <div className="px-6 py-4">
-          <WorkstreamForm
-            workstream={workstream}
-            onSuccess={onSuccess}
-            onCancel={onCancel}
-          />
-        </div>
+      <div
+        className={cn(
+          "bg-white dark:bg-dark-surface rounded-lg shadow-xl w-full my-8",
+          isCreateMode
+            ? "max-w-3xl max-h-[90vh] flex flex-col"
+            : "max-w-2xl max-h-[90vh] overflow-y-auto",
+        )}
+      >
+        {isCreateMode ? (
+          /* Wizard for create mode - no sticky header, wizard manages its own layout */
+          <WorkstreamWizard onSuccess={onSuccess} onCancel={onCancel} />
+        ) : (
+          /* Flat form for edit mode */
+          <>
+            <div className="sticky top-0 bg-white dark:bg-dark-surface border-b border-gray-200 dark:border-gray-700 px-6 py-4 rounded-t-lg">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                Edit Workstream
+              </h3>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                Update the filters and settings for this workstream.
+              </p>
+            </div>
+            <div className="px-6 py-4">
+              <WorkstreamForm
+                workstream={workstream}
+                onSuccess={onSuccess}
+                onCancel={onCancel}
+              />
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

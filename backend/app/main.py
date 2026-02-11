@@ -435,6 +435,22 @@ class WorkstreamUpdate(BaseModel):
     auto_scan: Optional[bool] = None
 
 
+class WorkstreamCreateResponse(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    pillar_ids: Optional[List[str]] = []
+    goal_ids: Optional[List[str]] = []
+    stage_ids: Optional[List[str]] = []
+    horizon: Optional[str] = "ALL"
+    keywords: Optional[List[str]] = []
+    is_active: bool = True
+    auto_scan: bool = False
+    auto_add: bool = False
+    auto_populated_count: int = 0
+    scan_queued: bool = False
+
+
 # ============================================================================
 # Workstream Kanban Card Models
 # ============================================================================
@@ -4254,11 +4270,115 @@ async def get_user_workstreams(current_user: dict = Depends(get_current_user)):
     return [Workstream(**ws) for ws in response.data]
 
 
-@app.post("/api/v1/me/workstreams")
+def _filter_cards_for_workstream(
+    workstream: dict,
+    cards: List[dict],
+) -> List[dict]:
+    """Apply pillar/goal/horizon/stage/keyword filters for a workstream."""
+    filtered = cards
+
+    ws_pillar_ids = workstream.get("pillar_ids") or []
+    if ws_pillar_ids:
+        filtered = [c for c in filtered if c.get("pillar_id") in ws_pillar_ids]
+
+    ws_goal_ids = workstream.get("goal_ids") or []
+    if ws_goal_ids:
+        filtered = [c for c in filtered if c.get("goal_id") in ws_goal_ids]
+
+    ws_horizon = workstream.get("horizon")
+    if ws_horizon and ws_horizon != "ALL":
+        filtered = [c for c in filtered if c.get("horizon") == ws_horizon]
+
+    ws_stage_ids = workstream.get("stage_ids") or []
+    if ws_stage_ids:
+
+        def _stage_num(card_stage_id: str) -> str:
+            return (
+                card_stage_id.split("_", 1)[0]
+                if "_" in card_stage_id
+                else card_stage_id
+            )
+
+        filtered = [
+            c for c in filtered if _stage_num((c.get("stage_id") or "")) in ws_stage_ids
+        ]
+
+    ws_keywords = [k.lower() for k in (workstream.get("keywords") or [])]
+    if ws_keywords:
+
+        def _card_text(card: dict) -> str:
+            return " ".join(
+                [
+                    (card.get("name") or "").lower(),
+                    (card.get("summary") or "").lower(),
+                    (card.get("description") or "").lower(),
+                ]
+            )
+
+        filtered = [
+            c for c in filtered if any(kw in _card_text(c) for kw in ws_keywords)
+        ]
+
+    return filtered
+
+
+def _build_workstream_scan_config(ws: dict, triggered_by: str) -> dict:
+    """Build a standardized workstream scan config dict."""
+    return {
+        "workstream_id": ws["id"],
+        "user_id": ws.get("user_id"),
+        "keywords": ws.get("keywords") or [],
+        "pillar_ids": ws.get("pillar_ids") or [],
+        "horizon": ws.get("horizon") or "ALL",
+        "triggered_by": triggered_by,
+    }
+
+
+def _auto_queue_workstream_scan(workstream_id: str, user_id: str, config: dict) -> bool:
+    """Queue a workstream scan directly into the workstream_scans table.
+
+    This bypasses the per-user rate limit because it is triggered by the
+    system (post-creation or auto-scan scheduler), not by a manual user action.
+
+    Args:
+        workstream_id: UUID of the workstream
+        user_id: UUID of the workstream owner
+        config: Scan configuration dict (keywords, pillar_ids, horizon, etc.)
+
+    Returns:
+        True if the scan was successfully queued, False otherwise
+    """
+    try:
+        scan_record = {
+            "workstream_id": workstream_id,
+            "user_id": user_id,
+            "status": "queued",
+            "config": config,
+        }
+        result = supabase.table("workstream_scans").insert(scan_record).execute()
+        if result.data:
+            scan_id = result.data[0]["id"]
+            logger.info(
+                f"Auto-queued workstream scan {scan_id} for workstream {workstream_id} "
+                f"(triggered_by: {config.get('triggered_by', 'unknown')})"
+            )
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"Failed to auto-queue scan for workstream {workstream_id}: {e}")
+        return False
+
+
+@app.post("/api/v1/me/workstreams", response_model=WorkstreamCreateResponse)
 async def create_workstream(
     workstream_data: WorkstreamCreate, current_user: dict = Depends(get_current_user)
 ):
-    """Create new workstream"""
+    """Create new workstream with optional auto-populate and auto-scan queueing.
+
+    After successful creation:
+    1. Auto-populates the workstream with matching existing cards
+    2. If fewer than 3 cards matched AND auto_scan is enabled, queues a scan
+    """
     ws_dict = workstream_data.dict()
     ws_dict.update(
         {
@@ -4269,10 +4389,91 @@ async def create_workstream(
     )
 
     response = supabase.table("workstreams").insert(ws_dict).execute()
-    if response.data:
-        return Workstream(**response.data[0])
-    else:
+    if not response.data:
         raise HTTPException(status_code=400, detail="Failed to create workstream")
+
+    workstream = response.data[0]
+    workstream_id = workstream["id"]
+    user_id = current_user["id"]
+
+    # --- Post-creation: auto-populate with matching existing cards ---
+    auto_populated_count = 0
+    scan_queued = False
+
+    try:
+        # Fetch candidate cards from DB (broad filter via SQL where possible)
+        query = supabase.table("cards").select("*").eq("status", "active")
+        cards_response = query.order("created_at", desc=True).limit(60).execute()
+        cards = cards_response.data or []
+
+        # Apply workstream filters via shared helper
+        cards = _filter_cards_for_workstream(workstream, cards)
+
+        # Limit to 20 cards
+        candidates = cards[:20]
+
+        if candidates:
+            now = datetime.now().isoformat()
+            new_records = [
+                {
+                    "workstream_id": workstream_id,
+                    "card_id": card["id"],
+                    "added_by": user_id,
+                    "added_at": now,
+                    "status": "inbox",
+                    "position": idx,
+                    "added_from": "auto",
+                    "updated_at": now,
+                }
+                for idx, card in enumerate(candidates)
+            ]
+            insert_result = (
+                supabase.table("workstream_cards").insert(new_records).execute()
+            )
+            auto_populated_count = len(insert_result.data) if insert_result.data else 0
+
+        logger.info(
+            f"Post-creation auto-populate for workstream {workstream_id}: "
+            f"{auto_populated_count} cards added"
+        )
+
+    except Exception as e:
+        logger.error(
+            f"Post-creation auto-populate failed for workstream {workstream_id}: {e}"
+        )
+        # Non-fatal: workstream was created successfully, continue
+
+    # --- Post-creation: queue scan if auto_scan is on and few matches ---
+    try:
+        if workstream.get("auto_scan") and auto_populated_count < 3:
+            ws_keywords = workstream.get("keywords") or []
+            ws_pillar_ids = workstream.get("pillar_ids") or []
+
+            if ws_keywords or ws_pillar_ids:
+                scan_config = _build_workstream_scan_config(workstream, "post_creation")
+                scan_queued = _auto_queue_workstream_scan(
+                    workstream_id, user_id, scan_config
+                )
+    except Exception as e:
+        logger.error(
+            f"Post-creation scan queue failed for workstream {workstream_id}: {e}"
+        )
+
+    return WorkstreamCreateResponse(
+        id=workstream_id,
+        name=workstream.get("name", ""),
+        description=workstream.get("description"),
+        pillar_ids=workstream.get("pillar_ids") or [],
+        goal_ids=workstream.get("goal_ids") or [],
+        stage_ids=workstream.get("stage_ids") or [],
+        horizon=workstream.get("horizon") or "ALL",
+        keywords=workstream.get("keywords") or [],
+        is_active=workstream.get("is_active", True),
+        auto_scan=workstream.get("auto_scan", False),
+        auto_add=workstream.get("auto_add", False),
+        auto_populated_count=auto_populated_count,
+        scan_queued=scan_queued,
+    )
 
 
 @app.patch("/api/v1/me/workstreams/{workstream_id}", response_model=Workstream)
@@ -7541,6 +7742,15 @@ async def execute_discovery_run_background(
             f"Discovery run {run_id} completed: {len(result.cards_created)} cards created, {len(result.cards_enriched)} enriched"
         )
 
+        # --- Post-processing: distribute new cards to auto_add workstreams ---
+        if result.cards_created:
+            try:
+                await _distribute_cards_to_auto_add_workstreams(result.cards_created)
+            except Exception as dist_err:
+                logger.error(
+                    f"Post-discovery card distribution failed (non-fatal): {dist_err}"
+                )
+
     except Exception as e:
         logger.error(f"Discovery run {run_id} failed: {str(e)}", exc_info=True)
         # Update as failed
@@ -7551,6 +7761,122 @@ async def execute_discovery_run_background(
                 "error_message": str(e),
             }
         ).eq("id", run_id).execute()
+
+
+async def _distribute_cards_to_auto_add_workstreams(new_card_ids: List[str]):
+    """Distribute newly discovered cards to workstreams with auto_add=true.
+
+    For each active workstream with auto_add enabled, checks if any of the
+    newly created cards match the workstream's filter criteria (pillar, goal,
+    stage, horizon, keywords). Matching cards are added to the workstream's
+    inbox with added_from='auto_discovery'.
+
+    This is a lightweight operation that only checks the new cards from the
+    current discovery run, not the full card pool.
+
+    Args:
+        new_card_ids: List of card IDs created during this discovery run
+    """
+    if not new_card_ids:
+        return
+
+    logger.info(f"Distributing {len(new_card_ids)} new cards to auto_add workstreams")
+
+    # Fetch the new cards
+    cards_response = (
+        supabase.table("cards")
+        .select("id, pillar_id, goal_id, stage_id, horizon, name, summary, description")
+        .in_("id", new_card_ids)
+        .execute()
+    )
+    new_cards = cards_response.data or []
+    if not new_cards:
+        return
+
+    # Fetch all active workstreams with auto_add enabled
+    ws_response = (
+        supabase.table("workstreams")
+        .select("id, user_id, pillar_ids, goal_ids, stage_ids, horizon, keywords")
+        .eq("auto_add", True)
+        .eq("is_active", True)
+        .execute()
+    )
+    workstreams = ws_response.data or []
+    if not workstreams:
+        logger.info("No active workstreams with auto_add enabled")
+        return
+
+    total_distributed = 0
+
+    for ws in workstreams:
+        try:
+            # Get existing card IDs in this workstream to avoid duplicates
+            existing_response = (
+                supabase.table("workstream_cards")
+                .select("card_id")
+                .eq("workstream_id", ws["id"])
+                .execute()
+            )
+            existing_card_ids = {
+                item["card_id"] for item in existing_response.data or []
+            }
+
+            # Filter new cards against workstream criteria using shared helper
+            non_duplicate_cards = [
+                c for c in new_cards if c["id"] not in existing_card_ids
+            ]
+            matching_cards = _filter_cards_for_workstream(ws, non_duplicate_cards)
+
+            if not matching_cards:
+                continue
+
+            # Get current max position in inbox for this workstream
+            pos_response = (
+                supabase.table("workstream_cards")
+                .select("position")
+                .eq("workstream_id", ws["id"])
+                .eq("status", "inbox")
+                .order("position", desc=True)
+                .limit(1)
+                .execute()
+            )
+            start_position = 0
+            if pos_response.data:
+                start_position = pos_response.data[0]["position"] + 1
+
+            # Insert matching cards into workstream inbox
+            now = datetime.now().isoformat()
+            records = [
+                {
+                    "workstream_id": ws["id"],
+                    "card_id": card["id"],
+                    "added_by": ws["user_id"],
+                    "added_at": now,
+                    "status": "inbox",
+                    "position": start_position + idx,
+                    "added_from": "auto_discovery",
+                    "updated_at": now,
+                }
+                for idx, card in enumerate(matching_cards)
+            ]
+
+            supabase.table("workstream_cards").insert(records).execute()
+            total_distributed += len(records)
+            logger.info(
+                f"Auto-added {len(records)} cards to workstream "
+                f"'{ws['id']}' (auto_discovery)"
+            )
+
+        except Exception as e:
+            logger.error(
+                f"Failed to distribute cards to workstream {ws.get('id')}: {e}"
+            )
+            continue
+
+    logger.info(
+        f"Post-discovery distribution complete: {total_distributed} cards "
+        f"distributed across {len(workstreams)} auto_add workstreams"
+    )
 
 
 @app.get("/api/v1/discovery/runs/{run_id}", response_model=DiscoveryRun)
@@ -7995,12 +8321,115 @@ def start_scheduler():
         replace_existing=True,
     )
 
+    # Daily auto-scan for workstreams with auto_scan=true at 4:00 AM UTC
+    scheduler.add_job(
+        run_scheduled_workstream_scans,
+        "cron",
+        hour=4,
+        minute=0,
+        id="scheduled_workstream_scans",
+        replace_existing=True,
+    )
+
     scheduler.start()
     logger.info(
-        "Scheduler started - reputation aggregation at 5:30 AM UTC, "
+        "Scheduler started - workstream auto-scans at 4:00 AM UTC, "
+        "reputation aggregation at 5:30 AM UTC, "
         "nightly scan at 6:00 AM UTC, SQI recalculation at 6:30 AM UTC, "
         "weekly discovery Sundays at 2:00 AM UTC"
     )
+
+
+async def run_scheduled_workstream_scans():
+    """
+    Queue scans for workstreams with auto_scan enabled.
+
+    Checks all active workstreams where auto_scan=true and queues a scan
+    if they haven't been scanned in the last 7 days. Runs daily at 4 AM UTC.
+
+    This bypasses the per-user 2-scans-per-day rate limit since it's
+    system-initiated. Inserts directly into the workstream_scans table
+    so the worker picks up the jobs.
+    """
+    logger.info("Starting scheduled workstream auto-scan check...")
+
+    try:
+        from datetime import timedelta
+
+        # Query all active workstreams with auto_scan enabled
+        ws_response = (
+            supabase.table("workstreams")
+            .select(
+                "id, user_id, name, keywords, pillar_ids, goal_ids, stage_ids, horizon"
+            )
+            .eq("auto_scan", True)
+            .eq("is_active", True)
+            .execute()
+        )
+
+        workstreams = ws_response.data or []
+        if not workstreams:
+            logger.info("No active workstreams with auto_scan enabled")
+            return
+
+        logger.info(f"Found {len(workstreams)} workstreams with auto_scan enabled")
+
+        # Check each workstream for recent scans
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        scans_queued = 0
+
+        for ws in workstreams:
+            try:
+                # Check if this workstream has a successful scan in the last 7 days
+                # (failed scans should not block the next auto-scan attempt)
+                recent_scans = (
+                    supabase.table("workstream_scans")
+                    .select("id")
+                    .eq("workstream_id", ws["id"])
+                    .gte("created_at", cutoff)
+                    .neq("status", "failed")
+                    .limit(1)
+                    .execute()
+                )
+
+                if recent_scans.data:
+                    logger.debug(
+                        f"Workstream '{ws['name']}' ({ws['id']}) scanned recently, skipping"
+                    )
+                    continue
+
+                # Validate workstream has keywords or pillars to scan
+                ws_keywords = ws.get("keywords") or []
+                ws_pillar_ids = ws.get("pillar_ids") or []
+                if not ws_keywords and not ws_pillar_ids:
+                    logger.debug(
+                        f"Workstream '{ws['name']}' ({ws['id']}) has no keywords/pillars, skipping"
+                    )
+                    continue
+
+                # Build scan config via shared helper and queue
+                config = _build_workstream_scan_config(ws, "auto_scan_scheduler")
+                queued = _auto_queue_workstream_scan(ws["id"], ws["user_id"], config)
+                if queued:
+                    scans_queued += 1
+                    logger.info(
+                        f"Queued auto-scan for workstream '{ws['name']}' ({ws['id']})"
+                    )
+
+            except Exception as e:
+                logger.error(
+                    f"Failed to queue auto-scan for workstream '{ws.get('name', 'unknown')}' "
+                    f"({ws.get('id', 'unknown')}): {e}"
+                )
+                continue
+
+        logger.info(
+            f"Scheduled workstream auto-scan complete: {scans_queued} scans queued "
+            f"out of {len(workstreams)} eligible workstreams"
+        )
+
+    except Exception as e:
+        logger.error(f"Scheduled workstream auto-scan failed: {e}", exc_info=True)
 
 
 async def run_nightly_scan():
@@ -9910,6 +10339,95 @@ async def suggest_keywords(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("keyword suggestion", e),
+        )
+
+
+class SuggestDescriptionRequest(BaseModel):
+    """Request body for AI-generated workstream description."""
+
+    name: str = Field(..., min_length=2, max_length=200, description="Workstream name")
+    pillar_ids: Optional[List[str]] = Field(
+        default=[], description="Strategic pillar IDs for context"
+    )
+    keywords: Optional[List[str]] = Field(
+        default=[], description="Keywords for context"
+    )
+
+
+class SuggestDescriptionResponse(BaseModel):
+    """Response for AI-generated workstream description."""
+
+    description: str = Field(..., description="AI-generated workstream description")
+
+
+@app.post("/api/v1/ai/suggest-description", response_model=SuggestDescriptionResponse)
+@limiter.limit("10/minute")
+async def suggest_description(
+    request: Request,
+    body: SuggestDescriptionRequest,
+    user=Depends(get_current_user),
+):
+    """Generate a workstream description from a name, pillars, and keywords.
+
+    Uses GPT-4.1-mini for cost efficiency. Returns a 1-2 sentence professional
+    description explaining what signals the workstream will track.
+    """
+    try:
+        # Build user prompt with available context
+        parts = [f"Workstream name: {body.name}"]
+        if body.pillar_ids:
+            pillar_labels = {
+                "CH": "Community Health",
+                "MC": "Mobility & Connectivity",
+                "HS": "Housing & Shelter",
+                "EC": "Economic Opportunity",
+                "ES": "Environmental Sustainability",
+                "CE": "Cultural & Educational Vitality",
+                "EW": "Environmental & Water",
+                "HG": "Housing & Growth",
+                "HH": "Health & Human Services",
+                "PS": "Public Safety",
+            }
+            names = [pillar_labels.get(p, p) for p in body.pillar_ids]
+            parts.append(f"Strategic pillars: {', '.join(names)}")
+        if body.keywords:
+            parts.append(f"Keywords: {', '.join(body.keywords)}")
+
+        user_prompt = "\n".join(parts)
+
+        client = azure_openai_client
+        response = client.chat.completions.create(
+            model=get_chat_mini_deployment(),
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are helping a City of Austin strategic analyst create a "
+                        "workstream description for their horizon scanning system. "
+                        "Generate a clear, professional 1-2 sentence description that "
+                        "explains what signals this workstream will track. Be specific "
+                        "about the domain and purpose."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": user_prompt,
+                },
+            ],
+            temperature=0.7,
+            max_tokens=150,
+        )
+
+        description = (response.choices[0].message.content or "").strip()
+        if not description:
+            description = f"Tracks emerging signals related to {body.name}."
+
+        return SuggestDescriptionResponse(description=description)
+    except Exception as e:
+        logger.error(f"Failed to suggest description for '{body.name}': {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("description suggestion", e),
         )
 
 
