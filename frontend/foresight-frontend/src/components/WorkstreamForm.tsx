@@ -13,18 +13,29 @@
  * - Active toggle
  */
 
-import React, { useState, useEffect, useCallback, KeyboardEvent, useRef } from 'react';
-import { X, Plus, Loader2, AlertCircle, Sparkles, Search } from 'lucide-react';
-import { supabase } from '../App';
-import { useAuthContext } from '../hooks/useAuthContext';
-import { cn } from '../lib/utils';
-import { PillarBadge } from './PillarBadge';
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  KeyboardEvent,
+  useRef,
+} from "react";
 import {
-  pillars,
-  stages,
-  horizons,
-  getGoalsByPillar,
-} from '../data/taxonomy';
+  X,
+  Plus,
+  Loader2,
+  AlertCircle,
+  Sparkles,
+  Search,
+  Wand2,
+  Radar,
+} from "lucide-react";
+import { supabase } from "../App";
+import { useAuthContext } from "../hooks/useAuthContext";
+import { cn } from "../lib/utils";
+import { PillarBadge } from "./PillarBadge";
+import { pillars, stages, horizons, getGoalsByPillar } from "../data/taxonomy";
+import { suggestKeywords } from "../lib/discovery-api";
 
 // ============================================================================
 // Filter Preview Types & API
@@ -32,7 +43,12 @@ import {
 
 interface FilterPreviewResult {
   estimated_count: number;
-  sample_cards: Array<{ id: string; name: string; pillar_id?: string; horizon?: string }>;
+  sample_cards: Array<{
+    id: string;
+    name: string;
+    pillar_id?: string;
+    horizon?: string;
+  }>;
 }
 
 async function fetchFilterPreview(
@@ -43,27 +59,27 @@ async function fetchFilterPreview(
     stage_ids: string[];
     horizon: string;
     keywords: string[];
-  }
+  },
 ): Promise<FilterPreviewResult> {
-  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
   const response = await fetch(`${API_BASE_URL}/api/v1/cards/filter-preview`, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({
       pillar_ids: filters.pillar_ids,
       goal_ids: filters.goal_ids,
       stage_ids: filters.stage_ids,
-      horizon: filters.horizon === 'ALL' ? null : filters.horizon,
+      horizon: filters.horizon === "ALL" ? null : filters.horizon,
       keywords: filters.keywords,
     }),
   });
 
   if (!response.ok) {
-    throw new Error('Failed to fetch filter preview');
+    throw new Error("Failed to fetch filter preview");
   }
 
   return response.json();
@@ -94,6 +110,8 @@ export interface WorkstreamFormProps {
   onSuccess: () => void;
   /** Called when form is cancelled */
   onCancel: () => void;
+  /** Called after creation when auto-populate finds zero matching cards */
+  onCreatedWithZeroMatches?: (workstreamId: string) => void;
 }
 
 interface FormData {
@@ -106,6 +124,7 @@ interface FormData {
   keywords: string[];
   is_active: boolean;
   analyze_now: boolean;
+  auto_scan: boolean;
 }
 
 interface FormErrors {
@@ -137,99 +156,132 @@ interface WorkstreamTemplate {
 
 const WORKSTREAM_TEMPLATES: WorkstreamTemplate[] = [
   {
-    id: 'emerging-tech',
-    name: 'Emerging Technology',
-    description: 'Track early-stage innovations and R&D across all sectors',
+    id: "emerging-tech",
+    name: "Emerging Technology",
+    description: "Track early-stage innovations and R&D across all sectors",
     icon: <Sparkles className="h-5 w-5" />,
-    color: 'purple',
+    color: "purple",
     config: {
-      name: 'Emerging Technology Watch',
-      description: 'Monitoring early-stage innovations, research breakthroughs, and emerging technologies that could impact city operations in the coming years.',
+      name: "Emerging Technology Watch",
+      description:
+        "Monitoring early-stage innovations, research breakthroughs, and emerging technologies that could impact city operations in the coming years.",
       pillar_ids: [],
       goal_ids: [],
-      stage_ids: ['1', '2', '3'],
-      horizon: 'H3',
-      keywords: ['innovation', 'research', 'emerging', 'breakthrough', 'startup'],
+      stage_ids: ["1", "2", "3"],
+      horizon: "H3",
+      keywords: [
+        "innovation",
+        "research",
+        "emerging",
+        "breakthrough",
+        "startup",
+      ],
     },
   },
   {
-    id: 'smart-city',
-    name: 'Smart City & Infrastructure',
-    description: 'Focus on mobility, utilities, and city infrastructure tech',
+    id: "smart-city",
+    name: "Smart City & Infrastructure",
+    description: "Focus on mobility, utilities, and city infrastructure tech",
     icon: <Search className="h-5 w-5" />,
-    color: 'amber',
+    color: "amber",
     config: {
-      name: 'Smart City & Infrastructure',
-      description: 'Tracking smart city technologies, mobility innovations, and infrastructure modernization relevant to Austin.',
-      pillar_ids: ['MC'],
+      name: "Smart City & Infrastructure",
+      description:
+        "Tracking smart city technologies, mobility innovations, and infrastructure modernization relevant to Austin.",
+      pillar_ids: ["MC"],
       goal_ids: [],
-      stage_ids: ['3', '4', '5', '6'],
-      horizon: 'H2',
-      keywords: ['smart city', 'IoT', 'mobility', 'transit', 'infrastructure', 'utilities'],
+      stage_ids: ["3", "4", "5", "6"],
+      horizon: "H2",
+      keywords: [
+        "smart city",
+        "IoT",
+        "mobility",
+        "transit",
+        "infrastructure",
+        "utilities",
+      ],
     },
   },
   {
-    id: 'leadership-ready',
-    name: 'Leadership Ready',
-    description: 'Mature technologies ready for executive briefings',
+    id: "leadership-ready",
+    name: "Leadership Ready",
+    description: "Mature technologies ready for executive briefings",
     icon: <AlertCircle className="h-5 w-5" />,
-    color: 'green',
+    color: "green",
     config: {
-      name: 'Leadership Ready',
-      description: 'Technologies and trends at sufficient maturity for executive consideration and potential implementation.',
+      name: "Leadership Ready",
+      description:
+        "Technologies and trends at sufficient maturity for executive consideration and potential implementation.",
       pillar_ids: [],
       goal_ids: [],
-      stage_ids: ['5', '6', '7'],
-      horizon: 'H1',
+      stage_ids: ["5", "6", "7"],
+      horizon: "H1",
       keywords: [],
     },
   },
   {
-    id: 'climate-sustainability',
-    name: 'Climate & Sustainability',
-    description: 'Environmental tech and climate resilience innovations',
+    id: "climate-sustainability",
+    name: "Climate & Sustainability",
+    description: "Environmental tech and climate resilience innovations",
     icon: <Search className="h-5 w-5" />,
-    color: 'green',
+    color: "green",
     config: {
-      name: 'Climate & Sustainability',
-      description: 'Monitoring climate technology, sustainability innovations, and environmental resilience solutions.',
-      pillar_ids: ['CH'],
-      goal_ids: ['CH.3', 'CH.4'],
+      name: "Climate & Sustainability",
+      description:
+        "Monitoring climate technology, sustainability innovations, and environmental resilience solutions.",
+      pillar_ids: ["CH"],
+      goal_ids: ["CH.3", "CH.4"],
       stage_ids: [],
-      horizon: 'ALL',
-      keywords: ['climate', 'sustainability', 'renewable', 'resilience', 'green', 'carbon'],
+      horizon: "ALL",
+      keywords: [
+        "climate",
+        "sustainability",
+        "renewable",
+        "resilience",
+        "green",
+        "carbon",
+      ],
     },
   },
   {
-    id: 'public-safety',
-    name: 'Public Safety Tech',
-    description: 'Safety, emergency response, and community protection',
+    id: "public-safety",
+    name: "Public Safety Tech",
+    description: "Safety, emergency response, and community protection",
     icon: <Search className="h-5 w-5" />,
-    color: 'red',
+    color: "red",
     config: {
-      name: 'Public Safety Technology',
-      description: 'Innovations in public safety, emergency response, disaster preparedness, and community protection.',
-      pillar_ids: ['PS'],
+      name: "Public Safety Technology",
+      description:
+        "Innovations in public safety, emergency response, disaster preparedness, and community protection.",
+      pillar_ids: ["PS"],
       goal_ids: [],
       stage_ids: [],
-      horizon: 'ALL',
-      keywords: ['safety', 'emergency', 'disaster', 'response', 'security'],
+      horizon: "ALL",
+      keywords: ["safety", "emergency", "disaster", "response", "security"],
     },
   },
   {
-    id: 'govtech',
-    name: 'GovTech & Digital Services',
-    description: 'Government technology and citizen service innovations',
+    id: "govtech",
+    name: "GovTech & Digital Services",
+    description: "Government technology and citizen service innovations",
     icon: <Search className="h-5 w-5" />,
-    color: 'indigo',
+    color: "indigo",
     config: {
-      name: 'GovTech & Digital Services',
-      description: 'Digital government innovations, citizen services technology, and public sector modernization.',
-      pillar_ids: ['HG'],
-      goal_ids: ['HG.2'],
+      name: "GovTech & Digital Services",
+      description:
+        "Digital government innovations, citizen services technology, and public sector modernization.",
+      pillar_ids: ["HG"],
+      goal_ids: ["HG.2"],
       stage_ids: [],
-      horizon: 'ALL',
-      keywords: ['govtech', 'digital services', 'citizen', 'automation', 'AI', 'data'],
+      horizon: "ALL",
+      keywords: [
+        "govtech",
+        "digital services",
+        "citizen",
+        "automation",
+        "AI",
+        "data",
+      ],
     },
   },
 ];
@@ -241,46 +293,55 @@ const WORKSTREAM_TEMPLATES: WorkstreamTemplate[] = [
 /**
  * Template color classes
  */
-function getTemplateColorClasses(color: string): { bg: string; border: string; text: string; hover: string } {
-  const colorMap: Record<string, { bg: string; border: string; text: string; hover: string }> = {
+function getTemplateColorClasses(color: string): {
+  bg: string;
+  border: string;
+  text: string;
+  hover: string;
+} {
+  const defaultColor = {
+    bg: "bg-blue-50 dark:bg-blue-900/20",
+    border: "border-blue-200 dark:border-blue-700",
+    text: "text-blue-700 dark:text-blue-300",
+    hover: "hover:bg-blue-100 dark:hover:bg-blue-900/40",
+  };
+  const colorMap: Record<
+    string,
+    { bg: string; border: string; text: string; hover: string }
+  > = {
     purple: {
-      bg: 'bg-purple-50 dark:bg-purple-900/20',
-      border: 'border-purple-200 dark:border-purple-700',
-      text: 'text-purple-700 dark:text-purple-300',
-      hover: 'hover:bg-purple-100 dark:hover:bg-purple-900/40',
+      bg: "bg-purple-50 dark:bg-purple-900/20",
+      border: "border-purple-200 dark:border-purple-700",
+      text: "text-purple-700 dark:text-purple-300",
+      hover: "hover:bg-purple-100 dark:hover:bg-purple-900/40",
     },
     amber: {
-      bg: 'bg-amber-50 dark:bg-amber-900/20',
-      border: 'border-amber-200 dark:border-amber-700',
-      text: 'text-amber-700 dark:text-amber-300',
-      hover: 'hover:bg-amber-100 dark:hover:bg-amber-900/40',
+      bg: "bg-amber-50 dark:bg-amber-900/20",
+      border: "border-amber-200 dark:border-amber-700",
+      text: "text-amber-700 dark:text-amber-300",
+      hover: "hover:bg-amber-100 dark:hover:bg-amber-900/40",
     },
     green: {
-      bg: 'bg-green-50 dark:bg-green-900/20',
-      border: 'border-green-200 dark:border-green-700',
-      text: 'text-green-700 dark:text-green-300',
-      hover: 'hover:bg-green-100 dark:hover:bg-green-900/40',
+      bg: "bg-green-50 dark:bg-green-900/20",
+      border: "border-green-200 dark:border-green-700",
+      text: "text-green-700 dark:text-green-300",
+      hover: "hover:bg-green-100 dark:hover:bg-green-900/40",
     },
     red: {
-      bg: 'bg-red-50 dark:bg-red-900/20',
-      border: 'border-red-200 dark:border-red-700',
-      text: 'text-red-700 dark:text-red-300',
-      hover: 'hover:bg-red-100 dark:hover:bg-red-900/40',
+      bg: "bg-red-50 dark:bg-red-900/20",
+      border: "border-red-200 dark:border-red-700",
+      text: "text-red-700 dark:text-red-300",
+      hover: "hover:bg-red-100 dark:hover:bg-red-900/40",
     },
     indigo: {
-      bg: 'bg-indigo-50 dark:bg-indigo-900/20',
-      border: 'border-indigo-200 dark:border-indigo-700',
-      text: 'text-indigo-700 dark:text-indigo-300',
-      hover: 'hover:bg-indigo-100 dark:hover:bg-indigo-900/40',
+      bg: "bg-indigo-50 dark:bg-indigo-900/20",
+      border: "border-indigo-200 dark:border-indigo-700",
+      text: "text-indigo-700 dark:text-indigo-300",
+      hover: "hover:bg-indigo-100 dark:hover:bg-indigo-900/40",
     },
-    blue: {
-      bg: 'bg-blue-50 dark:bg-blue-900/20',
-      border: 'border-blue-200 dark:border-blue-700',
-      text: 'text-blue-700 dark:text-blue-300',
-      hover: 'hover:bg-blue-100 dark:hover:bg-blue-900/40',
-    },
+    blue: defaultColor,
   };
-  return colorMap[color] || colorMap.blue;
+  return colorMap[color] ?? defaultColor;
 }
 
 /**
@@ -300,15 +361,17 @@ function TemplateCard({
       type="button"
       onClick={() => onSelect(template)}
       className={cn(
-        'flex flex-col items-start p-3 rounded-lg border text-left transition-all',
+        "flex flex-col items-start p-3 rounded-lg border text-left transition-all",
         colors.bg,
         colors.border,
         colors.hover,
-        'focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-1 dark:focus:ring-offset-gray-800'
+        "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-1 dark:focus:ring-offset-gray-800",
       )}
     >
-      <div className={cn('mb-2', colors.text)}>{template.icon}</div>
-      <div className="font-medium text-sm text-gray-900 dark:text-white">{template.name}</div>
+      <div className={cn("mb-2", colors.text)}>{template.icon}</div>
+      <div className="font-medium text-sm text-gray-900 dark:text-white">
+        {template.name}
+      </div>
       <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">
         {template.description}
       </div>
@@ -331,9 +394,13 @@ function FormSection({
   return (
     <div className="space-y-3">
       <div>
-        <h4 className="text-sm font-medium text-gray-900 dark:text-white">{title}</h4>
+        <h4 className="text-sm font-medium text-gray-900 dark:text-white">
+          {title}
+        </h4>
         {description && (
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{description}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            {description}
+          </p>
         )}
       </div>
       {children}
@@ -388,21 +455,25 @@ function ToggleSwitch({
         aria-checked={checked}
         onClick={() => onChange(!checked)}
         className={cn(
-          'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 dark:focus:ring-offset-[#2d3166]',
-          checked ? 'bg-brand-blue' : 'bg-gray-200 dark:bg-gray-600'
+          "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 dark:focus:ring-offset-[#2d3166]",
+          checked ? "bg-brand-blue" : "bg-gray-200 dark:bg-gray-600",
         )}
       >
         <span
           className={cn(
-            'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-            checked ? 'translate-x-5' : 'translate-x-0'
+            "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+            checked ? "translate-x-5" : "translate-x-0",
           )}
         />
       </button>
       <div className="flex-1">
-        <span className="text-sm font-medium text-gray-900 dark:text-white">{label}</span>
+        <span className="text-sm font-medium text-gray-900 dark:text-white">
+          {label}
+        </span>
         {description && (
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{description}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            {description}
+          </p>
         )}
       </div>
     </label>
@@ -417,27 +488,39 @@ export function WorkstreamForm({
   workstream,
   onSuccess,
   onCancel,
+  onCreatedWithZeroMatches,
 }: WorkstreamFormProps) {
   const { user } = useAuthContext();
   const isEditMode = Boolean(workstream);
 
   // Form state
   const [formData, setFormData] = useState<FormData>({
-    name: workstream?.name || '',
-    description: workstream?.description || '',
+    name: workstream?.name || "",
+    description: workstream?.description || "",
     pillar_ids: workstream?.pillar_ids || [],
     goal_ids: workstream?.goal_ids || [],
     stage_ids: workstream?.stage_ids || [],
-    horizon: workstream?.horizon || 'ALL',
+    horizon: workstream?.horizon || "ALL",
     keywords: workstream?.keywords || [],
     is_active: workstream?.is_active ?? true,
     analyze_now: false, // Only used in CREATE mode
+    auto_scan: false, // Defaults updated based on pillar selection
   });
 
   // UI state
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [keywordInput, setKeywordInput] = useState('');
+  const [keywordInput, setKeywordInput] = useState("");
+
+  // Suggest keywords state
+  const [suggestedKeywords, setSuggestedKeywords] = useState<string[]>([]);
+  const [isSuggestingKeywords, setIsSuggestingKeywords] = useState(false);
+
+  // Post-creation zero-match prompt state
+  const [showZeroMatchPrompt, setShowZeroMatchPrompt] = useState(false);
+  const [createdWorkstreamId, setCreatedWorkstreamId] = useState<string | null>(
+    null,
+  );
 
   // Filter preview state
   const [preview, setPreview] = useState<FilterPreviewResult | null>(null);
@@ -446,7 +529,7 @@ export function WorkstreamForm({
 
   // Derived state: available goals based on selected pillars
   const availableGoals = formData.pillar_ids.flatMap((pillarCode) =>
-    getGoalsByPillar(pillarCode)
+    getGoalsByPillar(pillarCode),
   );
 
   // Check if any filters are set
@@ -454,7 +537,7 @@ export function WorkstreamForm({
     formData.pillar_ids.length > 0 ||
     formData.goal_ids.length > 0 ||
     formData.stage_ids.length > 0 ||
-    formData.horizon !== 'ALL' ||
+    formData.horizon !== "ALL" ||
     formData.keywords.length > 0;
 
   // Fetch filter preview when filters change
@@ -474,7 +557,9 @@ export function WorkstreamForm({
     previewDebounceRef.current = setTimeout(async () => {
       setPreviewLoading(true);
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
         if (!session?.access_token) return;
 
         const result = await fetchFilterPreview(session.access_token, {
@@ -486,7 +571,7 @@ export function WorkstreamForm({
         });
         setPreview(result);
       } catch (error) {
-        console.error('Failed to fetch filter preview:', error);
+        console.error("Failed to fetch filter preview:", error);
         setPreview(null);
       } finally {
         setPreviewLoading(false);
@@ -498,13 +583,20 @@ export function WorkstreamForm({
         clearTimeout(previewDebounceRef.current);
       }
     };
-  }, [formData.pillar_ids, formData.goal_ids, formData.stage_ids, formData.horizon, formData.keywords, hasFilters]);
+  }, [
+    formData.pillar_ids,
+    formData.goal_ids,
+    formData.stage_ids,
+    formData.horizon,
+    formData.keywords,
+    hasFilters,
+  ]);
 
   // When pillars change, filter out goals that are no longer valid
   useEffect(() => {
     const validGoalCodes = new Set(availableGoals.map((g) => g.code));
     const filteredGoals = formData.goal_ids.filter((id) =>
-      validGoalCodes.has(id)
+      validGoalCodes.has(id),
     );
     if (filteredGoals.length !== formData.goal_ids.length) {
       setFormData((prev) => ({ ...prev, goal_ids: filteredGoals }));
@@ -520,21 +612,11 @@ export function WorkstreamForm({
 
     // Name is required
     if (!formData.name.trim()) {
-      newErrors.name = 'Name is required';
+      newErrors.name = "Name is required";
     }
 
-    // At least one filter criterion is required
-    const hasFilters =
-      formData.pillar_ids.length > 0 ||
-      formData.goal_ids.length > 0 ||
-      formData.stage_ids.length > 0 ||
-      formData.horizon !== 'ALL' ||
-      formData.keywords.length > 0;
-
-    if (!hasFilters) {
-      newErrors.filters =
-        'At least one filter criterion is required (pillar, goal, stage, horizon, or keyword)';
-    }
+    // Pillar selection is optional - topic-first workstreams can use keywords only
+    // No filter validation required; workstreams can be purely topic-driven
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -596,7 +678,7 @@ export function WorkstreamForm({
         ...prev,
         keywords: [...prev.keywords, trimmed],
       }));
-      setKeywordInput('');
+      setKeywordInput("");
       if (errors.filters) {
         setErrors((prev) => ({ ...prev, filters: undefined }));
       }
@@ -604,10 +686,10 @@ export function WorkstreamForm({
   };
 
   const handleKeywordInputKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
+    if (e.key === "Enter") {
       e.preventDefault();
       handleKeywordAdd();
-    } else if (e.key === ',' && keywordInput.trim()) {
+    } else if (e.key === "," && keywordInput.trim()) {
       e.preventDefault();
       handleKeywordAdd();
     }
@@ -619,6 +701,58 @@ export function WorkstreamForm({
       keywords: prev.keywords.filter((k) => k !== keyword),
     }));
   };
+
+  // Suggest related keywords using AI
+  const handleSuggestKeywords = async () => {
+    // Use current keyword input, name, or description as the topic
+    const topic =
+      keywordInput.trim() ||
+      formData.name.trim() ||
+      formData.description.trim();
+    if (!topic) return;
+
+    setIsSuggestingKeywords(true);
+    setSuggestedKeywords([]);
+    try {
+      const token = await getAuthToken();
+      if (!token) return;
+      const result = await suggestKeywords(topic, token);
+      // Filter out keywords already in the form
+      const newSuggestions = result.keywords.filter(
+        (kw) => !formData.keywords.includes(kw),
+      );
+      setSuggestedKeywords(newSuggestions);
+    } catch (error) {
+      console.error("Failed to suggest keywords:", error);
+    } finally {
+      setIsSuggestingKeywords(false);
+    }
+  };
+
+  // Add a suggested keyword to the form
+  const handleAddSuggestedKeyword = (keyword: string) => {
+    if (!formData.keywords.includes(keyword)) {
+      setFormData((prev) => ({
+        ...prev,
+        keywords: [...prev.keywords, keyword],
+      }));
+      if (errors.filters) {
+        setErrors((prev) => ({ ...prev, filters: undefined }));
+      }
+    }
+    // Remove from suggestions
+    setSuggestedKeywords((prev) => prev.filter((kw) => kw !== keyword));
+  };
+
+  // Sync auto_scan default based on pillar selection (topic-first = ON, pillar-based = OFF)
+  useEffect(() => {
+    if (!isEditMode) {
+      setFormData((prev) => ({
+        ...prev,
+        auto_scan: prev.pillar_ids.length === 0,
+      }));
+    }
+  }, [formData.pillar_ids.length, isEditMode]);
 
   // Apply a template to the form
   const handleApplyTemplate = useCallback((template: WorkstreamTemplate) => {
@@ -638,7 +772,9 @@ export function WorkstreamForm({
 
   // Helper to get auth token
   const getAuthToken = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     return session?.access_token;
   };
 
@@ -647,23 +783,24 @@ export function WorkstreamForm({
     const token = await getAuthToken();
     if (!token) return;
 
-    const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    const API_BASE_URL =
+      import.meta.env.VITE_API_URL || "http://localhost:8000";
 
     try {
       await fetch(`${API_BASE_URL}/api/v1/research`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           workstream_id: workstreamId,
-          task_type: 'workstream_analysis',
+          task_type: "workstream_analysis",
         }),
       });
       // Fire and forget - analysis runs in background
     } catch (error) {
-      console.error('Error triggering workstream analysis:', error);
+      console.error("Error triggering workstream analysis:", error);
       // Don't fail the form submission if analysis fails to start
     }
   };
@@ -688,24 +825,29 @@ export function WorkstreamForm({
         horizon: formData.horizon,
         keywords: formData.keywords,
         is_active: formData.is_active,
+        ...(formData.auto_scan ? { auto_scan: true } : {}),
       };
 
       if (isEditMode && workstream) {
         // PATCH: Update existing workstream
         const { error } = await supabase
-          .from('workstreams')
+          .from("workstreams")
           .update(payload)
-          .eq('id', workstream.id)
-          .eq('user_id', user?.id);
+          .eq("id", workstream.id)
+          .eq("user_id", user?.id);
 
         if (error) throw error;
       } else {
         // POST: Create new workstream
-        const { data, error } = await supabase.from('workstreams').insert({
-          ...payload,
-          user_id: user?.id,
-          auto_add: false, // Default value, deferred for later
-        }).select('id').single();
+        const { data, error } = await supabase
+          .from("workstreams")
+          .insert({
+            ...payload,
+            user_id: user?.id,
+            auto_add: false, // Default value, deferred for later
+          })
+          .select("id")
+          .single();
 
         if (error) throw error;
 
@@ -713,16 +855,25 @@ export function WorkstreamForm({
         if (formData.analyze_now && data?.id) {
           await triggerWorkstreamAnalysis(data.id);
         }
+
+        // Check if auto-populate returned zero matches and show prompt
+        if (data?.id && preview?.estimated_count === 0) {
+          setCreatedWorkstreamId(data.id);
+          setShowZeroMatchPrompt(true);
+          if (onCreatedWithZeroMatches) {
+            onCreatedWithZeroMatches(data.id);
+          }
+        }
       }
 
       onSuccess();
     } catch (error) {
-      console.error('Error saving workstream:', error);
+      console.error("Error saving workstream:", error);
       setErrors({
         submit:
           error instanceof Error
             ? error.message
-            : 'Failed to save workstream. Please try again.',
+            : "Failed to save workstream. Please try again.",
       });
     } finally {
       setIsSubmitting(false);
@@ -739,9 +890,12 @@ export function WorkstreamForm({
       {!isEditMode && (
         <div className="space-y-3">
           <div>
-            <h4 className="text-sm font-medium text-gray-900 dark:text-white">Quick Start Templates</h4>
+            <h4 className="text-sm font-medium text-gray-900 dark:text-white">
+              Quick Start Templates
+            </h4>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              Choose a template to pre-fill the form, or start from scratch below
+              Choose a template to pre-fill the form, or start from scratch
+              below
             </p>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -786,18 +940,21 @@ export function WorkstreamForm({
           }}
           placeholder="e.g., Smart Mobility Initiatives"
           className={cn(
-            'w-full px-3 py-2 border rounded-md shadow-sm text-sm',
-            'focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-brand-blue',
-            'dark:bg-[#3d4176] dark:text-white dark:placeholder-gray-400',
+            "w-full px-3 py-2 border rounded-md shadow-sm text-sm",
+            "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-brand-blue",
+            "dark:bg-[#3d4176] dark:text-white dark:placeholder-gray-400",
             errors.name
-              ? 'border-red-300 bg-red-50 dark:border-red-500 dark:bg-red-900/20'
-              : 'border-gray-300 bg-white dark:border-gray-600'
+              ? "border-red-300 bg-red-50 dark:border-red-500 dark:bg-red-900/20"
+              : "border-gray-300 bg-white dark:border-gray-600",
           )}
           aria-invalid={Boolean(errors.name)}
-          aria-describedby={errors.name ? 'name-error' : undefined}
+          aria-describedby={errors.name ? "name-error" : undefined}
         />
         {errors.name && (
-          <p id="name-error" className="mt-1 text-xs text-red-600 dark:text-red-400">
+          <p
+            id="name-error"
+            className="mt-1 text-xs text-red-600 dark:text-red-400"
+          >
             {errors.name}
           </p>
         )}
@@ -826,7 +983,7 @@ export function WorkstreamForm({
       {/* Pillars Selection */}
       <FormSection
         title="Pillars"
-        description="Select one or more strategic pillars to filter by"
+        description="Optionally select strategic pillars to filter by, or leave empty for a topic-driven workstream"
       >
         <div className="flex flex-wrap gap-2">
           {pillars.map((pillar) => (
@@ -835,10 +992,10 @@ export function WorkstreamForm({
               type="button"
               onClick={() => handlePillarToggle(pillar.code)}
               className={cn(
-                'transition-all duration-150',
+                "transition-all duration-150",
                 formData.pillar_ids.includes(pillar.code)
-                  ? 'ring-2 ring-brand-blue ring-offset-1 dark:ring-offset-[#2d3166] rounded'
-                  : 'opacity-60 hover:opacity-100'
+                  ? "ring-2 ring-brand-blue ring-offset-1 dark:ring-offset-[#2d3166] rounded"
+                  : "opacity-60 hover:opacity-100",
               )}
               aria-pressed={formData.pillar_ids.includes(pillar.code)}
               aria-label={`${pillar.name} pillar`}
@@ -919,10 +1076,10 @@ export function WorkstreamForm({
               type="button"
               onClick={() => handleStageToggle(stage.stage)}
               className={cn(
-                'px-3 py-1.5 text-sm font-medium rounded-md border transition-colors',
+                "px-3 py-1.5 text-sm font-medium rounded-md border transition-colors",
                 formData.stage_ids.includes(stage.stage.toString())
-                  ? 'bg-brand-light-blue dark:bg-brand-blue/20 border-brand-blue text-brand-dark-blue dark:text-brand-light-blue'
-                  : 'bg-white dark:bg-[#3d4176] border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#4d5186]'
+                  ? "bg-brand-light-blue dark:bg-brand-blue/20 border-brand-blue text-brand-dark-blue dark:text-brand-light-blue"
+                  : "bg-white dark:bg-[#3d4176] border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#4d5186]",
               )}
               aria-pressed={formData.stage_ids.includes(stage.stage.toString())}
               title={`${stage.name}: ${stage.description}`}
@@ -939,29 +1096,30 @@ export function WorkstreamForm({
         description="Filter by strategic planning horizon"
       >
         <div className="flex flex-wrap gap-2">
-          {[{ code: 'ALL', name: 'All Horizons', timeframe: '' }, ...horizons].map(
-            (h) => (
-              <button
-                key={h.code}
-                type="button"
-                onClick={() => handleHorizonChange(h.code)}
-                className={cn(
-                  'px-3 py-1.5 text-sm font-medium rounded-md border transition-colors',
-                  formData.horizon === h.code
-                    ? 'bg-brand-light-blue dark:bg-brand-blue/20 border-brand-blue text-brand-dark-blue dark:text-brand-light-blue'
-                    : 'bg-white dark:bg-[#3d4176] border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#4d5186]'
-                )}
-                aria-pressed={formData.horizon === h.code}
-              >
-                {h.code === 'ALL' ? 'All' : h.code}
-                {h.code !== 'ALL' && (
-                  <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">
-                    ({(h as typeof horizons[0]).timeframe})
-                  </span>
-                )}
-              </button>
-            )
-          )}
+          {[
+            { code: "ALL", name: "All Horizons", timeframe: "" },
+            ...horizons,
+          ].map((h) => (
+            <button
+              key={h.code}
+              type="button"
+              onClick={() => handleHorizonChange(h.code)}
+              className={cn(
+                "px-3 py-1.5 text-sm font-medium rounded-md border transition-colors",
+                formData.horizon === h.code
+                  ? "bg-brand-light-blue dark:bg-brand-blue/20 border-brand-blue text-brand-dark-blue dark:text-brand-light-blue"
+                  : "bg-white dark:bg-[#3d4176] border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#4d5186]",
+              )}
+              aria-pressed={formData.horizon === h.code}
+            >
+              {h.code === "ALL" ? "All" : h.code}
+              {h.code !== "ALL" && (
+                <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">
+                  ({(h as (typeof horizons)[0]).timeframe})
+                </span>
+              )}
+            </button>
+          ))}
         </div>
       </FormSection>
 
@@ -985,10 +1143,10 @@ export function WorkstreamForm({
               onClick={handleKeywordAdd}
               disabled={!keywordInput.trim()}
               className={cn(
-                'px-3 py-2 text-sm font-medium rounded-md border transition-colors',
+                "px-3 py-2 text-sm font-medium rounded-md border transition-colors",
                 keywordInput.trim()
-                  ? 'bg-brand-blue border-brand-blue text-white hover:bg-brand-dark-blue'
-                  : 'bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-400 cursor-not-allowed'
+                  ? "bg-brand-blue border-brand-blue text-white hover:bg-brand-dark-blue"
+                  : "bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-400 cursor-not-allowed",
               )}
             >
               <Plus className="h-4 w-4" />
@@ -1003,6 +1161,56 @@ export function WorkstreamForm({
                   onRemove={() => handleKeywordRemove(keyword)}
                 />
               ))}
+            </div>
+          )}
+          {/* Suggest Related Terms */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleSuggestKeywords}
+              disabled={
+                isSuggestingKeywords ||
+                (!keywordInput.trim() &&
+                  !formData.name.trim() &&
+                  !formData.description.trim())
+              }
+              className={cn(
+                "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border transition-colors",
+                isSuggestingKeywords ||
+                  (!keywordInput.trim() &&
+                    !formData.name.trim() &&
+                    !formData.description.trim())
+                  ? "bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-400 cursor-not-allowed"
+                  : "bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-700 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/40",
+              )}
+            >
+              {isSuggestingKeywords ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Wand2 className="h-3.5 w-3.5" />
+              )}
+              {isSuggestingKeywords ? "Suggesting..." : "Suggest Related Terms"}
+            </button>
+          </div>
+          {/* Suggested Keywords Chips */}
+          {suggestedKeywords.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Click to add suggested terms:
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {suggestedKeywords.map((kw) => (
+                  <button
+                    key={kw}
+                    type="button"
+                    onClick={() => handleAddSuggestedKeyword(kw)}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border border-dashed border-purple-300 dark:border-purple-600 text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-900/10 hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors"
+                  >
+                    <Plus className="h-3 w-3" />
+                    {kw}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -1034,16 +1242,36 @@ export function WorkstreamForm({
         </div>
       )}
 
+      {/* Auto-scan on Create Toggle - Only in CREATE mode */}
+      {!isEditMode && (
+        <div className="pt-2">
+          <ToggleSwitch
+            checked={formData.auto_scan}
+            onChange={(checked) =>
+              setFormData((prev) => ({ ...prev, auto_scan: checked }))
+            }
+            label="Auto-scan for sources on create"
+            description={
+              formData.pillar_ids.length === 0
+                ? "Recommended for topic-driven workstreams without pillars -- automatically discover relevant content sources"
+                : "Automatically scan for content sources matching your workstream filters"
+            }
+          />
+        </div>
+      )}
+
       {/* Filter Preview - Match Count */}
       {hasFilters && (
-        <div className={cn(
-          'rounded-lg p-4 border transition-all',
-          preview && preview.estimated_count > 0
-            ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700'
-            : preview && preview.estimated_count === 0
-            ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700'
-            : 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700'
-        )}>
+        <div
+          className={cn(
+            "rounded-lg p-4 border transition-all",
+            preview && preview.estimated_count > 0
+              ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700"
+              : preview && preview.estimated_count === 0
+                ? "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700"
+                : "bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700",
+          )}
+        >
           <div className="flex items-center gap-3">
             {previewLoading ? (
               <>
@@ -1061,26 +1289,35 @@ export function WorkstreamForm({
                 )}
                 <div className="flex-1">
                   <div className="flex items-baseline gap-2">
-                    <span className={cn(
-                      'text-2xl font-bold',
-                      preview.estimated_count > 0
-                        ? 'text-green-700 dark:text-green-300'
-                        : 'text-amber-700 dark:text-amber-300'
-                    )}>
+                    <span
+                      className={cn(
+                        "text-2xl font-bold",
+                        preview.estimated_count > 0
+                          ? "text-green-700 dark:text-green-300"
+                          : "text-amber-700 dark:text-amber-300",
+                      )}
+                    >
                       ~{preview.estimated_count}
                     </span>
-                    <span className={cn(
-                      'text-sm',
-                      preview.estimated_count > 0
-                        ? 'text-green-600 dark:text-green-400'
-                        : 'text-amber-600 dark:text-amber-400'
-                    )}>
-                      {preview.estimated_count === 1 ? 'card matches' : 'cards match'} these filters
+                    <span
+                      className={cn(
+                        "text-sm",
+                        preview.estimated_count > 0
+                          ? "text-green-600 dark:text-green-400"
+                          : "text-amber-600 dark:text-amber-400",
+                      )}
+                    >
+                      {preview.estimated_count === 1
+                        ? "card matches"
+                        : "cards match"}{" "}
+                      these filters
                     </span>
                   </div>
                   {preview.sample_cards.length > 0 && (
                     <div className="mt-2">
-                      <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Sample matches:</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                        Sample matches:
+                      </div>
                       <div className="flex flex-wrap gap-1">
                         {preview.sample_cards.slice(0, 3).map((card) => (
                           <span
@@ -1122,7 +1359,9 @@ export function WorkstreamForm({
       {errors.filters && (
         <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-md">
           <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-          <p className="text-sm text-amber-800 dark:text-amber-300">{errors.filters}</p>
+          <p className="text-sm text-amber-800 dark:text-amber-300">
+            {errors.filters}
+          </p>
         </div>
       )}
 
@@ -1130,7 +1369,39 @@ export function WorkstreamForm({
       {errors.submit && (
         <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-md">
           <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
-          <p className="text-sm text-red-800 dark:text-red-300">{errors.submit}</p>
+          <p className="text-sm text-red-800 dark:text-red-300">
+            {errors.submit}
+          </p>
+        </div>
+      )}
+
+      {/* Zero Match Prompt - shown after creation when no existing cards match */}
+      {showZeroMatchPrompt && createdWorkstreamId && (
+        <div className="rounded-lg p-4 border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20">
+          <div className="flex items-start gap-3">
+            <Radar className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+            <div className="flex-1 space-y-2">
+              <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                No existing signals match this topic.
+              </p>
+              <p className="text-xs text-blue-600 dark:text-blue-400">
+                Would you like to discover new content?
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onCreatedWithZeroMatches) {
+                    onCreatedWithZeroMatches(createdWorkstreamId);
+                  }
+                  setShowZeroMatchPrompt(false);
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+              >
+                <Radar className="h-3.5 w-3.5" />
+                Start Discovery Scan
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1148,14 +1419,14 @@ export function WorkstreamForm({
           type="submit"
           disabled={isSubmitting}
           className={cn(
-            'inline-flex items-center px-4 py-2 text-sm font-medium text-white rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-[#2d3166] transition-colors',
+            "inline-flex items-center px-4 py-2 text-sm font-medium text-white rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-[#2d3166] transition-colors",
             isSubmitting
-              ? 'bg-brand-blue/60 cursor-not-allowed'
-              : 'bg-brand-blue hover:bg-brand-dark-blue'
+              ? "bg-brand-blue/60 cursor-not-allowed"
+              : "bg-brand-blue hover:bg-brand-dark-blue",
           )}
         >
           {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-          {isEditMode ? 'Save Changes' : 'Create Workstream'}
+          {isEditMode ? "Save Changes" : "Create Workstream"}
         </button>
       </div>
     </form>

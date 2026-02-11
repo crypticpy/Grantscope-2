@@ -5,17 +5,28 @@
  * Supports comparison mode and follow functionality.
  */
 
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { Eye, Heart, Calendar, Sparkles, ArrowLeftRight, Check } from 'lucide-react';
-import { PillarBadge } from '../../../components/PillarBadge';
-import { HorizonBadge } from '../../../components/HorizonBadge';
-import { StageBadge } from '../../../components/StageBadge';
-import { Top25Badge } from '../../../components/Top25Badge';
-import { highlightText } from '../../../lib/highlight-utils';
-import { parseStageNumber } from '../../../lib/stage-utils';
-import type { Card } from '../types';
-import { getScoreColorClasses, formatCardDate } from '../utils';
+import React from "react";
+import { Link } from "react-router-dom";
+import {
+  Eye,
+  Heart,
+  Calendar,
+  Sparkles,
+  ArrowLeftRight,
+  Check,
+  AlertTriangle,
+  User,
+  Scan,
+} from "lucide-react";
+import { PillarBadge } from "../../../components/PillarBadge";
+import { HorizonBadge } from "../../../components/HorizonBadge";
+import { StageBadge } from "../../../components/StageBadge";
+import { Top25Badge } from "../../../components/Top25Badge";
+import { QualityBadge } from "../../../components/QualityBadge";
+import { highlightText } from "../../../lib/highlight-utils";
+import { parseStageNumber } from "../../../lib/stage-utils";
+import type { Card } from "../types";
+import { getScoreColorClasses, formatCardDate } from "../utils";
 
 export interface DiscoverCardProps {
   card: Card;
@@ -49,13 +60,17 @@ export const DiscoverCard = React.memo(function DiscoverCard({
 
   return (
     <div
-      onClick={compareMode ? () => onToggleCompare({ id: card.id, name: card.name }) : undefined}
+      onClick={
+        compareMode
+          ? () => onToggleCompare({ id: card.id, name: card.name })
+          : undefined
+      }
       className={`bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 border-l-4 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg relative ${
         compareMode
           ? isSelectedForCompare
-            ? 'border-l-extended-purple ring-2 ring-extended-purple/50 cursor-pointer'
-            : 'border-transparent hover:border-l-extended-purple/50 cursor-pointer'
-          : 'border-transparent hover:border-l-brand-blue'
+            ? "border-l-extended-purple ring-2 ring-extended-purple/50 cursor-pointer"
+            : "border-transparent hover:border-l-extended-purple/50 cursor-pointer"
+          : "border-transparent hover:border-l-brand-blue"
       }`}
     >
       {/* Compare Mode Selection Indicator */}
@@ -63,8 +78,8 @@ export const DiscoverCard = React.memo(function DiscoverCard({
         <div
           className={`absolute top-3 right-3 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
             isSelectedForCompare
-              ? 'bg-extended-purple border-extended-purple text-white'
-              : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
+              ? "bg-extended-purple border-extended-purple text-white"
+              : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
           }`}
         >
           {isSelectedForCompare && <Check className="h-4 w-4" />}
@@ -105,7 +120,42 @@ export const DiscoverCard = React.memo(function DiscoverCard({
               <StageBadge stage={stageNumber} size="sm" variant="minimal" />
             )}
             {card.top25_relevance && card.top25_relevance.length > 0 && (
-              <Top25Badge priorities={card.top25_relevance} size="sm" showCount />
+              <Top25Badge
+                priorities={card.top25_relevance}
+                size="sm"
+                showCount
+              />
+            )}
+            {/* Quality Badge */}
+            <QualityBadge score={card.quality_score ?? null} size="sm" />
+            {/* Provenance indicator */}
+            {card.origin === "user_created" && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700">
+                <User className="h-2.5 w-2.5" />
+                User Created
+              </span>
+            )}
+            {card.origin === "workstream_scan" && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-700">
+                <Scan className="h-2.5 w-2.5" />
+                Via Workstream
+              </span>
+            )}
+            {card.origin === "manual" && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-700">
+                <User className="h-2.5 w-2.5" />
+                Manual Import
+              </span>
+            )}
+            {/* Scores Unverified indicator */}
+            {card.discovery_metadata?.scores_are_defaults === true && (
+              <span
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-yellow-50 text-yellow-800 border border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-700"
+                title="Scores are defaults and have not been verified by analysis"
+              >
+                <AlertTriangle className="h-2.5 w-2.5" />
+                Scores Unverified
+              </span>
             )}
           </div>
         </div>
@@ -117,13 +167,16 @@ export const DiscoverCard = React.memo(function DiscoverCard({
             }}
             className={`flex-shrink-0 p-2 transition-colors ${
               isFollowed
-                ? 'text-red-500 hover:text-red-600'
-                : 'text-gray-400 hover:text-red-500'
+                ? "text-red-500 hover:text-red-600"
+                : "text-gray-400 hover:text-red-500"
             }`}
-            title={isFollowed ? 'Unfollow card' : 'Follow card'}
+            title={isFollowed ? "Unfollow card" : "Follow card"}
             aria-pressed={isFollowed}
           >
-            <Heart className="h-5 w-5" fill={isFollowed ? 'currentColor' : 'none'} />
+            <Heart
+              className="h-5 w-5"
+              fill={isFollowed ? "currentColor" : "none"}
+            />
           </button>
         )}
       </div>
@@ -134,21 +187,41 @@ export const DiscoverCard = React.memo(function DiscoverCard({
 
       {/* Scores */}
       <div className="grid grid-cols-2 gap-2 text-xs">
-        <div className="flex justify-between" title="How much this could affect Austin's operations or residents">
+        <div
+          className="flex justify-between"
+          title="How much this could affect Austin's operations or residents"
+        >
           <span className="text-gray-500 dark:text-gray-400">Impact:</span>
-          <span className={getScoreColorClasses(card.impact_score)}>{card.impact_score}</span>
+          <span className={getScoreColorClasses(card.impact_score)}>
+            {card.impact_score}
+          </span>
         </div>
-        <div className="flex justify-between" title="How closely this aligns with Austin's strategic priorities">
+        <div
+          className="flex justify-between"
+          title="How closely this aligns with Austin's strategic priorities"
+        >
           <span className="text-gray-500 dark:text-gray-400">Relevance:</span>
-          <span className={getScoreColorClasses(card.relevance_score)}>{card.relevance_score}</span>
+          <span className={getScoreColorClasses(card.relevance_score)}>
+            {card.relevance_score}
+          </span>
         </div>
-        <div className="flex justify-between" title="How quickly this technology or trend is evolving">
+        <div
+          className="flex justify-between"
+          title="How quickly this technology or trend is evolving"
+        >
           <span className="text-gray-500 dark:text-gray-400">Velocity:</span>
-          <span className={getScoreColorClasses(card.velocity_score)}>{card.velocity_score}</span>
+          <span className={getScoreColorClasses(card.velocity_score)}>
+            {card.velocity_score}
+          </span>
         </div>
-        <div className="flex justify-between" title="How new or emerging this is in the market">
+        <div
+          className="flex justify-between"
+          title="How new or emerging this is in the market"
+        >
           <span className="text-gray-500 dark:text-gray-400">Novelty:</span>
-          <span className={getScoreColorClasses(card.novelty_score)}>{card.novelty_score}</span>
+          <span className={getScoreColorClasses(card.novelty_score)}>
+            {card.novelty_score}
+          </span>
         </div>
       </div>
 
@@ -156,7 +229,7 @@ export const DiscoverCard = React.memo(function DiscoverCard({
         {compareMode ? (
           <span className="inline-flex items-center text-sm text-extended-purple">
             <ArrowLeftRight className="h-4 w-4 mr-1" />
-            {isSelectedForCompare ? 'Selected' : 'Click to select'}
+            {isSelectedForCompare ? "Selected" : "Click to select"}
           </span>
         ) : (
           <Link

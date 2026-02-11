@@ -1,37 +1,43 @@
-import React, { useState, useEffect, lazy } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { createClient, User } from '@supabase/supabase-js';
-import { TooltipProvider } from '@radix-ui/react-tooltip';
-import Header from './components/Header';
-import { AuthContextProvider } from './hooks/useAuthContext';
-import { ProtectedRoute } from './components/ProtectedRoute';
+import { useState, useEffect, lazy } from "react";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
+import { createClient, User } from "@supabase/supabase-js";
+import { TooltipProvider } from "@radix-ui/react-tooltip";
+import Header from "./components/Header";
+import { AuthContextProvider } from "./hooks/useAuthContext";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 
 // Synchronous imports for critical path components (login + landing page)
-import Dashboard from './pages/Dashboard';
-import Login from './pages/Login';
+import Dashboard from "./pages/Dashboard";
+import Login from "./pages/Login";
 
 // Lazy-loaded page components for route-based code splitting
 // Discovery pages - share common discovery patterns
-const Discover = lazy(() => import('./pages/Discover'));
-const DiscoveryQueue = lazy(() => import('./pages/DiscoveryQueue'));
-const DiscoveryHistory = lazy(() => import('./pages/DiscoveryHistory'));
+const Discover = lazy(() => import("./pages/Discover"));
+const DiscoveryQueue = lazy(() => import("./pages/DiscoveryQueue"));
+const DiscoveryHistory = lazy(() => import("./pages/DiscoveryHistory"));
 
 // Card visualization pages - share React Flow and related viz libraries
-const CardDetail = lazy(() => import('./pages/CardDetail'));
-const Compare = lazy(() => import('./pages/Compare'));
+const CardDetail = lazy(() => import("./pages/CardDetail"));
+const Compare = lazy(() => import("./pages/Compare"));
 
 // Workstream pages - share workstream components
-const Workstreams = lazy(() => import('./pages/Workstreams'));
-const WorkstreamFeed = lazy(() => import('./pages/WorkstreamFeed'));
-const WorkstreamKanban = lazy(() => import('./pages/WorkstreamKanban'));
+const Workstreams = lazy(() => import("./pages/Workstreams"));
+const WorkstreamFeed = lazy(() => import("./pages/WorkstreamFeed"));
+const WorkstreamKanban = lazy(() => import("./pages/WorkstreamKanban"));
 
 // Standalone pages
-const Settings = lazy(() => import('./pages/Settings'));
-const Analytics = lazy(() => import('./pages/AnalyticsV2'));
+const Settings = lazy(() => import("./pages/Settings"));
+const Analytics = lazy(() => import("./pages/AnalyticsV2"));
+const Methodology = lazy(() => import("./pages/Methodology"));
 
 // Supabase configuration
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export interface AuthContextType {
@@ -95,7 +101,9 @@ function App() {
   return (
     <TooltipProvider delayDuration={200}>
       <AuthContextProvider value={authValue}>
-        <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Router
+          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+        >
           <div className="min-h-screen bg-brand-faded-white dark:bg-brand-dark-blue transition-colors">
             {user && <Header />}
             <main className={user ? "pt-16" : ""}>
@@ -109,55 +117,119 @@ function App() {
                 {/* Dashboard - synchronous landing page (critical path) */}
                 <Route
                   path="/"
-                  element={<ProtectedRoute element={<Dashboard />} withSuspense={false} />}
+                  element={
+                    <ProtectedRoute
+                      element={<Dashboard />}
+                      withSuspense={false}
+                    />
+                  }
                 />
 
                 {/* Discovery pages - lazy-loaded with Suspense */}
                 <Route
                   path="/discover"
-                  element={<ProtectedRoute element={<Discover />} loadingMessage="Loading discovery..." />}
+                  element={
+                    <ProtectedRoute
+                      element={<Discover />}
+                      loadingMessage="Loading discovery..."
+                    />
+                  }
                 />
                 <Route
                   path="/discover/queue"
-                  element={<ProtectedRoute element={<DiscoveryQueue />} loadingMessage="Loading queue..." />}
+                  element={
+                    <ProtectedRoute
+                      element={<DiscoveryQueue />}
+                      loadingMessage="Loading queue..."
+                    />
+                  }
                 />
                 <Route
                   path="/discover/history"
-                  element={<ProtectedRoute element={<DiscoveryHistory />} loadingMessage="Loading history..." />}
+                  element={
+                    <ProtectedRoute
+                      element={<DiscoveryHistory />}
+                      loadingMessage="Loading history..."
+                    />
+                  }
                 />
 
                 {/* Card visualization pages - lazy-loaded with React Flow */}
                 <Route
                   path="/cards/:slug"
-                  element={<ProtectedRoute element={<CardDetail />} loadingMessage="Loading card details..." />}
+                  element={
+                    <ProtectedRoute
+                      element={<CardDetail />}
+                      loadingMessage="Loading card details..."
+                    />
+                  }
                 />
                 <Route
                   path="/compare"
-                  element={<ProtectedRoute element={<Compare />} loadingMessage="Loading comparison..." />}
+                  element={
+                    <ProtectedRoute
+                      element={<Compare />}
+                      loadingMessage="Loading comparison..."
+                    />
+                  }
                 />
 
                 {/* Workstream pages - lazy-loaded */}
                 <Route
                   path="/workstreams/:id/board"
-                  element={<ProtectedRoute element={<WorkstreamKanban />} loadingMessage="Loading kanban board..." />}
+                  element={
+                    <ProtectedRoute
+                      element={<WorkstreamKanban />}
+                      loadingMessage="Loading kanban board..."
+                    />
+                  }
                 />
                 <Route
                   path="/workstreams"
-                  element={<ProtectedRoute element={<Workstreams />} loadingMessage="Loading workstreams..." />}
+                  element={
+                    <ProtectedRoute
+                      element={<Workstreams />}
+                      loadingMessage="Loading workstreams..."
+                    />
+                  }
                 />
                 <Route
                   path="/workstreams/:id"
-                  element={<ProtectedRoute element={<WorkstreamFeed />} loadingMessage="Loading workstream..." />}
+                  element={
+                    <ProtectedRoute
+                      element={<WorkstreamFeed />}
+                      loadingMessage="Loading workstream..."
+                    />
+                  }
                 />
 
                 {/* Settings and Analytics - lazy-loaded standalone pages */}
                 <Route
                   path="/settings"
-                  element={<ProtectedRoute element={<Settings />} loadingMessage="Loading settings..." />}
+                  element={
+                    <ProtectedRoute
+                      element={<Settings />}
+                      loadingMessage="Loading settings..."
+                    />
+                  }
                 />
                 <Route
                   path="/analytics"
-                  element={<ProtectedRoute element={<Analytics />} loadingMessage="Loading analytics..." />}
+                  element={
+                    <ProtectedRoute
+                      element={<Analytics />}
+                      loadingMessage="Loading analytics..."
+                    />
+                  }
+                />
+                <Route
+                  path="/methodology"
+                  element={
+                    <ProtectedRoute
+                      element={<Methodology />}
+                      loadingMessage="Loading methodology..."
+                    />
+                  }
                 />
               </Routes>
             </main>

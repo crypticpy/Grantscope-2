@@ -6,8 +6,8 @@
  * and define the structure of the kanban workflow columns.
  */
 
-import type { LucideIcon } from 'lucide-react';
-import { RefreshCw, Search, FileDown, Presentation, Bell } from 'lucide-react';
+import type { LucideIcon } from "lucide-react";
+import { RefreshCw, Search, FileDown, Presentation, Bell } from "lucide-react";
 
 // =============================================================================
 // Status and Column Types
@@ -18,17 +18,17 @@ import { RefreshCw, Search, FileDown, Presentation, Bell } from 'lucide-react';
  * Maps to the workflow stages a research card can progress through.
  */
 export type KanbanStatus =
-  | 'inbox'
-  | 'screening'
-  | 'research'
-  | 'brief'
-  | 'watching'
-  | 'archived';
+  | "inbox"
+  | "screening"
+  | "research"
+  | "brief"
+  | "watching"
+  | "archived";
 
 /**
  * Describes how a card was added to a workstream.
  */
-export type AddedFrom = 'manual' | 'auto' | 'follow';
+export type AddedFrom = "manual" | "auto" | "follow";
 
 // =============================================================================
 // Card and Data Types
@@ -52,13 +52,17 @@ export interface EmbeddedCard {
   /** Maturity stage number (1-8) */
   stage_id: number;
   /** Technology horizon classification */
-  horizon: 'H1' | 'H2' | 'H3';
+  horizon: "H1" | "H2" | "H3";
   /** Novelty score (0-100) */
   novelty_score: number;
   /** Maturity score (0-100) */
   maturity_score: number;
   /** Optional Top 25 priority alignment codes */
   top25_relevance?: string[];
+  /** Source Quality Index score (0-100) */
+  quality_score?: number | null;
+  /** Whether this card is exploratory (not tied to a specific pillar) */
+  is_exploratory?: boolean;
 }
 
 /**
@@ -67,9 +71,9 @@ export interface EmbeddedCard {
  */
 export interface CardResearchStatus {
   /** Current research task status (queued, processing, completed, failed) */
-  status: 'queued' | 'processing' | 'completed' | 'failed' | null;
+  status: "queued" | "processing" | "completed" | "failed" | null;
   /** Task type (quick_update, deep_research) */
-  task_type?: 'quick_update' | 'deep_research';
+  task_type?: "quick_update" | "deep_research";
   /** ID of the research task for polling */
   task_id?: string;
   /** When research started */
@@ -102,6 +106,8 @@ export interface WorkstreamCard {
   added_from: AddedFrom;
   /** Active research status for this card (populated from separate tracking) */
   research_status?: CardResearchStatus;
+  /** Review status for content quality review workflow */
+  review_status?: "pending_review" | "approved" | "rejected" | null;
   /** When the card was added to the workstream */
   added_at: string;
   /** Last update timestamp */
@@ -119,15 +125,15 @@ export interface WorkstreamCard {
  * Maps to actual handler functions in the component.
  */
 export type ActionHandler =
-  | 'quickUpdate'
-  | 'deepDive'
-  | 'exportPdf'
-  | 'exportPptx'
-  | 'checkUpdates'
-  | 'viewDetails'
-  | 'addNotes'
-  | 'remove'
-  | 'generateBrief';
+  | "quickUpdate"
+  | "deepDive"
+  | "exportPdf"
+  | "exportPptx"
+  | "checkUpdates"
+  | "viewDetails"
+  | "addNotes"
+  | "remove"
+  | "generateBrief";
 
 /**
  * Defines an action available on cards within a specific column.
@@ -145,7 +151,7 @@ export interface ColumnAction {
   /** Handler identifier - maps to actual function */
   handler: ActionHandler;
   /** Whether this action is always available or column-specific */
-  availability: 'always' | 'column-specific';
+  availability: "always" | "column-specific";
 }
 
 /**
@@ -189,91 +195,92 @@ export interface KanbanColumnDefinition {
  */
 export const KANBAN_COLUMNS: KanbanColumnDefinition[] = [
   {
-    id: 'inbox',
-    title: 'Inbox',
-    description: 'New cards matching your filters',
-    emptyStateHint: 'Cards matching your filters will appear here automatically',
+    id: "inbox",
+    title: "Inbox",
+    description: "New cards matching your filters",
+    emptyStateHint:
+      "Cards matching your filters will appear here automatically",
     // No primary action - inbox is for triage
   },
   {
-    id: 'screening',
-    title: 'Screening',
-    description: 'Quick triage - is this relevant?',
+    id: "screening",
+    title: "Screening",
+    description: "Quick triage - is this relevant?",
     primaryAction: {
-      id: 'quick-update',
-      label: 'Quick Update',
+      id: "quick-update",
+      label: "Quick Update",
       icon: RefreshCw,
-      description: 'Run a quick 5-source research update',
-      handler: 'quickUpdate',
-      availability: 'column-specific',
+      description: "Run a quick 5-source research update",
+      handler: "quickUpdate",
+      availability: "column-specific",
     },
-    emptyStateHint: 'Drag cards here to evaluate their relevance',
+    emptyStateHint: "Drag cards here to evaluate their relevance",
   },
   {
-    id: 'research',
-    title: 'Research',
-    description: 'Deep investigation in progress',
+    id: "research",
+    title: "Research",
+    description: "Deep investigation in progress",
     primaryAction: {
-      id: 'deep-dive',
-      label: 'Deep Dive',
+      id: "deep-dive",
+      label: "Deep Dive",
       icon: Search,
-      description: 'Run comprehensive 15-source research',
-      handler: 'deepDive',
-      availability: 'column-specific',
+      description: "Run comprehensive 15-source research",
+      handler: "deepDive",
+      availability: "column-specific",
     },
-    emptyStateHint: 'Cards here are being actively researched',
+    emptyStateHint: "Cards here are being actively researched",
   },
   {
-    id: 'brief',
-    title: 'Brief',
-    description: 'Ready to present to leadership',
+    id: "brief",
+    title: "Brief",
+    description: "Ready to present to leadership",
     primaryAction: {
-      id: 'generate-brief',
-      label: 'Generate Brief',
+      id: "generate-brief",
+      label: "Generate Brief",
       icon: FileDown,
-      description: 'Generate executive brief for this card',
-      handler: 'generateBrief',
-      availability: 'column-specific',
+      description: "Generate executive brief for this card",
+      handler: "generateBrief",
+      availability: "column-specific",
     },
     secondaryActions: [
       {
-        id: 'export-pdf',
-        label: 'Export Brief PDF',
+        id: "export-pdf",
+        label: "Export Brief PDF",
         icon: FileDown,
-        description: 'Export brief as PDF document',
-        handler: 'exportPdf',
-        availability: 'column-specific',
+        description: "Export brief as PDF document",
+        handler: "exportPdf",
+        availability: "column-specific",
       },
       {
-        id: 'export-pptx',
-        label: 'Export Brief PPTX',
+        id: "export-pptx",
+        label: "Export Brief PPTX",
         icon: Presentation,
-        description: 'Export brief as PowerPoint presentation',
-        handler: 'exportPptx',
-        availability: 'column-specific',
+        description: "Export brief as PowerPoint presentation",
+        handler: "exportPptx",
+        availability: "column-specific",
       },
     ],
-    emptyStateHint: 'Cards ready for leadership briefings',
+    emptyStateHint: "Cards ready for leadership briefings",
   },
   {
-    id: 'watching',
-    title: 'Watching',
-    description: 'Monitoring for updates',
+    id: "watching",
+    title: "Watching",
+    description: "Monitoring for updates",
     primaryAction: {
-      id: 'check-updates',
-      label: 'Check for Updates',
+      id: "check-updates",
+      label: "Check for Updates",
       icon: Bell,
-      description: 'Search for recent developments',
-      handler: 'checkUpdates',
-      availability: 'column-specific',
+      description: "Search for recent developments",
+      handler: "checkUpdates",
+      availability: "column-specific",
     },
-    emptyStateHint: 'Cards here will be monitored for new developments',
+    emptyStateHint: "Cards here will be monitored for new developments",
   },
   {
-    id: 'archived',
-    title: 'Archived',
-    description: 'No longer active',
-    emptyStateHint: 'Completed or dismissed cards',
+    id: "archived",
+    title: "Archived",
+    description: "No longer active",
+    emptyStateHint: "Completed or dismissed cards",
     // No primary action - archived cards are dormant
   },
 ];
@@ -292,7 +299,7 @@ export const KANBAN_COLUMNS: KanbanColumnDefinition[] = [
 export type OnCardMoveCallback = (
   cardId: string,
   newStatus: KanbanStatus,
-  newPosition: number
+  newPosition: number,
 ) => void;
 
 /**
@@ -330,7 +337,10 @@ export type OnRemoveCardCallback = (cardId: string) => void;
  * @param cardId - The ID of the card
  * @param status - The target column status
  */
-export type OnMoveToColumnCallback = (cardId: string, status: KanbanStatus) => void;
+export type OnMoveToColumnCallback = (
+  cardId: string,
+  status: KanbanStatus,
+) => void;
 
 /**
  * Callback signature for column-specific actions (Quick Update, Check Updates).
@@ -345,7 +355,10 @@ export type OnQuickUpdateCallback = (cardId: string) => Promise<void>;
  * @param cardId - The ID of the card
  * @param format - Export format (pdf or pptx)
  */
-export type OnExportCallback = (cardId: string, format: 'pdf' | 'pptx') => Promise<void>;
+export type OnExportCallback = (
+  cardId: string,
+  format: "pdf" | "pptx",
+) => Promise<void>;
 
 /**
  * Callback signature for checking for updates on a card.
@@ -360,7 +373,10 @@ export type OnCheckUpdatesCallback = (cardId: string) => Promise<void>;
  * @param workstreamCardId - The ID of the workstream card (junction table ID)
  * @param cardId - The ID of the underlying research card
  */
-export type OnGenerateBriefCallback = (workstreamCardId: string, cardId: string) => void;
+export type OnGenerateBriefCallback = (
+  workstreamCardId: string,
+  cardId: string,
+) => void;
 
 /**
  * Combined card action callbacks for the kanban board.
@@ -388,4 +404,6 @@ export interface CardActionCallbacks {
   onCheckUpdates?: OnCheckUpdatesCallback;
   /** Callback for generating an executive brief (brief column) */
   onGenerateBrief?: OnGenerateBriefCallback;
+  /** Callback for approving a card's review status */
+  onApproveReview?: (cardId: string) => void;
 }

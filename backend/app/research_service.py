@@ -29,12 +29,14 @@ import openai
 # Optional imports for enhanced source fetching
 try:
     from firecrawl import FirecrawlApp
+
     FIRECRAWL_AVAILABLE = True
 except ImportError:
     FIRECRAWL_AVAILABLE = False
 
 try:
     from exa_py import Exa
+
     EXA_AVAILABLE = True
 except ImportError:
     EXA_AVAILABLE = False
@@ -49,6 +51,7 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 # GPT Researcher requires specific env var formats that differ from our app's config.
 # This function ensures the correct format is set before GPTResearcher is used.
+
 
 def _configure_gpt_researcher_for_azure():
     """
@@ -70,8 +73,12 @@ def _configure_gpt_researcher_for_azure():
 
     # Get deployment names from our config
     chat_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT_CHAT", "gpt-4.1")
-    chat_mini_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT_CHAT_MINI", "gpt-4.1-mini")
-    embedding_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT_EMBEDDING", "text-embedding-ada-002")
+    chat_mini_deployment = os.getenv(
+        "AZURE_OPENAI_DEPLOYMENT_CHAT_MINI", "gpt-4.1-mini"
+    )
+    embedding_deployment = os.getenv(
+        "AZURE_OPENAI_DEPLOYMENT_EMBEDDING", "text-embedding-ada-002"
+    )
 
     # Set GPT Researcher expected env vars with azure_openai: prefix
     gptr_config = {
@@ -79,14 +86,12 @@ def _configure_gpt_researcher_for_azure():
         "SMART_LLM": f"azure_openai:{chat_deployment}",
         "FAST_LLM": f"azure_openai:{chat_mini_deployment}",
         "EMBEDDING": f"azure_openai:{embedding_deployment}",
-
         # Azure credentials (GPT Researcher expects these exact names)
         "AZURE_OPENAI_API_KEY": azure_key,
         "AZURE_OPENAI_ENDPOINT": azure_endpoint,
         "OPENAI_API_VERSION": api_version,
         # Some GPT Researcher components (e.g. embeddings) read this directly.
         "AZURE_OPENAI_API_VERSION": api_version,
-
         # Token limits
         "FAST_TOKEN_LIMIT": "4000",
         "SMART_TOKEN_LIMIT": "4000",
@@ -99,9 +104,15 @@ def _configure_gpt_researcher_for_azure():
             current = os.getenv(key, "")
             if current != value:
                 os.environ[key] = value
-                logger.debug(f"GPT Researcher config: {key}={value[:50]}..." if len(value) > 50 else f"GPT Researcher config: {key}={value}")
+                logger.debug(
+                    f"GPT Researcher config: {key}={value[:50]}..."
+                    if len(value) > 50
+                    else f"GPT Researcher config: {key}={value}"
+                )
 
-    logger.info(f"GPT Researcher configured for Azure OpenAI: SMART_LLM={gptr_config['SMART_LLM']}, FAST_LLM={gptr_config['FAST_LLM']}")
+    logger.info(
+        f"GPT Researcher configured for Azure OpenAI: SMART_LLM={gptr_config['SMART_LLM']}, FAST_LLM={gptr_config['FAST_LLM']}"
+    )
 
 
 # Configure GPT Researcher on module load
@@ -112,9 +123,11 @@ _configure_gpt_researcher_for_azure()
 # Data Classes
 # ============================================================================
 
+
 @dataclass
 class RawSource:
     """Source as returned from GPT Researcher."""
+
     url: str
     title: str
     content: str
@@ -124,11 +137,13 @@ class RawSource:
     published_at: Optional[str] = None
     source_type: Optional[str] = None
     discovered_source_id: Optional[str] = None  # ID in discovered_sources table
+    is_preprint: bool = False  # Flag set by SourceValidator.detect_preprint()
 
 
 @dataclass
 class ProcessedSource:
     """Fully processed source ready for storage."""
+
     raw: RawSource
     triage: TriageResult
     analysis: AnalysisResult
@@ -139,6 +154,7 @@ class ProcessedSource:
 @dataclass
 class ResearchResult:
     """Result of a research operation."""
+
     sources_found: int
     sources_relevant: int
     sources_added: int
@@ -204,6 +220,7 @@ Prioritize actionable intelligence for city strategic planning and horizon scann
 # Research Service
 # ============================================================================
 
+
 class ResearchService:
     """
     Handles research operations using hybrid GPT Researcher + AI analysis pipeline.
@@ -225,11 +242,7 @@ class ResearchService:
     VECTOR_MATCH_THRESHOLD = 0.82
     STRONG_MATCH_THRESHOLD = 0.92
 
-    def __init__(
-        self,
-        supabase: Client,
-        openai_client: openai.OpenAI
-    ):
+    def __init__(self, supabase: Client, openai_client: openai.OpenAI):
         self.supabase = supabase
         self.openai_client = openai_client
         self.ai_service = AIService(openai_client)
@@ -258,9 +271,13 @@ class ResearchService:
 
     async def check_rate_limit(self, card_id: str) -> bool:
         """Check if deep research is allowed for this card today."""
-        result = self.supabase.table("cards").select(
-            "deep_research_count_today, deep_research_reset_date"
-        ).eq("id", card_id).single().execute()
+        result = (
+            self.supabase.table("cards")
+            .select("deep_research_count_today, deep_research_reset_date")
+            .eq("id", card_id)
+            .single()
+            .execute()
+        )
 
         if not result.data:
             return False
@@ -269,26 +286,25 @@ class ResearchService:
         today = date.today().isoformat()
 
         if card.get("deep_research_reset_date") != today:
-            self.supabase.table("cards").update({
-                "deep_research_count_today": 0,
-                "deep_research_reset_date": today
-            }).eq("id", card_id).execute()
+            self.supabase.table("cards").update(
+                {"deep_research_count_today": 0, "deep_research_reset_date": today}
+            ).eq("id", card_id).execute()
             return True
 
         return card.get("deep_research_count_today", 0) < self.DAILY_DEEP_RESEARCH_LIMIT
 
     async def increment_research_count(self, card_id: str) -> None:
         """Increment the daily research counter for a card."""
-        self.supabase.rpc("increment_deep_research_count", {"p_card_id": card_id}).execute()
+        self.supabase.rpc(
+            "increment_deep_research_count", {"p_card_id": card_id}
+        ).execute()
 
     # ========================================================================
     # Step 1: Discovery (GPT Researcher + Exa Enhancement)
     # ========================================================================
 
     async def _discover_sources(
-        self,
-        query: str,
-        report_type: str = "research_report"
+        self, query: str, report_type: str = "research_report"
     ) -> Tuple[List[RawSource], str, float]:
         """
         Use GPT Researcher to discover sources, enhanced with Exa AI.
@@ -337,36 +353,46 @@ class ResearchService:
             url = src.get("url", "")
             if url and url not in seen_urls:
                 seen_urls.add(url)
-                
+
                 # Extract title - GPT Researcher may return empty title for PDFs
                 raw_title = src.get("title", "") or ""
-                
+
                 # If title is empty or just whitespace, try to extract from URL or content
                 if not raw_title.strip():
                     # Check if it's a PDF and try to get title from metadata or filename
-                    if url.lower().endswith('.pdf'):
+                    if url.lower().endswith(".pdf"):
                         # Extract filename from URL as fallback title
                         from urllib.parse import urlparse, unquote
+
                         path = urlparse(url).path
-                        filename = unquote(path.split('/')[-1])
+                        filename = unquote(path.split("/")[-1])
                         # Remove .pdf extension and clean up
-                        raw_title = filename.replace('.pdf', '').replace('_', ' ').replace('-', ' ').strip()
+                        raw_title = (
+                            filename.replace(".pdf", "")
+                            .replace("_", " ")
+                            .replace("-", " ")
+                            .strip()
+                        )
                         logger.debug(f"PDF title extracted from URL: {raw_title}")
-                    
+
                     # If still empty, use "Untitled"
                     if not raw_title.strip():
                         raw_title = "Untitled"
-                
+
                 # Log source data for debugging
-                logger.debug(f"Source from GPT Researcher: url={url[:80]}, title={raw_title[:50] if raw_title else 'EMPTY'}, keys={list(src.keys())}")
-                
-                sources.append(RawSource(
-                    url=url,
-                    title=raw_title,
-                    content=src.get("content", "") or "",
-                    source_name=src.get("source", "") or src.get("domain", ""),
-                    relevance=src.get("relevance", src.get("score", 0.7))
-                ))
+                logger.debug(
+                    f"Source from GPT Researcher: url={url[:80]}, title={raw_title[:50] if raw_title else 'EMPTY'}, keys={list(src.keys())}"
+                )
+
+                sources.append(
+                    RawSource(
+                        url=url,
+                        title=raw_title,
+                        content=src.get("content", "") or "",
+                        source_name=src.get("source", "") or src.get("domain", ""),
+                        relevance=src.get("relevance", src.get("score", 0.7)),
+                    )
+                )
 
         logger.info(f"GPT Researcher found {len(sources)} sources")
 
@@ -380,14 +406,14 @@ class ResearchService:
                         sources.append(src)
                 logger.info(f"Exa added {len(exa_sources)} additional sources")
             except Exception as e:
-                logger.warning(f"Exa search failed (continuing with GPT Researcher sources): {e}")
+                logger.warning(
+                    f"Exa search failed (continuing with GPT Researcher sources): {e}"
+                )
 
         return sources, report, costs
 
     async def _search_with_exa(
-        self,
-        query: str,
-        num_results: int = 10
+        self, query: str, num_results: int = 10
     ) -> List[RawSource]:
         """
         Search with Exa AI for high-quality sources with content.
@@ -412,7 +438,7 @@ class ResearchService:
                 num_results=num_results,
                 start_published_date=start_date,
                 text=True,
-                highlights=True
+                highlights=True,
             )
 
             sources = []
@@ -422,13 +448,15 @@ class ResearchService:
                 if result.highlights:
                     content = "\n\n".join(result.highlights) + "\n\n" + content
 
-                sources.append(RawSource(
-                    url=result.url,
-                    title=result.title or "Untitled",
-                    content=content[:10000],  # Limit content size
-                    source_name=result.author or "",
-                    relevance=result.score if hasattr(result, 'score') else 0.8
-                ))
+                sources.append(
+                    RawSource(
+                        url=result.url,
+                        title=result.title or "Untitled",
+                        content=content[:10000],  # Limit content size
+                        source_name=result.author or "",
+                        relevance=result.score if hasattr(result, "score") else 0.8,
+                    )
+                )
 
             return sources
 
@@ -437,8 +465,7 @@ class ResearchService:
             return []
 
     async def _backfill_content_with_firecrawl(
-        self,
-        sources: List[RawSource]
+        self, sources: List[RawSource]
     ) -> List[RawSource]:
         """
         Use Firecrawl to fetch content for sources that have URLs but no content.
@@ -458,57 +485,68 @@ class ResearchService:
             logger.info("All sources already have content")
             return sources
 
-        logger.info(f"Attempting to backfill content for {len(sources_needing_content)} sources with Firecrawl")
+        logger.info(
+            f"Attempting to backfill content for {len(sources_needing_content)} sources with Firecrawl"
+        )
         backfilled_count = 0
 
         for source in sources_needing_content:
             try:
                 # Use Firecrawl to scrape the page
-                result = self.firecrawl.scrape(
-                    source.url,
-                    formats=['markdown']
-                )
+                result = self.firecrawl.scrape(source.url, formats=["markdown"])
 
                 # Extract markdown content and metadata from result
                 markdown_content = None
                 scraped_title = None
                 if result:
                     if isinstance(result, dict):
-                        markdown_content = result.get('markdown') or result.get('content')
+                        markdown_content = result.get("markdown") or result.get(
+                            "content"
+                        )
                         # Try to get title from Firecrawl metadata
-                        metadata = result.get('metadata', {})
-                        scraped_title = metadata.get('title') or metadata.get('og:title') or result.get('title')
-                    elif hasattr(result, 'markdown'):
+                        metadata = result.get("metadata", {})
+                        scraped_title = (
+                            metadata.get("title")
+                            or metadata.get("og:title")
+                            or result.get("title")
+                        )
+                    elif hasattr(result, "markdown"):
                         markdown_content = result.markdown
                         # Try to get title from object attributes
-                        if hasattr(result, 'metadata') and result.metadata:
-                            scraped_title = getattr(result.metadata, 'title', None) or getattr(result.metadata, 'og:title', None)
-                        elif hasattr(result, 'title'):
+                        if hasattr(result, "metadata") and result.metadata:
+                            scraped_title = getattr(
+                                result.metadata, "title", None
+                            ) or getattr(result.metadata, "og:title", None)
+                        elif hasattr(result, "title"):
                             scraped_title = result.title
 
                 if markdown_content:
                     source.content = markdown_content[:10000]  # Limit size
                     backfilled_count += 1
                     logger.debug(f"Backfilled content for: {source.url[:50]}...")
-                    
+
                 # Update title if we got a better one from Firecrawl and current title is generic
                 if scraped_title and scraped_title.strip():
                     current_title = source.title or ""
                     is_generic_title = (
-                        not current_title.strip() or 
-                        current_title == "Untitled" or 
-                        current_title.lower() == source.url.lower() or
-                        len(current_title) < 5
+                        not current_title.strip()
+                        or current_title == "Untitled"
+                        or current_title.lower() == source.url.lower()
+                        or len(current_title) < 5
                     )
                     if is_generic_title:
                         source.title = scraped_title.strip()[:500]
-                        logger.debug(f"Updated title from Firecrawl: {source.title[:50]}...")
+                        logger.debug(
+                            f"Updated title from Firecrawl: {source.title[:50]}..."
+                        )
 
             except Exception as e:
                 logger.warning(f"Firecrawl failed for {source.url}: {e}")
                 # Continue to next source - don't fail the whole batch
 
-        logger.info(f"Firecrawl backfilled content for {backfilled_count}/{len(sources_needing_content)} sources")
+        logger.info(
+            f"Firecrawl backfilled content for {backfilled_count}/{len(sources_needing_content)} sources"
+        )
         return sources
 
     # ========================================================================
@@ -516,8 +554,7 @@ class ResearchService:
     # ========================================================================
 
     async def _triage_sources(
-        self,
-        sources: List[RawSource]
+        self, sources: List[RawSource]
     ) -> List[Tuple[RawSource, TriageResult]]:
         """
         Quick relevance check on sources using cheap model.
@@ -550,7 +587,7 @@ class ResearchService:
                     is_relevant=True,
                     confidence=0.65,  # Just above threshold
                     primary_pillar=None,
-                    reason="Source passed without content - URL/title preserved for reference"
+                    reason="Source passed without content - URL/title preserved for reference",
                 )
                 relevant.append((source, default_triage))
                 continue
@@ -558,8 +595,7 @@ class ResearchService:
             # Full AI triage for sources with content
             try:
                 triage = await self.ai_service.triage_source(
-                    title=source.title,
-                    content=source.content
+                    title=source.title, content=source.content
                 )
                 ai_triaged += 1
 
@@ -572,11 +608,13 @@ class ResearchService:
                     is_relevant=True,
                     confidence=0.6,
                     primary_pillar=None,
-                    reason=f"Triage failed: {str(e)[:100]}"
+                    reason=f"Triage failed: {str(e)[:100]}",
                 )
                 relevant.append((source, default_triage))
 
-        logger.info(f"Triage: {len(relevant)} passed ({auto_passed} auto-passed, {ai_triaged} AI-triaged), {skipped_no_url} skipped (no URL)")
+        logger.info(
+            f"Triage: {len(relevant)} passed ({auto_passed} auto-passed, {ai_triaged} AI-triaged), {skipped_no_url} skipped (no URL)"
+        )
         return relevant
 
     # ========================================================================
@@ -584,8 +622,7 @@ class ResearchService:
     # ========================================================================
 
     async def _analyze_sources(
-        self,
-        triaged_sources: List[Tuple[RawSource, TriageResult]]
+        self, triaged_sources: List[Tuple[RawSource, TriageResult]]
     ) -> List[ProcessedSource]:
         """
         Full analysis of triaged sources using powerful model.
@@ -604,19 +641,18 @@ class ResearchService:
                 title=source.title,
                 content=source.content,
                 source_name=source.source_name,
-                published_at=datetime.now().isoformat()  # GPT Researcher doesn't always provide dates
+                published_at=datetime.now().isoformat(),  # GPT Researcher doesn't always provide dates
             )
 
             # Generate embedding for vector matching
             embed_text = f"{source.title} {analysis.summary}"
             embedding = await self.ai_service.generate_embedding(embed_text)
 
-            processed.append(ProcessedSource(
-                raw=source,
-                triage=triage,
-                analysis=analysis,
-                embedding=embedding
-            ))
+            processed.append(
+                ProcessedSource(
+                    raw=source, triage=triage, analysis=analysis, embedding=embedding
+                )
+            )
 
         return processed
 
@@ -625,9 +661,7 @@ class ResearchService:
     # ========================================================================
 
     async def _match_to_cards(
-        self,
-        processed: ProcessedSource,
-        card_id: Optional[str] = None
+        self, processed: ProcessedSource, card_id: Optional[str] = None
     ) -> Tuple[Optional[str], bool]:
         """
         Match processed source to existing card using vector similarity.
@@ -652,8 +686,8 @@ class ResearchService:
                 {
                     "query_embedding": processed.embedding,
                     "match_threshold": self.VECTOR_MATCH_THRESHOLD,
-                    "match_count": 5
-                }
+                    "match_count": 5,
+                },
             ).execute()
 
             if not result.data:
@@ -668,16 +702,20 @@ class ResearchService:
 
             elif similarity > self.VECTOR_MATCH_THRESHOLD:
                 # Moderate match - use LLM to decide
-                card = self.supabase.table("cards").select(
-                    "name, summary"
-                ).eq("id", top_match["id"]).single().execute()
+                card = (
+                    self.supabase.table("cards")
+                    .select("name, summary")
+                    .eq("id", top_match["id"])
+                    .single()
+                    .execute()
+                )
 
                 if card.data:
                     decision = await self.ai_service.check_card_match(
                         source_summary=processed.analysis.summary,
                         source_card_name=processed.analysis.suggested_card_name,
                         existing_card_name=card.data["name"],
-                        existing_card_summary=card.data.get("summary", "")
+                        existing_card_summary=card.data.get("summary", ""),
                     )
 
                     if decision.get("is_match") and decision.get("confidence", 0) > 0.7:
@@ -696,9 +734,7 @@ class ResearchService:
     # ========================================================================
 
     async def _store_source(
-        self,
-        card_id: str,
-        processed: ProcessedSource
+        self, card_id: str, processed: ProcessedSource
     ) -> Optional[str]:
         """
         Store processed source with full schema.
@@ -712,9 +748,13 @@ class ResearchService:
         """
         try:
             # Check for duplicate URL
-            existing = self.supabase.table("sources").select("id").eq(
-                "card_id", card_id
-            ).eq("url", processed.raw.url).execute()
+            existing = (
+                self.supabase.table("sources")
+                .select("id")
+                .eq("card_id", card_id)
+                .eq("url", processed.raw.url)
+                .execute()
+            )
 
             if existing.data:
                 logger.debug(f"Duplicate source skipped: {processed.raw.url[:50]}...")
@@ -725,11 +765,25 @@ class ResearchService:
                 "card_id": card_id,
                 "url": processed.raw.url,
                 "title": (processed.raw.title or "Untitled")[:500],
-                "publication": (processed.raw.source_name or "")[:200] if processed.raw.source_name else None,
-                "full_text": processed.raw.content[:10000] if processed.raw.content else None,
-                "ai_summary": processed.analysis.summary if processed.analysis else None,
-                "key_excerpts": processed.analysis.key_excerpts[:5] if processed.analysis and processed.analysis.key_excerpts else [],
-                "relevance_to_card": processed.analysis.relevance if processed.analysis else 0.5,
+                "publication": (
+                    (processed.raw.source_name or "")[:200]
+                    if processed.raw.source_name
+                    else None
+                ),
+                "full_text": (
+                    processed.raw.content[:10000] if processed.raw.content else None
+                ),
+                "ai_summary": (
+                    processed.analysis.summary if processed.analysis else None
+                ),
+                "key_excerpts": (
+                    processed.analysis.key_excerpts[:5]
+                    if processed.analysis and processed.analysis.key_excerpts
+                    else []
+                ),
+                "relevance_to_card": (
+                    processed.analysis.relevance if processed.analysis else 0.5
+                ),
                 "api_source": "gpt_researcher",
                 "ingested_at": datetime.now().isoformat(),
             }
@@ -739,12 +793,16 @@ class ResearchService:
 
             if result.data:
                 source_id = result.data[0]["id"]
-                logger.info(f"Stored source: {processed.raw.title[:50]}... (id: {source_id})")
+                logger.info(
+                    f"Stored source: {processed.raw.title[:50]}... (id: {source_id})"
+                )
 
                 # Store entities for graph (non-blocking)
                 try:
                     if processed.analysis and processed.analysis.entities:
-                        await self._store_entities(source_id, card_id, processed.analysis.entities)
+                        await self._store_entities(
+                            source_id, card_id, processed.analysis.entities
+                        )
                 except Exception as e:
                     logger.warning(f"Entity storage failed (source still saved): {e}")
 
@@ -754,7 +812,7 @@ class ResearchService:
                         card_id=card_id,
                         event_type="source_added",
                         description=f"New source: {processed.raw.title[:100]}",
-                        source_id=source_id
+                        source_id=source_id,
                     )
                 except Exception as e:
                     logger.warning(f"Timeline event failed (source still saved): {e}")
@@ -767,7 +825,9 @@ class ResearchService:
         except Exception as e:
             error_msg = str(e)
             # Log detailed error for debugging
-            logger.error(f"Source storage failed for {processed.raw.url[:50]}...: {error_msg}")
+            logger.error(
+                f"Source storage failed for {processed.raw.url[:50]}...: {error_msg}"
+            )
 
             # Check for specific error types
             if "duplicate" in error_msg.lower() or "unique" in error_msg.lower():
@@ -781,10 +841,7 @@ class ResearchService:
             return None
 
     async def _store_entities(
-        self,
-        source_id: str,
-        card_id: str,
-        entities: List[Any]
+        self, source_id: str, card_id: str, entities: List[Any]
     ) -> None:
         """
         Store extracted entities for graph building.
@@ -800,22 +857,22 @@ class ResearchService:
         # Store in entities table (if exists)
         try:
             for entity in entities:
-                self.supabase.table("entities").insert({
-                    "name": entity.name,
-                    "entity_type": entity.entity_type,
-                    "context": entity.context,
-                    "source_id": source_id,
-                    "card_id": card_id,
-                    "created_at": datetime.now().isoformat()
-                }).execute()
+                self.supabase.table("entities").insert(
+                    {
+                        "name": entity.name,
+                        "entity_type": entity.entity_type,
+                        "context": entity.context,
+                        "source_id": source_id,
+                        "card_id": card_id,
+                        "created_at": datetime.now().isoformat(),
+                    }
+                ).execute()
         except Exception as e:
             # Table might not exist yet - log but don't fail
             logger.warning(f"Entity storage failed (table may not exist): {e}")
 
     async def _create_card(
-        self,
-        processed: ProcessedSource,
-        created_by: Optional[str] = None
+        self, processed: ProcessedSource, created_by: Optional[str] = None
     ) -> str:
         """
         Create a new card from processed source.
@@ -839,34 +896,46 @@ class ResearchService:
         if existing.data:
             slug = f"{slug}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
-        result = self.supabase.table("cards").insert({
-            "name": analysis.suggested_card_name,
-            "slug": slug,
-            "summary": analysis.summary,
-
-            "horizon": analysis.horizon,
-            "stage_id": f"{analysis.suggested_stage}_stage",  # Adjust to your schema
-            "pillar_id": analysis.pillars[0] if analysis.pillars else None,
-            "goal_id": analysis.goals[0] if analysis.goals else None,
-
-            # Arrays (if your schema supports them)
-            # "pillars": analysis.pillars,
-            # "goals": analysis.goals,
-            # "steep_categories": analysis.steep_categories,
-            # "anchors": analysis.anchors,
-
-            # Scoring
-            "maturity_score": int(analysis.credibility * 20),  # Convert 1-5 to 0-100
-            "novelty_score": int(analysis.novelty * 20),
-            "impact_score": int(analysis.impact * 20),
-            "relevance_score": int(analysis.relevance * 20),
-            "velocity_score": int(analysis.likelihood * 11),  # Convert 1-9 to 0-100
-
-            "status": "active",
-            "created_by": created_by,
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat(),
-        }).execute()
+        result = (
+            self.supabase.table("cards")
+            .insert(
+                {
+                    "name": analysis.suggested_card_name,
+                    "slug": slug,
+                    "summary": analysis.summary,
+                    "horizon": analysis.horizon,
+                    "stage_id": f"{analysis.suggested_stage}_stage",  # Adjust to your schema
+                    "pillar_id": analysis.pillars[0] if analysis.pillars else None,
+                    "goal_id": analysis.goals[0] if analysis.goals else None,
+                    # Arrays (if your schema supports them)
+                    # "pillars": analysis.pillars,
+                    # "goals": analysis.goals,
+                    # "steep_categories": analysis.steep_categories,
+                    # "anchors": analysis.anchors,
+                    # Scoring (convert AI scale to 0-100 and clamp)
+                    "maturity_score": max(
+                        0, min(int(analysis.credibility * 20), 100)
+                    ),  # 1-5 -> 0-100
+                    "novelty_score": max(
+                        0, min(int(analysis.novelty * 20), 100)
+                    ),  # 1-5 -> 0-100
+                    "impact_score": max(
+                        0, min(int(analysis.impact * 20), 100)
+                    ),  # 1-5 -> 0-100
+                    "relevance_score": max(
+                        0, min(int(analysis.relevance * 20), 100)
+                    ),  # 1-5 -> 0-100
+                    "velocity_score": max(
+                        0, min(int(analysis.velocity * 10), 100)
+                    ),  # 1-10 -> 0-100
+                    "status": "active",
+                    "created_by": created_by,
+                    "created_at": datetime.now().isoformat(),
+                    "updated_at": datetime.now().isoformat(),
+                }
+            )
+            .execute()
+        )
 
         if result.data:
             card_id = result.data[0]["id"]
@@ -875,7 +944,7 @@ class ResearchService:
             await self._create_timeline_event(
                 card_id=card_id,
                 event_type="created",
-                description=f"Card created from research"
+                description=f"Card created from research",
             )
 
             return card_id
@@ -888,40 +957,38 @@ class ResearchService:
         event_type: str,
         description: str,
         source_id: Optional[str] = None,
-        metadata: Optional[Dict] = None
+        metadata: Optional[Dict] = None,
     ) -> None:
         """Create a timeline event for a card."""
-        self.supabase.table("card_timeline").insert({
-            "card_id": card_id,
-            "event_type": event_type,
-            "title": event_type.replace("_", " ").title(),
-            "description": description,
-            "triggered_by_source_id": source_id,
-            "metadata": metadata or {},
-            "created_at": datetime.now().isoformat()
-        }).execute()
+        self.supabase.table("card_timeline").insert(
+            {
+                "card_id": card_id,
+                "event_type": event_type,
+                "title": event_type.replace("_", " ").title(),
+                "description": description,
+                "triggered_by_source_id": source_id,
+                "metadata": metadata or {},
+                "created_at": datetime.now().isoformat(),
+            }
+        ).execute()
 
     async def _update_card_from_analysis(
-        self,
-        card_id: str,
-        analysis: AnalysisResult
+        self, card_id: str, analysis: AnalysisResult
     ) -> None:
         """Update card metrics based on new analysis."""
-        self.supabase.table("cards").update({
-            "updated_at": datetime.now().isoformat(),
-            # Optionally update scores if novelty warrants it
-            # This could be more sophisticated - averaging, weighting, etc.
-        }).eq("id", card_id).execute()
+        self.supabase.table("cards").update(
+            {
+                "updated_at": datetime.now().isoformat(),
+                # Optionally update scores if novelty warrants it
+                # This could be more sophisticated - averaging, weighting, etc.
+            }
+        ).eq("id", card_id).execute()
 
     # ========================================================================
     # Main Entry Points
     # ========================================================================
 
-    async def execute_update(
-        self,
-        card_id: str,
-        task_id: str
-    ) -> ResearchResult:
+    async def execute_update(self, card_id: str, task_id: str) -> ResearchResult:
         """
         Execute quick update research for a card.
 
@@ -936,9 +1003,13 @@ class ResearchService:
         logger.info(f"Starting update research for card {card_id} (task: {task_id})")
 
         # Get card details
-        card_result = self.supabase.table("cards").select(
-            "name, summary"
-        ).eq("id", card_id).single().execute()
+        card_result = (
+            self.supabase.table("cards")
+            .select("name, summary")
+            .eq("id", card_id)
+            .single()
+            .execute()
+        )
 
         if not card_result.data:
             raise ValueError(f"Card not found: {card_id}")
@@ -947,24 +1018,22 @@ class ResearchService:
 
         # Step 1: Build customized query
         query = UPDATE_QUERY_TEMPLATE.format(
-            name=card["name"],
-            summary=card.get("summary", "")
+            name=card["name"], summary=card.get("summary", "")
         )
 
         # Step 2: Discover sources (GPT Researcher + Exa)
         sources, report, cost = await self._discover_sources(
-            query=query,
-            report_type="research_report"
+            query=query, report_type="research_report"
         )
 
         # Step 3: Backfill missing content with Firecrawl
         sources = await self._backfill_content_with_firecrawl(sources)
 
         # Step 4: Triage
-        triaged = await self._triage_sources(sources[:self.MAX_SOURCES_UPDATE * 2])
+        triaged = await self._triage_sources(sources[: self.MAX_SOURCES_UPDATE * 2])
 
         # Step 5: Analyze (limit to MAX_SOURCES_UPDATE)
-        processed = await self._analyze_sources(triaged[:self.MAX_SOURCES_UPDATE])
+        processed = await self._analyze_sources(triaged[: self.MAX_SOURCES_UPDATE])
 
         # Step 6: Store
         sources_added = 0
@@ -977,14 +1046,19 @@ class ResearchService:
         if sources_added > 0 or report:
             try:
                 # Get full card details for enhancement
-                full_card = self.supabase.table("cards").select(
-                    "name, summary, description"
-                ).eq("id", card_id).single().execute()
+                full_card = (
+                    self.supabase.table("cards")
+                    .select("name, summary, description")
+                    .eq("id", card_id)
+                    .single()
+                    .execute()
+                )
 
                 if full_card.data:
                     # Collect source summaries for enhancement
                     source_summaries = [
-                        p.analysis.summary for p in processed
+                        p.analysis.summary
+                        for p in processed
                         if p.analysis and p.analysis.summary
                     ]
 
@@ -993,38 +1067,53 @@ class ResearchService:
                         current_summary=full_card.data.get("summary", ""),
                         current_description=full_card.data.get("description", ""),
                         research_report=report or "",
-                        source_summaries=source_summaries
+                        source_summaries=source_summaries,
                     )
 
                     # Update card with enhanced content
-                    self.supabase.table("cards").update({
-                        "summary": enhancement.get("enhanced_summary", full_card.data.get("summary")),
-                        "description": enhancement.get("enhanced_description", full_card.data.get("description")),
-                        "updated_at": datetime.now().isoformat()
-                    }).eq("id", card_id).execute()
+                    self.supabase.table("cards").update(
+                        {
+                            "summary": enhancement.get(
+                                "enhanced_summary", full_card.data.get("summary")
+                            ),
+                            "description": enhancement.get(
+                                "enhanced_description",
+                                full_card.data.get("description"),
+                            ),
+                            "updated_at": datetime.now().isoformat(),
+                        }
+                    ).eq("id", card_id).execute()
 
-                    logger.info(f"Card {card_id} enhanced with research insights: {enhancement.get('key_updates', [])}")
+                    logger.info(
+                        f"Card {card_id} enhanced with research insights: {enhancement.get('key_updates', [])}"
+                    )
             except Exception as e:
                 logger.warning(f"Card enhancement failed (research still saved): {e}")
                 # Still update timestamp even if enhancement fails
-                self.supabase.table("cards").update({
-                    "updated_at": datetime.now().isoformat()
-                }).eq("id", card_id).execute()
+                self.supabase.table("cards").update(
+                    {"updated_at": datetime.now().isoformat()}
+                ).eq("id", card_id).execute()
         else:
             # Just update timestamp if no new sources
-            self.supabase.table("cards").update({
-                "updated_at": datetime.now().isoformat()
-            }).eq("id", card_id).execute()
+            self.supabase.table("cards").update(
+                {"updated_at": datetime.now().isoformat()}
+            ).eq("id", card_id).execute()
 
         # Create summary timeline event
         await self._create_timeline_event(
             card_id=card_id,
             event_type="updated",
             description=f"Quick update: {sources_added} new sources from {len(sources)} discovered",
-            metadata={"sources_found": len(sources), "sources_added": sources_added, "cost": cost}
+            metadata={
+                "sources_found": len(sources),
+                "sources_added": sources_added,
+                "cost": cost,
+            },
         )
 
-        logger.info(f"Update research complete for card {card_id}: {sources_added} sources added from {len(sources)} discovered")
+        logger.info(
+            f"Update research complete for card {card_id}: {sources_added} sources added from {len(sources)} discovered"
+        )
 
         return ResearchResult(
             sources_found=len(sources),
@@ -1032,16 +1121,16 @@ class ResearchService:
             sources_added=sources_added,
             cards_matched=[card_id],
             cards_created=[],
-            entities_extracted=sum(len(p.analysis.entities) for p in processed if p.analysis),
+            entities_extracted=sum(
+                len(p.analysis.entities) for p in processed if p.analysis
+            ),
             cost_estimate=cost,
-            report_preview=report[:10000] if report else None  # Store up to 10KB of report
+            report_preview=(
+                report[:10000] if report else None
+            ),  # Store up to 10KB of report
         )
 
-    async def execute_deep_research(
-        self,
-        card_id: str,
-        task_id: str
-    ) -> ResearchResult:
+    async def execute_deep_research(self, card_id: str, task_id: str) -> ResearchResult:
         """
         Execute comprehensive deep research for a card.
 
@@ -1061,7 +1150,13 @@ class ResearchService:
             raise Exception("Daily deep research limit reached (2 per day per card)")
 
         # Get card details
-        card_result = self.supabase.table("cards").select("*").eq("id", card_id).single().execute()
+        card_result = (
+            self.supabase.table("cards")
+            .select("*")
+            .eq("id", card_id)
+            .single()
+            .execute()
+        )
 
         if not card_result.data:
             raise ValueError(f"Card not found: {card_id}")
@@ -1070,14 +1165,12 @@ class ResearchService:
 
         # Step 1: Build comprehensive query
         query = DEEP_RESEARCH_QUERY_TEMPLATE.format(
-            name=card["name"],
-            summary=card.get("summary", "")
+            name=card["name"], summary=card.get("summary", "")
         )
 
         # Step 2: Discover sources (GPT Researcher + Exa - detailed report for more depth)
         sources, report, cost = await self._discover_sources(
-            query=query,
-            report_type="detailed_report"
+            query=query, report_type="detailed_report"
         )
 
         # Step 3: Backfill missing content with Firecrawl
@@ -1087,7 +1180,7 @@ class ResearchService:
         triaged = await self._triage_sources(sources)
 
         # Step 5: Analyze (more sources for deep research)
-        processed = await self._analyze_sources(triaged[:self.MAX_SOURCES_DEEP])
+        processed = await self._analyze_sources(triaged[: self.MAX_SOURCES_DEEP])
 
         # Step 6: Store
         sources_added = 0
@@ -1102,11 +1195,13 @@ class ResearchService:
         for p in processed:
             if p.analysis and p.analysis.entities:
                 for ent in p.analysis.entities:
-                    all_entities.append({
-                        "name": ent.name,
-                        "type": ent.entity_type,
-                        "context": ent.context
-                    })
+                    all_entities.append(
+                        {
+                            "name": ent.name,
+                            "type": ent.entity_type,
+                            "context": ent.context,
+                        }
+                    )
 
         # Step 7: Generate COMPREHENSIVE strategic intelligence report
         comprehensive_report = None
@@ -1115,20 +1210,24 @@ class ResearchService:
             source_analyses = []
             for p in processed:
                 if p.analysis:
-                    source_analyses.append({
-                        "title": p.raw.title,
-                        "url": p.raw.url,  # Include URL for source citations
-                        "source_name": p.raw.source_name,  # Include publication/source name
-                        "summary": p.analysis.summary,
-                        "key_excerpts": p.analysis.key_excerpts,
-                        "relevance": p.analysis.relevance
-                    })
+                    source_analyses.append(
+                        {
+                            "title": p.raw.title,
+                            "url": p.raw.url,  # Include URL for source citations
+                            "source_name": p.raw.source_name,  # Include publication/source name
+                            "summary": p.analysis.summary,
+                            "key_excerpts": p.analysis.key_excerpts,
+                            "relevance": p.analysis.relevance,
+                        }
+                    )
 
             # Parse stage_id safely - it could be "4", "4_stage", "4_proof", etc.
             stage_id_raw = card.get("stage_id", "4") or "4"
             try:
                 # Extract just the number from stage_id
-                stage_num = int(''.join(c for c in str(stage_id_raw) if c.isdigit()) or "4")
+                stage_num = int(
+                    "".join(c for c in str(stage_id_raw) if c.isdigit()) or "4"
+                )
             except (ValueError, TypeError):
                 stage_num = 4
 
@@ -1141,9 +1240,11 @@ class ResearchService:
                 pillar=card.get("pillar_id", ""),
                 gpt_researcher_report=report or "",
                 source_analyses=source_analyses,
-                entities=all_entities
+                entities=all_entities,
             )
-            logger.info(f"Generated comprehensive report ({len(comprehensive_report)} chars) for card {card_id}")
+            logger.info(
+                f"Generated comprehensive report ({len(comprehensive_report)} chars) for card {card_id}"
+            )
         except Exception as e:
             logger.warning(f"Comprehensive report generation failed: {e}")
             # Fallback: try to generate a minimal report from source analyses
@@ -1165,22 +1266,24 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
 
 """
                     for i, src in enumerate(source_analyses[:10], 1):
-                        title = src.get('title', 'Untitled')
-                        url = src.get('url', '')
+                        title = src.get("title", "Untitled")
+                        url = src.get("url", "")
                         # Format as clickable link if URL available
-                        if url and url.startswith(('http://', 'https://')):
+                        if url and url.startswith(("http://", "https://")):
                             fallback_report += f"### {i}. [{title}]({url})\n\n"
                         else:
                             fallback_report += f"### {i}. {title}\n\n"
-                        fallback_report += f"{src.get('summary', 'No summary available.')}\n\n"
+                        fallback_report += (
+                            f"{src.get('summary', 'No summary available.')}\n\n"
+                        )
 
                     # Add sources section
                     fallback_report += "\n---\n\n## Sources Cited\n\n"
                     for i, src in enumerate(source_analyses[:10], 1):
-                        title = src.get('title', 'Untitled')
-                        url = src.get('url', '')
-                        source_name = src.get('source_name', '')
-                        if url and url.startswith(('http://', 'https://')):
+                        title = src.get("title", "Untitled")
+                        url = src.get("url", "")
+                        source_name = src.get("source_name", "")
+                        if url and url.startswith(("http://", "https://")):
                             entry = f"{i}. [{title}]({url})"
                         else:
                             entry = f"{i}. {title}"
@@ -1189,17 +1292,24 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
                         fallback_report += entry + "\n"
 
                     comprehensive_report = fallback_report
-                    logger.info(f"Generated fallback report from {len(source_analyses)} source analyses")
+                    logger.info(
+                        f"Generated fallback report from {len(source_analyses)} source analyses"
+                    )
                 except Exception as e2:
                     logger.error(f"Fallback report generation also failed: {e2}")
-                    comprehensive_report = report  # Use GPT Researcher report as last resort
+                    comprehensive_report = (
+                        report  # Use GPT Researcher report as last resort
+                    )
             else:
-                comprehensive_report = report  # Use GPT Researcher report if no source analyses
+                comprehensive_report = (
+                    report  # Use GPT Researcher report if no source analyses
+                )
 
         # Step 8: Enhance card with research insights
         try:
             source_summaries = [
-                p.analysis.summary for p in processed
+                p.analysis.summary
+                for p in processed
                 if p.analysis and p.analysis.summary
             ]
 
@@ -1208,25 +1318,33 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
                 current_summary=card.get("summary", ""),
                 current_description=card.get("description", ""),
                 research_report=report or "",
-                source_summaries=source_summaries
+                source_summaries=source_summaries,
             )
 
             # Update card with enhanced content and timestamps
-            self.supabase.table("cards").update({
-                "summary": enhancement.get("enhanced_summary", card.get("summary")),
-                "description": enhancement.get("enhanced_description", card.get("description")),
-                "updated_at": datetime.now().isoformat(),
-                "deep_research_at": datetime.now().isoformat()
-            }).eq("id", card_id).execute()
+            self.supabase.table("cards").update(
+                {
+                    "summary": enhancement.get("enhanced_summary", card.get("summary")),
+                    "description": enhancement.get(
+                        "enhanced_description", card.get("description")
+                    ),
+                    "updated_at": datetime.now().isoformat(),
+                    "deep_research_at": datetime.now().isoformat(),
+                }
+            ).eq("id", card_id).execute()
 
-            logger.info(f"Card {card_id} enhanced with deep research insights: {enhancement.get('key_updates', [])}")
+            logger.info(
+                f"Card {card_id} enhanced with deep research insights: {enhancement.get('key_updates', [])}"
+            )
         except Exception as e:
             logger.warning(f"Card enhancement failed (research still saved): {e}")
             # Still update timestamps even if enhancement fails
-            self.supabase.table("cards").update({
-                "updated_at": datetime.now().isoformat(),
-                "deep_research_at": datetime.now().isoformat()
-            }).eq("id", card_id).execute()
+            self.supabase.table("cards").update(
+                {
+                    "updated_at": datetime.now().isoformat(),
+                    "deep_research_at": datetime.now().isoformat(),
+                }
+            ).eq("id", card_id).execute()
 
         # Increment rate limit
         await self.increment_research_count(card_id)
@@ -1242,11 +1360,15 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
                 "sources_added": sources_added,
                 "entities_extracted": entities_count,
                 "cost": cost,
-                "detailed_report": comprehensive_report[:50000] if comprehensive_report else None,  # Store full comprehensive report with sources
-            }
+                "detailed_report": (
+                    comprehensive_report[:50000] if comprehensive_report else None
+                ),  # Store full comprehensive report with sources
+            },
         )
 
-        logger.info(f"Deep research complete for card {card_id}: {sources_added} sources added, {entities_count} entities extracted")
+        logger.info(
+            f"Deep research complete for card {card_id}: {sources_added} sources added, {entities_count} entities extracted"
+        )
 
         return ResearchResult(
             sources_found=len(sources),
@@ -1256,14 +1378,13 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
             cards_created=[],
             entities_extracted=entities_count,
             cost_estimate=cost,
-            report_preview=comprehensive_report[:50000] if comprehensive_report else None  # Full report with sources section
+            report_preview=(
+                comprehensive_report[:50000] if comprehensive_report else None
+            ),  # Full report with sources section
         )
 
     async def execute_workstream_analysis(
-        self,
-        workstream_id: str,
-        task_id: str,
-        user_id: str
+        self, workstream_id: str, task_id: str, user_id: str
     ) -> ResearchResult:
         """
         Analyze a workstream and find/create relevant cards.
@@ -1276,10 +1397,18 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
         5. Analyze relevant sources
         6. Match or create cards
         """
-        logger.info(f"Starting workstream analysis for {workstream_id} (task: {task_id})")
+        logger.info(
+            f"Starting workstream analysis for {workstream_id} (task: {task_id})"
+        )
 
         # Get workstream details
-        ws_result = self.supabase.table("workstreams").select("*").eq("id", workstream_id).single().execute()
+        ws_result = (
+            self.supabase.table("workstreams")
+            .select("*")
+            .eq("id", workstream_id)
+            .single()
+            .execute()
+        )
 
         if not ws_result.data:
             raise ValueError(f"Workstream not found: {workstream_id}")
@@ -1291,13 +1420,12 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
         query = WORKSTREAM_QUERY_TEMPLATE.format(
             name=ws.get("name", ""),
             keywords_list=", ".join(keywords) if keywords else "emerging technologies",
-            description=ws.get("description", "")
+            description=ws.get("description", ""),
         )
 
         # Step 2: Discover sources (GPT Researcher + Exa)
         sources, report, cost = await self._discover_sources(
-            query=query,
-            report_type="research_report"
+            query=query, report_type="research_report"
         )
 
         # Step 3: Backfill missing content with Firecrawl
@@ -1332,11 +1460,15 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
                     await self._store_source(new_card_id, proc)
                     cards_created.append(new_card_id)
                     sources_added += 1
-                    logger.info(f"Created new card: {proc.analysis.suggested_card_name}")
+                    logger.info(
+                        f"Created new card: {proc.analysis.suggested_card_name}"
+                    )
                 except Exception as e:
                     logger.error(f"Failed to create card: {e}")
 
-        logger.info(f"Workstream analysis complete for {workstream_id}: matched {len(cards_matched)} cards, created {len(cards_created)} new cards")
+        logger.info(
+            f"Workstream analysis complete for {workstream_id}: matched {len(cards_matched)} cards, created {len(cards_created)} new cards"
+        )
 
         return ResearchResult(
             sources_found=len(sources),
@@ -1344,7 +1476,9 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
             sources_added=sources_added,
             cards_matched=cards_matched,
             cards_created=cards_created,
-            entities_extracted=sum(len(p.analysis.entities) for p in processed if p.analysis),
+            entities_extracted=sum(
+                len(p.analysis.entities) for p in processed if p.analysis
+            ),
             cost_estimate=cost,
-            report_preview=report[:10000] if report else None  # Store full report
+            report_preview=report[:10000] if report else None,  # Store full report
         )

@@ -13,39 +13,39 @@ from typing import Optional
 # ============================================================================
 
 # Pillar code to human-readable name
+# These are the 6 canonical AI pillar codes from Austin's strategic framework
 PILLAR_NAMES = {
-    "CH": "Community Health",
-    "MC": "Mobility Infrastructure",
-    "HS": "Housing Stability",
-    "EC": "Economic Development",
-    "ES": "Environmental Sustainability",
-    "CE": "Cultural Entertainment",
+    "CH": "Community Health & Sustainability",
+    "EW": "Economic & Workforce Development",
+    "HG": "High-Performing Government",
+    "HH": "Homelessness & Housing",
+    "MC": "Mobility & Critical Infrastructure",
+    "PS": "Public Safety",
 }
 
 # AI pillar codes -> Database pillar IDs mapping
-# AI may return different codes than what's in the database
+# All 6 canonical pillar codes pass through natively (no lossy conversion).
+# The database pillars table has been updated to match the AI taxonomy.
 PILLAR_CODE_MAP = {
-    "CH": "CH",  # Community Health -> Community Health
-    "MC": "MC",  # Mobility & Connectivity -> Mobility & Connectivity
-    "EW": "EC",  # Economic & Workforce -> Economic Development
-    "HG": "EC",  # High-Performing Government -> Economic Development (closest match)
-    "HH": "HS",  # Homelessness & Housing -> Housing & Economic Stability
-    "PS": "CH",  # Public Safety -> Community Health (closest match)
-    "ES": "ES",  # Environmental Sustainability -> Environmental Sustainability
-    "CE": "CE",  # Cultural & Entertainment -> Cultural & Entertainment
+    "CH": "CH",  # Community Health & Sustainability
+    "EW": "EW",  # Economic & Workforce Development
+    "HG": "HG",  # High-Performing Government
+    "HH": "HH",  # Homelessness & Housing
+    "MC": "MC",  # Mobility & Critical Infrastructure
+    "PS": "PS",  # Public Safety
 }
 
 
 def convert_pillar_id(ai_pillar: str) -> Optional[str]:
     """
     Convert AI pillar code to database pillar ID.
-    
-    AI may return codes that don't exist in the database.
-    This function maps them to the closest valid pillar.
-    
+
+    All 6 canonical pillar codes (CH, EW, HG, HH, MC, PS) pass through
+    natively. Unknown codes are returned as-is for forward compatibility.
+
     Args:
         ai_pillar: Pillar code from AI classification
-        
+
     Returns:
         Database-compatible pillar ID, or None if input is empty
     """
@@ -89,10 +89,10 @@ STAGE_NAMES = {
 def convert_stage_to_id(stage_number: int) -> str:
     """
     Convert stage number to database stage_id.
-    
+
     Args:
         stage_number: Stage number (1-8)
-        
+
     Returns:
         Database stage_id string (e.g., "4_proof")
     """
@@ -102,19 +102,19 @@ def convert_stage_to_id(stage_number: int) -> str:
 def extract_stage_number(stage_id: str) -> Optional[int]:
     """
     Extract stage number from stage_id.
-    
+
     Args:
         stage_id: Database stage_id (e.g., "4_proof" or "4")
-        
+
     Returns:
         Stage number (1-8) or None if invalid
     """
     if not stage_id:
         return None
-    
+
     # Handle both "4_proof" and "4" formats
     stage_str = stage_id.split("_")[0] if "_" in stage_id else stage_id
-    
+
     try:
         return int(stage_str)
     except ValueError:
@@ -125,32 +125,33 @@ def extract_stage_number(stage_id: str) -> Optional[int]:
 # Goals
 # ============================================================================
 
+
 def convert_goal_id(ai_goal: str) -> str:
     """
     Convert AI goal format to database format.
-    
+
     AI returns: "CH.1", "MC.3", "HG.2"
     Database expects: "CH-01", "MC-03", "HG-02"
-    
-    Also maps pillar codes in the goal to database-compatible codes.
-    
+
+    Pillar codes in the goal prefix pass through natively.
+
     Args:
         ai_goal: Goal ID from AI classification (e.g., "CH.1")
-        
+
     Returns:
         Database-compatible goal ID (e.g., "CH-01")
     """
-    if not ai_goal or '.' not in ai_goal:
+    if not ai_goal or "." not in ai_goal:
         return ai_goal
-    
-    parts = ai_goal.split('.')
+
+    parts = ai_goal.split(".")
     if len(parts) != 2:
         return ai_goal
-    
+
     pillar = parts[0]
     try:
         number = int(parts[1])
-        # Also convert the pillar code in the goal
+        # Pillar code passes through natively (no lossy conversion)
         mapped_pillar = PILLAR_CODE_MAP.get(pillar, pillar)
         return f"{mapped_pillar}-{number:02d}"
     except ValueError:

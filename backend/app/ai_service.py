@@ -35,9 +35,41 @@ REQUEST_TIMEOUT = 60  # seconds
 SUMMARY_MIN_WORDS = 150
 SUMMARY_MAX_WORDS = 300
 SUMMARY_STRUCTURE_KEYWORDS = {
-    "problem_statement": ["challenge", "trend", "opportunity", "issue", "development", "emerging", "innovation", "technology", "advancement"],
-    "implications": ["implication", "impact", "effect", "affect", "consequence", "result", "influence", "municipal", "city", "government"],
-    "strategic": ["consider", "prepare", "action", "decision", "strategy", "recommend", "plan", "implement", "adopt", "evaluate"]
+    "problem_statement": [
+        "challenge",
+        "trend",
+        "opportunity",
+        "issue",
+        "development",
+        "emerging",
+        "innovation",
+        "technology",
+        "advancement",
+    ],
+    "implications": [
+        "implication",
+        "impact",
+        "effect",
+        "affect",
+        "consequence",
+        "result",
+        "influence",
+        "municipal",
+        "city",
+        "government",
+    ],
+    "strategic": [
+        "consider",
+        "prepare",
+        "action",
+        "decision",
+        "strategy",
+        "recommend",
+        "plan",
+        "implement",
+        "adopt",
+        "evaluate",
+    ],
 }
 
 
@@ -47,6 +79,7 @@ def with_retry(max_retries: int = MAX_RETRIES):
 
     Handles OpenAI API errors and rate limits gracefully.
     """
+
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
@@ -58,33 +91,44 @@ def with_retry(max_retries: int = MAX_RETRIES):
                     return await func(*args, **kwargs)
                 except openai.RateLimitError as e:
                     last_exception = e
-                    wait_time = backoff * (BACKOFF_MULTIPLIER ** attempt)
-                    logger.warning(f"Rate limited on {func.__name__}, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})")
+                    wait_time = backoff * (BACKOFF_MULTIPLIER**attempt)
+                    logger.warning(
+                        f"Rate limited on {func.__name__}, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})"
+                    )
                     await asyncio.sleep(wait_time)
                 except openai.APITimeoutError as e:
                     last_exception = e
-                    wait_time = backoff * (BACKOFF_MULTIPLIER ** attempt)
-                    logger.warning(f"Timeout on {func.__name__}, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})")
+                    wait_time = backoff * (BACKOFF_MULTIPLIER**attempt)
+                    logger.warning(
+                        f"Timeout on {func.__name__}, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})"
+                    )
                     await asyncio.sleep(wait_time)
                 except openai.APIConnectionError as e:
                     last_exception = e
-                    wait_time = backoff * (BACKOFF_MULTIPLIER ** attempt)
-                    logger.warning(f"Connection error on {func.__name__}, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})")
+                    wait_time = backoff * (BACKOFF_MULTIPLIER**attempt)
+                    logger.warning(
+                        f"Connection error on {func.__name__}, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})"
+                    )
                     await asyncio.sleep(wait_time)
                 except openai.APIStatusError as e:
                     # Don't retry on 4xx errors (except 429 which is RateLimitError)
                     if 400 <= e.status_code < 500:
-                        logger.error(f"API error on {func.__name__}: {e.status_code} - {e.message}")
+                        logger.error(
+                            f"API error on {func.__name__}: {e.status_code} - {e.message}"
+                        )
                         raise
                     last_exception = e
-                    wait_time = backoff * (BACKOFF_MULTIPLIER ** attempt)
-                    logger.warning(f"API error on {func.__name__}, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})")
+                    wait_time = backoff * (BACKOFF_MULTIPLIER**attempt)
+                    logger.warning(
+                        f"API error on {func.__name__}, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})"
+                    )
                     await asyncio.sleep(wait_time)
 
             logger.error(f"All {max_retries} retries exhausted for {func.__name__}")
             raise last_exception
 
         return wrapper
+
     return decorator
 
 
@@ -92,9 +136,11 @@ def with_retry(max_retries: int = MAX_RETRIES):
 # Data Classes
 # ============================================================================
 
+
 @dataclass
 class TriageResult:
     """Result of quick relevance triage."""
+
     is_relevant: bool
     confidence: float
     primary_pillar: Optional[str]
@@ -104,6 +150,7 @@ class TriageResult:
 @dataclass
 class ExtractedEntity:
     """Entity extracted for graph storage."""
+
     name: str
     entity_type: str  # technology, organization, concept, person, location
     context: str  # How it appeared in the source
@@ -112,6 +159,7 @@ class ExtractedEntity:
 @dataclass
 class AnalysisResult:
     """Full analysis result for a source."""
+
     # Summary
     summary: str
     key_excerpts: List[str]
@@ -150,10 +198,14 @@ class AnalysisResult:
     # Reasoning (for debugging/auditing)
     reasoning: str = ""
 
+    # Flag indicating whether scores are defaults (e.g., due to AI parse failure)
+    scores_are_defaults: bool = False
+
 
 @dataclass
 class SummaryQualityResult:
     """Result of summary quality validation."""
+
     is_valid: bool
     word_count: int
     word_count_valid: bool
@@ -165,6 +217,7 @@ class SummaryQualityResult:
 # ============================================================================
 # Summary Quality Validation
 # ============================================================================
+
 
 def validate_summary_quality(summary: str) -> SummaryQualityResult:
     """
@@ -191,9 +244,13 @@ def validate_summary_quality(summary: str) -> SummaryQualityResult:
     word_count_valid = SUMMARY_MIN_WORDS <= word_count <= SUMMARY_MAX_WORDS
 
     if word_count < SUMMARY_MIN_WORDS:
-        issues.append(f"Summary too short: {word_count} words (minimum: {SUMMARY_MIN_WORDS})")
+        issues.append(
+            f"Summary too short: {word_count} words (minimum: {SUMMARY_MIN_WORDS})"
+        )
     elif word_count > SUMMARY_MAX_WORDS:
-        issues.append(f"Summary too long: {word_count} words (maximum: {SUMMARY_MAX_WORDS})")
+        issues.append(
+            f"Summary too long: {word_count} words (maximum: {SUMMARY_MAX_WORDS})"
+        )
 
     # Structure validation - check for presence of key structural elements
     summary_lower = summary.lower()
@@ -207,7 +264,9 @@ def validate_summary_quality(summary: str) -> SummaryQualityResult:
         structure_scores[element] = score
 
         if score < 0.5:
-            issues.append(f"Weak {element.replace('_', ' ')}: consider adding relevant context")
+            issues.append(
+                f"Weak {element.replace('_', ' ')}: consider adding relevant context"
+            )
 
     # Structure is valid if all elements have at least 0.5 score
     structure_valid = all(score >= 0.5 for score in structure_scores.values())
@@ -221,7 +280,7 @@ def validate_summary_quality(summary: str) -> SummaryQualityResult:
         word_count_valid=word_count_valid,
         structure_valid=structure_valid,
         structure_scores=structure_scores,
-        issues=issues
+        issues=issues,
     )
 
 
@@ -477,6 +536,7 @@ Respond with JSON:
 # AI Service Class
 # ============================================================================
 
+
 class AIService:
     """Service for AI-powered analysis and classification."""
 
@@ -506,19 +566,13 @@ class AIService:
         logger.debug(f"Generating embedding for text ({len(truncated)} chars)")
 
         response = self.client.embeddings.create(
-            model=get_embedding_deployment(),
-            input=truncated,
-            timeout=REQUEST_TIMEOUT
+            model=get_embedding_deployment(), input=truncated, timeout=REQUEST_TIMEOUT
         )
 
         return response.data[0].embedding
 
     @with_retry(max_retries=MAX_RETRIES)
-    async def triage_source(
-        self,
-        title: str,
-        content: str
-    ) -> TriageResult:
+    async def triage_source(self, title: str, content: str) -> TriageResult:
         """
         Quick relevance check for a source using cheap model.
 
@@ -530,8 +584,7 @@ class AIService:
             TriageResult with relevance decision
         """
         prompt = TRIAGE_PROMPT.format(
-            title=title,
-            content=content[:2000]  # Limit content for cheap triage
+            title=title, content=content[:2000]  # Limit content for cheap triage
         )
 
         logger.debug(f"Triaging source: {title[:50]}...")
@@ -541,29 +594,30 @@ class AIService:
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             max_tokens=200,
-            timeout=REQUEST_TIMEOUT
+            timeout=REQUEST_TIMEOUT,
         )
 
         try:
             result = json.loads(response.choices[0].message.content)
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse triage response: {e}")
-            return TriageResult(is_relevant=False, confidence=0.0, primary_pillar=None, reason="Parse error")
+            return TriageResult(
+                is_relevant=False,
+                confidence=0.0,
+                primary_pillar=None,
+                reason="Parse error",
+            )
 
         return TriageResult(
             is_relevant=result.get("is_relevant", False),
             confidence=result.get("confidence", 0.0),
             primary_pillar=result.get("primary_pillar"),
-            reason=result.get("reason", "")
+            reason=result.get("reason", ""),
         )
 
     @with_retry(max_retries=MAX_RETRIES)
     async def analyze_source(
-        self,
-        title: str,
-        content: str,
-        source_name: str,
-        published_at: str
+        self, title: str, content: str, source_name: str, published_at: str
     ) -> AnalysisResult:
         """
         Full analysis of a source using powerful model.
@@ -581,7 +635,7 @@ class AIService:
             title=title,
             content=content[:6000],  # More content for full analysis
             source=source_name,
-            published_at=published_at
+            published_at=published_at,
         )
 
         logger.info(f"Analyzing source: {title[:50]}...")
@@ -591,7 +645,7 @@ class AIService:
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             max_tokens=1500,
-            timeout=REQUEST_TIMEOUT * 2  # Longer timeout for full analysis
+            timeout=REQUEST_TIMEOUT * 2,  # Longer timeout for full analysis
         )
 
         try:
@@ -620,17 +674,20 @@ class AIService:
                 time_to_prepare_months=24,
                 suggested_card_name=title[:50],
                 is_new_concept=False,
-                reasoning="Parse error in analysis"
+                reasoning="Parse error in analysis",
+                scores_are_defaults=True,
             )
 
         # Parse entities
         entities = []
         for ent in result.get("entities", []):
-            entities.append(ExtractedEntity(
-                name=ent.get("name", ""),
-                entity_type=ent.get("type", "concept"),
-                context=ent.get("context", "")
-            ))
+            entities.append(
+                ExtractedEntity(
+                    name=ent.get("name", ""),
+                    entity_type=ent.get("type", "concept"),
+                    context=ent.get("context", ""),
+                )
+            )
 
         # Validate summary quality
         summary = result.get("summary", "")
@@ -649,6 +706,45 @@ class AIService:
                 f"structure_scores={quality_result.structure_scores}"
             )
 
+        # Extract raw scores and clamp to valid ranges
+        raw_credibility = result.get("credibility", 3.0)
+        raw_novelty = result.get("novelty", 3.0)
+        raw_likelihood = result.get("likelihood", 5.0)
+        raw_impact = result.get("impact", 3.0)
+        raw_relevance = result.get("relevance", 3.0)
+        raw_velocity = result.get("velocity", 5.0)
+        raw_risk = result.get("risk", 5.0)
+
+        # Clamp scores to their documented valid ranges
+        clamped_credibility = max(1.0, min(float(raw_credibility), 5.0))
+        clamped_novelty = max(1.0, min(float(raw_novelty), 5.0))
+        clamped_likelihood = max(1.0, min(float(raw_likelihood), 9.0))
+        clamped_impact = max(1.0, min(float(raw_impact), 5.0))
+        clamped_relevance = max(1.0, min(float(raw_relevance), 5.0))
+        clamped_velocity = max(1.0, min(float(raw_velocity), 10.0))
+        clamped_risk = max(1.0, min(float(raw_risk), 10.0))
+
+        # Log if any scores were clamped (indicates AI returned out-of-range values)
+        if (
+            clamped_credibility != float(raw_credibility)
+            or clamped_novelty != float(raw_novelty)
+            or clamped_likelihood != float(raw_likelihood)
+            or clamped_impact != float(raw_impact)
+            or clamped_relevance != float(raw_relevance)
+            or clamped_velocity != float(raw_velocity)
+            or clamped_risk != float(raw_risk)
+        ):
+            logger.warning(
+                f"Scores clamped for '{title[:50]}...': "
+                f"credibility={raw_credibility}->{clamped_credibility}, "
+                f"novelty={raw_novelty}->{clamped_novelty}, "
+                f"likelihood={raw_likelihood}->{clamped_likelihood}, "
+                f"impact={raw_impact}->{clamped_impact}, "
+                f"relevance={raw_relevance}->{clamped_relevance}, "
+                f"velocity={raw_velocity}->{clamped_velocity}, "
+                f"risk={raw_risk}->{clamped_risk}"
+            )
+
         return AnalysisResult(
             summary=summary,
             key_excerpts=result.get("key_excerpts", []),
@@ -659,19 +755,19 @@ class AIService:
             horizon=result.get("horizon", "H2"),
             suggested_stage=result.get("suggested_stage", 4),
             triage_score=result.get("triage_score", 3),
-            credibility=result.get("credibility", 3.0),
-            novelty=result.get("novelty", 3.0),
-            likelihood=result.get("likelihood", 5.0),
-            impact=result.get("impact", 3.0),
-            relevance=result.get("relevance", 3.0),
-            velocity=result.get("velocity", 5.0),
-            risk=result.get("risk", 5.0),
+            credibility=clamped_credibility,
+            novelty=clamped_novelty,
+            likelihood=clamped_likelihood,
+            impact=clamped_impact,
+            relevance=clamped_relevance,
+            velocity=clamped_velocity,
+            risk=clamped_risk,
             time_to_awareness_months=result.get("time_to_awareness_months", 12),
             time_to_prepare_months=result.get("time_to_prepare_months", 24),
             suggested_card_name=result.get("suggested_card_name", title[:50]),
             is_new_concept=result.get("is_new_concept", False),
             entities=entities,
-            reasoning=result.get("reasoning", "")
+            reasoning=result.get("reasoning", ""),
         )
 
     @with_retry(max_retries=MAX_RETRIES)
@@ -694,7 +790,7 @@ class AIService:
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             max_tokens=800,
-            timeout=REQUEST_TIMEOUT
+            timeout=REQUEST_TIMEOUT,
         )
 
         try:
@@ -709,7 +805,7 @@ class AIService:
         source_summary: str,
         source_card_name: str,
         existing_card_name: str,
-        existing_card_summary: str
+        existing_card_summary: str,
     ) -> Dict[str, Any]:
         """
         Determine if a source belongs to an existing card or is new.
@@ -768,7 +864,7 @@ Respond with JSON:
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             max_tokens=300,
-            timeout=REQUEST_TIMEOUT
+            timeout=REQUEST_TIMEOUT,
         )
 
         try:
@@ -784,7 +880,7 @@ Respond with JSON:
         current_summary: str,
         current_description: str,
         research_report: str,
-        source_summaries: List[str]
+        source_summaries: List[str],
     ) -> Dict[str, str]:
         """
         Generate enhanced card summary and description based on research findings.
@@ -842,7 +938,7 @@ Respond with JSON:
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             max_tokens=1500,
-            timeout=REQUEST_TIMEOUT
+            timeout=REQUEST_TIMEOUT,
         )
 
         try:
@@ -852,7 +948,7 @@ Respond with JSON:
             return {
                 "enhanced_summary": current_summary,
                 "enhanced_description": current_description,
-                "key_updates": []
+                "key_updates": [],
             }
 
     @with_retry(max_retries=MAX_RETRIES)
@@ -866,7 +962,7 @@ Respond with JSON:
         pillar: str,
         gpt_researcher_report: str,
         source_analyses: List[Dict[str, Any]],
-        entities: List[Dict[str, str]]
+        entities: List[Dict[str, str]],
     ) -> str:
         """
         Generate a comprehensive strategic intelligence report for deep research.
@@ -891,29 +987,31 @@ Respond with JSON:
         # Format source insights with URLs for citation
         source_insights = ""
         for i, src in enumerate(source_analyses[:10], 1):
-            title = src.get('title', 'Untitled')[:80]
-            url = src.get('url', '')
-            source_name = src.get('source_name', '')
-            
+            title = src.get("title", "Untitled")[:80]
+            url = src.get("url", "")
+            source_name = src.get("source_name", "")
+
             # Format title as clickable link if URL available
             if url:
                 source_insights += f"\n{i}. **[{title}]({url})**"
             else:
                 source_insights += f"\n{i}. **{title}**"
-            
+
             if source_name:
                 source_insights += f" *({source_name})*"
             source_insights += "\n"
             source_insights += f"   Summary: {src.get('summary', 'No summary')[:300]}\n"
-            if src.get('key_excerpts'):
-                source_insights += f"   Key insight: {src.get('key_excerpts', [''])[0][:200]}\n"
+            if src.get("key_excerpts"):
+                source_insights += (
+                    f"   Key insight: {src.get('key_excerpts', [''])[0][:200]}\n"
+                )
 
         # Format entities
         entity_str = ""
         if entities:
-            tech_entities = [e for e in entities if e.get('type') == 'technology']
-            org_entities = [e for e in entities if e.get('type') == 'organization']
-            loc_entities = [e for e in entities if e.get('type') == 'location']
+            tech_entities = [e for e in entities if e.get("type") == "technology"]
+            org_entities = [e for e in entities if e.get("type") == "organization"]
+            loc_entities = [e for e in entities if e.get("type") == "location"]
 
             if tech_entities:
                 entity_str += f"Technologies: {', '.join(e.get('name', '') for e in tech_entities[:8])}\n"
@@ -929,9 +1027,13 @@ Respond with JSON:
             horizon=horizon or "H2",
             stage=stage or 4,
             pillar=pillar or "Not specified",
-            gpt_researcher_report=gpt_researcher_report[:8000] if gpt_researcher_report else "No GPT Researcher report available",
+            gpt_researcher_report=(
+                gpt_researcher_report[:8000]
+                if gpt_researcher_report
+                else "No GPT Researcher report available"
+            ),
             source_insights=source_insights or "No additional source insights",
-            entities=entity_str or "No entities extracted"
+            entities=entity_str or "No entities extracted",
         )
 
         logger.info(f"Generating comprehensive deep research report for: {card_name}")
@@ -940,7 +1042,7 @@ Respond with JSON:
             model=get_chat_deployment(),
             messages=[{"role": "user", "content": prompt}],
             max_tokens=16384,  # Max output for GPT-4o to ensure complete report with sources
-            timeout=REQUEST_TIMEOUT * 3  # Extended timeout for long report
+            timeout=REQUEST_TIMEOUT * 3,  # Extended timeout for long report
         )
 
         report = response.choices[0].message.content
@@ -964,76 +1066,82 @@ Respond with JSON:
 {sources_section}
 """
 
-        logger.info(f"Generated comprehensive report ({len(report_with_header)} chars) for: {card_name}")
+        logger.info(
+            f"Generated comprehensive report ({len(report_with_header)} chars) for: {card_name}"
+        )
         return report_with_header
 
     def _build_sources_section(self, source_analyses: List[Dict[str, Any]]) -> str:
         """
         Build a formatted sources section with clickable links.
-        
+
         Args:
             source_analyses: List of source analysis dicts with url, title, source_name
-            
+
         Returns:
             Markdown-formatted sources section
         """
         if not source_analyses:
             return "## Sources Cited\n\nNo sources available."
-        
+
         # Log source data for debugging
         logger.info(f"Building sources section from {len(source_analyses)} sources")
         for i, src in enumerate(source_analyses[:3]):
-            logger.debug(f"Source {i}: title={src.get('title', 'N/A')[:50]}, url={src.get('url', 'N/A')[:50] if src.get('url') else 'None'}")
-        
+            logger.debug(
+                f"Source {i}: title={src.get('title', 'N/A')[:50]}, url={src.get('url', 'N/A')[:50] if src.get('url') else 'None'}"
+            )
+
         # Deduplicate sources by URL
         seen_urls = set()
         unique_sources = []
         for src in source_analyses:
-            url = src.get('url', '')
+            url = src.get("url", "")
             if url and url not in seen_urls:
                 seen_urls.add(url)
                 unique_sources.append(src)
             elif not url:
                 # Include sources without URLs but mark them
                 unique_sources.append(src)
-        
+
         # Build the section
         lines = ["## Sources Cited", ""]
-        
+
         for i, src in enumerate(unique_sources, 1):
-            title = src.get('title') or 'Untitled Source'
-            url = src.get('url') or ''
-            source_name = src.get('source_name') or ''
-            
+            title = src.get("title") or "Untitled Source"
+            url = src.get("url") or ""
+            source_name = src.get("source_name") or ""
+
             # Clean up title (remove excessive length, normalize whitespace)
-            title = ' '.join(str(title).split())[:100] or 'Untitled Source'
-            
+            title = " ".join(str(title).split())[:100] or "Untitled Source"
+
             # Skip completely empty entries
             if not title and not url:
                 continue
-            
+
             # Format as numbered list with clickable links
-            if url and url.startswith(('http://', 'https://')):
+            if url and url.startswith(("http://", "https://")):
                 entry = f"{i}. [{title}]({url})"
             elif url:
                 entry = f"{i}. {title} ({url})"
             else:
                 entry = f"{i}. {title}"
-            
+
             # Add source/publication name if available
             if source_name:
                 entry += f" — *{source_name}*"
-            
+
             lines.append(entry)
-        
+
         # Add methodology note
-        lines.extend([
-            "",
-            "---",
-            "",
-            "**Research Methodology:** This report was generated using GPT Researcher with Firecrawl for source discovery, "
-            "supplemented by Exa AI for additional high-quality sources. Sources were filtered for relevance to municipal "
-            "government applications and analyzed using AI-powered classification and summarization."
-        ])
-        
+        lines.extend(
+            [
+                "",
+                "---",
+                "",
+                "**Research Methodology:** This report was generated using GPT Researcher with Firecrawl for source discovery, "
+                "supplemented by Exa AI for additional high-quality sources. Sources were filtered for relevance to municipal "
+                "government applications and analyzed using AI-powered classification and summarization.",
+            ]
+        )
+
         return "\n".join(lines)
