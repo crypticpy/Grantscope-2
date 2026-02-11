@@ -155,7 +155,7 @@ const Dashboard: React.FC = () => {
           .from("cards")
           .select("id", { count: "exact", head: true })
           .eq("status", "active")
-          .lt("signal_quality_score", 50),
+          .or("signal_quality_score.lt.50,signal_quality_score.is.null"),
       ]);
 
       // Log errors for debugging (non-blocking)
