@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import {
   Search,
   Grid,
@@ -25,6 +25,7 @@ import { StageBadge } from "../components/StageBadge";
 import { QualityScoreBadge } from "../components/QualityScoreBadge";
 import { Top25Badge } from "../components/Top25Badge";
 import { parseStageNumber } from "../lib/stage-utils";
+import { CreateSignalModal } from "../components/CreateSignal";
 
 interface Signal {
   id: string;
@@ -69,13 +70,12 @@ type SortOption =
 
 const Signals: React.FC = () => {
   useAuthContext(); // ensure authenticated
-  const navigate = useNavigate();
   const [signals, setSignals] = useState<Signal[]>([]);
   const [pillars, setPillars] = useState<Pillar[]>([]);
   const [stages, setStages] = useState<Stage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [showCreateSignal, setShowCreateSignal] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
   // Filters
@@ -214,42 +214,6 @@ const Signals: React.FC = () => {
     }
   };
 
-  const handleCreateSignal = useCallback(async () => {
-    if (creating) return;
-    setCreating(true);
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.access_token) return;
-
-      const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
-      const res = await fetch(`${apiUrl}/api/v1/cards`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          name: "New Signal",
-          summary: "",
-          pillar_id: pillars[0]?.id,
-          stage_id: stages[0]?.id,
-          horizon: "H2",
-        }),
-      });
-
-      if (res.ok) {
-        const card = await res.json();
-        navigate(`/signals/${card.slug}`);
-      }
-    } catch (err) {
-      console.error("Error creating signal:", err);
-    } finally {
-      setCreating(false);
-    }
-  }, [navigate, pillars, stages, creating]);
-
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Hero Header */}
@@ -270,16 +234,11 @@ const Signals: React.FC = () => {
             </p>
           </div>
           <button
-            onClick={handleCreateSignal}
-            disabled={creating}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-white/20 hover:bg-white/30 text-white font-medium rounded-xl backdrop-blur-sm border border-white/20 transition-colors shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => setShowCreateSignal(true)}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-white/20 hover:bg-white/30 text-white font-medium rounded-xl backdrop-blur-sm border border-white/20 transition-colors shrink-0"
           >
-            {creating ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Plus className="w-5 h-5" />
-            )}
-            {creating ? "Creating..." : "New Signal"}
+            <Plus className="w-5 h-5" />
+            New Signal
           </button>
         </div>
       </div>
@@ -587,6 +546,15 @@ const Signals: React.FC = () => {
           ))}
         </div>
       )}
+
+      <CreateSignalModal
+        isOpen={showCreateSignal}
+        onClose={() => setShowCreateSignal(false)}
+        onSuccess={() => {
+          loadSignals();
+          setShowCreateSignal(false);
+        }}
+      />
     </div>
   );
 };

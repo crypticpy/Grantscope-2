@@ -47,7 +47,6 @@ import {
   AlertTriangle,
   RefreshCw,
   ArrowLeftRight,
-  Plus,
   ShieldCheck,
 } from "lucide-react";
 import { supabase } from "../../App";
@@ -79,7 +78,6 @@ import {
 } from "./utils";
 import { DiscoverCard } from "./components";
 import { useSearchHistory } from "./hooks";
-import { CreateSignalModal } from "../../components/CreateSignal";
 
 /**
  * Build a short description of a query config for display
@@ -161,9 +159,6 @@ const Discover: React.FC = () => {
 
   // Semantic search toggle
   const [useSemanticSearch, setUseSemanticSearch] = useState<boolean>(false);
-
-  // Create Signal modal state
-  const [showCreateSignal, setShowCreateSignal] = useState(false);
 
   // Quality tier filter: 'all' | 'high' | 'moderate' | 'low'
   const [qualityFilter, setQualityFilter] = useState<string>("all");
@@ -775,13 +770,6 @@ const Discover: React.FC = () => {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowCreateSignal(true)}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-brand-green border border-brand-green rounded-lg hover:bg-brand-green/90 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                Create Signal
-              </button>
               <button
                 onClick={() =>
                   compareMode ? exitCompareMode() : setCompareMode(true)
@@ -1617,12 +1605,6 @@ const Discover: React.FC = () => {
           onClose={() => setShowSaveSearchModal(false)}
           onSuccess={handleSaveSearchSuccess}
           queryConfig={currentQueryConfig}
-        />
-
-        {/* Create Signal Modal */}
-        <CreateSignalModal
-          isOpen={showCreateSignal}
-          onClose={() => setShowCreateSignal(false)}
         />
       </div>
     </>

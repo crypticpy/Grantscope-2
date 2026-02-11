@@ -41,6 +41,8 @@ export interface CreateSignalModalProps {
   onClose: () => void;
   /** Optional pre-selected workstream ID (passed to QuickCreateTab) */
   workstreamId?: string;
+  /** Optional callback fired after a signal is successfully created */
+  onSuccess?: () => void;
 }
 
 /** Tab identifiers */
@@ -86,6 +88,7 @@ export function CreateSignalModal({
   isOpen,
   onClose,
   workstreamId,
+  onSuccess,
 }: CreateSignalModalProps) {
   const [activeTab, setActiveTab] = useState<TabId>("quick");
   const modalRef = useRef<HTMLDivElement>(null);
@@ -265,7 +268,10 @@ export function CreateSignalModal({
             hidden={activeTab !== "quick"}
           >
             {activeTab === "quick" && (
-              <QuickCreateTab workstreamId={workstreamId} />
+              <QuickCreateTab
+                workstreamId={workstreamId}
+                onCreated={onSuccess ? () => onSuccess() : undefined}
+              />
             )}
           </div>
 
@@ -276,7 +282,11 @@ export function CreateSignalModal({
             aria-labelledby="tab-manual"
             hidden={activeTab !== "manual"}
           >
-            {activeTab === "manual" && <ManualCreateTab />}
+            {activeTab === "manual" && (
+              <ManualCreateTab
+                onCreated={onSuccess ? () => onSuccess() : undefined}
+              />
+            )}
           </div>
         </div>
       </div>
