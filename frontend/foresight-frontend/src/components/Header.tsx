@@ -1,7 +1,22 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Home, Compass, FolderOpen, Settings, LogOut, Menu, X, Sun, Moon, BarChart3, ChevronDown, MoreHorizontal, User } from 'lucide-react';
-import { useAuthContext } from '../hooks/useAuthContext';
+import React, { useState, useEffect, useRef } from "react";
+import { Link, useLocation } from "react-router-dom";
+import {
+  Home,
+  Compass,
+  FolderOpen,
+  Settings,
+  LogOut,
+  Menu,
+  X,
+  Sun,
+  Moon,
+  BarChart3,
+  ChevronDown,
+  MoreHorizontal,
+  User,
+  BookOpen,
+} from "lucide-react";
+import { useAuthContext } from "../hooks/useAuthContext";
 
 const Header: React.FC = () => {
   const { user, signOut } = useAuthContext();
@@ -13,34 +28,40 @@ const Header: React.FC = () => {
   const moreDropdownRef = useRef<HTMLDivElement>(null);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     // Check localStorage first, then system preference
-    const stored = localStorage.getItem('theme');
-    if (stored) return stored === 'dark';
-    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const stored = localStorage.getItem("theme");
+    if (stored) return stored === "dark";
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
   });
 
   useEffect(() => {
     // Apply theme on mount and changes
     if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("theme", "dark");
     } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("theme", "light");
     }
   }, [isDarkMode]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) {
+      if (
+        userDropdownRef.current &&
+        !userDropdownRef.current.contains(event.target as Node)
+      ) {
         setIsUserDropdownOpen(false);
       }
-      if (moreDropdownRef.current && !moreDropdownRef.current.contains(event.target as Node)) {
+      if (
+        moreDropdownRef.current &&
+        !moreDropdownRef.current.contains(event.target as Node)
+      ) {
         setIsMoreDropdownOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const toggleTheme = () => {
@@ -49,21 +70,22 @@ const Header: React.FC = () => {
 
   // Main navigation items (Queue removed - accessible via Discover page)
   const navigation = [
-    { name: 'Dashboard', href: '/', icon: Home },
-    { name: 'Discover', href: '/discover', icon: Compass },
-    { name: 'Workstreams', href: '/workstreams', icon: FolderOpen },
+    { name: "Dashboard", href: "/", icon: Home },
+    { name: "Discover", href: "/discover", icon: Compass },
+    { name: "Workstreams", href: "/workstreams", icon: FolderOpen },
   ];
 
   // Items in the "More" dropdown
   const moreNavigation = [
-    { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+    { name: "Analytics", href: "/analytics", icon: BarChart3 },
+    { name: "Methodology", href: "/methodology", icon: BookOpen },
   ];
 
   const handleSignOut = async () => {
     try {
       await signOut();
     } catch (error) {
-      console.error('Error signing out:', error);
+      console.error("Error signing out:", error);
     }
   };
 
@@ -72,15 +94,22 @@ const Header: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo and Title */}
-          <Link to="/" className="flex items-center gap-3 hover:opacity-90 transition-opacity">
+          <Link
+            to="/"
+            className="flex items-center gap-3 hover:opacity-90 transition-opacity"
+          >
             <img
               src="/logo-horizontal.png"
               alt="City of Austin"
               className="h-8 w-auto"
             />
             <div className="hidden sm:flex flex-col">
-              <span className="text-sm font-semibold text-brand-blue leading-tight">Foresight</span>
-              <span className="text-xs text-gray-500 dark:text-gray-400 leading-tight">Strategic Research</span>
+              <span className="text-sm font-semibold text-brand-blue leading-tight">
+                Foresight
+              </span>
+              <span className="text-xs text-gray-500 dark:text-gray-400 leading-tight">
+                Strategic Research
+              </span>
             </div>
           </Link>
 
@@ -88,17 +117,19 @@ const Header: React.FC = () => {
           <nav className="hidden md:flex items-center space-x-1">
             {navigation.map((item) => {
               const Icon = item.icon;
-              const isActive = location.pathname === item.href ||
-                (item.href === '/discover' && location.pathname.startsWith('/discover'));
+              const isActive =
+                location.pathname === item.href ||
+                (item.href === "/discover" &&
+                  location.pathname.startsWith("/discover"));
               return (
                 <Link
                   key={item.name}
                   to={item.href}
-                  aria-current={isActive ? 'page' : undefined}
+                  aria-current={isActive ? "page" : undefined}
                   className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150 ${
                     isActive
-                      ? 'text-brand-blue bg-brand-blue/10'
-                      : 'text-gray-600 hover:text-brand-dark-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10'
+                      ? "text-brand-blue bg-brand-blue/10"
+                      : "text-gray-600 hover:text-brand-dark-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10"
                   }`}
                 >
                   <Icon className="w-4 h-4 mr-2" />
@@ -112,14 +143,16 @@ const Header: React.FC = () => {
               <button
                 onClick={() => setIsMoreDropdownOpen(!isMoreDropdownOpen)}
                 className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150 ${
-                  moreNavigation.some(item => location.pathname === item.href)
-                    ? 'text-brand-blue bg-brand-blue/10'
-                    : 'text-gray-600 hover:text-brand-dark-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10'
+                  moreNavigation.some((item) => location.pathname === item.href)
+                    ? "text-brand-blue bg-brand-blue/10"
+                    : "text-gray-600 hover:text-brand-dark-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10"
                 }`}
               >
                 <MoreHorizontal className="w-4 h-4 mr-2" />
                 More
-                <ChevronDown className={`w-3 h-3 ml-1 transition-transform ${isMoreDropdownOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown
+                  className={`w-3 h-3 ml-1 transition-transform ${isMoreDropdownOpen ? "rotate-180" : ""}`}
+                />
               </button>
               {isMoreDropdownOpen && (
                 <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
@@ -133,8 +166,8 @@ const Header: React.FC = () => {
                         onClick={() => setIsMoreDropdownOpen(false)}
                         className={`flex items-center px-4 py-2 text-sm transition-colors ${
                           isActive
-                            ? 'text-brand-blue bg-brand-blue/10'
-                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                            ? "text-brand-blue bg-brand-blue/10"
+                            : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                         }`}
                       >
                         <Icon className="w-4 h-4 mr-3" />
@@ -155,15 +188,23 @@ const Header: React.FC = () => {
                 className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-600 hover:text-brand-dark-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10 rounded-md transition-colors duration-150"
               >
                 <User className="w-4 h-4 mr-2" />
-                <span className="max-w-[150px] truncate">{user?.email?.split('@')[0]}</span>
-                <ChevronDown className={`w-3 h-3 ml-1 transition-transform ${isUserDropdownOpen ? 'rotate-180' : ''}`} />
+                <span className="max-w-[150px] truncate">
+                  {user?.email?.split("@")[0]}
+                </span>
+                <ChevronDown
+                  className={`w-3 h-3 ml-1 transition-transform ${isUserDropdownOpen ? "rotate-180" : ""}`}
+                />
               </button>
               {isUserDropdownOpen && (
                 <div className="absolute right-0 mt-1 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
                   {/* User email display */}
                   <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Signed in as</p>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{user?.email}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Signed in as
+                    </p>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                      {user?.email}
+                    </p>
                   </div>
 
                   {/* Theme Toggle */}
@@ -189,9 +230,9 @@ const Header: React.FC = () => {
                     to="/settings"
                     onClick={() => setIsUserDropdownOpen(false)}
                     className={`flex items-center px-4 py-2 text-sm transition-colors ${
-                      location.pathname === '/settings'
-                        ? 'text-brand-blue bg-brand-blue/10'
-                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                      location.pathname === "/settings"
+                        ? "text-brand-blue bg-brand-blue/10"
+                        : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                     }`}
                   >
                     <Settings className="w-4 h-4 mr-3" />
@@ -241,18 +282,20 @@ const Header: React.FC = () => {
             {/* Main Navigation */}
             {navigation.map((item) => {
               const Icon = item.icon;
-              const isActive = location.pathname === item.href ||
-                (item.href === '/discover' && location.pathname.startsWith('/discover'));
+              const isActive =
+                location.pathname === item.href ||
+                (item.href === "/discover" &&
+                  location.pathname.startsWith("/discover"));
               return (
                 <Link
                   key={item.name}
                   to={item.href}
                   onClick={() => setIsMenuOpen(false)}
-                  aria-current={isActive ? 'page' : undefined}
+                  aria-current={isActive ? "page" : undefined}
                   className={`flex items-center min-h-[44px] px-3 py-2 text-base font-medium rounded-md active:scale-[0.98] transition-all duration-150 ${
                     isActive
-                      ? 'text-brand-blue bg-brand-blue/10'
-                      : 'text-gray-600 hover:text-brand-dark-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10'
+                      ? "text-brand-blue bg-brand-blue/10"
+                      : "text-gray-600 hover:text-brand-dark-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10"
                   }`}
                 >
                   <Icon className="w-5 h-5 mr-3 flex-shrink-0" />
@@ -270,11 +313,11 @@ const Header: React.FC = () => {
                   key={item.name}
                   to={item.href}
                   onClick={() => setIsMenuOpen(false)}
-                  aria-current={isActive ? 'page' : undefined}
+                  aria-current={isActive ? "page" : undefined}
                   className={`flex items-center min-h-[44px] px-3 py-2 text-base font-medium rounded-md active:scale-[0.98] transition-all duration-150 ${
                     isActive
-                      ? 'text-brand-blue bg-brand-blue/10'
-                      : 'text-gray-600 hover:text-brand-dark-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10'
+                      ? "text-brand-blue bg-brand-blue/10"
+                      : "text-gray-600 hover:text-brand-dark-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10"
                   }`}
                 >
                   <Icon className="w-5 h-5 mr-3 flex-shrink-0" />
@@ -287,11 +330,13 @@ const Header: React.FC = () => {
             <Link
               to="/settings"
               onClick={() => setIsMenuOpen(false)}
-              aria-current={location.pathname === '/settings' ? 'page' : undefined}
+              aria-current={
+                location.pathname === "/settings" ? "page" : undefined
+              }
               className={`flex items-center min-h-[44px] px-3 py-2 text-base font-medium rounded-md active:scale-[0.98] transition-all duration-150 ${
-                location.pathname === '/settings'
-                  ? 'text-brand-blue bg-brand-blue/10'
-                  : 'text-gray-600 hover:text-brand-dark-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10'
+                location.pathname === "/settings"
+                  ? "text-brand-blue bg-brand-blue/10"
+                  : "text-gray-600 hover:text-brand-dark-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10"
               }`}
             >
               <Settings className="w-5 h-5 mr-3 flex-shrink-0" />

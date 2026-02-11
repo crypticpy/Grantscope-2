@@ -519,6 +519,12 @@ const Discover: React.FC = () => {
         query = query.gte("created_at", oneWeekAgo.toISOString());
       }
 
+      if (quickFilter === "updated") {
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+        query = query.gte("updated_at", oneWeekAgo.toISOString());
+      }
+
       if (selectedPillar) query = query.eq("pillar_id", selectedPillar);
       if (selectedStage) query = query.eq("stage_id", selectedStage);
       if (selectedHorizon) query = query.eq("horizon", selectedHorizon);
@@ -830,6 +836,17 @@ const Discover: React.FC = () => {
           >
             <Clock className="h-4 w-4 mr-1.5" />
             New This Week
+          </button>
+          <button
+            onClick={() => setSearchParams({ filter: "updated" })}
+            className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              quickFilter === "updated"
+                ? "bg-amber-500 text-white"
+                : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+            }`}
+          >
+            <RefreshCw className="h-4 w-4 mr-1.5" />
+            Updated This Week
           </button>
           <button
             onClick={() => setSearchParams({ filter: "following" })}
