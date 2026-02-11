@@ -131,18 +131,18 @@ class ForesightWorker:
             if did_work:
                 self._current_interval = self.poll_interval_seconds
             else:
-                self._current_interval = min(
-                    self._current_interval * 2,
-                    self.max_poll_interval_seconds,
-                )
-
-            if not did_work:
                 try:
                     await asyncio.wait_for(
                         self._stop_event.wait(), timeout=self._current_interval
                     )
                 except asyncio.TimeoutError:
                     pass
+                # Backoff *after* sleeping so the first idle wait uses the
+                # base interval, not 2x.
+                self._current_interval = min(
+                    self._current_interval * 2,
+                    self.max_poll_interval_seconds,
+                )
 
         logger.info("Worker stopping", extra={"worker_id": self.worker_id})
 

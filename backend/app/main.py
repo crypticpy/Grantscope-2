@@ -1392,7 +1392,9 @@ async def search_cards(request: AdvancedSearchRequest):
                 )
                 query_embedding = embedding_response.data[0].embedding
 
-                # Search using vector similarity (returns id + similarity only)
+                # Vector similarity search returns id, name, summary,
+                # pillar_id, horizon, similarity.  We hydrate the matched
+                # IDs with only the columns needed for SearchResultItem.
                 search_response = supabase.rpc(
                     "find_similar_cards",
                     {
@@ -1406,14 +1408,20 @@ async def search_cards(request: AdvancedSearchRequest):
 
                 matched = search_response.data or []
                 if matched:
-                    # Build similarity lookup and hydrate full card data
                     similarity_map = {
                         item["id"]: item.get("similarity", 0.0) for item in matched
                     }
                     matched_ids = list(similarity_map.keys())
+                    _SEARCH_HYDRATE_COLS = (
+                        "id, name, slug, summary, description, pillar_id, goal_id, "
+                        "anchor_id, stage_id, horizon, novelty_score, maturity_score, "
+                        "impact_score, relevance_score, velocity_score, risk_score, "
+                        "opportunity_score, status, created_at, updated_at, "
+                        "signal_quality_score, top25_relevance, origin, is_exploratory"
+                    )
                     cards_response = (
                         supabase.table("cards")
-                        .select("*")
+                        .select(_SEARCH_HYDRATE_COLS)
                         .in_("id", matched_ids)
                         .execute()
                     )
