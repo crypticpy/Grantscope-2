@@ -83,7 +83,7 @@ const InsightSkeleton: React.FC = () => (
     {[1, 2, 3].map((i) => (
       <div
         key={i}
-        className="bg-white dark:bg-[#2d3166] rounded-lg p-4 border border-gray-100 dark:border-gray-700"
+        className="bg-white dark:bg-dark-surface rounded-lg p-4 border border-gray-100 dark:border-gray-700"
       >
         <div className="flex items-start gap-3">
           <div className="w-10 h-10 bg-gray-200 dark:bg-gray-600 rounded-full" />
@@ -158,7 +158,7 @@ const InsightCard: React.FC<{ insight: InsightItem; index: number }> = ({
   const pillar = insight.pillar_id ? getPillarByCode(insight.pillar_id) : null;
 
   return (
-    <div className="bg-white dark:bg-[#2d3166] rounded-lg p-4 border border-gray-100 dark:border-gray-700 transition-all duration-200 hover:shadow-md hover:border-brand-blue/30">
+    <div className="bg-white dark:bg-dark-surface rounded-lg p-4 border border-gray-100 dark:border-gray-700 transition-all duration-200 hover:shadow-md hover:border-brand-blue/30">
       <div className="flex items-start gap-3">
         {/* Rank indicator - Austin brand colors */}
         <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-brand-blue to-brand-green flex items-center justify-center text-white font-semibold text-sm">
@@ -235,7 +235,7 @@ const InsightsPanel: React.FC<InsightsPanelProps> = ({
   // Handle loading state
   if (loading) {
     return (
-      <div className="bg-gray-50 dark:bg-[#1e2048] rounded-lg p-6">
+      <div className="bg-gray-50 dark:bg-dark-surface rounded-lg p-6">
         <div className="flex items-center gap-2 mb-2">
           <Sparkles className="h-5 w-5 text-brand-blue animate-pulse" />
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
@@ -253,7 +253,7 @@ const InsightsPanel: React.FC<InsightsPanelProps> = ({
   // Handle error state
   if (error) {
     return (
-      <div className="bg-gray-50 dark:bg-[#1e2048] rounded-lg p-6">
+      <div className="bg-gray-50 dark:bg-dark-surface rounded-lg p-6">
         <div className="flex items-center gap-2 mb-4">
           <Sparkles className="h-5 w-5 text-brand-blue" />
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
@@ -271,7 +271,7 @@ const InsightsPanel: React.FC<InsightsPanelProps> = ({
   const fallbackMessage = data?.fallback_message;
 
   return (
-    <div className="bg-gray-50 dark:bg-[#1e2048] rounded-lg p-6">
+    <div className="bg-gray-50 dark:bg-dark-surface rounded-lg p-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">

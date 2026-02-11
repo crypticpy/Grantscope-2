@@ -31,6 +31,7 @@ import {
   ClipboardList,
   Layers,
   BarChart3,
+  Compass,
   Sparkles,
   GitBranch,
   Shield,
@@ -109,25 +110,24 @@ function ProTip({
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="my-4 rounded-lg border border-brand-blue/20 bg-brand-light-blue/30 dark:bg-brand-blue/10 overflow-hidden">
+    <div className="my-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-4">
       <button
+        type="button"
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-brand-blue/5 dark:hover:bg-brand-blue/15"
+        className="w-full flex items-center gap-2 text-left text-sm font-semibold text-amber-600 dark:text-amber-400 transition-colors hover:text-amber-700 dark:hover:text-amber-300"
       >
-        <Lightbulb className="h-4 w-4 text-brand-blue dark:text-brand-light-blue flex-shrink-0" />
-        <span className="text-sm font-semibold text-brand-blue dark:text-brand-light-blue">
-          {title}
-        </span>
+        <Lightbulb className="h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+        <span className="flex-1">{title}</span>
         <ChevronDown
           className={cn(
-            "h-4 w-4 ml-auto text-brand-blue/50 transition-transform duration-200",
+            "h-4 w-4 transition-transform duration-200",
             expanded && "rotate-180",
           )}
         />
       </button>
       {expanded && (
-        <div className="px-4 pb-3 text-sm text-gray-700 dark:text-gray-300 leading-relaxed border-t border-brand-blue/10">
-          <div className="pt-2">{children}</div>
+        <div className="mt-2 text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+          {children}
         </div>
       )}
     </div>
@@ -151,10 +151,11 @@ function QuickStartCard({ data }: { data: QuickStartStep }) {
 
   return (
     <button
+      type="button"
       onClick={() => setExpanded(!expanded)}
       className={cn(
-        "relative flex flex-col items-center text-center p-5 rounded-xl border transition-all duration-200 cursor-pointer",
-        "bg-white dark:bg-[#2d3166]",
+        "relative flex flex-col items-center text-center p-5 rounded-xl border transition-all duration-200 cursor-pointer print:break-inside-avoid",
+        "bg-white dark:bg-dark-surface",
         expanded
           ? "border-brand-blue shadow-lg shadow-brand-blue/10 dark:shadow-brand-blue/20 ring-1 ring-brand-blue/20"
           : "border-gray-200 dark:border-gray-700 hover:border-brand-blue/40 hover:shadow-md",
@@ -314,6 +315,7 @@ function InteractiveKanban() {
         {KANBAN_COLUMN_INFO.map((col, idx) => (
           <div key={col.id} className="relative">
             <button
+              type="button"
               onClick={() =>
                 setSelectedColumn(selectedColumn === col.id ? null : col.id)
               }
@@ -339,7 +341,7 @@ function InteractiveKanban() {
 
       {/* Details panel */}
       {selected && (
-        <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2d3166] p-5 animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-dark-surface p-5 animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="flex items-center gap-2 mb-3">
             <div
               className={cn(
@@ -506,7 +508,7 @@ function ResearchComparisonTable() {
           <div
             key={m.id}
             className={cn(
-              "rounded-lg border-l-4 bg-white dark:bg-[#2d3166] p-4 shadow-sm",
+              "rounded-lg border-l-4 bg-white dark:bg-dark-surface p-4 shadow-sm",
               m.color,
             )}
           >
@@ -621,7 +623,7 @@ function BriefStructurePreview() {
   ];
 
   return (
-    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2d3166] overflow-hidden">
+    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-dark-surface overflow-hidden">
       <div className="bg-gradient-to-r from-brand-blue/10 to-brand-green/10 dark:from-brand-blue/20 dark:to-brand-green/20 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-2">
           <FileText className="h-4 w-4 text-brand-blue dark:text-brand-light-blue" />
@@ -637,6 +639,7 @@ function BriefStructurePreview() {
         {sections.map((section) => (
           <div key={section.id}>
             <button
+              type="button"
               onClick={() =>
                 setExpandedSection(
                   expandedSection === section.id ? null : section.id,
@@ -722,7 +725,7 @@ function ExportWorkflowDiagram() {
     <div className="flex flex-col sm:flex-row items-stretch gap-2 sm:gap-0">
       {steps.map((step, idx) => (
         <React.Fragment key={step.title}>
-          <div className="flex-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2d3166] p-3 text-center">
+          <div className="flex-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-dark-surface p-3 text-center">
             <div
               className={cn(
                 "w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-2",
@@ -820,8 +823,8 @@ export default function GuideWorkstreams() {
               Back to Workstreams
             </Link>
             <div className="flex items-start gap-4">
-              <div className="hidden sm:flex w-14 h-14 rounded-2xl bg-white/15 backdrop-blur-sm items-center justify-center flex-shrink-0">
-                <FolderOpen className="h-7 w-7 text-white" />
+              <div className="hidden sm:flex w-12 h-12 rounded-xl bg-white/15 items-center justify-center flex-shrink-0">
+                <FolderOpen className="h-6 w-6 text-white" />
               </div>
               <div>
                 <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">
@@ -1028,7 +1031,7 @@ export default function GuideWorkstreams() {
                       focus. The description provides context for anyone
                       reviewing your workstreams.
                     </p>
-                    <div className="bg-gray-50 dark:bg-[#3d4176] rounded-md p-3 text-sm">
+                    <div className="bg-gray-50 dark:bg-dark-surface-elevated rounded-md p-3 text-sm">
                       <div className="font-medium text-gray-900 dark:text-white mb-1">
                         Good examples:
                       </div>
@@ -1704,7 +1707,7 @@ export default function GuideWorkstreams() {
                           "flex-1 rounded-lg border p-3 text-center",
                           s.label === "Workstream"
                             ? "border-brand-blue bg-brand-blue/5 dark:bg-brand-blue/10"
-                            : "border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2d3166]",
+                            : "border-gray-200 dark:border-gray-700 bg-white dark:bg-dark-surface",
                         )}
                       >
                         <div
@@ -1873,7 +1876,7 @@ export default function GuideWorkstreams() {
                 <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">
                   Maximizing Research Quality
                 </h4>
-                <div className="rounded-lg bg-gray-50 dark:bg-[#3d4176] p-4 mb-4">
+                <div className="rounded-lg bg-gray-50 dark:bg-dark-surface-elevated p-4 mb-4">
                   <ol className="list-decimal list-inside space-y-2 text-sm">
                     <li>
                       <strong>Screen first:</strong> Run a Quick Update before
@@ -1915,48 +1918,68 @@ export default function GuideWorkstreams() {
           {/* ================================================================ */}
           {/* Footer CTA */}
           {/* ================================================================ */}
-          <div className="mt-12 no-print">
-            <div className="bg-gradient-to-r from-brand-blue/10 to-brand-green/10 dark:from-brand-blue/15 dark:to-brand-green/15 rounded-xl border border-brand-blue/20 p-6">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
-                Explore More Guides
-              </h3>
+          <section className="mt-14 no-print">
+            <div className="rounded-xl border border-brand-blue/20 bg-gradient-to-r from-brand-blue/10 to-brand-green/10 p-6 sm:p-8">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                Continue Learning
+              </h2>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-5">
-                Learn how to get the most from every part of the Foresight
-                platform.
+                Explore the other guide pages to master the complete Foresight
+                workflow.
               </p>
-              <div className="flex flex-wrap gap-3">
+              <div className="grid sm:grid-cols-3 gap-3">
                 <Link
                   to="/guide/signals"
-                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-[#2d3166] rounded-lg border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-900 dark:text-white hover:border-brand-blue hover:shadow-sm transition-all"
+                  className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-dark-surface p-4 transition-all hover:shadow-md hover:-translate-y-0.5 hover:border-brand-blue/30"
                 >
-                  <BookOpen className="h-4 w-4 text-brand-blue dark:text-brand-light-blue" />
-                  How to Use Signals
+                  <Star className="h-5 w-5 text-amber-500 flex-shrink-0" />
+                  <div>
+                    <p className="font-semibold text-sm text-gray-900 dark:text-white">
+                      How to Use Signals
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                      Manage your followed signals
+                    </p>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-gray-400 ml-auto" />
                 </Link>
                 <Link
                   to="/guide/discover"
-                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-[#2d3166] rounded-lg border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-900 dark:text-white hover:border-brand-blue hover:shadow-sm transition-all"
+                  className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-dark-surface p-4 transition-all hover:shadow-md hover:-translate-y-0.5 hover:border-brand-blue/30"
                 >
-                  <Search className="h-4 w-4 text-brand-blue dark:text-brand-light-blue" />
-                  How to Use Discover
+                  <Compass className="h-5 w-5 text-brand-blue dark:text-brand-light-blue flex-shrink-0" />
+                  <div>
+                    <p className="font-semibold text-sm text-gray-900 dark:text-white">
+                      How to Use Discover
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                      Browse and triage AI-curated signals
+                    </p>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-gray-400 ml-auto" />
                 </Link>
                 <Link
-                  to="/workstreams"
-                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-blue text-white rounded-lg text-sm font-medium hover:bg-brand-dark-blue transition-colors"
+                  to="/"
+                  className="flex items-center gap-3 rounded-lg border border-brand-blue/30 bg-brand-blue/5 dark:bg-brand-blue/10 p-4 transition-all hover:shadow-md hover:-translate-y-0.5"
                 >
-                  <FolderOpen className="h-4 w-4" />
-                  Go to Workstreams
-                  <ArrowRight className="h-4 w-4" />
+                  <BarChart3 className="h-5 w-5 text-brand-blue dark:text-brand-light-blue flex-shrink-0" />
+                  <div>
+                    <p className="font-semibold text-sm text-gray-900 dark:text-white">
+                      Dashboard
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                      View your overview and metrics
+                    </p>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-gray-400 ml-auto" />
                 </Link>
               </div>
             </div>
-          </div>
+          </section>
 
           {/* Footer note */}
           <p className="mt-10 text-sm text-gray-400 dark:text-gray-500 text-center no-print">
-            Questions about workstreams?{" "}
-            <span className="text-brand-blue dark:text-brand-light-blue">
-              Reach out to the Foresight team.
-            </span>
+            Questions about workstreams? Reach out to the Foresight team.
           </p>
         </div>
       </div>

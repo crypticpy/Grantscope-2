@@ -65,21 +65,24 @@ export const DiscoverCard = React.memo(function DiscoverCard({
           ? () => onToggleCompare({ id: card.id, name: card.name })
           : undefined
       }
-      className={`bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 border-l-4 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg relative ${
+      className={`bg-white dark:bg-dark-surface rounded-lg shadow-sm p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg relative overflow-hidden ${
         compareMode
           ? isSelectedForCompare
-            ? "border-l-extended-purple ring-2 ring-extended-purple/50 cursor-pointer"
-            : "border-transparent hover:border-l-extended-purple/50 cursor-pointer"
-          : "border-transparent hover:border-l-brand-blue"
+            ? "ring-2 ring-extended-purple/50 cursor-pointer"
+            : "hover:ring-1 hover:ring-extended-purple/30 cursor-pointer"
+          : ""
       }`}
     >
+      {/* Top gradient accent bar */}
+      <div className="absolute top-0 left-0 right-0 h-1 rounded-t-lg bg-gradient-to-r from-brand-blue to-brand-green" />
+
       {/* Compare Mode Selection Indicator */}
       {compareMode && (
         <div
           className={`absolute top-3 right-3 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
             isSelectedForCompare
               ? "bg-extended-purple border-extended-purple text-white"
-              : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
+              : "border-gray-300 dark:border-gray-600 bg-white dark:bg-dark-surface"
           }`}
         >
           {isSelectedForCompare && <Check className="h-4 w-4" />}
@@ -165,7 +168,7 @@ export const DiscoverCard = React.memo(function DiscoverCard({
               e.stopPropagation();
               onToggleFollow(card.id);
             }}
-            className={`flex-shrink-0 p-2 transition-colors ${
+            className={`flex-shrink-0 p-2 transition-all duration-200 active:scale-75 ${
               isFollowed
                 ? "text-red-500 hover:text-red-600"
                 : "text-gray-400 hover:text-red-500"

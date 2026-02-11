@@ -91,7 +91,7 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3">
+    <div className="bg-white dark:bg-dark-surface border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3">
       <p className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
         {formattedDate}
       </p>
@@ -145,7 +145,7 @@ const WoWChangeBadge: React.FC<WoWChangeBadgeProps> = ({ change }) => {
   const colorClass = isPositive
     ? "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30"
     : isNeutral
-      ? "text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800"
+      ? "text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-dark-surface"
       : "text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30";
 
   return (
@@ -321,12 +321,12 @@ export const TrendVelocityChart: React.FC<TrendVelocityChartProps> = ({
             type="monotone"
             dataKey="velocity"
             name="Total Velocity"
-            stroke="#3b82f6"
+            stroke="#44499C"
             strokeWidth={2}
-            dot={{ fill: "#3b82f6", strokeWidth: 2, r: 3 }}
+            dot={{ fill: "#44499C", strokeWidth: 2, r: 3 }}
             activeDot={{
               r: 6,
-              fill: "#3b82f6",
+              fill: "#44499C",
               stroke: "#fff",
               strokeWidth: 2,
             }}
@@ -336,12 +336,12 @@ export const TrendVelocityChart: React.FC<TrendVelocityChartProps> = ({
             type="monotone"
             dataKey="count"
             name="Signal Count"
-            stroke="#10b981"
+            stroke="#009F4D"
             strokeWidth={2}
-            dot={{ fill: "#10b981", strokeWidth: 2, r: 3 }}
+            dot={{ fill: "#009F4D", strokeWidth: 2, r: 3 }}
             activeDot={{
               r: 6,
-              fill: "#10b981",
+              fill: "#009F4D",
               stroke: "#fff",
               strokeWidth: 2,
             }}

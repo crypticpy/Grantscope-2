@@ -185,7 +185,7 @@ function PillarTooltipContent({
             {extendedInfo.keyDepartments.map((dept) => (
               <span
                 key={dept}
-                className="text-[10px] px-1.5 py-0.5 rounded bg-white/60 dark:bg-gray-800/60 text-gray-700 dark:text-gray-300"
+                className="text-[10px] px-1.5 py-0.5 rounded bg-white/60 dark:bg-dark-surface/60 text-gray-700 dark:text-gray-300"
               >
                 {dept}
               </span>

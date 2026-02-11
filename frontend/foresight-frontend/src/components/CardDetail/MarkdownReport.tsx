@@ -145,7 +145,7 @@ export const MarkdownReport: React.FC<MarkdownReportProps> = ({
             return (
               <code
                 {...props}
-                className="bg-gray-100 dark:bg-gray-800 text-brand-dark-blue dark:text-brand-light-blue px-1.5 py-0.5 rounded text-xs sm:text-sm font-mono"
+                className="bg-gray-100 dark:bg-dark-surface text-brand-dark-blue dark:text-brand-light-blue px-1.5 py-0.5 rounded text-xs sm:text-sm font-mono"
               >
                 {children}
               </code>
@@ -178,7 +178,7 @@ export const MarkdownReport: React.FC<MarkdownReportProps> = ({
           thead: ({ node: _node, ...props }) => (
             <thead
               {...props}
-              className="bg-gray-50 dark:bg-gray-800"
+              className="bg-gray-50 dark:bg-dark-surface"
             />
           ),
           // Table body

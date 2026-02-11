@@ -13,7 +13,7 @@
  * - Keyboard accessible (Escape to close when allowed)
  */
 
-import React, { useEffect, useRef, useCallback, useState } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from "react";
 import {
   X,
   Download,
@@ -25,21 +25,21 @@ import {
   Sparkles,
   Clock,
   RefreshCw,
-} from 'lucide-react';
-import { cn } from '../lib/utils';
+} from "lucide-react";
+import { cn } from "../lib/utils";
 
 // =============================================================================
 // Types
 // =============================================================================
 
 export type ExportStatus =
-  | 'preparing'
-  | 'generating'
-  | 'processing'
-  | 'completed'
-  | 'error';
+  | "preparing"
+  | "generating"
+  | "processing"
+  | "completed"
+  | "error";
 
-export type ExportFormat = 'pdf' | 'pptx';
+export type ExportFormat = "pdf" | "pptx";
 
 export interface ExportProgressModalProps {
   /** Whether the modal is open */
@@ -78,14 +78,14 @@ export interface ExportProgressModalProps {
 
 // City of Austin brand colors
 const COA_COLORS = {
-  logoBlue: '#44499C',
-  logoGreen: '#009F4D',
-  fadedWhite: '#f7f6f5',
-  darkBlue: '#22254E',
-  lightBlue: '#dcf2fd',
-  lightGreen: '#dff0e3',
-  red: '#F83125',
-  darkGray: '#636262',
+  logoBlue: "#44499C",
+  logoGreen: "#009F4D",
+  fadedWhite: "#f7f6f5",
+  darkBlue: "#22254E",
+  lightBlue: "#dcf2fd",
+  lightGreen: "#dff0e3",
+  red: "#F83125",
+  darkGray: "#636262",
 };
 
 const STATUS_CONFIG: Record<
@@ -99,32 +99,32 @@ const STATUS_CONFIG: Record<
 > = {
   preparing: {
     icon: Clock,
-    title: 'Preparing Export',
-    description: 'Setting up your export request...',
+    title: "Preparing Export",
+    description: "Setting up your export request...",
     color: COA_COLORS.logoBlue,
   },
   generating: {
     icon: Sparkles,
-    title: 'Generating Content',
-    description: 'AI is creating your presentation with images and charts...',
+    title: "Generating Content",
+    description: "AI is creating your presentation with images and charts...",
     color: COA_COLORS.logoBlue,
   },
   processing: {
     icon: Loader2,
-    title: 'Processing',
-    description: 'Finalizing your export...',
+    title: "Processing",
+    description: "Finalizing your export...",
     color: COA_COLORS.logoBlue,
   },
   completed: {
     icon: CheckCircle,
-    title: 'Export Ready',
-    description: 'Your export is ready to download.',
+    title: "Export Ready",
+    description: "Your export is ready to download.",
     color: COA_COLORS.logoGreen,
   },
   error: {
     icon: AlertCircle,
-    title: 'Export Failed',
-    description: 'There was a problem generating your export.',
+    title: "Export Failed",
+    description: "There was a problem generating your export.",
     color: COA_COLORS.red,
   },
 };
@@ -157,11 +157,11 @@ export const ExportProgressModal: React.FC<ExportProgressModalProps> = ({
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
 
-    if (isOpen && (status === 'generating' || status === 'processing')) {
+    if (isOpen && (status === "generating" || status === "processing")) {
       interval = setInterval(() => {
         setElapsedTime((prev) => prev + 1);
       }, 1000);
-    } else if (status === 'completed' || status === 'error') {
+    } else if (status === "completed" || status === "error") {
       // Reset on completion
     } else {
       setElapsedTime(0);
@@ -182,14 +182,17 @@ export const ExportProgressModal: React.FC<ExportProgressModalProps> = ({
   // Handle escape key - only allow close when completed or error
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && (status === 'completed' || status === 'error')) {
+      if (
+        e.key === "Escape" &&
+        (status === "completed" || status === "error")
+      ) {
         onClose();
       }
     };
 
     if (isOpen) {
-      document.addEventListener('keydown', handleKeyDown);
-      return () => document.removeEventListener('keydown', handleKeyDown);
+      document.addEventListener("keydown", handleKeyDown);
+      return () => document.removeEventListener("keydown", handleKeyDown);
     }
   }, [isOpen, onClose, status]);
 
@@ -205,7 +208,7 @@ export const ExportProgressModal: React.FC<ExportProgressModalProps> = ({
     if (onDownload) {
       onDownload();
     } else if (downloadUrl) {
-      const link = document.createElement('a');
+      const link = document.createElement("a");
       link.href = downloadUrl;
       link.download = filename || `export.${format}`;
       document.body.appendChild(link);
@@ -218,9 +221,12 @@ export const ExportProgressModal: React.FC<ExportProgressModalProps> = ({
 
   const config = STATUS_CONFIG[status];
   const StatusIcon = config.icon;
-  const FormatIcon = format === 'pptx' ? Presentation : FileText;
-  const canClose = status === 'completed' || status === 'error';
-  const isInProgress = status === 'preparing' || status === 'generating' || status === 'processing';
+  const FormatIcon = format === "pptx" ? Presentation : FileText;
+  const canClose = status === "completed" || status === "error";
+  const isInProgress =
+    status === "preparing" ||
+    status === "generating" ||
+    status === "processing";
 
   // Format elapsed time
   const formatTime = (seconds: number) => {
@@ -247,14 +253,14 @@ export const ExportProgressModal: React.FC<ExportProgressModalProps> = ({
       <div
         ref={modalRef}
         className={cn(
-          'relative w-full max-w-md mx-4 bg-white dark:bg-gray-800 rounded-xl shadow-2xl',
-          'transform transition-all duration-300',
-          'border border-gray-200 dark:border-gray-700'
+          "relative w-full max-w-md mx-4 bg-white dark:bg-dark-surface rounded-xl shadow-2xl",
+          "transform transition-all duration-300",
+          "border border-gray-200 dark:border-gray-700",
         )}
       >
         {/* Header */}
         <div
-          className="px-6 py-4 border-b border-gray-200 dark:border-gray-700"
+          className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 rounded-t-xl"
           style={{ backgroundColor: COA_COLORS.fadedWhite }}
         >
           <div className="flex items-center justify-between">
@@ -274,7 +280,7 @@ export const ExportProgressModal: React.FC<ExportProgressModalProps> = ({
                   className="text-lg font-semibold"
                   style={{ color: COA_COLORS.darkBlue }}
                 >
-                  {format === 'pptx' ? 'PowerPoint Export' : 'PDF Export'}
+                  {format === "pptx" ? "PowerPoint Export" : "PDF Export"}
                 </h2>
                 {itemName && (
                   <p className="text-sm text-gray-600 dark:text-gray-400 truncate max-w-[200px]">
@@ -302,22 +308,22 @@ export const ExportProgressModal: React.FC<ExportProgressModalProps> = ({
           <div className="flex flex-col items-center text-center">
             <div
               className={cn(
-                'relative w-20 h-20 rounded-full flex items-center justify-center mb-4',
-                isInProgress && 'animate-pulse'
+                "relative w-20 h-20 rounded-full flex items-center justify-center mb-4",
+                isInProgress && "animate-pulse",
               )}
               style={{
                 backgroundColor:
-                  status === 'completed'
+                  status === "completed"
                     ? COA_COLORS.lightGreen
-                    : status === 'error'
-                      ? '#FEE2E2'
+                    : status === "error"
+                      ? "#FEE2E2"
                       : COA_COLORS.lightBlue,
               }}
             >
               <StatusIcon
                 className={cn(
-                  'h-10 w-10',
-                  isInProgress && status !== 'preparing' && 'animate-spin'
+                  "h-10 w-10",
+                  isInProgress && status !== "preparing" && "animate-spin",
                 )}
                 style={{ color: config.color }}
               />
@@ -383,17 +389,18 @@ export const ExportProgressModal: React.FC<ExportProgressModalProps> = ({
                 <span>Elapsed: {formatTime(elapsedTime)}</span>
                 {estimatedTimeSeconds && estimatedTimeSeconds > elapsedTime && (
                   <span className="text-gray-400">
-                    • ~{formatTime(estimatedTimeSeconds - elapsedTime)} remaining
+                    • ~{formatTime(estimatedTimeSeconds - elapsedTime)}{" "}
+                    remaining
                   </span>
                 )}
               </div>
             )}
 
             {/* Error Message */}
-            {status === 'error' && errorMessage && (
+            {status === "error" && errorMessage && (
               <div
                 className="mt-4 p-3 rounded-lg text-sm text-left w-full"
-                style={{ backgroundColor: '#FEE2E2', color: COA_COLORS.red }}
+                style={{ backgroundColor: "#FEE2E2", color: COA_COLORS.red }}
               >
                 {errorMessage}
               </div>
@@ -402,9 +409,9 @@ export const ExportProgressModal: React.FC<ExportProgressModalProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 rounded-b-xl">
+        <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-dark-surface-deep rounded-b-xl">
           <div className="flex items-center justify-end gap-3">
-            {status === 'completed' && (
+            {status === "completed" && (
               <>
                 <button
                   onClick={onClose}
@@ -417,10 +424,12 @@ export const ExportProgressModal: React.FC<ExportProgressModalProps> = ({
                   className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors"
                   style={{ backgroundColor: COA_COLORS.logoGreen }}
                   onMouseEnter={(e) =>
-                    (e.currentTarget.style.backgroundColor = COA_COLORS.darkBlue)
+                    (e.currentTarget.style.backgroundColor =
+                      COA_COLORS.darkBlue)
                   }
                   onMouseLeave={(e) =>
-                    (e.currentTarget.style.backgroundColor = COA_COLORS.logoGreen)
+                    (e.currentTarget.style.backgroundColor =
+                      COA_COLORS.logoGreen)
                   }
                 >
                   <Download className="h-4 w-4" />
@@ -429,7 +438,7 @@ export const ExportProgressModal: React.FC<ExportProgressModalProps> = ({
               </>
             )}
 
-            {status === 'error' && (
+            {status === "error" && (
               <>
                 <button
                   onClick={onClose}

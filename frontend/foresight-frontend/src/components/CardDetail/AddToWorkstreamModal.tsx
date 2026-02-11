@@ -170,15 +170,15 @@ export const AddToWorkstreamModal = memo(function AddToWorkstreamModal({
     >
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/50 transition-opacity"
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
         onClick={isAdding ? undefined : onClose}
         aria-hidden="true"
       />
 
       {/* Modal Content */}
-      <div className="relative bg-white dark:bg-[#2d3166] rounded-lg shadow-xl w-full max-w-md transform transition-all">
+      <div className="relative bg-white dark:bg-dark-surface rounded-xl shadow-2xl w-full max-w-md transform transition-all">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-600">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center gap-2">
             <Briefcase className="h-5 w-5 text-brand-blue" />
             <h2
@@ -200,7 +200,7 @@ export const AddToWorkstreamModal = memo(function AddToWorkstreamModal({
         </div>
 
         {/* Card Reference */}
-        <div className="px-6 py-3 bg-gray-50 dark:bg-[#252850] border-b border-gray-200 dark:border-gray-600">
+        <div className="px-6 py-3 bg-gray-50 dark:bg-dark-surface border-b border-gray-200 dark:border-gray-700">
           <p className="text-sm text-gray-600 dark:text-gray-400">
             Adding{" "}
             <span className="font-medium text-gray-900 dark:text-white">
@@ -297,7 +297,7 @@ export const AddToWorkstreamModal = memo(function AddToWorkstreamModal({
         </div>
 
         {/* Footer - Create New Workstream */}
-        <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-600">
+        <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700">
           <button
             onClick={handleCreateNew}
             disabled={!!isAdding}

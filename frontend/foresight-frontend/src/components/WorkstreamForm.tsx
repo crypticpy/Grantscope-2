@@ -455,7 +455,7 @@ function ToggleSwitch({
         aria-checked={checked}
         onClick={() => onChange(!checked)}
         className={cn(
-          "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 dark:focus:ring-offset-[#2d3166]",
+          "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 dark:focus:ring-offset-dark-surface",
           checked ? "bg-brand-blue" : "bg-gray-200 dark:bg-gray-600",
         )}
       >
@@ -912,7 +912,7 @@ export function WorkstreamForm({
               <div className="w-full border-t border-gray-200 dark:border-gray-700" />
             </div>
             <div className="relative flex justify-center text-xs">
-              <span className="bg-white dark:bg-[#2d3166] px-2 text-gray-500 dark:text-gray-400">
+              <span className="bg-white dark:bg-dark-surface px-2 text-gray-500 dark:text-gray-400">
                 or customize your own
               </span>
             </div>
@@ -942,7 +942,7 @@ export function WorkstreamForm({
           className={cn(
             "w-full px-3 py-2 border rounded-md shadow-sm text-sm",
             "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-brand-blue",
-            "dark:bg-[#3d4176] dark:text-white dark:placeholder-gray-400",
+            "dark:bg-dark-surface-elevated dark:text-white dark:placeholder-gray-400",
             errors.name
               ? "border-red-300 bg-red-50 dark:border-red-500 dark:bg-red-900/20"
               : "border-gray-300 bg-white dark:border-gray-600",
@@ -976,7 +976,7 @@ export function WorkstreamForm({
           }
           placeholder="Describe the focus and purpose of this workstream..."
           rows={3}
-          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-brand-blue bg-white dark:bg-[#3d4176] dark:text-white dark:placeholder-gray-400 resize-none"
+          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-brand-blue bg-white dark:bg-dark-surface-elevated dark:text-white dark:placeholder-gray-400 resize-none"
         />
       </div>
 
@@ -992,7 +992,7 @@ export function WorkstreamForm({
               type="button"
               onClick={() => handlePillarToggle(pillar.code)}
               className={cn(
-                "transition-all duration-150",
+                "transition-all duration-200",
                 formData.pillar_ids.includes(pillar.code)
                   ? "ring-2 ring-brand-blue ring-offset-1 dark:ring-offset-[#2d3166] rounded"
                   : "opacity-60 hover:opacity-100",
@@ -1017,7 +1017,7 @@ export function WorkstreamForm({
           title="Goals"
           description="Narrow down by specific goals within selected pillars"
         >
-          <div className="space-y-4 max-h-48 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-gray-50 dark:bg-[#3d4176]">
+          <div className="space-y-4 max-h-48 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-gray-50 dark:bg-dark-surface-elevated">
             {formData.pillar_ids.map((pillarCode) => {
               const pillarGoals = getGoalsByPillar(pillarCode);
               const pillar = pillars.find((p) => p.code === pillarCode);
@@ -1079,7 +1079,7 @@ export function WorkstreamForm({
                 "px-3 py-1.5 text-sm font-medium rounded-md border transition-colors",
                 formData.stage_ids.includes(stage.stage.toString())
                   ? "bg-brand-light-blue dark:bg-brand-blue/20 border-brand-blue text-brand-dark-blue dark:text-brand-light-blue"
-                  : "bg-white dark:bg-[#3d4176] border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#4d5186]",
+                  : "bg-white dark:bg-dark-surface-elevated border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-dark-surface-hover",
               )}
               aria-pressed={formData.stage_ids.includes(stage.stage.toString())}
               title={`${stage.name}: ${stage.description}`}
@@ -1108,7 +1108,7 @@ export function WorkstreamForm({
                 "px-3 py-1.5 text-sm font-medium rounded-md border transition-colors",
                 formData.horizon === h.code
                   ? "bg-brand-light-blue dark:bg-brand-blue/20 border-brand-blue text-brand-dark-blue dark:text-brand-light-blue"
-                  : "bg-white dark:bg-[#3d4176] border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#4d5186]",
+                  : "bg-white dark:bg-dark-surface-elevated border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-dark-surface-hover",
               )}
               aria-pressed={formData.horizon === h.code}
             >
@@ -1136,7 +1136,7 @@ export function WorkstreamForm({
               onChange={(e) => setKeywordInput(e.target.value)}
               onKeyDown={handleKeywordInputKeyDown}
               placeholder="Type a keyword and press Enter..."
-              className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-brand-blue bg-white dark:bg-[#3d4176] dark:text-white dark:placeholder-gray-400"
+              className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-brand-blue bg-white dark:bg-dark-surface-elevated dark:text-white dark:placeholder-gray-400"
             />
             <button
               type="button"
@@ -1269,7 +1269,7 @@ export function WorkstreamForm({
               ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700"
               : preview && preview.estimated_count === 0
                 ? "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700"
-                : "bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700",
+                : "bg-gray-50 dark:bg-dark-surface/50 border-gray-200 dark:border-gray-700",
           )}
         >
           <div className="flex items-center gap-3">
@@ -1411,7 +1411,7 @@ export function WorkstreamForm({
           type="button"
           onClick={onCancel}
           disabled={isSubmitting}
-          className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-[#3d4176] border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-[#2d3166] disabled:opacity-50 transition-colors"
+          className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-dark-surface-elevated border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-dark-surface-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-dark-surface disabled:opacity-50 transition-colors"
         >
           Cancel
         </button>
@@ -1419,7 +1419,7 @@ export function WorkstreamForm({
           type="submit"
           disabled={isSubmitting}
           className={cn(
-            "inline-flex items-center px-4 py-2 text-sm font-medium text-white rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-[#2d3166] transition-colors",
+            "inline-flex items-center px-4 py-2 text-sm font-medium text-white rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-dark-surface transition-colors",
             isSubmitting
               ? "bg-brand-blue/60 cursor-not-allowed"
               : "bg-brand-blue hover:bg-brand-dark-blue",

@@ -55,10 +55,10 @@ const loadingButtonVariants = cva(
   [
     'inline-flex items-center justify-center',
     'font-medium rounded-md',
-    'transition-colors duration-150',
+    'transition-colors duration-200',
     'focus:outline-none focus:ring-2 focus:ring-offset-2',
     'disabled:opacity-50 disabled:cursor-not-allowed',
-    'dark:focus:ring-offset-[#2d3166]',
+    'dark:focus:ring-offset-dark-surface',
   ],
   {
     variants: {
@@ -72,8 +72,8 @@ const loadingButtonVariants = cva(
           'bg-white text-gray-700 border border-gray-300',
           'hover:bg-gray-50',
           'focus:ring-brand-blue',
-          'dark:bg-[#3d4176] dark:text-gray-300 dark:border-gray-600',
-          'dark:hover:bg-[#4d5186]',
+          'dark:bg-dark-surface-elevated dark:text-gray-300 dark:border-gray-600',
+          'dark:hover:bg-dark-surface-hover',
         ],
         danger: [
           'bg-red-600 text-white',

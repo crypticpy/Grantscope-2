@@ -155,7 +155,7 @@ export function SeedUrlInput({
               placeholder="https://example.com/article"
               className={cn(
                 "w-full pl-8 pr-3 py-2 text-sm rounded-md border",
-                "bg-white dark:bg-[#2d3166]",
+                "bg-white dark:bg-dark-surface",
                 "text-gray-900 dark:text-gray-100",
                 "placeholder-gray-400 dark:placeholder-gray-500",
                 "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent",
@@ -177,7 +177,7 @@ export function SeedUrlInput({
               "bg-brand-blue text-white hover:bg-brand-dark-blue",
               "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2",
               "disabled:opacity-50 disabled:cursor-not-allowed",
-              "transition-colors duration-150",
+              "transition-colors duration-200",
             )}
             aria-label="Add URL"
           >
@@ -211,7 +211,7 @@ export function SeedUrlInput({
               role="listitem"
               className={cn(
                 "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full",
-                "bg-gray-100 dark:bg-[#3d4176]",
+                "bg-gray-100 dark:bg-dark-surface-elevated",
                 "text-xs text-gray-700 dark:text-gray-300",
                 "border border-gray-200 dark:border-gray-600",
                 "max-w-[300px]",
@@ -232,7 +232,7 @@ export function SeedUrlInput({
                   "text-gray-400 hover:text-red-500 dark:hover:text-red-400",
                   "hover:bg-gray-200 dark:hover:bg-gray-600",
                   "focus:outline-none focus:ring-1 focus:ring-red-400",
-                  "transition-colors duration-150",
+                  "transition-colors duration-200",
                 )}
                 aria-label={`Remove ${url}`}
               >

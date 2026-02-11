@@ -219,7 +219,7 @@ export const BulkExportModal: React.FC<BulkExportModalProps> = ({
       <div
         className={cn(
           "relative w-full max-w-2xl mx-4",
-          "bg-white dark:bg-[#1a1d40] rounded-xl shadow-2xl",
+          "bg-white dark:bg-dark-surface-deep rounded-xl shadow-2xl",
           "border border-gray-200 dark:border-gray-800",
           "transform transition-all duration-200",
           "max-h-[90vh] overflow-hidden flex flex-col",
@@ -375,7 +375,7 @@ export const BulkExportModal: React.FC<BulkExportModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
+        <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-dark-surface/50">
           {/* Export Progress Indicator */}
           {isExporting && (
             <div className="mb-4">
@@ -557,8 +557,8 @@ function CardStatusRow({ card, index }: CardStatusRowProps) {
         "flex items-center gap-3 px-3 py-2.5 rounded-lg",
         "border",
         isReady
-          ? "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
-          : "bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 opacity-60",
+          ? "bg-white dark:bg-dark-surface border-gray-200 dark:border-gray-700"
+          : "bg-gray-50 dark:bg-dark-surface/50 border-gray-200 dark:border-gray-700 opacity-60",
       )}
     >
       <div className="flex items-center gap-2 flex-shrink-0">

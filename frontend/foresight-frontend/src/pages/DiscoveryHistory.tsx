@@ -252,7 +252,7 @@ const StatCard: React.FC<{
 }> = ({ label, value, icon, color }) => (
   <div className={`p-4 rounded-lg border ${color}`}>
     <div className="flex items-center gap-3">
-      <div className="p-2 rounded-lg bg-white dark:bg-gray-800">{icon}</div>
+      <div className="p-2 rounded-lg bg-white dark:bg-dark-surface">{icon}</div>
       <div>
         <div className="text-2xl font-bold">{value}</div>
         <div className="text-sm text-gray-600 dark:text-gray-400">{label}</div>
@@ -294,7 +294,7 @@ const RunRow: React.FC<{
 
   return (
     <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-      <div className="w-full px-4 py-3 flex items-center justify-between bg-white dark:bg-gray-800">
+      <div className="w-full px-4 py-3 flex items-center justify-between bg-white dark:bg-dark-surface">
         <div
           onClick={() => setExpanded(!expanded)}
           className="flex items-center gap-4 cursor-pointer hover:opacity-80 transition-opacity flex-1"
@@ -458,7 +458,7 @@ const RunRow: React.FC<{
               <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
                 Summary Report
               </div>
-              <div className="text-sm whitespace-pre-wrap bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-3 max-h-64 overflow-auto">
+              <div className="text-sm whitespace-pre-wrap bg-white dark:bg-dark-surface border border-gray-200 dark:border-gray-700 rounded p-3 max-h-64 overflow-auto">
                 {markdownReport}
               </div>
             </div>
@@ -708,7 +708,7 @@ const DiscoveryHistory: React.FC = () => {
               label="Total Runs"
               value={stats.totalRuns}
               icon={<Calendar className="w-5 h-5 text-gray-600" />}
-              color="bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700"
+              color="bg-gray-50 dark:bg-dark-surface border-gray-200 dark:border-gray-700"
             />
             <StatCard
               label="Signals Created"
@@ -748,7 +748,7 @@ const DiscoveryHistory: React.FC = () => {
 
         {/* Empty State */}
         {!initialLoading && runs.length === 0 && (
-          <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+          <div className="text-center py-12 bg-white dark:bg-dark-surface rounded-xl border border-gray-200 dark:border-gray-700">
             <Clock className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
               No Discovery Runs Yet

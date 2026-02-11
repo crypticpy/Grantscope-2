@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import {
   Calendar,
@@ -62,6 +62,38 @@ function safeCount(r: { error: unknown; count: number | null }): number {
   return r.error ? 0 : (r.count ?? 0);
 }
 
+/**
+ * Animates a number from 0 to the target value over the given duration (ms)
+ * using requestAnimationFrame for smooth 60fps rendering.
+ */
+function useCountUp(target: number, duration = 500): number {
+  const [value, setValue] = useState(0);
+  const rafRef = useRef<number>();
+
+  useEffect(() => {
+    if (target === 0) {
+      setValue(0);
+      return;
+    }
+    const start = performance.now();
+    const animate = (now: number) => {
+      const progress = Math.min((now - start) / duration, 1);
+      // Use ease-out curve for a more natural feel
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setValue(Math.round(eased * target));
+      if (progress < 1) {
+        rafRef.current = requestAnimationFrame(animate);
+      }
+    };
+    rafRef.current = requestAnimationFrame(animate);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [target, duration]);
+
+  return value;
+}
+
 const Dashboard: React.FC = () => {
   const { user } = useAuthContext();
   const [recentCards, setRecentCards] = useState<Card[]>([]);
@@ -80,6 +112,13 @@ const Dashboard: React.FC = () => {
     moderate: 0,
     low: 0,
   });
+
+  // Animated stat card values
+  const animatedTotalCards = useCountUp(stats.totalCards);
+  const animatedNewThisWeek = useCountUp(stats.newThisWeek);
+  const animatedFollowing = useCountUp(stats.following);
+  const animatedWorkstreams = useCountUp(stats.workstreams);
+  const animatedUpdatedThisWeek = useCountUp(stats.updatedThisWeek);
 
   useEffect(() => {
     loadDashboardData();
@@ -257,8 +296,13 @@ const Dashboard: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-brand-blue"></div>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-blue mx-auto"></div>
+          <p className="mt-4 text-gray-500 dark:text-gray-400">
+            Loading dashboard...
+          </p>
+        </div>
       </div>
     );
   }
@@ -311,7 +355,8 @@ const Dashboard: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
         <Link
           to="/discover"
-          className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg cursor-pointer group"
+          aria-label={`Total Signals: ${stats.totalCards}`}
+          className="bg-white dark:bg-dark-surface rounded-lg shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg active:scale-95 active:shadow-inner cursor-pointer group"
         >
           <div className="flex items-center">
             <div className="flex-shrink-0">
@@ -322,7 +367,7 @@ const Dashboard: React.FC = () => {
                 Total Signals
               </p>
               <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                {stats.totalCards}
+                {animatedTotalCards}
               </p>
             </div>
           </div>
@@ -330,7 +375,8 @@ const Dashboard: React.FC = () => {
 
         <Link
           to="/discover?filter=new"
-          className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg cursor-pointer group"
+          aria-label={`New This Week: ${stats.newThisWeek}`}
+          className="bg-white dark:bg-dark-surface rounded-lg shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg active:scale-95 active:shadow-inner cursor-pointer group"
         >
           <div className="flex items-center">
             <div className="flex-shrink-0">
@@ -341,7 +387,7 @@ const Dashboard: React.FC = () => {
                 New This Week
               </p>
               <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                {stats.newThisWeek}
+                {animatedNewThisWeek}
               </p>
             </div>
           </div>
@@ -349,7 +395,8 @@ const Dashboard: React.FC = () => {
 
         <Link
           to="/discover?filter=following"
-          className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg cursor-pointer group"
+          aria-label={`Following: ${stats.following}`}
+          className="bg-white dark:bg-dark-surface rounded-lg shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg active:scale-95 active:shadow-inner cursor-pointer group"
         >
           <div className="flex items-center">
             <div className="flex-shrink-0">
@@ -360,7 +407,7 @@ const Dashboard: React.FC = () => {
                 Following
               </p>
               <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                {stats.following}
+                {animatedFollowing}
               </p>
             </div>
           </div>
@@ -368,7 +415,8 @@ const Dashboard: React.FC = () => {
 
         <Link
           to="/workstreams"
-          className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg cursor-pointer group"
+          aria-label={`Workstreams: ${stats.workstreams}`}
+          className="bg-white dark:bg-dark-surface rounded-lg shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg active:scale-95 active:shadow-inner cursor-pointer group"
         >
           <div className="flex items-center">
             <div className="flex-shrink-0">
@@ -379,7 +427,7 @@ const Dashboard: React.FC = () => {
                 Workstreams
               </p>
               <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                {stats.workstreams}
+                {animatedWorkstreams}
               </p>
             </div>
           </div>
@@ -387,7 +435,8 @@ const Dashboard: React.FC = () => {
 
         <Link
           to="/discover?filter=updated"
-          className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg cursor-pointer group"
+          aria-label={`Updated This Week: ${stats.updatedThisWeek}`}
+          className="bg-white dark:bg-dark-surface rounded-lg shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg active:scale-95 active:shadow-inner cursor-pointer group"
         >
           <div className="flex items-center">
             <div className="flex-shrink-0">
@@ -398,7 +447,7 @@ const Dashboard: React.FC = () => {
                 Updated This Week
               </p>
               <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                {stats.updatedThisWeek}
+                {animatedUpdatedThisWeek}
               </p>
             </div>
           </div>
@@ -407,7 +456,11 @@ const Dashboard: React.FC = () => {
 
       {/* Quality Distribution & Methodology Link */}
       <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400"
+        >
           <span className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-green-500"></span>
             {qualityDistribution.high} High
@@ -440,12 +493,16 @@ const Dashboard: React.FC = () => {
         </div>
         {followingCards.length > 0 ? (
           <div className="grid gap-4">
-            {followingCards.slice(0, 3).map((following) => {
+            {followingCards.slice(0, 3).map((following, index) => {
               const stageNum = parseStageNumber(following.cards.stage_id);
               return (
                 <div
                   key={following.id}
-                  className={`bg-gradient-to-r ${getPriorityGradient(following.priority)} to-white dark:to-[#2d3166] rounded-lg shadow p-6 border-l-4 ${getPriorityBorder(following.priority)} transition-all duration-200 hover:-translate-y-1 hover:shadow-lg`}
+                  style={{
+                    animationDelay: `${Math.min(index, 5) * 50}ms`,
+                    animationFillMode: "both",
+                  }}
+                  className={`animate-in fade-in slide-in-from-bottom-2 duration-300 bg-gradient-to-r ${getPriorityGradient(following.priority)} to-white dark:to-[#2d3166] rounded-lg shadow p-6 border-l-4 ${getPriorityBorder(following.priority)} transition-all duration-200 hover:-translate-y-1 hover:shadow-lg`}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -454,6 +511,7 @@ const Dashboard: React.FC = () => {
                         <h3 className="text-lg font-medium text-gray-900 dark:text-white">
                           <Link
                             to={`/signals/${following.cards.slug}`}
+                            state={{ from: "/" }}
                             className="hover:text-brand-blue transition-colors"
                           >
                             {following.cards.name}
@@ -510,7 +568,7 @@ const Dashboard: React.FC = () => {
             })}
           </div>
         ) : (
-          <div className="text-center py-12 bg-white dark:bg-[#2d3166] rounded-lg shadow">
+          <div className="text-center py-12 bg-white dark:bg-dark-surface rounded-lg shadow">
             <Star className="mx-auto h-12 w-12 text-gray-400" />
             <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
               Start Following Signals
@@ -552,12 +610,16 @@ const Dashboard: React.FC = () => {
           </Link>
         </div>
         <div className="grid gap-4">
-          {recentCards.map((card) => {
+          {recentCards.map((card, index) => {
             const stageNum = parseStageNumber(card.stage_id);
             return (
               <div
                 key={card.id}
-                className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 border-l-4 border-transparent transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-l-brand-blue"
+                style={{
+                  animationDelay: `${Math.min(index, 5) * 50}ms`,
+                  animationFillMode: "both",
+                }}
+                className="animate-in fade-in slide-in-from-bottom-2 duration-300 bg-white dark:bg-dark-surface rounded-lg shadow p-6 border-l-4 border-transparent transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-l-brand-blue"
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
@@ -565,6 +627,7 @@ const Dashboard: React.FC = () => {
                       <h3 className="text-lg font-medium text-gray-900 dark:text-white">
                         <Link
                           to={`/signals/${card.slug}`}
+                          state={{ from: "/" }}
                           className="hover:text-brand-blue transition-colors"
                         >
                           {card.name}
@@ -609,7 +672,8 @@ const Dashboard: React.FC = () => {
                   <div className="ml-4 flex-shrink-0">
                     <Link
                       to={`/signals/${card.slug}`}
-                      className="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue transition-colors"
+                      state={{ from: "/" }}
+                      className="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-dark-surface-elevated hover:bg-gray-50 dark:hover:bg-dark-surface-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue transition-colors"
                     >
                       View Details
                     </Link>

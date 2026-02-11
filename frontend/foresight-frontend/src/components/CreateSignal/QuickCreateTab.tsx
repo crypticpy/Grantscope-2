@@ -212,12 +212,12 @@ export function QuickCreateTab({
         </div>
         <div className="flex items-center gap-3">
           <Link
-            to={`/cards/${createdCard.card_id}`}
+            to={`/signals/${createdCard.card_id}`}
             className={cn(
               "inline-flex items-center px-4 py-2 text-sm font-medium rounded-md",
               "bg-brand-blue text-white hover:bg-brand-dark-blue",
               "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2",
-              "transition-colors duration-150",
+              "transition-colors duration-200",
             )}
           >
             View Card
@@ -229,9 +229,9 @@ export function QuickCreateTab({
               "inline-flex items-center px-4 py-2 text-sm font-medium rounded-md",
               "bg-white text-gray-700 border border-gray-300",
               "hover:bg-gray-50",
-              "dark:bg-[#3d4176] dark:text-gray-300 dark:border-gray-600 dark:hover:bg-[#4d5186]",
+              "dark:bg-dark-surface-elevated dark:text-gray-300 dark:border-gray-600 dark:hover:bg-dark-surface-hover",
               "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2",
-              "transition-colors duration-150",
+              "transition-colors duration-200",
             )}
           >
             Create Another
@@ -264,7 +264,7 @@ export function QuickCreateTab({
           disabled={isCreating}
           className={cn(
             "w-full px-3 py-2.5 text-sm rounded-md border",
-            "bg-white dark:bg-[#2d3166]",
+            "bg-white dark:bg-dark-surface",
             "text-gray-900 dark:text-gray-100",
             "placeholder-gray-400 dark:placeholder-gray-500",
             "border-gray-300 dark:border-gray-600",
@@ -295,7 +295,7 @@ export function QuickCreateTab({
           disabled={isCreating || loadingWorkstreams}
           className={cn(
             "w-full px-3 py-2.5 text-sm rounded-md border",
-            "bg-white dark:bg-[#2d3166]",
+            "bg-white dark:bg-dark-surface",
             "text-gray-900 dark:text-gray-100",
             "border-gray-300 dark:border-gray-600",
             "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent",
@@ -321,10 +321,10 @@ export function QuickCreateTab({
             "inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md",
             "bg-white text-gray-700 border border-gray-300",
             "hover:bg-gray-50",
-            "dark:bg-[#3d4176] dark:text-gray-300 dark:border-gray-600 dark:hover:bg-[#4d5186]",
+            "dark:bg-dark-surface-elevated dark:text-gray-300 dark:border-gray-600 dark:hover:bg-dark-surface-hover",
             "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2",
             "disabled:opacity-50 disabled:cursor-not-allowed",
-            "transition-colors duration-150",
+            "transition-colors duration-200",
           )}
         >
           {isSuggestingKeywords ? (
@@ -362,7 +362,7 @@ export function QuickCreateTab({
                     "text-blue-400 hover:text-blue-600 dark:hover:text-blue-200",
                     "hover:bg-blue-100 dark:hover:bg-blue-800",
                     "focus:outline-none focus:ring-1 focus:ring-blue-400",
-                    "transition-colors duration-150",
+                    "transition-colors duration-200",
                   )}
                   aria-label={`Remove keyword: ${keyword}`}
                 >
@@ -402,7 +402,7 @@ export function QuickCreateTab({
           "bg-brand-blue text-white hover:bg-brand-dark-blue",
           "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2",
           "disabled:opacity-50 disabled:cursor-not-allowed",
-          "transition-colors duration-150",
+          "transition-colors duration-200",
         )}
       >
         {isCreating ? (

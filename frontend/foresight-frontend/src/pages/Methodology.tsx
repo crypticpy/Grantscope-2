@@ -362,7 +362,7 @@ const Methodology: React.FC = () => {
                   </div>
 
                   {/* Tier 3 */}
-                  <div className="rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/50 p-4">
+                  <div className="rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-dark-surface/50 p-4">
                     <h4 className="font-semibold text-gray-700 dark:text-gray-300 mb-1">
                       Tier 3 &mdash; General
                     </h4>

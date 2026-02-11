@@ -180,7 +180,7 @@ const ErrorState = memo(function ErrorState({ error, onRetry }: ErrorStateProps)
       {onRetry && (
         <button
           onClick={onRetry}
-          className="px-4 py-2 text-sm font-medium text-white bg-brand-blue hover:bg-brand-dark-blue rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 dark:focus:ring-offset-[#2d3166]"
+          className="px-4 py-2 text-sm font-medium text-white bg-brand-blue hover:bg-brand-dark-blue rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 dark:focus:ring-offset-dark-surface"
         >
           Try Again
         </button>
@@ -267,7 +267,7 @@ const BriefContent = memo(function BriefContent({ brief }: BriefContentProps) {
         </div>
 
         {/* Markdown Content with Styled Prose */}
-        <div className="prose prose-sm dark:prose-invert max-w-none bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 overflow-hidden">
+        <div className="prose prose-sm dark:prose-invert max-w-none bg-gray-50 dark:bg-dark-surface/50 rounded-lg p-4 overflow-hidden">
           <ReactMarkdown
             components={{
               a: ({ node: _node, ...props }) => (
@@ -425,7 +425,7 @@ const VersionHistoryPanel = memo(function VersionHistoryPanel({
     <div className="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors text-left"
+        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-dark-surface/50 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors text-left"
       >
         <div className="flex items-center gap-2">
           <History className="h-4 w-4 text-gray-500 dark:text-gray-400" />
@@ -644,7 +644,7 @@ export const BriefPreviewModal = memo(function BriefPreviewModal({
       <div
         ref={modalRef}
         className={cn(
-          'relative bg-white dark:bg-[#2d3166] rounded-xl shadow-2xl',
+          'relative bg-white dark:bg-dark-surface rounded-xl shadow-2xl',
           'w-full max-w-3xl max-h-[90vh] flex flex-col',
           'transform transition-all'
         )}
@@ -687,7 +687,7 @@ export const BriefPreviewModal = memo(function BriefPreviewModal({
                   'inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors',
                   'text-gray-700 dark:text-gray-200',
                   'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600',
-                  'focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 dark:focus:ring-offset-[#2d3166]',
+                  'focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 dark:focus:ring-offset-dark-surface',
                   isGenerating && 'opacity-50 cursor-not-allowed'
                 )}
                 aria-label="Regenerate brief with latest sources"
@@ -710,7 +710,7 @@ export const BriefPreviewModal = memo(function BriefPreviewModal({
                 'p-2 rounded-lg transition-colors',
                 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300',
                 'hover:bg-gray-100 dark:hover:bg-gray-700',
-                'focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 dark:focus:ring-offset-[#2d3166]'
+                'focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 dark:focus:ring-offset-dark-surface'
               )}
               aria-label="Close modal"
             >
@@ -767,16 +767,16 @@ export const BriefPreviewModal = memo(function BriefPreviewModal({
         </div>
 
         {/* Footer - Export Actions */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-600 flex-shrink-0 bg-gray-50 dark:bg-[#252850]">
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-600 flex-shrink-0 bg-gray-50 dark:bg-dark-surface">
           <button
             type="button"
             onClick={onClose}
             className={cn(
               'px-4 py-2 text-sm font-medium rounded-lg transition-colors',
               'text-gray-700 dark:text-gray-300',
-              'bg-white dark:bg-[#3d4176]',
+              'bg-white dark:bg-dark-surface-elevated',
               'border border-gray-300 dark:border-gray-600',
-              'hover:bg-gray-50 dark:hover:bg-[#4d5186]',
+              'hover:bg-gray-50 dark:hover:bg-dark-surface-hover',
               'focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 dark:focus:ring-offset-[#252850]'
             )}
           >
@@ -790,7 +790,7 @@ export const BriefPreviewModal = memo(function BriefPreviewModal({
               'inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors',
               'focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 dark:focus:ring-offset-[#252850]',
               canExport
-                ? 'text-gray-700 dark:text-gray-200 bg-white dark:bg-[#3d4176] border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-[#4d5186]'
+                ? 'text-gray-700 dark:text-gray-200 bg-white dark:bg-dark-surface-elevated border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-dark-surface-hover'
                 : 'text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 cursor-not-allowed'
             )}
           >

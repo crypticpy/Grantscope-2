@@ -530,7 +530,7 @@ export const DiscoveryQueueCard = memo(function DiscoveryQueueCard({
       tabIndex={isFocused ? 0 : -1}
       onClick={onCardClick}
       className={cn(
-        "bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6 border-l-4 transition-all duration-200",
+        "bg-white dark:bg-dark-surface rounded-lg shadow p-4 sm:p-6 border-l-4 transition-all duration-200",
         isFocused
           ? "border-l-brand-blue ring-2 ring-brand-blue/50 shadow-lg"
           : isSelected
@@ -618,7 +618,7 @@ export const DiscoveryQueueCard = memo(function DiscoveryQueueCard({
             </button>
 
             <Link
-              to={`/cards/${card.slug}?mode=edit`}
+              to={`/signals/${card.slug}?mode=edit`}
               onClick={(e) => e.stopPropagation()}
               className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 px-3 sm:px-3 py-2 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors active:scale-95"
               title="Edit and approve"
@@ -655,7 +655,7 @@ export const DiscoveryQueueCard = memo(function DiscoveryQueueCard({
               </button>
 
               {isDropdownOpen && (
-                <div className="absolute right-0 mt-1 w-48 sm:w-48 bg-white dark:bg-[#3d4176] rounded-md shadow-lg border border-gray-200 dark:border-gray-600 py-1 z-10">
+                <div className="absolute right-0 mt-1 w-48 sm:w-48 bg-white dark:bg-dark-surface-elevated rounded-md shadow-lg border border-gray-200 dark:border-gray-600 py-1 z-10">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();

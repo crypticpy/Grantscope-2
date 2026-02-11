@@ -79,7 +79,7 @@ export class KanbanErrorBoundary extends Component<
           className={cn(
             'flex flex-col items-center justify-center',
             'min-h-[400px] p-8',
-            'bg-gray-50 dark:bg-[#1a1d40]',
+            'bg-gray-50 dark:bg-dark-surface-deep',
             'rounded-xl border border-gray-200 dark:border-gray-800'
           )}
         >
@@ -109,7 +109,7 @@ export class KanbanErrorBoundary extends Component<
               <div
                 className={cn(
                   'w-full mb-6 p-4 rounded-lg',
-                  'bg-gray-100 dark:bg-gray-800',
+                  'bg-gray-100 dark:bg-dark-surface',
                   'border border-gray-200 dark:border-gray-700',
                   'text-left overflow-auto max-h-32'
                 )}

@@ -223,7 +223,7 @@ export const ResearchStatusBanner: React.FC<ResearchStatusBannerProps> = ({
               </h4>
               <button
                 onClick={onCopyReport}
-                className="inline-flex items-center px-2 py-1 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 dark:text-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 rounded transition-colors"
+                className="inline-flex items-center px-2 py-1 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 dark:text-gray-300 dark:bg-dark-surface dark:hover:bg-gray-700 rounded transition-colors"
                 aria-label={reportCopied ? 'Report copied' : 'Copy report to clipboard'}
               >
                 {reportCopied ? (
@@ -241,7 +241,7 @@ export const ResearchStatusBanner: React.FC<ResearchStatusBannerProps> = ({
             </div>
 
             {/* Report Content */}
-            <div className="max-h-[70vh] sm:max-h-[500px] overflow-y-auto p-3 sm:p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+            <div className="max-h-[70vh] sm:max-h-[500px] overflow-y-auto p-3 sm:p-4 bg-gray-50 dark:bg-dark-surface rounded-lg">
               <MarkdownReport content={researchTask.result_summary!.report_preview!} />
             </div>
           </div>

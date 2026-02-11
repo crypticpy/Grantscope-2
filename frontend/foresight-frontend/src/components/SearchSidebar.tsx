@@ -180,7 +180,7 @@ export function SearchSidebar({
       {!isOpen && (
         <button
           onClick={onToggle}
-          className="fixed left-0 top-1/2 -translate-y-1/2 z-40 bg-white dark:bg-[#2d3166] shadow-lg rounded-r-lg px-2 py-4 hover:bg-gray-50 dark:hover:bg-[#3d4176] transition-colors border-r border-t border-b border-gray-200 dark:border-gray-600"
+          className="fixed left-0 top-1/2 -translate-y-1/2 z-40 bg-white dark:bg-dark-surface shadow-lg rounded-r-lg px-2 py-4 hover:bg-gray-50 dark:hover:bg-[#3d4176] transition-colors border-r border-t border-b border-gray-200 dark:border-gray-600"
           aria-label="Open saved searches sidebar"
           title="Saved Searches"
         >
@@ -194,7 +194,7 @@ export function SearchSidebar({
       {/* Sidebar Panel */}
       <div
         className={cn(
-          'fixed left-0 top-16 bottom-0 z-40 bg-white dark:bg-[#2d3166] shadow-xl border-r border-gray-200 dark:border-gray-600 transition-transform duration-300 ease-in-out w-80',
+          'fixed left-0 top-16 bottom-0 z-40 bg-white dark:bg-dark-surface shadow-xl border-r border-gray-200 dark:border-gray-600 transition-transform duration-300 ease-in-out w-80',
           isOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >

@@ -80,7 +80,7 @@ export const PillarHeatmap: React.FC<PillarHeatmapProps> = ({
   if (loading) {
     return (
       <div
-        className="w-full bg-white dark:bg-[#2d3166] rounded-lg shadow p-6"
+        className="w-full bg-white dark:bg-dark-surface rounded-lg shadow p-6"
         style={{ minHeight: height }}
       >
         {title && (
@@ -102,7 +102,7 @@ export const PillarHeatmap: React.FC<PillarHeatmapProps> = ({
   if (data.length === 0) {
     return (
       <div
-        className="w-full bg-white dark:bg-[#2d3166] rounded-lg shadow p-6"
+        className="w-full bg-white dark:bg-dark-surface rounded-lg shadow p-6"
         style={{ minHeight: height }}
       >
         {title && (
@@ -122,7 +122,7 @@ export const PillarHeatmap: React.FC<PillarHeatmapProps> = ({
 
   return (
     <div
-      className="w-full bg-white dark:bg-[#2d3166] rounded-lg shadow p-6"
+      className="w-full bg-white dark:bg-dark-surface rounded-lg shadow p-6"
       style={{ minHeight: height }}
     >
       {/* Header */}
@@ -218,7 +218,7 @@ export const PillarHeatmap: React.FC<PillarHeatmapProps> = ({
 
               {/* Hover tooltip with full name */}
               {isHovered && (
-                <div className="absolute left-14 -top-8 z-10 bg-gray-900 dark:bg-gray-800 text-white text-xs px-3 py-2 rounded-lg shadow-lg whitespace-nowrap">
+                <div className="absolute left-14 -top-8 z-10 bg-gray-900 dark:bg-dark-surface text-white text-xs px-3 py-2 rounded-lg shadow-lg whitespace-nowrap">
                   <div className="font-semibold">{pillar.name}</div>
                   {avgVelocity !== null && avgVelocity !== undefined && (
                     <div className="text-gray-300">
@@ -231,7 +231,7 @@ export const PillarHeatmap: React.FC<PillarHeatmapProps> = ({
                     </div>
                   )}
                   {/* Arrow */}
-                  <div className="absolute left-4 -bottom-1 w-2 h-2 bg-gray-900 dark:bg-gray-800 rotate-45" />
+                  <div className="absolute left-4 -bottom-1 w-2 h-2 bg-gray-900 dark:bg-dark-surface rotate-45" />
                 </div>
               )}
             </div>

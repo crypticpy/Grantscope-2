@@ -60,7 +60,7 @@ const NavLinkItem: React.FC<{
                       ? "text-brand-blue bg-brand-blue/10"
                       : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                   }`
-                : `min-h-[44px] px-3 py-2 text-base font-medium rounded-md active:scale-[0.98] transition-all duration-150 ${
+                : `min-h-[44px] px-3 py-2 text-base font-medium rounded-md active:scale-[0.98] transition-all duration-200 ${
                     isActive
                       ? "text-brand-blue bg-brand-blue/10"
                       : "text-gray-600 hover:text-brand-dark-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10"
@@ -128,6 +128,19 @@ const Header: React.FC = () => {
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Close dropdowns on Escape key
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsUserDropdownOpen(false);
+        setIsMoreDropdownOpen(false);
+        setIsMenuOpen(false);
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   const toggleTheme = () => {
@@ -204,7 +217,7 @@ const Header: React.FC = () => {
                   key={item.name}
                   to={item.href}
                   aria-current={isActive ? "page" : undefined}
-                  className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150 ${
+                  className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200 ${
                     isActive
                       ? "text-brand-blue bg-brand-blue/10"
                       : "text-gray-600 hover:text-brand-dark-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10"
@@ -220,7 +233,9 @@ const Header: React.FC = () => {
             <div className="relative" ref={moreDropdownRef}>
               <button
                 onClick={() => setIsMoreDropdownOpen(!isMoreDropdownOpen)}
-                className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150 ${
+                aria-haspopup="menu"
+                aria-expanded={isMoreDropdownOpen}
+                className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200 ${
                   [...moreNavigation, ...guideNavigation].some(
                     (item) => location.pathname === item.href,
                   )
@@ -235,7 +250,10 @@ const Header: React.FC = () => {
                 />
               </button>
               {isMoreDropdownOpen && (
-                <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
+                <div
+                  className="absolute right-0 mt-1 w-48 bg-white dark:bg-dark-surface rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50 animate-in fade-in-0 zoom-in-95 duration-200"
+                  role="menu"
+                >
                   <NavLinkItem
                     items={moreNavigation}
                     variant="dropdown"
@@ -264,7 +282,9 @@ const Header: React.FC = () => {
             <div className="relative">
               <button
                 onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
-                className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-600 hover:text-brand-dark-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10 rounded-md transition-colors duration-150"
+                aria-haspopup="menu"
+                aria-expanded={isUserDropdownOpen}
+                className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-600 hover:text-brand-dark-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10 rounded-md transition-colors duration-200"
               >
                 <User className="w-4 h-4 mr-2" />
                 <span className="max-w-[150px] truncate">
@@ -275,7 +295,10 @@ const Header: React.FC = () => {
                 />
               </button>
               {isUserDropdownOpen && (
-                <div className="absolute right-0 mt-1 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
+                <div
+                  className="absolute right-0 mt-1 w-56 bg-white dark:bg-dark-surface rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50 animate-in fade-in-0 zoom-in-95 duration-200"
+                  role="menu"
+                >
                   {/* User email display */}
                   <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
                     <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -342,7 +365,7 @@ const Header: React.FC = () => {
               onClick={() => setIsMenuOpen(!isMenuOpen)}
               aria-expanded={isMenuOpen}
               aria-label="Toggle navigation menu"
-              className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] p-2 rounded-md text-gray-600 hover:text-brand-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-brand-blue active:scale-95 transition-all duration-150"
+              className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] p-2 rounded-md text-gray-600 hover:text-brand-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-brand-blue active:scale-95 transition-all duration-200"
             >
               {isMenuOpen ? (
                 <X className="block h-6 w-6" />
@@ -356,7 +379,7 @@ const Header: React.FC = () => {
 
       {/* Mobile Navigation - 44px minimum touch targets */}
       {isMenuOpen && (
-        <div className="md:hidden">
+        <div className="md:hidden animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 bg-white/95 dark:bg-brand-dark-blue/95 backdrop-blur-md border-t border-gray-200/50 dark:border-gray-700/50">
             {/* Main Navigation */}
             {navigation.map((item) => {
@@ -375,7 +398,7 @@ const Header: React.FC = () => {
                   to={item.href}
                   onClick={() => setIsMenuOpen(false)}
                   aria-current={isActive ? "page" : undefined}
-                  className={`flex items-center min-h-[44px] px-3 py-2 text-base font-medium rounded-md active:scale-[0.98] transition-all duration-150 ${
+                  className={`flex items-center min-h-[44px] px-3 py-2 text-base font-medium rounded-md active:scale-[0.98] transition-all duration-200 ${
                     isActive
                       ? "text-brand-blue bg-brand-blue/10"
                       : "text-gray-600 hover:text-brand-dark-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10"
@@ -417,7 +440,7 @@ const Header: React.FC = () => {
               aria-current={
                 location.pathname === "/settings" ? "page" : undefined
               }
-              className={`flex items-center min-h-[44px] px-3 py-2 text-base font-medium rounded-md active:scale-[0.98] transition-all duration-150 ${
+              className={`flex items-center min-h-[44px] px-3 py-2 text-base font-medium rounded-md active:scale-[0.98] transition-all duration-200 ${
                 location.pathname === "/settings"
                   ? "text-brand-blue bg-brand-blue/10"
                   : "text-gray-600 hover:text-brand-dark-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10"
@@ -431,7 +454,7 @@ const Header: React.FC = () => {
               {/* Theme Toggle for Mobile - 44px touch target */}
               <button
                 onClick={toggleTheme}
-                className="w-full flex items-center min-h-[44px] px-3 py-2 text-base font-medium text-gray-600 hover:text-brand-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10 rounded-md active:scale-[0.98] transition-all duration-150"
+                className="w-full flex items-center min-h-[44px] px-3 py-2 text-base font-medium text-gray-600 hover:text-brand-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10 rounded-md active:scale-[0.98] transition-all duration-200"
               >
                 {isDarkMode ? (
                   <>
@@ -452,7 +475,7 @@ const Header: React.FC = () => {
               </div>
               <button
                 onClick={handleSignOut}
-                className="w-full flex items-center min-h-[44px] px-3 py-2 text-base font-medium text-gray-600 hover:text-brand-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10 rounded-md active:scale-[0.98] transition-all duration-150"
+                className="w-full flex items-center min-h-[44px] px-3 py-2 text-base font-medium text-gray-600 hover:text-brand-blue hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10 rounded-md active:scale-[0.98] transition-all duration-200"
               >
                 <LogOut className="w-5 h-5 mr-3 flex-shrink-0" />
                 <span>Sign Out</span>

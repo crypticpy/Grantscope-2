@@ -114,7 +114,7 @@ const COLUMN_COLORS: Record<
     border: "border-cyan-200 dark:border-cyan-800",
   },
   archived: {
-    bg: "bg-gray-50 dark:bg-gray-800/50",
+    bg: "bg-gray-50 dark:bg-dark-surface/50",
     text: "text-gray-500 dark:text-gray-400",
     border: "border-gray-200 dark:border-gray-700",
   },
@@ -204,7 +204,7 @@ export const KanbanColumn = memo(function KanbanColumn({
         // Base column styles
         "flex flex-col",
         "w-72 min-w-72 flex-shrink-0",
-        "bg-gray-50 dark:bg-[#1a1d40]",
+        "bg-gray-50 dark:bg-dark-surface-deep",
         "rounded-xl",
         "border border-gray-200 dark:border-gray-800",
         // Transition for hover/over states
@@ -302,7 +302,7 @@ export const KanbanColumn = memo(function KanbanColumn({
                 "text-xs font-medium rounded-full",
                 cards.length > 0
                   ? cn(colors.bg, colors.text, "border", colors.border)
-                  : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
+                  : "bg-gray-100 text-gray-500 dark:bg-dark-surface dark:text-gray-400",
               )}
             >
               {cards.length}
@@ -319,7 +319,7 @@ export const KanbanColumn = memo(function KanbanColumn({
         className={cn(
           "flex-1 p-3 overflow-y-auto",
           "min-h-32 max-h-[calc(100vh-280px)]",
-          "transition-all duration-150",
+          "transition-all duration-200",
         )}
       >
         <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>

@@ -79,7 +79,7 @@ export const CardDetailHeader: React.FC<CardDetailHeaderProps> = ({
       </Link>
 
       {/* Hero Section Container - optimized for quick scanning */}
-      <div className="bg-white dark:bg-gray-800/90 rounded-2xl border border-gray-200 dark:border-gray-700/70 shadow-sm overflow-hidden mb-6">
+      <div className="bg-white dark:bg-dark-surface/90 rounded-2xl border border-gray-200 dark:border-gray-700/70 shadow-sm overflow-hidden mb-6">
         {/* Gradient Header Bar - Austin brand colors */}
         <div className="bg-gradient-to-r from-brand-blue to-brand-green h-1.5" />
         

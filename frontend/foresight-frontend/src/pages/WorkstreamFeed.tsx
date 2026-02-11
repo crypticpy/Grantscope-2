@@ -188,12 +188,12 @@ function CardItem({
   };
 
   return (
-    <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 border-l-4 border-transparent transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-l-brand-blue">
+    <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-6 border-l-4 border-transparent transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-l-brand-blue">
       <div className="flex items-start justify-between mb-4">
         <div className="flex-1 min-w-0">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2 truncate">
             <Link
-              to={`/cards/${card.slug}`}
+              to={`/signals/${card.slug}`}
               className="hover:text-brand-blue transition-colors"
             >
               {card.name}
@@ -270,7 +270,7 @@ function CardItem({
 
       <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
         <Link
-          to={`/cards/${card.slug}`}
+          to={`/signals/${card.slug}`}
           className="inline-flex items-center text-sm text-brand-blue hover:text-brand-dark-blue dark:hover:text-brand-light-blue transition-colors"
         >
           <Eye className="h-4 w-4 mr-1" />
@@ -595,7 +595,7 @@ const WorkstreamFeed: React.FC = () => {
   if (error) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="text-center py-12 bg-white dark:bg-[#2d3166] rounded-lg shadow">
+        <div className="text-center py-12 bg-white dark:bg-dark-surface rounded-lg shadow">
           <div className="text-red-500 dark:text-red-400 mb-4">
             <Filter className="mx-auto h-12 w-12" />
           </div>
@@ -619,7 +619,7 @@ const WorkstreamFeed: React.FC = () => {
   if (!workstream) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="text-center py-12 bg-white dark:bg-[#2d3166] rounded-lg shadow">
+        <div className="text-center py-12 bg-white dark:bg-dark-surface rounded-lg shadow">
           <Filter className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" />
           <h3 className="mt-2 text-lg font-medium text-gray-900 dark:text-white">
             Workstream not found
@@ -673,7 +673,7 @@ const WorkstreamFeed: React.FC = () => {
           <div className="flex items-center gap-2">
             <button
               onClick={handleRefresh}
-              className="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-[#2d3166] transition-colors"
+              className="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-dark-surface-elevated hover:bg-gray-50 dark:hover:bg-dark-surface-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-dark-surface transition-colors"
               title="Refresh feed"
             >
               <RefreshCw
@@ -687,7 +687,7 @@ const WorkstreamFeed: React.FC = () => {
                 onClick={() => setShowExportMenu(!showExportMenu)}
                 disabled={exportLoading !== null}
                 className={cn(
-                  "inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-[#2d3166] transition-colors",
+                  "inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-dark-surface-elevated hover:bg-gray-50 dark:hover:bg-dark-surface-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-dark-surface transition-colors",
                   exportLoading !== null && "opacity-75 cursor-not-allowed",
                 )}
                 title="Export workstream report"
@@ -714,7 +714,7 @@ const WorkstreamFeed: React.FC = () => {
                     className="fixed inset-0 z-10"
                     onClick={() => setShowExportMenu(false)}
                   />
-                  <div className="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-[#3d4176] ring-1 ring-black ring-opacity-5 z-20">
+                  <div className="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-dark-surface-elevated ring-1 ring-black ring-opacity-5 z-20">
                     <div
                       className="py-1"
                       role="menu"
@@ -722,7 +722,7 @@ const WorkstreamFeed: React.FC = () => {
                     >
                       <button
                         onClick={() => handleExport("pdf")}
-                        className="w-full text-left px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#4d5186] flex items-center gap-3 transition-colors"
+                        className="w-full text-left px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-dark-surface-hover flex items-center gap-3 transition-colors"
                         role="menuitem"
                       >
                         <FileText className="h-5 w-5 text-red-500" />
@@ -735,7 +735,7 @@ const WorkstreamFeed: React.FC = () => {
                       </button>
                       <button
                         onClick={() => handleExport("pptx")}
-                        className="w-full text-left px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#4d5186] flex items-center gap-3 transition-colors"
+                        className="w-full text-left px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-dark-surface-hover flex items-center gap-3 transition-colors"
                         role="menuitem"
                       >
                         <Presentation className="h-5 w-5 text-orange-500" />
@@ -754,7 +754,7 @@ const WorkstreamFeed: React.FC = () => {
 
             <button
               onClick={() => setShowEditModal(true)}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-[#2d3166] transition-colors"
+              className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-dark-surface-elevated hover:bg-gray-50 dark:hover:bg-dark-surface-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-dark-surface transition-colors"
             >
               <Edit className="h-4 w-4 mr-2" />
               Edit Filters
@@ -764,7 +764,7 @@ const WorkstreamFeed: React.FC = () => {
       </div>
 
       {/* Filter Display Section */}
-      <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6 mb-6">
+      <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-6 mb-6">
         <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">
           Active Filters
         </h2>
@@ -845,7 +845,7 @@ const WorkstreamFeed: React.FC = () => {
         </div>
       ) : cards.length === 0 ? (
         /* Empty State */
-        <div className="text-center py-12 bg-white dark:bg-[#2d3166] rounded-lg shadow">
+        <div className="text-center py-12 bg-white dark:bg-dark-surface rounded-lg shadow">
           <Filter className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" />
           <h3 className="mt-2 text-lg font-medium text-gray-900 dark:text-white">
             No matching signals
@@ -857,7 +857,7 @@ const WorkstreamFeed: React.FC = () => {
           <div className="mt-6">
             <button
               onClick={() => setShowEditModal(true)}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-brand-dark-blue focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-[#2d3166] transition-colors"
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-brand-dark-blue focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-dark-surface transition-colors"
             >
               <Edit className="h-4 w-4 mr-2" />
               Adjust Filters
@@ -890,8 +890,8 @@ const WorkstreamFeed: React.FC = () => {
       {/* Edit Workstream Modal */}
       {showEditModal && workstream && (
         <div className="fixed inset-0 bg-gray-600/50 dark:bg-black/60 flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
-            <div className="sticky top-0 bg-white dark:bg-[#2d3166] border-b border-gray-200 dark:border-gray-700 px-6 py-4 rounded-t-lg">
+          <div className="bg-white dark:bg-dark-surface rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
+            <div className="sticky top-0 bg-white dark:bg-dark-surface border-b border-gray-200 dark:border-gray-700 px-6 py-4 rounded-t-lg">
               <h3 className="text-lg font-medium text-gray-900 dark:text-white">
                 Edit Workstream Filters
               </h3>

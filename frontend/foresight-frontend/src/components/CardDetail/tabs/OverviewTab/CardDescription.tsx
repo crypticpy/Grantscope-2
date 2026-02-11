@@ -62,7 +62,7 @@ export const CardDescription: React.FC<CardDescriptionProps> = ({
 }) => {
   return (
     <div
-      className={`bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6 ${className}`}
+      className={`bg-white dark:bg-dark-surface rounded-lg shadow p-4 sm:p-6 ${className}`}
     >
       <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white mb-3 sm:mb-4">
         {title}

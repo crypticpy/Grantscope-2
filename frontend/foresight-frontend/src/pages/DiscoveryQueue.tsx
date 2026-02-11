@@ -649,7 +649,7 @@ const UndoToast = React.memo(function UndoToast({
       className={cn(
         "fixed bottom-4 sm:bottom-6 left-3 right-3 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-50",
         "flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg shadow-lg",
-        "bg-white dark:bg-[#3d4176] border border-gray-200 dark:border-gray-600",
+        "bg-white dark:bg-dark-surface-elevated border border-gray-200 dark:border-gray-600",
         "animate-in slide-in-from-bottom-4 fade-in duration-200",
       )}
     >
@@ -1121,7 +1121,7 @@ const DiscoveryQueue: React.FC = () => {
   const openCardDetail = useCallback(
     (card: PendingCard) => {
       if (!card.slug) return;
-      navigate(`/cards/${encodeURIComponent(card.slug)}?mode=review`);
+      navigate(`/signals/${encodeURIComponent(card.slug)}?mode=review`);
     },
     [navigate],
   );
@@ -1369,7 +1369,7 @@ const DiscoveryQueue: React.FC = () => {
           <button
             onClick={loadData}
             disabled={loading}
-            className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] px-3 sm:px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue disabled:opacity-50 transition-colors flex-shrink-0 active:scale-95"
+            className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] px-3 sm:px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-dark-surface-elevated hover:bg-gray-50 dark:hover:bg-dark-surface-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue disabled:opacity-50 transition-colors flex-shrink-0 active:scale-95"
           >
             <RefreshCw
               className={`h-5 w-5 sm:h-4 sm:w-4 ${loading ? "animate-spin" : ""} ${isMobile ? "" : "mr-2"}`}
@@ -1450,7 +1450,7 @@ const DiscoveryQueue: React.FC = () => {
       )}
 
       {/* Filters */}
-      <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6 mb-4 sm:mb-6">
+      <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-4 sm:p-6 mb-4 sm:mb-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {/* Search */}
           <div className="sm:col-span-2 lg:col-span-2">
@@ -1465,7 +1465,7 @@ const DiscoveryQueue: React.FC = () => {
               <input
                 type="text"
                 id="search"
-                className="pl-10 block w-full min-h-[44px] sm:min-h-0 border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue text-base sm:text-sm"
+                className="pl-10 block w-full min-h-[44px] sm:min-h-0 border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue text-base sm:text-sm"
                 placeholder="Search pending signals..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -1483,7 +1483,7 @@ const DiscoveryQueue: React.FC = () => {
             </label>
             <select
               id="pillar"
-              className="block w-full min-h-[44px] sm:min-h-0 border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue text-base sm:text-sm"
+              className="block w-full min-h-[44px] sm:min-h-0 border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue text-base sm:text-sm"
               value={selectedPillar}
               onChange={(e) => setSelectedPillar(e.target.value)}
             >
@@ -1506,7 +1506,7 @@ const DiscoveryQueue: React.FC = () => {
             </label>
             <select
               id="confidence"
-              className="block w-full min-h-[44px] sm:min-h-0 border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue text-base sm:text-sm"
+              className="block w-full min-h-[44px] sm:min-h-0 border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue text-base sm:text-sm"
               value={confidenceFilter}
               onChange={(e) =>
                 setConfidenceFilter(e.target.value as ConfidenceFilter)
@@ -1546,7 +1546,7 @@ const DiscoveryQueue: React.FC = () => {
 
       {/* Keyboard Shortcuts Hint - hidden on mobile (touch users swipe instead) */}
       {!isMobile && !showBulkActions && filteredCards.length > 0 && (
-        <div className="mb-4 px-4 py-2 bg-gray-50 dark:bg-[#2d3166]/50 rounded-lg border border-gray-200 dark:border-gray-700">
+        <div className="mb-4 px-4 py-2 bg-gray-50 dark:bg-dark-surface/50 rounded-lg border border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-center gap-6 text-xs text-gray-500 dark:text-gray-400">
             <span className="flex items-center gap-1.5">
               <kbd className="px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 font-mono text-gray-700 dark:text-gray-300">
@@ -1581,7 +1581,7 @@ const DiscoveryQueue: React.FC = () => {
 
       {/* Mobile Swipe Hint - shown on mobile only */}
       {isMobile && filteredCards.length > 0 && !showBulkActions && (
-        <div className="mb-3 px-3 py-2 bg-gray-50 dark:bg-[#2d3166]/50 rounded-lg border border-gray-200 dark:border-gray-700">
+        <div className="mb-3 px-3 py-2 bg-gray-50 dark:bg-dark-surface/50 rounded-lg border border-gray-200 dark:border-gray-700">
           <p className="text-xs text-center text-gray-500 dark:text-gray-400">
             Swipe right to approve • Swipe left to dismiss
           </p>
@@ -1630,7 +1630,7 @@ const DiscoveryQueue: React.FC = () => {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue"></div>
         </div>
       ) : filteredCards.length === 0 ? (
-        <div className="text-center py-12 bg-white dark:bg-[#2d3166] rounded-lg shadow">
+        <div className="text-center py-12 bg-white dark:bg-dark-surface rounded-lg shadow">
           {cards.length === 0 ? (
             <>
               {/* Empty queue - all cards reviewed */}
@@ -1668,7 +1668,7 @@ const DiscoveryQueue: React.FC = () => {
                   setSelectedPillar("");
                   setConfidenceFilter("all");
                 }}
-                className="mt-4 inline-flex items-center justify-center min-h-[44px] px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-[#3d4176] hover:bg-gray-50 dark:hover:bg-[#4d5186] transition-colors active:scale-95"
+                className="mt-4 inline-flex items-center justify-center min-h-[44px] px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-dark-surface-elevated hover:bg-gray-50 dark:hover:bg-dark-surface-hover transition-colors active:scale-95"
               >
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Clear All Filters
@@ -1706,7 +1706,7 @@ const DiscoveryQueue: React.FC = () => {
                 disabled={isLoading}
                 tabIndex={isFocused ? 0 : -1}
                 className={cn(
-                  "bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6 border-l-4 transition-all duration-200 cursor-pointer",
+                  "bg-white dark:bg-dark-surface rounded-lg shadow p-4 sm:p-6 border-l-4 transition-all duration-200 cursor-pointer",
                   isFocused
                     ? "border-l-brand-blue ring-2 ring-brand-blue/50 shadow-lg"
                     : isSelected
@@ -1803,7 +1803,7 @@ const DiscoveryQueue: React.FC = () => {
                       </button>
 
                       <Link
-                        to={`/cards/${card.slug}?mode=edit`}
+                        to={`/signals/${card.slug}?mode=edit`}
                         onClick={(e) => e.stopPropagation()}
                         className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 px-3 sm:px-3 py-2 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors active:scale-95"
                         title="Edit and approve"
@@ -1840,7 +1840,7 @@ const DiscoveryQueue: React.FC = () => {
                         </button>
 
                         {isDropdownOpen && (
-                          <div className="absolute right-0 mt-1 w-48 sm:w-48 bg-white dark:bg-[#3d4176] rounded-md shadow-lg border border-gray-200 dark:border-gray-600 py-1 z-10">
+                          <div className="absolute right-0 mt-1 w-48 sm:w-48 bg-white dark:bg-dark-surface-elevated rounded-md shadow-lg border border-gray-200 dark:border-gray-600 py-1 z-10">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();

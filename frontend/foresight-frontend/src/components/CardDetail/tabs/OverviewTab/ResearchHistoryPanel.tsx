@@ -121,7 +121,7 @@ export const ResearchHistoryPanel: React.FC<ResearchHistoryPanelProps> = ({
   return (
     <div
       className={cn(
-        'bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6',
+        'bg-white dark:bg-dark-surface rounded-lg shadow p-4 sm:p-6',
         className
       )}
     >
@@ -139,7 +139,7 @@ export const ResearchHistoryPanel: React.FC<ResearchHistoryPanelProps> = ({
             {/* Task header - always visible */}
             <button
               onClick={() => handleToggleExpand(task.id)}
-              className="w-full px-3 sm:px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors min-h-[48px] touch-manipulation"
+              className="w-full px-3 sm:px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 bg-gray-50 dark:bg-dark-surface hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors min-h-[48px] touch-manipulation"
               aria-expanded={expandedReportId === task.id}
               aria-controls={`report-${task.id}`}
             >
@@ -213,7 +213,7 @@ export const ResearchHistoryPanel: React.FC<ResearchHistoryPanelProps> = ({
                 </div>
 
                 {/* Markdown report content */}
-                <div className="max-h-[60vh] sm:max-h-[400px] overflow-y-auto overflow-x-hidden p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                <div className="max-h-[60vh] sm:max-h-[400px] overflow-y-auto overflow-x-hidden p-3 bg-gray-50 dark:bg-dark-surface rounded-lg">
                   <MarkdownReport content={task.result_summary.report_preview} />
                 </div>
               </div>

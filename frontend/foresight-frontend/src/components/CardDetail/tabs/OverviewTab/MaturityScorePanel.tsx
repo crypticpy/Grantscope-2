@@ -96,7 +96,7 @@ export const MaturityScorePanel: React.FC<MaturityScorePanelProps> = ({
   const stageNumber = stageId ? parseStageNumber(stageId) : null;
 
   return (
-    <div className={`bg-white dark:bg-[#2d3166] rounded-lg shadow p-4 sm:p-6 ${className}`}>
+    <div className={`bg-white dark:bg-dark-surface rounded-lg shadow p-4 sm:p-6 ${className}`}>
       {/* Header with info tooltip */}
       <div className="flex items-center gap-2 mb-4">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Maturity</h3>

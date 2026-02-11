@@ -371,7 +371,7 @@ const Signals: React.FC = () => {
       {/* ── Stats Row ──────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {/* Tracking */}
-        <div className="bg-white dark:bg-[#2d3166] rounded-xl shadow-sm p-5 flex items-center gap-4">
+        <div className="bg-white dark:bg-dark-surface rounded-xl shadow-sm p-5 flex items-center gap-4">
           <div className="p-3 bg-brand-blue/10 rounded-xl">
             <Radio className="w-6 h-6 text-brand-blue" />
           </div>
@@ -390,7 +390,7 @@ const Signals: React.FC = () => {
         </div>
 
         {/* Followed / Created breakdown */}
-        <div className="bg-white dark:bg-[#2d3166] rounded-xl shadow-sm p-5 flex items-center gap-4">
+        <div className="bg-white dark:bg-dark-surface rounded-xl shadow-sm p-5 flex items-center gap-4">
           <div className="p-3 bg-brand-green/10 rounded-xl">
             <Eye className="w-6 h-6 text-brand-green" />
           </div>
@@ -409,7 +409,7 @@ const Signals: React.FC = () => {
         </div>
 
         {/* Updates this week */}
-        <div className="bg-white dark:bg-[#2d3166] rounded-xl shadow-sm p-5 flex items-center gap-4">
+        <div className="bg-white dark:bg-dark-surface rounded-xl shadow-sm p-5 flex items-center gap-4">
           <div className="p-3 bg-extended-purple/10 rounded-xl">
             <Bell className="w-6 h-6 text-extended-purple" />
           </div>
@@ -424,7 +424,7 @@ const Signals: React.FC = () => {
         </div>
 
         {/* Needs research */}
-        <div className="bg-white dark:bg-[#2d3166] rounded-xl shadow-sm p-5 flex items-center gap-4">
+        <div className="bg-white dark:bg-dark-surface rounded-xl shadow-sm p-5 flex items-center gap-4">
           <div className="p-3 bg-amber-500/10 rounded-xl">
             <Microscope className="w-6 h-6 text-amber-500" />
           </div>
@@ -440,7 +440,7 @@ const Signals: React.FC = () => {
       </div>
 
       {/* ── Filter / Sort Bar ──────────────────────────────── */}
-      <div className="bg-white dark:bg-[#2d3166] rounded-xl shadow-sm p-6 mb-6">
+      <div className="bg-white dark:bg-dark-surface rounded-xl shadow-sm p-6 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
           {/* Search */}
           <div className="lg:col-span-2">
@@ -455,7 +455,7 @@ const Signals: React.FC = () => {
               <input
                 type="text"
                 id="signal-search"
-                className="pl-10 block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                className="pl-10 block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
                 placeholder="Search your signals..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -473,7 +473,7 @@ const Signals: React.FC = () => {
             </label>
             <select
               id="signal-pillar"
-              className="block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+              className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
               value={selectedPillar}
               onChange={(e) => setSelectedPillar(e.target.value)}
             >
@@ -496,7 +496,7 @@ const Signals: React.FC = () => {
             </label>
             <select
               id="signal-horizon"
-              className="block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+              className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
               value={selectedHorizon}
               onChange={(e) => setSelectedHorizon(e.target.value)}
             >
@@ -517,7 +517,7 @@ const Signals: React.FC = () => {
             </label>
             <select
               id="signal-source"
-              className="block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+              className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
               value={sourceFilter}
               onChange={(e) => setSourceFilter(e.target.value as SourceFilter)}
             >
@@ -538,7 +538,7 @@ const Signals: React.FC = () => {
             </label>
             <select
               id="signal-sort"
-              className="block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+              className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
               value={sortOption}
               onChange={(e) => setSortOption(e.target.value as SortOption)}
             >
@@ -589,7 +589,7 @@ const Signals: React.FC = () => {
               <Layers className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               <select
                 id="signal-group"
-                className="pl-10 block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                className="pl-10 block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
                 value={groupBy}
                 onChange={(e) => setGroupBy(e.target.value as GroupBy)}
               >
@@ -720,7 +720,7 @@ const Signals: React.FC = () => {
 // ---------------------------------------------------------------------------
 
 const EmptyState: React.FC<{ hasFilters: boolean }> = ({ hasFilters }) => (
-  <div className="text-center py-16 bg-white dark:bg-[#2d3166] rounded-xl shadow-sm">
+  <div className="text-center py-16 bg-white dark:bg-dark-surface rounded-xl shadow-sm">
     {hasFilters ? (
       <>
         <Filter className="mx-auto h-12 w-12 text-gray-400" />
@@ -807,22 +807,32 @@ const SignalGroup: React.FC<SignalGroupProps> = ({
       {!collapsed &&
         (viewMode === "grid" ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {signals.map((signal) => (
-              <SignalCard
+            {signals.map((signal, index) => (
+              <div
                 key={signal.id}
-                signal={signal}
-                onTogglePin={onTogglePin}
-              />
+                className="animate-in fade-in slide-in-from-bottom-2 duration-300"
+                style={{
+                  animationDelay: `${Math.min(index, 5) * 50}ms`,
+                  animationFillMode: "both",
+                }}
+              >
+                <SignalCard signal={signal} onTogglePin={onTogglePin} />
+              </div>
             ))}
           </div>
         ) : (
           <div className="space-y-3">
-            {signals.map((signal) => (
-              <SignalListItem
+            {signals.map((signal, index) => (
+              <div
                 key={signal.id}
-                signal={signal}
-                onTogglePin={onTogglePin}
-              />
+                className="animate-in fade-in slide-in-from-bottom-2 duration-300"
+                style={{
+                  animationDelay: `${Math.min(index, 5) * 50}ms`,
+                  animationFillMode: "both",
+                }}
+              >
+                <SignalListItem signal={signal} onTogglePin={onTogglePin} />
+              </div>
             ))}
           </div>
         ))}
@@ -886,7 +896,7 @@ const SignalCard: React.FC<SignalCardProps> = React.memo(
     const stageNumber = parseStageNumber(signal.stage_id);
 
     return (
-      <div className="relative bg-white dark:bg-[#2d3166] rounded-lg shadow-sm border border-gray-100 dark:border-gray-700/50 hover:-translate-y-1 hover:shadow-lg transition-all duration-200 overflow-hidden group">
+      <div className="relative bg-white dark:bg-dark-surface rounded-lg shadow-sm hover:-translate-y-1 hover:shadow-lg transition-all duration-200 overflow-hidden group">
         {/* Gradient accent bar */}
         <div className="h-1 bg-gradient-to-r from-brand-blue to-brand-green" />
 
@@ -897,7 +907,7 @@ const SignalCard: React.FC<SignalCardProps> = React.memo(
             e.stopPropagation();
             onTogglePin(signal.id, signal.is_pinned);
           }}
-          className={`absolute top-3 right-3 z-10 p-1.5 rounded-lg transition-colors ${
+          className={`absolute top-3 right-3 z-10 p-1.5 rounded-lg transition-all duration-200 active:scale-75 ${
             signal.is_pinned
               ? "text-amber-500 bg-amber-50 dark:bg-amber-900/30"
               : "text-gray-300 hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 opacity-0 group-hover:opacity-100"
@@ -978,7 +988,7 @@ const SignalListItem: React.FC<SignalCardProps> = React.memo(
     const stageNumber = parseStageNumber(signal.stage_id);
 
     return (
-      <div className="flex items-center gap-4 bg-white dark:bg-[#2d3166] rounded-lg shadow-sm border border-gray-100 dark:border-gray-700/50 p-4 hover:shadow-md hover:border-brand-blue/30 transition-all group">
+      <div className="flex items-center gap-4 bg-white dark:bg-dark-surface rounded-lg shadow-sm p-4 hover:shadow-lg transition-all duration-200 group">
         {/* Pin */}
         <button
           onClick={(e) => {
@@ -986,7 +996,7 @@ const SignalListItem: React.FC<SignalCardProps> = React.memo(
             e.stopPropagation();
             onTogglePin(signal.id, signal.is_pinned);
           }}
-          className={`shrink-0 p-1.5 rounded-lg transition-colors ${
+          className={`shrink-0 p-1.5 rounded-lg transition-all duration-200 active:scale-75 ${
             signal.is_pinned
               ? "text-amber-500 bg-amber-50 dark:bg-amber-900/30"
               : "text-gray-300 hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 opacity-0 group-hover:opacity-100"
