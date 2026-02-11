@@ -186,7 +186,9 @@ ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
 # Configure allowed origins based on environment
 if ENVIRONMENT == "production":
     # Production: strict HTTPS origins only
-    default_origins = "https://foresight.vercel.app"
+    default_origins = (
+        "https://foresight.vercel.app,https://foresight-frontend-beta.vercel.app"
+    )
     ALLOWED_ORIGINS_RAW = os.getenv("ALLOWED_ORIGINS", default_origins).split(",")
 
     # Validate production origins: must be HTTPS, no localhost
