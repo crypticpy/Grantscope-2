@@ -39,8 +39,8 @@ export function StepFocus({
             Strategic Pillars
           </h4>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            Pillars represent Austin's strategic priorities. Select the ones
-            relevant to your research focus. Leave empty for a purely
+            Pillars represent Austin's strategic priorities. Click to select the
+            ones relevant to your research focus, or skip for a purely
             topic-driven workstream.
           </p>
         </div>
@@ -52,10 +52,10 @@ export function StepFocus({
               type="button"
               onClick={() => onPillarToggle(pillar.code)}
               className={cn(
-                "transition-all duration-200",
+                "transition-all duration-200 cursor-pointer",
                 formData.pillar_ids.includes(pillar.code)
-                  ? "ring-2 ring-brand-blue ring-offset-1 dark:ring-offset-[#2d3166] rounded"
-                  : "opacity-60 hover:opacity-100",
+                  ? "ring-2 ring-brand-blue ring-offset-1 dark:ring-offset-[#2d3166] rounded scale-105"
+                  : "hover:scale-105 hover:ring-1 hover:ring-gray-300 dark:hover:ring-gray-500 rounded",
               )}
               aria-pressed={formData.pillar_ids.includes(pillar.code)}
               aria-label={`${pillar.name} pillar`}

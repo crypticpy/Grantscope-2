@@ -56,7 +56,7 @@ export function WorkstreamWizard({
       }
       return true;
     },
-    [form],
+    [form.formData.name, form.setErrors],
   );
 
   // ============================================================================

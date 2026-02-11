@@ -1,12 +1,13 @@
 /**
  * StepDetails - Name & Description (Step 2)
  *
- * Name input (required) and description textarea with a
- * "Generate with AI" placeholder button.
+ * Name input (required) and description textarea with AI generation.
  */
 
-import { Sparkles } from "lucide-react";
+import { useState } from "react";
+import { Sparkles, Loader2 } from "lucide-react";
 import { cn } from "../../../lib/utils";
+import { supabase } from "../../../App";
 import type { FormData, FormErrors } from "../../../types/workstream";
 
 interface StepDetailsProps {
@@ -24,6 +25,49 @@ export function StepDetails({
   onDescriptionChange,
   onClearNameError,
 }: StepDetailsProps) {
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const handleGenerateDescription = async () => {
+    if (!formData.name.trim()) return;
+    setIsGenerating(true);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+
+      const API_BASE_URL =
+        import.meta.env.VITE_API_URL || "http://localhost:8000";
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/ai/suggest-description`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            name: formData.name,
+            pillar_ids: formData.pillar_ids,
+            keywords: formData.keywords,
+          }),
+        },
+      );
+      if (response.ok) {
+        const data = await response.json();
+        if (data.description) {
+          onDescriptionChange(data.description);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to generate description:", error);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const canGenerate = formData.name.trim().length > 0 && !isGenerating;
+
   return (
     <div className="space-y-6">
       {/* Inline help */}
@@ -86,12 +130,21 @@ export function StepDetails({
           </label>
           <button
             type="button"
-            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-400 dark:text-gray-500 rounded border border-gray-200 dark:border-gray-600 cursor-not-allowed"
-            title="Coming soon"
-            disabled
+            onClick={handleGenerateDescription}
+            disabled={!canGenerate}
+            className={cn(
+              "inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded border transition-colors",
+              canGenerate
+                ? "bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-700 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/40"
+                : "bg-gray-100 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-400 cursor-not-allowed",
+            )}
           >
-            <Sparkles className="h-3 w-3" />
-            Generate with AI
+            {isGenerating ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Sparkles className="h-3 w-3" />
+            )}
+            {isGenerating ? "Generating..." : "Generate with AI"}
           </button>
         </div>
         <textarea
