@@ -8,8 +8,8 @@
  * - Social discovery: popular cards not followed
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
 import {
   BarChart3,
   TrendingUp,
@@ -30,13 +30,14 @@ import {
   Sparkles,
   Heart,
   FolderOpen,
-} from 'lucide-react';
-import { supabase } from '../App';
-import { useAuthContext } from '../hooks/useAuthContext';
-import { PillarBadge } from '../components/PillarBadge';
-import { HorizonBadge } from '../components/HorizonBadge';
+} from "lucide-react";
+import { supabase } from "../App";
+import { useAuthContext } from "../hooks/useAuthContext";
+import { PillarBadge } from "../components/PillarBadge";
+import { HorizonBadge } from "../components/HorizonBadge";
+import TopDomainsLeaderboard from "../components/analytics/TopDomainsLeaderboard";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 // ============================================================================
 // Type Definitions
@@ -48,7 +49,7 @@ interface PillarCoverageItem {
   count: number;
   percentage: number;
   avg_velocity: number | null;
-  trend_direction?: 'up' | 'down' | 'stable';
+  trend_direction?: "up" | "down" | "stable";
 }
 
 interface StageDistribution {
@@ -182,24 +183,30 @@ interface PersonalStats {
 // ============================================================================
 
 async function fetchSystemStats(token: string): Promise<SystemWideStats> {
-  const response = await fetch(`${API_BASE_URL}/api/v1/analytics/system-stats`, {
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/analytics/system-stats`,
+    {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
     },
-  });
-  if (!response.ok) throw new Error('Failed to fetch system stats');
+  );
+  if (!response.ok) throw new Error("Failed to fetch system stats");
   return response.json();
 }
 
 async function fetchPersonalStats(token: string): Promise<PersonalStats> {
-  const response = await fetch(`${API_BASE_URL}/api/v1/analytics/personal-stats`, {
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/analytics/personal-stats`,
+    {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
     },
-  });
-  if (!response.ok) throw new Error('Failed to fetch personal stats');
+  );
+  if (!response.ok) throw new Error("Failed to fetch personal stats");
   return response.json();
 }
 
@@ -224,31 +231,52 @@ const StatCard: React.FC<StatCardProps> = ({
   icon,
   trend,
   linkTo,
-  colorClass = 'text-brand-blue',
+  colorClass = "text-brand-blue",
 }) => {
   const content = (
     <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg group">
       <div className="flex items-center justify-between">
         <div className="flex items-center">
-          <div className={`flex-shrink-0 ${colorClass} group-hover:scale-110 transition-transform`}>
+          <div
+            className={`flex-shrink-0 ${colorClass} group-hover:scale-110 transition-transform`}
+          >
             {icon}
           </div>
           <div className="ml-3">
-            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{title}</p>
-            <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-              {typeof value === 'number' ? value.toLocaleString() : value}
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+              {title}
             </p>
-            {subtitle && <p className="text-xs text-gray-400 dark:text-gray-500">{subtitle}</p>}
+            <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+              {typeof value === "number" ? value.toLocaleString() : value}
+            </p>
+            {subtitle && (
+              <p className="text-xs text-gray-400 dark:text-gray-500">
+                {subtitle}
+              </p>
+            )}
           </div>
         </div>
         {trend !== undefined && trend !== null && (
           <div
             className={`flex items-center gap-1 text-sm font-medium ${
-              trend > 0 ? 'text-emerald-600 dark:text-emerald-400' : trend < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-500'
+              trend > 0
+                ? "text-emerald-600 dark:text-emerald-400"
+                : trend < 0
+                  ? "text-red-600 dark:text-red-400"
+                  : "text-gray-500"
             }`}
           >
-            {trend > 0 ? <TrendingUp className="h-4 w-4" /> : trend < 0 ? <TrendingDown className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
-            <span>{trend > 0 ? '+' : ''}{trend.toFixed(0)}%</span>
+            {trend > 0 ? (
+              <TrendingUp className="h-4 w-4" />
+            ) : trend < 0 ? (
+              <TrendingDown className="h-4 w-4" />
+            ) : (
+              <Minus className="h-4 w-4" />
+            )}
+            <span>
+              {trend > 0 ? "+" : ""}
+              {trend.toFixed(0)}%
+            </span>
           </div>
         )}
       </div>
@@ -259,15 +287,17 @@ const StatCard: React.FC<StatCardProps> = ({
 };
 
 const TrendBadge: React.FC<{ trend: string }> = ({ trend }) => {
-  if (trend === 'up') return <TrendingUp className="h-3 w-3 text-emerald-500" />;
-  if (trend === 'down') return <TrendingDown className="h-3 w-3 text-red-500" />;
+  if (trend === "up")
+    return <TrendingUp className="h-3 w-3 text-emerald-500" />;
+  if (trend === "down")
+    return <TrendingDown className="h-3 w-3 text-red-500" />;
   return <Minus className="h-3 w-3 text-gray-400" />;
 };
 
 const LoadingSkeleton: React.FC = () => (
   <div className="animate-pulse space-y-6">
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-      {[1, 2, 3, 4].map(i => (
+      {[1, 2, 3, 4].map((i) => (
         <div key={i} className="bg-white dark:bg-[#2d3166] rounded-lg p-5 h-24">
           <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mb-2" />
           <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-1/3" />
@@ -275,12 +305,15 @@ const LoadingSkeleton: React.FC = () => (
       ))}
     </div>
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {[1, 2].map(i => (
+      {[1, 2].map((i) => (
         <div key={i} className="bg-white dark:bg-[#2d3166] rounded-lg p-6 h-64">
           <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" />
           <div className="space-y-3">
-            {[1, 2, 3, 4].map(j => (
-              <div key={j} className="h-8 bg-gray-200 dark:bg-gray-700 rounded" />
+            {[1, 2, 3, 4].map((j) => (
+              <div
+                key={j}
+                className="h-8 bg-gray-200 dark:bg-gray-700 rounded"
+              />
             ))}
           </div>
         </div>
@@ -289,16 +322,18 @@ const LoadingSkeleton: React.FC = () => (
   </div>
 );
 
-const EmptyState: React.FC<{ title: string; description: string; icon: React.ReactNode }> = ({
-  title,
-  description,
-  icon,
-}) => (
+const EmptyState: React.FC<{
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+}> = ({ title, description, icon }) => (
   <div className="text-center py-8">
     <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-700 mb-4">
       {icon}
     </div>
-    <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-1">{title}</h3>
+    <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-1">
+      {title}
+    </h3>
     <p className="text-sm text-gray-500 dark:text-gray-400">{description}</p>
   </div>
 );
@@ -307,9 +342,11 @@ const EmptyState: React.FC<{ title: string; description: string; icon: React.Rea
 // Section Components
 // ============================================================================
 
-const PillarDistribution: React.FC<{ data: PillarCoverageItem[] }> = ({ data }) => {
-  const maxCount = Math.max(...data.map(d => d.count), 1);
-  
+const PillarDistribution: React.FC<{ data: PillarCoverageItem[] }> = ({
+  data,
+}) => {
+  const maxCount = Math.max(...data.map((d) => d.count), 1);
+
   return (
     <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
@@ -317,7 +354,7 @@ const PillarDistribution: React.FC<{ data: PillarCoverageItem[] }> = ({ data }) 
         Cards by Pillar
       </h3>
       <div className="space-y-3">
-        {data.map(pillar => (
+        {data.map((pillar) => (
           <div key={pillar.pillar_code} className="group">
             <div className="flex items-center justify-between text-sm mb-1">
               <div className="flex items-center gap-2">
@@ -344,10 +381,21 @@ const PillarDistribution: React.FC<{ data: PillarCoverageItem[] }> = ({ data }) 
   );
 };
 
-const StageDistributionChart: React.FC<{ data: StageDistribution[] }> = ({ data }) => {
-  const maxCount = Math.max(...data.map(d => d.count), 1);
-  const stageColors = ['#3B82F6', '#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#06B6D4', '#6366F1', '#EF4444'];
-  
+const StageDistributionChart: React.FC<{ data: StageDistribution[] }> = ({
+  data,
+}) => {
+  const maxCount = Math.max(...data.map((d) => d.count), 1);
+  const stageColors = [
+    "#3B82F6",
+    "#8B5CF6",
+    "#EC4899",
+    "#F59E0B",
+    "#10B981",
+    "#06B6D4",
+    "#6366F1",
+    "#EF4444",
+  ];
+
   return (
     <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
@@ -357,15 +405,18 @@ const StageDistributionChart: React.FC<{ data: StageDistribution[] }> = ({ data 
       <div className="space-y-2">
         {data.map((stage, idx) => (
           <div key={stage.stage_id} className="flex items-center gap-3">
-            <div className="w-20 text-xs text-gray-500 dark:text-gray-400 truncate" title={stage.stage_name}>
+            <div
+              className="w-20 text-xs text-gray-500 dark:text-gray-400 truncate"
+              title={stage.stage_name}
+            >
               {stage.stage_name}
             </div>
             <div className="flex-1 h-5 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden">
               <div
                 className="h-full rounded transition-all duration-500"
-                style={{ 
+                style={{
                   width: `${(stage.count / maxCount) * 100}%`,
-                  backgroundColor: stageColors[idx % stageColors.length]
+                  backgroundColor: stageColors[idx % stageColors.length],
                 }}
               />
             </div>
@@ -379,7 +430,10 @@ const StageDistributionChart: React.FC<{ data: StageDistribution[] }> = ({ data 
   );
 };
 
-const HotTopics: React.FC<{ topics: TrendingTopic[]; title: string }> = ({ topics, title }) => {
+const HotTopics: React.FC<{ topics: TrendingTopic[]; title: string }> = ({
+  topics,
+  title,
+}) => {
   if (topics.length === 0) {
     return (
       <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
@@ -431,7 +485,9 @@ const HotTopics: React.FC<{ topics: TrendingTopic[]; title: string }> = ({ topic
   );
 };
 
-const EngagementComparison: React.FC<{ engagement: UserEngagementComparison }> = ({ engagement }) => (
+const EngagementComparison: React.FC<{
+  engagement: UserEngagementComparison;
+}> = ({ engagement }) => (
   <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
       <Users className="h-5 w-5 text-brand-blue" />
@@ -440,33 +496,45 @@ const EngagementComparison: React.FC<{ engagement: UserEngagementComparison }> =
     <div className="grid grid-cols-2 gap-6">
       <div>
         <div className="text-center mb-2">
-          <div className="text-3xl font-bold text-brand-blue">{engagement.user_follow_count}</div>
-          <div className="text-sm text-gray-500 dark:text-gray-400">Cards Following</div>
+          <div className="text-3xl font-bold text-brand-blue">
+            {engagement.user_follow_count}
+          </div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">
+            Cards Following
+          </div>
         </div>
         <div className="text-center text-xs text-gray-400">
-          Avg: {engagement.avg_community_follows.toFixed(1)} | 
-          Top {(100 - engagement.user_percentile_follows).toFixed(0)}%
+          Avg: {engagement.avg_community_follows.toFixed(1)} | Top{" "}
+          {(100 - engagement.user_percentile_follows).toFixed(0)}%
         </div>
         <div className="mt-2 h-2 bg-gray-100 dark:bg-gray-700 rounded-full">
           <div
             className="h-full bg-brand-blue rounded-full"
-            style={{ width: `${Math.min(engagement.user_percentile_follows, 100)}%` }}
+            style={{
+              width: `${Math.min(engagement.user_percentile_follows, 100)}%`,
+            }}
           />
         </div>
       </div>
       <div>
         <div className="text-center mb-2">
-          <div className="text-3xl font-bold text-extended-purple">{engagement.user_workstream_count}</div>
-          <div className="text-sm text-gray-500 dark:text-gray-400">Workstreams</div>
+          <div className="text-3xl font-bold text-extended-purple">
+            {engagement.user_workstream_count}
+          </div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">
+            Workstreams
+          </div>
         </div>
         <div className="text-center text-xs text-gray-400">
-          Avg: {engagement.avg_community_workstreams.toFixed(1)} | 
-          Top {(100 - engagement.user_percentile_workstreams).toFixed(0)}%
+          Avg: {engagement.avg_community_workstreams.toFixed(1)} | Top{" "}
+          {(100 - engagement.user_percentile_workstreams).toFixed(0)}%
         </div>
         <div className="mt-2 h-2 bg-gray-100 dark:bg-gray-700 rounded-full">
           <div
             className="h-full bg-extended-purple rounded-full"
-            style={{ width: `${Math.min(engagement.user_percentile_workstreams, 100)}%` }}
+            style={{
+              width: `${Math.min(engagement.user_percentile_workstreams, 100)}%`,
+            }}
           />
         </div>
       </div>
@@ -474,7 +542,9 @@ const EngagementComparison: React.FC<{ engagement: UserEngagementComparison }> =
   </div>
 );
 
-const PillarAffinityChart: React.FC<{ affinity: PillarAffinity[] }> = ({ affinity }) => (
+const PillarAffinityChart: React.FC<{ affinity: PillarAffinity[] }> = ({
+  affinity,
+}) => (
   <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
       <Heart className="h-5 w-5 text-red-500" />
@@ -484,7 +554,7 @@ const PillarAffinityChart: React.FC<{ affinity: PillarAffinity[] }> = ({ affinit
       How your follows compare to the community average
     </p>
     <div className="space-y-3">
-      {affinity.slice(0, 6).map(p => (
+      {affinity.slice(0, 6).map((p) => (
         <div key={p.pillar_code} className="flex items-center gap-3">
           <PillarBadge pillarId={p.pillar_code} size="sm" />
           <div className="flex-1">
@@ -511,8 +581,11 @@ const PillarAffinityChart: React.FC<{ affinity: PillarAffinity[] }> = ({ affinit
               </div>
             </div>
           </div>
-          <div className={`text-xs font-medium ${p.affinity_score > 0 ? 'text-emerald-500' : p.affinity_score < 0 ? 'text-gray-400' : ''}`}>
-            {p.affinity_score > 0 ? '+' : ''}{p.affinity_score}%
+          <div
+            className={`text-xs font-medium ${p.affinity_score > 0 ? "text-emerald-500" : p.affinity_score < 0 ? "text-gray-400" : ""}`}
+          >
+            {p.affinity_score > 0 ? "+" : ""}
+            {p.affinity_score}%
           </div>
         </div>
       ))}
@@ -520,9 +593,9 @@ const PillarAffinityChart: React.FC<{ affinity: PillarAffinity[] }> = ({ affinit
   </div>
 );
 
-const PopularCardsSection: React.FC<{ 
-  cards: PopularCard[]; 
-  title: string; 
+const PopularCardsSection: React.FC<{
+  cards: PopularCard[];
+  title: string;
   subtitle: string;
   emptyMessage: string;
 }> = ({ cards, title, subtitle, emptyMessage }) => {
@@ -533,7 +606,9 @@ const PopularCardsSection: React.FC<{
           <Star className="h-5 w-5 text-amber-500" />
           {title}
         </h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{subtitle}</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+          {subtitle}
+        </p>
         <EmptyState
           title="No suggestions yet"
           description={emptyMessage}
@@ -549,9 +624,11 @@ const PopularCardsSection: React.FC<{
         <Star className="h-5 w-5 text-amber-500" />
         {title}
       </h3>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{subtitle}</p>
+      <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+        {subtitle}
+      </p>
       <div className="space-y-3">
-        {cards.map(card => (
+        {cards.map((card) => (
           <Link
             key={card.card_id}
             to={`/cards/${card.card_slug || card.card_id}`}
@@ -563,8 +640,15 @@ const PopularCardsSection: React.FC<{
                   <span className="font-medium text-gray-900 dark:text-white text-sm truncate">
                     {card.card_name}
                   </span>
-                  {card.pillar_id && <PillarBadge pillarId={card.pillar_id} size="sm" />}
-                  {card.horizon && <HorizonBadge horizon={card.horizon as 'H1'|'H2'|'H3'} size="sm" />}
+                  {card.pillar_id && (
+                    <PillarBadge pillarId={card.pillar_id} size="sm" />
+                  )}
+                  {card.horizon && (
+                    <HorizonBadge
+                      horizon={card.horizon as "H1" | "H2" | "H3"}
+                      size="sm"
+                    />
+                  )}
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
                   {card.summary}
@@ -588,9 +672,11 @@ const PopularCardsSection: React.FC<{
 
 const AnalyticsV2: React.FC = () => {
   const { user: _user } = useAuthContext();
-  const [activeTab, setActiveTab] = useState<'system' | 'personal'>('system');
+  const [activeTab, setActiveTab] = useState<"system" | "personal">("system");
   const [systemStats, setSystemStats] = useState<SystemWideStats | null>(null);
-  const [personalStats, setPersonalStats] = useState<PersonalStats | null>(null);
+  const [personalStats, setPersonalStats] = useState<PersonalStats | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -598,9 +684,11 @@ const AnalyticsV2: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        throw new Error('Not authenticated');
+        throw new Error("Not authenticated");
       }
 
       const [system, personal] = await Promise.all([
@@ -611,7 +699,7 @@ const AnalyticsV2: React.FC = () => {
       setSystemStats(system);
       setPersonalStats(personal);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load analytics');
+      setError(err instanceof Error ? err.message : "Failed to load analytics");
     } finally {
       setLoading(false);
     }
@@ -627,7 +715,9 @@ const AnalyticsV2: React.FC = () => {
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
             <BarChart3 className="h-8 w-8 text-brand-blue" />
-            <h1 className="text-3xl font-bold text-brand-dark-blue dark:text-white">Analytics</h1>
+            <h1 className="text-3xl font-bold text-brand-dark-blue dark:text-white">
+              Analytics
+            </h1>
           </div>
         </div>
         <LoadingSkeleton />
@@ -659,7 +749,9 @@ const AnalyticsV2: React.FC = () => {
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-3">
             <BarChart3 className="h-8 w-8 text-brand-blue" />
-            <h1 className="text-3xl font-bold text-brand-dark-blue dark:text-white">Analytics</h1>
+            <h1 className="text-3xl font-bold text-brand-dark-blue dark:text-white">
+              Analytics
+            </h1>
           </div>
           <button
             onClick={loadData}
@@ -677,22 +769,22 @@ const AnalyticsV2: React.FC = () => {
       {/* Tab Switcher */}
       <div className="flex gap-2 mb-6">
         <button
-          onClick={() => setActiveTab('system')}
+          onClick={() => setActiveTab("system")}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-            activeTab === 'system'
-              ? 'bg-brand-blue text-white'
-              : 'bg-white dark:bg-[#2d3166] text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#3d4176]'
+            activeTab === "system"
+              ? "bg-brand-blue text-white"
+              : "bg-white dark:bg-[#2d3166] text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#3d4176]"
           }`}
         >
           <Globe className="h-4 w-4" />
           System Overview
         </button>
         <button
-          onClick={() => setActiveTab('personal')}
+          onClick={() => setActiveTab("personal")}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-            activeTab === 'personal'
-              ? 'bg-brand-blue text-white'
-              : 'bg-white dark:bg-[#2d3166] text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#3d4176]'
+            activeTab === "personal"
+              ? "bg-brand-blue text-white"
+              : "bg-white dark:bg-[#2d3166] text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#3d4176]"
           }`}
         >
           <UserCircle className="h-4 w-4" />
@@ -701,7 +793,7 @@ const AnalyticsV2: React.FC = () => {
       </div>
 
       {/* System-wide Stats Tab */}
-      {activeTab === 'system' && systemStats && (
+      {activeTab === "system" && systemStats && (
         <div className="space-y-6">
           {/* Top Stats */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -748,7 +840,9 @@ const AnalyticsV2: React.FC = () => {
             />
             <StatCard
               title="Cards in Workstreams"
-              value={systemStats.workstream_engagement.unique_cards_in_workstreams}
+              value={
+                systemStats.workstream_engagement.unique_cards_in_workstreams
+              }
               subtitle={`Avg: ${systemStats.workstream_engagement.avg_cards_per_workstream}/workstream`}
               icon={<Layers className="h-6 w-6" />}
               colorClass="text-extended-purple"
@@ -777,8 +871,14 @@ const AnalyticsV2: React.FC = () => {
 
           {/* Trending & Hot Topics */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <HotTopics topics={systemStats.trending_pillars} title="Trending Pillars" />
-            <HotTopics topics={systemStats.hot_topics} title="High Velocity Cards" />
+            <HotTopics
+              topics={systemStats.trending_pillars}
+              title="Trending Pillars"
+            />
+            <HotTopics
+              topics={systemStats.hot_topics}
+              title="High Velocity Cards"
+            />
           </div>
 
           {/* Most Followed Cards */}
@@ -789,33 +889,38 @@ const AnalyticsV2: React.FC = () => {
                 Most Followed Cards
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {systemStats.follow_stats.most_followed_cards.map((card, idx) => (
-                  <Link
-                    key={card.card_id}
-                    to={`/cards/${card.card_slug || card.card_id}`}
-                    className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-[#1e2048] rounded-lg hover:bg-gray-100 dark:hover:bg-[#252860] transition-colors"
-                  >
-                    <span className="w-6 h-6 flex items-center justify-center text-sm font-bold text-white bg-amber-500 rounded-full">
-                      {idx + 1}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-gray-900 dark:text-white text-sm truncate">
-                        {card.card_name}
+                {systemStats.follow_stats.most_followed_cards.map(
+                  (card, idx) => (
+                    <Link
+                      key={card.card_id}
+                      to={`/cards/${card.card_slug || card.card_id}`}
+                      className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-[#1e2048] rounded-lg hover:bg-gray-100 dark:hover:bg-[#252860] transition-colors"
+                    >
+                      <span className="w-6 h-6 flex items-center justify-center text-sm font-bold text-white bg-amber-500 rounded-full">
+                        {idx + 1}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-gray-900 dark:text-white text-sm truncate">
+                          {card.card_name}
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          {card.follower_count} followers
+                        </div>
                       </div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
-                        {card.follower_count} followers
-                      </div>
-                    </div>
-                  </Link>
-                ))}
+                    </Link>
+                  ),
+                )}
               </div>
             </div>
           )}
+
+          {/* Source Intelligence */}
+          <TopDomainsLeaderboard />
         </div>
       )}
 
       {/* Personal Stats Tab */}
-      {activeTab === 'personal' && personalStats && (
+      {activeTab === "personal" && personalStats && (
         <div className="space-y-6">
           {/* Engagement Comparison */}
           <EngagementComparison engagement={personalStats.engagement} />
@@ -853,7 +958,7 @@ const AnalyticsV2: React.FC = () => {
           {/* Pillar Affinity */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <PillarAffinityChart affinity={personalStats.pillar_affinity} />
-            
+
             {/* Your Following */}
             <div className="bg-white dark:bg-[#2d3166] rounded-lg shadow p-6">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
@@ -868,7 +973,7 @@ const AnalyticsV2: React.FC = () => {
                 />
               ) : (
                 <div className="space-y-2 max-h-80 overflow-y-auto">
-                  {personalStats.following.slice(0, 10).map(item => (
+                  {personalStats.following.slice(0, 10).map((item) => (
                     <Link
                       key={item.card_id}
                       to={`/cards/${item.card_slug || item.card_id}`}
@@ -878,7 +983,9 @@ const AnalyticsV2: React.FC = () => {
                         <span className="font-medium text-sm text-gray-900 dark:text-white truncate">
                           {item.card_name}
                         </span>
-                        {item.pillar_id && <PillarBadge pillarId={item.pillar_id} size="sm" />}
+                        {item.pillar_id && (
+                          <PillarBadge pillarId={item.pillar_id} size="sm" />
+                        )}
                       </div>
                       <div className="flex items-center gap-2 text-xs text-gray-400">
                         <Users className="h-3 w-3" />
@@ -928,8 +1035,12 @@ const AnalyticsV2: React.FC = () => {
               <Target className="h-5 w-5 text-brand-blue" />
             </div>
             <div>
-              <h3 className="font-medium text-gray-900 dark:text-white">Discover Cards</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Browse intelligence</p>
+              <h3 className="font-medium text-gray-900 dark:text-white">
+                Discover Cards
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Browse intelligence
+              </p>
             </div>
           </div>
           <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-brand-blue group-hover:translate-x-1 transition-all" />
@@ -944,8 +1055,12 @@ const AnalyticsV2: React.FC = () => {
               <Layers className="h-5 w-5 text-extended-purple" />
             </div>
             <div>
-              <h3 className="font-medium text-gray-900 dark:text-white">Workstreams</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Manage collections</p>
+              <h3 className="font-medium text-gray-900 dark:text-white">
+                Workstreams
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Manage collections
+              </p>
             </div>
           </div>
           <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-extended-purple group-hover:translate-x-1 transition-all" />
@@ -960,8 +1075,12 @@ const AnalyticsV2: React.FC = () => {
               <Sparkles className="h-5 w-5 text-extended-orange" />
             </div>
             <div>
-              <h3 className="font-medium text-gray-900 dark:text-white">Discovery Queue</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Review new cards</p>
+              <h3 className="font-medium text-gray-900 dark:text-white">
+                Discovery Queue
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Review new cards
+              </p>
             </div>
           </div>
           <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-extended-orange group-hover:translate-x-1 transition-all" />
@@ -970,7 +1089,8 @@ const AnalyticsV2: React.FC = () => {
 
       {/* Footer timestamp */}
       <div className="mt-6 text-center text-xs text-gray-400">
-        Last updated: {new Date(systemStats?.generated_at || Date.now()).toLocaleString()}
+        Last updated:{" "}
+        {new Date(systemStats?.generated_at || Date.now()).toLocaleString()}
       </div>
     </div>
   );

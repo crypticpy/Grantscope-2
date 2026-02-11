@@ -68,6 +68,38 @@ from .brief import (
     VALID_BRIEF_STATUSES,
 )
 
+from .source_rating import (
+    # Source rating models
+    RelevanceRating,
+    SourceRatingCreate,
+    SourceRatingResponse,
+    SourceRatingAggregate,
+)
+
+from .quality import (
+    # Quality/SQI models
+    QualityTier,
+    QualityBreakdown,
+    QualityTierFilter,
+)
+
+from .domain_reputation import (
+    # Domain reputation models
+    DomainReputationResponse,
+    DomainReputationCreate,
+    DomainReputationUpdate,
+    TopDomainsResponse,
+    DomainReputationList,
+)
+
+from .card_creation import (
+    # Card creation models
+    CreateCardFromTopicRequest,
+    CreateCardFromTopicResponse,
+    ManualCardCreateRequest,
+    KeywordSuggestionResponse,
+)
+
 __all__ = [
     # Validation models
     "ClassificationValidation",
@@ -115,4 +147,24 @@ __all__ = [
     "BriefStatusResponse",
     "BriefListItem",
     "VALID_BRIEF_STATUSES",
+    # Source rating models
+    "RelevanceRating",
+    "SourceRatingCreate",
+    "SourceRatingResponse",
+    "SourceRatingAggregate",
+    # Quality/SQI models
+    "QualityTier",
+    "QualityBreakdown",
+    "QualityTierFilter",
+    # Domain reputation models
+    "DomainReputationResponse",
+    "DomainReputationCreate",
+    "DomainReputationUpdate",
+    "TopDomainsResponse",
+    "DomainReputationList",
+    # Card creation models
+    "CreateCardFromTopicRequest",
+    "CreateCardFromTopicResponse",
+    "ManualCardCreateRequest",
+    "KeywordSuggestionResponse",
 ]

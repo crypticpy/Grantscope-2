@@ -47,8 +47,7 @@ load_dotenv()
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -126,11 +125,43 @@ from app.models.history import (
     CardComparisonResponse,
 )
 
+# Source rating models import
+from app.models.source_rating import (
+    SourceRatingCreate,
+    SourceRatingResponse,
+    SourceRatingAggregate,
+    RelevanceRating,
+)
+
+# Quality / SQI models import
+from app.models.quality import QualityBreakdown, QualityTier, QualityTierFilter
+
+# Domain reputation models import
+from app.models.domain_reputation import (
+    DomainReputationResponse,
+    DomainReputationCreate,
+    DomainReputationUpdate,
+    TopDomainsResponse,
+    DomainReputationList,
+)
+
+# Card creation models import
+from app.models.card_creation import (
+    CreateCardFromTopicRequest,
+    CreateCardFromTopicResponse,
+    ManualCardCreateRequest,
+    KeywordSuggestionResponse,
+)
+
+# Domain reputation and quality services
+from app import domain_reputation_service
+from app import quality_service
+
 # Initialize FastAPI app
 app = FastAPI(
     title="Foresight API",
     description="Austin Strategic Research & Intelligence System",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 # =============================================================================
@@ -164,14 +195,20 @@ if ENVIRONMENT == "production":
     # Fail-safe: ensure at least the default production origin is present
     if not ALLOWED_ORIGINS:
         ALLOWED_ORIGINS = ["https://foresight.vercel.app"]
-        print("[CORS] WARNING: No valid origins configured, using default production origin")
+        print(
+            "[CORS] WARNING: No valid origins configured, using default production origin"
+        )
 else:
     # Development: allow localhost for local development
-    default_origins = "http://localhost:3000,http://localhost:5173,http://localhost:5174"
+    default_origins = (
+        "http://localhost:3000,http://localhost:5173,http://localhost:5174"
+    )
     ALLOWED_ORIGINS_RAW = os.getenv("ALLOWED_ORIGINS", default_origins).split(",")
 
     # Clean and validate development origins
-    ALLOWED_ORIGINS = [origin.strip() for origin in ALLOWED_ORIGINS_RAW if origin.strip()]
+    ALLOWED_ORIGINS = [
+        origin.strip() for origin in ALLOWED_ORIGINS_RAW if origin.strip()
+    ]
 
 # Reject empty configuration (should never happen due to defaults, but safety check)
 if not ALLOWED_ORIGINS:
@@ -221,6 +258,7 @@ supabase: Client = create_client(supabase_url, supabase_service_key)
 # Supabase helpers
 # =============================================================================
 
+
 def _is_missing_supabase_table_error(exc: Exception, table_name: str) -> bool:
     """Best-effort detection for missing PostgREST table errors."""
     try:
@@ -246,6 +284,7 @@ def _is_missing_supabase_table_error(exc: Exception, table_name: str) -> bool:
         )
     )
 
+
 # Azure OpenAI client is initialized in openai_provider module (fail-fast on missing config)
 # Use azure_openai_client for chat completions
 # Use azure_openai_embedding_client for embeddings (uses different API version)
@@ -253,6 +292,7 @@ openai_client = azure_openai_client
 
 # Initialize scheduler for nightly jobs
 scheduler = AsyncIOScheduler()
+
 
 # Pydantic models
 class UserProfile(BaseModel):
@@ -262,6 +302,7 @@ class UserProfile(BaseModel):
     department: Optional[str] = None
     role: Optional[str] = None
     preferences: Dict[str, Any] = {}
+
 
 class Card(BaseModel):
     id: str
@@ -285,21 +326,31 @@ class Card(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+
 class CardCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=200, description="Card name")
     summary: Optional[str] = Field(None, max_length=2000, description="Card summary")
-    description: Optional[str] = Field(None, max_length=10000, description="Detailed description")
-    pillar_id: Optional[str] = Field(None, pattern=r"^[A-Z]{2}$", description="Pillar code (e.g., CH, MC)")
-    goal_id: Optional[str] = Field(None, pattern=r"^[A-Z]{2}\.\d+$", description="Goal code (e.g., CH.1)")
+    description: Optional[str] = Field(
+        None, max_length=10000, description="Detailed description"
+    )
+    pillar_id: Optional[str] = Field(
+        None, pattern=r"^[A-Z]{2}$", description="Pillar code (e.g., CH, MC)"
+    )
+    goal_id: Optional[str] = Field(
+        None, pattern=r"^[A-Z]{2}\.\d+$", description="Goal code (e.g., CH.1)"
+    )
     anchor_id: Optional[str] = None
     stage_id: Optional[str] = None
-    horizon: Optional[str] = Field(None, pattern=r"^H[123]$", description="Horizon (H1, H2, H3)")
+    horizon: Optional[str] = Field(
+        None, pattern=r"^H[123]$", description="Horizon (H1, H2, H3)"
+    )
 
-    @validator('name')
+    @validator("name")
     def name_must_not_be_empty(cls, v):
         if not v or not v.strip():
-            raise ValueError('Name cannot be empty or whitespace')
+            raise ValueError("Name cannot be empty or whitespace")
         return v.strip()
+
 
 class Workstream(BaseModel):
     id: str
@@ -312,25 +363,41 @@ class Workstream(BaseModel):
     keywords: Optional[List[str]] = []
     is_active: bool = True
     auto_add: bool = False
+    auto_scan: bool = False
     created_at: datetime
+
 
 class WorkstreamCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=100, description="Workstream name")
-    description: Optional[str] = Field(None, max_length=1000, description="Workstream description")
-    pillar_ids: Optional[List[str]] = Field(default=[], description="Filter by pillar IDs")
+    description: Optional[str] = Field(
+        None, max_length=1000, description="Workstream description"
+    )
+    pillar_ids: Optional[List[str]] = Field(
+        default=[], description="Filter by pillar IDs"
+    )
     goal_ids: Optional[List[str]] = Field(default=[], description="Filter by goal IDs")
-    stage_ids: Optional[List[str]] = Field(default=[], description="Filter by stage IDs")
-    horizon: Optional[str] = Field("ALL", pattern=r"^(H[123]|ALL)$", description="Horizon filter")
-    keywords: Optional[List[str]] = Field(default=[], max_items=20, description="Search keywords")
+    stage_ids: Optional[List[str]] = Field(
+        default=[], description="Filter by stage IDs"
+    )
+    horizon: Optional[str] = Field(
+        "ALL", pattern=r"^(H[123]|ALL)$", description="Horizon filter"
+    )
+    keywords: Optional[List[str]] = Field(
+        default=[], max_items=20, description="Search keywords"
+    )
     auto_add: bool = False
+    auto_scan: bool = Field(
+        default=False,
+        description="Enable automatic background source scanning for this workstream",
+    )
 
-    @validator('name')
+    @validator("name")
     def name_must_not_be_empty(cls, v):
         if not v or not v.strip():
-            raise ValueError('Name cannot be empty or whitespace')
+            raise ValueError("Name cannot be empty or whitespace")
         return v.strip()
 
-    @validator('keywords')
+    @validator("keywords")
     def keywords_must_be_valid(cls, v):
         if v:
             # Clean and deduplicate keywords
@@ -341,6 +408,7 @@ class WorkstreamCreate(BaseModel):
 
 class WorkstreamUpdate(BaseModel):
     """Partial update model for workstreams - all fields optional"""
+
     name: Optional[str] = None
     description: Optional[str] = None
     pillar_ids: Optional[List[str]] = None
@@ -350,6 +418,7 @@ class WorkstreamUpdate(BaseModel):
     keywords: Optional[List[str]] = None
     is_active: Optional[bool] = None
     auto_add: Optional[bool] = None
+    auto_scan: Optional[bool] = None
 
 
 # ============================================================================
@@ -357,11 +426,19 @@ class WorkstreamUpdate(BaseModel):
 # ============================================================================
 
 # Valid status values for workstream cards (Kanban columns)
-VALID_WORKSTREAM_CARD_STATUSES = {"inbox", "screening", "research", "brief", "watching", "archived"}
+VALID_WORKSTREAM_CARD_STATUSES = {
+    "inbox",
+    "screening",
+    "research",
+    "brief",
+    "watching",
+    "archived",
+}
 
 
 class WorkstreamCardBase(BaseModel):
     """Base model for workstream card data."""
+
     id: str
     workstream_id: str
     card_id: str
@@ -377,6 +454,7 @@ class WorkstreamCardBase(BaseModel):
 
 class WorkstreamCardWithDetails(BaseModel):
     """Workstream card with full card details for display."""
+
     id: str
     workstream_id: str
     card_id: str
@@ -394,47 +472,57 @@ class WorkstreamCardWithDetails(BaseModel):
 
 class WorkstreamCardCreate(BaseModel):
     """Request model for adding a card to a workstream."""
+
     card_id: str = Field(..., description="UUID of the card to add")
     status: Optional[str] = Field("inbox", description="Initial status (column)")
     notes: Optional[str] = Field(None, max_length=5000, description="Optional notes")
 
-    @validator('card_id')
+    @validator("card_id")
     def validate_card_id_format(cls, v):
         """Validate UUID format for card_id."""
         import re
+
         uuid_pattern = re.compile(
-            r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-            re.IGNORECASE
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            re.IGNORECASE,
         )
         if not uuid_pattern.match(v):
-            raise ValueError('Invalid UUID format for card_id')
+            raise ValueError("Invalid UUID format for card_id")
         return v
 
-    @validator('status')
+    @validator("status")
     def validate_status(cls, v):
         """Validate status is a valid Kanban column."""
         if v and v not in VALID_WORKSTREAM_CARD_STATUSES:
-            raise ValueError(f"Invalid status. Must be one of: {', '.join(sorted(VALID_WORKSTREAM_CARD_STATUSES))}")
+            raise ValueError(
+                f"Invalid status. Must be one of: {', '.join(sorted(VALID_WORKSTREAM_CARD_STATUSES))}"
+            )
         return v or "inbox"
 
 
 class WorkstreamCardUpdate(BaseModel):
     """Request model for updating a workstream card."""
+
     status: Optional[str] = Field(None, description="New status (column)")
     position: Optional[int] = Field(None, ge=0, description="New position in column")
     notes: Optional[str] = Field(None, max_length=5000, description="Card notes")
-    reminder_at: Optional[str] = Field(None, description="Reminder timestamp (ISO format)")
+    reminder_at: Optional[str] = Field(
+        None, description="Reminder timestamp (ISO format)"
+    )
 
-    @validator('status')
+    @validator("status")
     def validate_status(cls, v):
         """Validate status is a valid Kanban column."""
         if v and v not in VALID_WORKSTREAM_CARD_STATUSES:
-            raise ValueError(f"Invalid status. Must be one of: {', '.join(sorted(VALID_WORKSTREAM_CARD_STATUSES))}")
+            raise ValueError(
+                f"Invalid status. Must be one of: {', '.join(sorted(VALID_WORKSTREAM_CARD_STATUSES))}"
+            )
         return v
 
 
 class WorkstreamCardsGroupedResponse(BaseModel):
     """Response model for cards grouped by status (Kanban view)."""
+
     inbox: List[WorkstreamCardWithDetails] = []
     screening: List[WorkstreamCardWithDetails] = []
     research: List[WorkstreamCardWithDetails] = []
@@ -445,8 +533,11 @@ class WorkstreamCardsGroupedResponse(BaseModel):
 
 class AutoPopulateResponse(BaseModel):
     """Response model for auto-populate results."""
+
     added: int = Field(..., description="Number of cards added")
-    cards: List[WorkstreamCardWithDetails] = Field(default=[], description="Cards that were added")
+    cards: List[WorkstreamCardWithDetails] = Field(
+        default=[], description="Cards that were added"
+    )
 
 
 class Note(BaseModel):
@@ -455,47 +546,60 @@ class Note(BaseModel):
     is_private: bool = False
     created_at: datetime
 
+
 class NoteCreate(BaseModel):
-    content: str = Field(..., min_length=1, max_length=10000, description="Note content")
+    content: str = Field(
+        ..., min_length=1, max_length=10000, description="Note content"
+    )
     is_private: bool = False
 
-    @validator('content')
+    @validator("content")
     def content_must_not_be_empty(cls, v):
         if not v or not v.strip():
-            raise ValueError('Note content cannot be empty')
+            raise ValueError("Note content cannot be empty")
         return v.strip()
 
 
 # Research task models
 VALID_TASK_TYPES = {"update", "deep_research", "workstream_analysis"}
 
+
 class ResearchTaskCreate(BaseModel):
     """Request model for creating a research task."""
-    card_id: Optional[str] = Field(None, description="Card ID for card-based research")
-    workstream_id: Optional[str] = Field(None, description="Workstream ID for workstream analysis")
-    task_type: str = Field(..., description="One of: update, deep_research, workstream_analysis")
 
-    @validator('task_type')
+    card_id: Optional[str] = Field(None, description="Card ID for card-based research")
+    workstream_id: Optional[str] = Field(
+        None, description="Workstream ID for workstream analysis"
+    )
+    task_type: str = Field(
+        ..., description="One of: update, deep_research, workstream_analysis"
+    )
+
+    @validator("task_type")
     def task_type_must_be_valid(cls, v):
         if v not in VALID_TASK_TYPES:
-            raise ValueError(f"Invalid task_type. Must be one of: {', '.join(VALID_TASK_TYPES)}")
+            raise ValueError(
+                f"Invalid task_type. Must be one of: {', '.join(VALID_TASK_TYPES)}"
+            )
         return v
 
-    @validator('card_id', 'workstream_id')
+    @validator("card_id", "workstream_id")
     def validate_uuid_format(cls, v):
         if v is not None:
             import re
+
             uuid_pattern = re.compile(
-                r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-                re.IGNORECASE
+                r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                re.IGNORECASE,
             )
             if not uuid_pattern.match(v):
-                raise ValueError('Invalid UUID format')
+                raise ValueError("Invalid UUID format")
         return v
 
 
 class ResearchTask(BaseModel):
     """Response model for research task status."""
+
     id: str
     user_id: str
     card_id: Optional[str] = None
@@ -514,16 +618,27 @@ class ResearchTask(BaseModel):
 # Card Review Workflow Models
 # ============================================================================
 
+
 class CardReviewRequest(BaseModel):
     """Request model for reviewing a discovered card."""
-    action: str = Field(..., pattern=r"^(approve|reject|edit_approve)$", description="Review action: approve, reject, or edit_approve")
-    updates: Optional[Dict[str, Any]] = Field(None, description="Card field updates (for edit_approve action)")
-    reason: Optional[str] = Field(None, max_length=1000, description="Reason for rejection or edit notes")
+
+    action: str = Field(
+        ...,
+        pattern=r"^(approve|reject|edit_approve)$",
+        description="Review action: approve, reject, or edit_approve",
+    )
+    updates: Optional[Dict[str, Any]] = Field(
+        None, description="Card field updates (for edit_approve action)"
+    )
+    reason: Optional[str] = Field(
+        None, max_length=1000, description="Reason for rejection or edit notes"
+    )
 
 
 def get_discovery_max_queries():
     """Get max queries from environment."""
     return int(os.getenv("DISCOVERY_MAX_QUERIES", "100"))
+
 
 def get_discovery_max_sources():
     """Get max sources from environment."""
@@ -532,27 +647,53 @@ def get_discovery_max_sources():
 
 class DiscoveryConfigRequest(BaseModel):
     """Request model for discovery run configuration."""
-    max_queries_per_run: Optional[int] = Field(None, le=200, ge=1, description="Maximum queries per run (defaults to DISCOVERY_MAX_QUERIES env var)")
-    max_sources_total: Optional[int] = Field(None, le=1000, ge=10, description="Maximum sources to process (defaults to DISCOVERY_MAX_SOURCES_TOTAL env var)")
-    auto_approve_threshold: float = Field(default=0.95, ge=0.8, le=1.0, description="Auto-approval threshold")
-    pillars_filter: Optional[List[str]] = Field(None, description="Filter by pillar IDs")
+
+    max_queries_per_run: Optional[int] = Field(
+        None,
+        le=200,
+        ge=1,
+        description="Maximum queries per run (defaults to DISCOVERY_MAX_QUERIES env var)",
+    )
+    max_sources_total: Optional[int] = Field(
+        None,
+        le=1000,
+        ge=10,
+        description="Maximum sources to process (defaults to DISCOVERY_MAX_SOURCES_TOTAL env var)",
+    )
+    auto_approve_threshold: float = Field(
+        default=0.95, ge=0.8, le=1.0, description="Auto-approval threshold"
+    )
+    pillars_filter: Optional[List[str]] = Field(
+        None, description="Filter by pillar IDs"
+    )
     dry_run: bool = Field(False, description="Run in dry-run mode without persisting")
 
 
 class BulkReviewRequest(BaseModel):
     """Request model for bulk card review operations."""
-    card_ids: List[str] = Field(..., min_items=1, max_items=100, description="List of card IDs to review")
-    action: str = Field(..., pattern=r"^(approve|reject)$", description="Bulk action: approve or reject")
-    reason: Optional[str] = Field(None, max_length=500, description="Optional reason for bulk action")
+
+    card_ids: List[str] = Field(
+        ..., min_items=1, max_items=100, description="List of card IDs to review"
+    )
+    action: str = Field(
+        ..., pattern=r"^(approve|reject)$", description="Bulk action: approve or reject"
+    )
+    reason: Optional[str] = Field(
+        None, max_length=500, description="Optional reason for bulk action"
+    )
 
 
 class CardDismissRequest(BaseModel):
     """Request model for user card dismissal."""
-    reason: Optional[str] = Field(None, max_length=500, description="Optional reason for dismissal")
+
+    reason: Optional[str] = Field(
+        None, max_length=500, description="Optional reason for dismissal"
+    )
 
 
 class DiscoveryRun(BaseModel):
     """Response model for discovery run status matching database schema."""
+
     id: str
     started_at: datetime
     completed_at: Optional[datetime] = None
@@ -580,6 +721,7 @@ class DiscoveryRun(BaseModel):
 
 class BlockedTopic(BaseModel):
     """Response model for blocked discovery topics."""
+
     id: str
     topic_pattern: str
     reason: str
@@ -589,6 +731,7 @@ class BlockedTopic(BaseModel):
 
 class SimilarCard(BaseModel):
     """Response model for similar cards."""
+
     id: str
     name: str
     summary: Optional[str] = None
@@ -604,39 +747,49 @@ class SimilarCard(BaseModel):
 # Must match PILLAR_DEFINITIONS in query_generator.py
 VALID_PILLAR_CODES = {"CH", "EW", "HG", "HH", "MC", "PS"}
 
+
 class ValidationSubmission(BaseModel):
     """Request model for submitting ground truth classification labels."""
+
     card_id: str = Field(..., description="UUID of the card being validated")
     ground_truth_pillar: str = Field(
         ...,
         pattern=r"^[A-Z]{2}$",
-        description="Ground truth pillar code (CH, EW, HG, HH, MC, PS)"
+        description="Ground truth pillar code (CH, EW, HG, HH, MC, PS)",
     )
-    reviewer_id: str = Field(..., min_length=1, description="Identifier for the reviewer")
-    notes: Optional[str] = Field(None, max_length=1000, description="Optional reviewer notes")
+    reviewer_id: str = Field(
+        ..., min_length=1, description="Identifier for the reviewer"
+    )
+    notes: Optional[str] = Field(
+        None, max_length=1000, description="Optional reviewer notes"
+    )
 
-    @validator('card_id')
+    @validator("card_id")
     def validate_card_id_format(cls, v):
         """Validate UUID format for card_id."""
         import re
+
         uuid_pattern = re.compile(
-            r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-            re.IGNORECASE
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            re.IGNORECASE,
         )
         if not uuid_pattern.match(v):
-            raise ValueError('Invalid UUID format for card_id')
+            raise ValueError("Invalid UUID format for card_id")
         return v
 
-    @validator('ground_truth_pillar')
+    @validator("ground_truth_pillar")
     def validate_pillar_code(cls, v):
         """Validate pillar code is in allowed list."""
         if v not in VALID_PILLAR_CODES:
-            raise ValueError(f"Invalid pillar code. Must be one of: {', '.join(sorted(VALID_PILLAR_CODES))}")
+            raise ValueError(
+                f"Invalid pillar code. Must be one of: {', '.join(sorted(VALID_PILLAR_CODES))}"
+            )
         return v
 
 
 class ValidationSubmissionResponse(BaseModel):
     """Response model for validation submission."""
+
     id: str
     card_id: str
     ground_truth_pillar: str
@@ -651,8 +804,10 @@ class ValidationSubmissionResponse(BaseModel):
 # Processing Metrics Models
 # ============================================================================
 
+
 class SourceCategoryMetrics(BaseModel):
     """Metrics for a single source category."""
+
     category: str
     sources_fetched: int = 0
     articles_processed: int = 0
@@ -662,6 +817,7 @@ class SourceCategoryMetrics(BaseModel):
 
 class DiscoveryRunMetrics(BaseModel):
     """Aggregated metrics for discovery runs."""
+
     total_runs: int = 0
     completed_runs: int = 0
     failed_runs: int = 0
@@ -673,6 +829,7 @@ class DiscoveryRunMetrics(BaseModel):
 
 class ResearchTaskMetrics(BaseModel):
     """Aggregated metrics for research tasks."""
+
     total_tasks: int = 0
     completed_tasks: int = 0
     failed_tasks: int = 0
@@ -683,6 +840,7 @@ class ResearchTaskMetrics(BaseModel):
 
 class ClassificationMetrics(BaseModel):
     """Classification accuracy metrics."""
+
     total_validations: int = 0
     correct_count: int = 0
     accuracy_percentage: Optional[float] = None
@@ -701,6 +859,7 @@ class ProcessingMetrics(BaseModel):
     - Classification accuracy metrics
     - Time period information
     """
+
     # Time range for metrics
     period_start: datetime
     period_end: datetime
@@ -730,8 +889,7 @@ class ProcessingMetrics(BaseModel):
 
 # Authentication dependency
 async def get_current_user(
-    request: Request,
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    request: Request, credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Get current authenticated user with security logging.
@@ -754,7 +912,7 @@ async def get_current_user(
             log_security_event("auth_invalid_token_format", request)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authentication credentials"
+                detail="Invalid authentication credentials",
             )
 
         # Validate token with Supabase Auth (handles signature, expiration, revocation)
@@ -762,24 +920,28 @@ async def get_current_user(
 
         if response.user:
             # Get user profile
-            profile_response = supabase.table("users").select("*").eq("id", response.user.id).execute()
+            profile_response = (
+                supabase.table("users").select("*").eq("id", response.user.id).execute()
+            )
             if profile_response.data:
                 # Log successful auth for audit trail (info level, not warning)
                 logger.debug(f"Authenticated user: {response.user.id}")
                 return profile_response.data[0]
             else:
                 # User exists in auth but not in users table - potential issue
-                logger.warning(f"User profile not found for authenticated user_id: {response.user.id}")
+                logger.warning(
+                    f"User profile not found for authenticated user_id: {response.user.id}"
+                )
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail="User profile not found"
+                    detail="User profile not found",
                 )
         else:
             # Token was valid format but not a valid session
             log_security_event("auth_invalid_session", request)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authentication credentials"
+                detail="Invalid authentication credentials",
             )
 
     except HTTPException:
@@ -789,19 +951,22 @@ async def get_current_user(
         log_security_event(
             "auth_error",
             request,
-            {"error_type": type(e).__name__, "error_msg": str(e)[:100]}
+            {"error_type": type(e).__name__, "error_msg": str(e)[:100]},
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials"
+            detail="Invalid authentication credentials",
         )
 
+
 # API Routes
+
 
 @app.get("/")
 async def root():
     """Health check"""
     return {"status": "ok", "message": "Foresight API is running"}
+
 
 @app.get("/api/v1/health")
 async def health_check():
@@ -809,10 +974,7 @@ async def health_check():
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "services": {
-            "database": "connected",
-            "ai": "available"
-        }
+        "services": {"database": "connected", "ai": "available"},
     }
 
 
@@ -831,8 +993,14 @@ async def debug_gpt_researcher():
         "OPENAI_API_VERSION": os.getenv("OPENAI_API_VERSION", "NOT SET"),
         "AZURE_OPENAI_API_VERSION": os.getenv("AZURE_OPENAI_API_VERSION", "NOT SET"),
         "SCRAPER": os.getenv("SCRAPER", "NOT SET"),
-        "AZURE_OPENAI_ENDPOINT": os.getenv("AZURE_OPENAI_ENDPOINT", "NOT SET")[:50] + "..." if os.getenv("AZURE_OPENAI_ENDPOINT") else "NOT SET",
-        "AZURE_OPENAI_API_KEY": "SET" if os.getenv("AZURE_OPENAI_API_KEY") else "NOT SET",
+        "AZURE_OPENAI_ENDPOINT": (
+            os.getenv("AZURE_OPENAI_ENDPOINT", "NOT SET")[:50] + "..."
+            if os.getenv("AZURE_OPENAI_ENDPOINT")
+            else "NOT SET"
+        ),
+        "AZURE_OPENAI_API_KEY": (
+            "SET" if os.getenv("AZURE_OPENAI_API_KEY") else "NOT SET"
+        ),
         "TAVILY_API_KEY": "SET" if os.getenv("TAVILY_API_KEY") else "NOT SET",
         "FIRECRAWL_API_KEY": "SET" if os.getenv("FIRECRAWL_API_KEY") else "NOT SET",
     }
@@ -844,14 +1012,15 @@ async def debug_gpt_researcher():
 
     try:
         from gpt_researcher.config import Config
+
         config = Config()
         parsed_config = {
-            "fast_llm_provider": getattr(config, 'fast_llm_provider', 'N/A'),
-            "fast_llm_model": getattr(config, 'fast_llm_model', 'N/A'),
-            "smart_llm_provider": getattr(config, 'smart_llm_provider', 'N/A'),
-            "smart_llm_model": getattr(config, 'smart_llm_model', 'N/A'),
-            "embedding_provider": getattr(config, 'embedding_provider', 'N/A'),
-            "embedding_model": getattr(config, 'embedding_model', 'N/A'),
+            "fast_llm_provider": getattr(config, "fast_llm_provider", "N/A"),
+            "fast_llm_model": getattr(config, "fast_llm_model", "N/A"),
+            "smart_llm_provider": getattr(config, "smart_llm_provider", "N/A"),
+            "smart_llm_model": getattr(config, "smart_llm_model", "N/A"),
+            "embedding_provider": getattr(config, "embedding_provider", "N/A"),
+            "embedding_model": getattr(config, "embedding_model", "N/A"),
         }
         gptr_config_status = "parsed"
     except Exception as e:
@@ -882,7 +1051,11 @@ async def debug_gpt_researcher():
                 langchain_tests[label] = {
                     "status": "success",
                     "deployment": deployment,
-                    "response": response.content if hasattr(response, "content") else str(response),
+                    "response": (
+                        response.content
+                        if hasattr(response, "content")
+                        else str(response)
+                    ),
                     "error": None,
                 }
             except Exception as e:
@@ -896,7 +1069,11 @@ async def debug_gpt_researcher():
         langchain_tests["import_error"] = {"status": "error", "error": str(e)}
 
     # Test GPT Researcher internal LLM utility (closest to agent selection path)
-    gptr_llm_test: Dict[str, Any] = {"status": "unknown", "error": None, "response": None}
+    gptr_llm_test: Dict[str, Any] = {
+        "status": "unknown",
+        "error": None,
+        "response": None,
+    }
     try:
         from gpt_researcher.config import Config
         from gpt_researcher.utils.llm import create_chat_completion
@@ -930,23 +1107,27 @@ async def debug_gpt_researcher():
         "gptr_llm_test": gptr_llm_test,
     }
 
+
 # User endpoints
 @app.get("/api/v1/me", response_model=UserProfile)
 async def get_current_user_profile(current_user: dict = Depends(get_current_user)):
     """Get current user profile"""
     return UserProfile(**current_user)
 
+
 @app.patch("/api/v1/me", response_model=UserProfile)
 async def update_user_profile(
-    updates: dict,
-    current_user: dict = Depends(get_current_user)
+    updates: dict, current_user: dict = Depends(get_current_user)
 ):
     """Update user profile"""
-    response = supabase.table("users").update(updates).eq("id", current_user["id"]).execute()
+    response = (
+        supabase.table("users").update(updates).eq("id", current_user["id"]).execute()
+    )
     if response.data:
         return UserProfile(**response.data[0])
     else:
         raise HTTPException(status_code=404, detail="User not found")
+
 
 # Cards endpoints
 @app.get("/api/v1/cards", response_model=List[Card])
@@ -956,20 +1137,22 @@ async def get_cards(
     pillar_id: Optional[str] = None,
     stage_id: Optional[str] = None,
     horizon: Optional[str] = None,
-    search: Optional[str] = None
+    search: Optional[str] = None,
 ):
     """Get cards with filtering"""
     query = supabase.table("cards").select("*").eq("status", "active")
-    
+
     if pillar_id:
         query = query.eq("pillar_id", pillar_id)
     if stage_id:
         query = query.eq("stage_id", stage_id)
     if horizon:
         query = query.eq("horizon", horizon)
-    
-    response = query.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
-    
+
+    response = (
+        query.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
+    )
+
     return [Card(**card) for card in response.data]
 
 
@@ -979,7 +1162,7 @@ async def get_pending_review_cards(
     current_user: dict = Depends(get_current_user),
     limit: int = 20,
     offset: int = 0,
-    pillar_id: Optional[str] = None
+    pillar_id: Optional[str] = None,
 ):
     """
     Get cards pending review.
@@ -998,13 +1181,13 @@ async def get_pending_review_cards(
     if pillar_id:
         query = query.eq("pillar_id", pillar_id)
 
-    response = query.order(
-        "ai_confidence", desc=True
-    ).order(
-        "discovered_at", desc=True
-    ).order(
-        "created_at", desc=True
-    ).range(offset, offset + limit - 1).execute()
+    response = (
+        query.order("ai_confidence", desc=True)
+        .order("discovered_at", desc=True)
+        .order("created_at", desc=True)
+        .range(offset, offset + limit - 1)
+        .execute()
+    )
 
     return response.data
 
@@ -1018,33 +1201,34 @@ async def get_card(card_id: uuid.UUID):
     else:
         raise HTTPException(status_code=404, detail="Card not found")
 
+
 @app.post("/api/v1/cards", response_model=Card)
 async def create_card(
-    card_data: CardCreate,
-    current_user: dict = Depends(get_current_user)
+    card_data: CardCreate, current_user: dict = Depends(get_current_user)
 ):
     """Create new card"""
     # Generate slug from name
     slug = card_data.name.lower().replace(" ", "-").replace(":", "").replace("/", "-")
-    
+
     card_dict = card_data.dict()
-    card_dict.update({
-        "slug": slug,
-        "created_by": current_user["id"],
-        "created_at": datetime.now().isoformat(),
-        "updated_at": datetime.now().isoformat()
-    })
-    
+    card_dict.update(
+        {
+            "slug": slug,
+            "created_by": current_user["id"],
+            "created_at": datetime.now().isoformat(),
+            "updated_at": datetime.now().isoformat(),
+        }
+    )
+
     response = supabase.table("cards").insert(card_dict).execute()
     if response.data:
         return Card(**response.data[0])
     else:
         raise HTTPException(status_code=400, detail="Failed to create card")
 
+
 @app.post("/api/v1/cards/search")
-async def search_cards(
-    request: AdvancedSearchRequest
-):
+async def search_cards(request: AdvancedSearchRequest):
     """
     Advanced search for intelligence cards with filtering and vector similarity.
 
@@ -1057,15 +1241,16 @@ async def search_cards(
     """
     try:
         results = []
-        search_type = "vector" if request.use_vector_search and request.query else "text"
+        search_type = (
+            "vector" if request.use_vector_search and request.query else "text"
+        )
 
         # Vector search path
         if request.use_vector_search and request.query:
             try:
                 # Get embedding for search query (uses embedding client with specific API version)
                 embedding_response = azure_openai_embedding_client.embeddings.create(
-                    model=get_embedding_deployment(),
-                    input=request.query
+                    model=get_embedding_deployment(), input=request.query
                 )
                 query_embedding = embedding_response.data[0].embedding
 
@@ -1075,8 +1260,10 @@ async def search_cards(
                     {
                         "query_embedding": query_embedding,
                         "match_threshold": 0.5,
-                        "match_count": request.limit + request.offset + 100  # Get extra for filtering
-                    }
+                        "match_count": request.limit
+                        + request.offset
+                        + 100,  # Get extra for filtering
+                    },
                 ).execute()
 
                 # Process results with similarity scores
@@ -1085,7 +1272,9 @@ async def search_cards(
                 results = search_response.data or []
 
             except Exception as vector_error:
-                logger.warning(f"Vector search failed, falling back to text: {vector_error}")
+                logger.warning(
+                    f"Vector search failed, falling back to text: {vector_error}"
+                )
                 search_type = "text"
                 results = []
 
@@ -1100,7 +1289,9 @@ async def search_cards(
                     f"name.ilike.%{request.query}%,summary.ilike.%{request.query}%"
                 )
 
-            response = query_builder.limit(request.limit + request.offset + 100).execute()
+            response = query_builder.limit(
+                request.limit + request.offset + 100
+            ).execute()
             results = response.data or []
 
             # Add placeholder relevance for text search
@@ -1110,9 +1301,12 @@ async def search_cards(
         # If no query provided, fetch all cards (for filter-only searches)
         if not request.query:
             search_type = "filter"
-            response = supabase.table("cards").select("*").limit(
-                request.limit + request.offset + 100
-            ).execute()
+            response = (
+                supabase.table("cards")
+                .select("*")
+                .limit(request.limit + request.offset + 100)
+                .execute()
+            )
             results = response.data or []
 
         # Apply filters
@@ -1123,7 +1317,7 @@ async def search_cards(
         total_count = len(results)
 
         # Apply pagination
-        results = results[request.offset:request.offset + request.limit]
+        results = results[request.offset : request.offset + request.limit]
 
         # Convert to response format
         result_items = [
@@ -1149,7 +1343,9 @@ async def search_cards(
                 created_at=item.get("created_at"),
                 updated_at=item.get("updated_at"),
                 search_relevance=item.get("search_relevance"),
-                match_highlights=_extract_highlights(item, request.query) if request.query else None
+                match_highlights=(
+                    _extract_highlights(item, request.query) if request.query else None
+                ),
             )
             for item in results
         ]
@@ -1159,7 +1355,7 @@ async def search_cards(
             total_count=total_count,
             query=request.query,
             filters_applied=request.filters,
-            search_type=search_type
+            search_type=search_type,
         )
 
     except Exception as e:
@@ -1167,7 +1363,9 @@ async def search_cards(
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 
 
-def _apply_search_filters(results: List[Dict[str, Any]], filters: SearchFilters) -> List[Dict[str, Any]]:
+def _apply_search_filters(
+    results: List[Dict[str, Any]], filters: SearchFilters
+) -> List[Dict[str, Any]]:
     """Apply advanced filters to search results."""
     filtered = results
 
@@ -1196,13 +1394,15 @@ def _apply_search_filters(results: List[Dict[str, Any]], filters: SearchFilters)
         if filters.date_range.start:
             start_str = filters.date_range.start.isoformat()
             filtered = [
-                r for r in filtered
+                r
+                for r in filtered
                 if r.get("created_at") and r["created_at"][:10] >= start_str
             ]
         if filters.date_range.end:
             end_str = filters.date_range.end.isoformat()
             filtered = [
-                r for r in filtered
+                r
+                for r in filtered
                 if r.get("created_at") and r["created_at"][:10] <= end_str
             ]
 
@@ -1213,7 +1413,9 @@ def _apply_search_filters(results: List[Dict[str, Any]], filters: SearchFilters)
     return filtered
 
 
-def _apply_score_filters(results: List[Dict[str, Any]], thresholds) -> List[Dict[str, Any]]:
+def _apply_score_filters(
+    results: List[Dict[str, Any]], thresholds
+) -> List[Dict[str, Any]]:
     """Apply score threshold filters to results."""
     filtered = results
 
@@ -1231,12 +1433,14 @@ def _apply_score_filters(results: List[Dict[str, Any]], thresholds) -> List[Dict
         if threshold:
             if threshold.min is not None:
                 filtered = [
-                    r for r in filtered
+                    r
+                    for r in filtered
                     if r.get(field_name) is not None and r[field_name] >= threshold.min
                 ]
             if threshold.max is not None:
                 filtered = [
-                    r for r in filtered
+                    r
+                    for r in filtered
                     if r.get(field_name) is not None and r[field_name] <= threshold.max
                 ]
 
@@ -1263,7 +1467,11 @@ def _extract_highlights(item: Dict[str, Any], query: str) -> Optional[List[str]]
         pos = summary.lower().find(query_lower)
         start = max(0, pos - 50)
         end = min(len(summary), pos + len(query) + 50)
-        snippet = ("..." if start > 0 else "") + summary[start:end] + ("..." if end < len(summary) else "")
+        snippet = (
+            ("..." if start > 0 else "")
+            + summary[start:end]
+            + ("..." if end < len(summary) else "")
+        )
         highlights.append(snippet)
 
     return highlights if highlights else None
@@ -1286,9 +1494,7 @@ SCORE_FIELDS = [
 
 
 def _record_score_history(
-    old_card_data: Dict[str, Any],
-    new_card_data: Dict[str, Any],
-    card_id: str
+    old_card_data: Dict[str, Any], new_card_data: Dict[str, Any], card_id: str
 ) -> bool:
     """
     Record score history to card_score_history table if any scores have changed.
@@ -1314,7 +1520,9 @@ def _record_score_history(
             break
 
     if not scores_changed:
-        logger.debug(f"No score changes detected for card {card_id}, skipping history record")
+        logger.debug(
+            f"No score changes detected for card {card_id}, skipping history record"
+        )
         return False
 
     try:
@@ -1350,7 +1558,7 @@ def _record_stage_history(
     card_id: str,
     user_id: Optional[str] = None,
     trigger: str = "manual",
-    reason: Optional[str] = None
+    reason: Optional[str] = None,
 ) -> bool:
     """
     Record stage transition to card_timeline table if stage or horizon has changed.
@@ -1398,11 +1606,13 @@ def _record_stage_history(
                 "old_horizon": old_horizon,
                 "new_horizon": new_horizon,
             },
-            "created_at": now
+            "created_at": now,
         }
 
         supabase.table("card_timeline").insert(timeline_entry).execute()
-        logger.info(f"Recorded stage transition for card {card_id}: {old_stage} -> {new_stage}")
+        logger.info(
+            f"Recorded stage transition for card {card_id}: {old_stage} -> {new_stage}"
+        )
         return True
 
     except Exception as e:
@@ -1415,13 +1625,26 @@ def _record_stage_history(
 @app.get("/api/v1/cards/{card_id}/sources")
 async def get_card_sources(card_id: str):
     """Get sources for a card"""
-    response = supabase.table("sources").select("*").eq("card_id", card_id).order("relevance_score", desc=True).execute()
+    response = (
+        supabase.table("sources")
+        .select("*")
+        .eq("card_id", card_id)
+        .order("relevance_score", desc=True)
+        .execute()
+    )
     return response.data
+
 
 @app.get("/api/v1/cards/{card_id}/timeline")
 async def get_card_timeline(card_id: str):
     """Get timeline for a card"""
-    response = supabase.table("card_timeline").select("*").eq("card_id", card_id).order("created_at", desc=True).execute()
+    response = (
+        supabase.table("card_timeline")
+        .select("*")
+        .eq("card_id", card_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
     return response.data
 
 
@@ -1430,7 +1653,7 @@ async def get_card_score_history(
     card_id: str,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Get historical score data for a card to enable trend visualization.
@@ -1465,21 +1688,22 @@ async def get_card_score_history(
     response = query.order("recorded_at", desc=True).execute()
 
     # Convert to ScoreHistory models
-    history_records = [ScoreHistory(**record) for record in response.data] if response.data else []
+    history_records = (
+        [ScoreHistory(**record) for record in response.data] if response.data else []
+    )
 
     return ScoreHistoryResponse(
         history=history_records,
         card_id=card_id,
         total_count=len(history_records),
         start_date=start_date,
-        end_date=end_date
+        end_date=end_date,
     )
 
 
 @app.get("/api/v1/cards/{card_id}/stage-history", response_model=StageHistoryList)
 async def get_card_stage_history(
-    card_id: str,
-    current_user: dict = Depends(get_current_user)
+    card_id: str, current_user: dict = Depends(get_current_user)
 ):
     """
     Get maturity stage transition history for a card.
@@ -1504,9 +1728,16 @@ async def get_card_stage_history(
 
     # Query card_timeline for stage change events
     # Filter by event_type='stage_changed' to get only stage transitions
-    response = supabase.table("card_timeline").select(
-        "id, card_id, created_at, old_stage_id, new_stage_id, old_horizon, new_horizon, trigger, reason"
-    ).eq("card_id", card_id).eq("event_type", "stage_changed").order("created_at", desc=True).execute()
+    response = (
+        supabase.table("card_timeline")
+        .select(
+            "id, card_id, created_at, old_stage_id, new_stage_id, old_horizon, new_horizon, trigger, reason"
+        )
+        .eq("card_id", card_id)
+        .eq("event_type", "stage_changed")
+        .order("created_at", desc=True)
+        .execute()
+    )
 
     # Convert to StageHistory models, mapping created_at to changed_at
     history_records = []
@@ -1516,30 +1747,30 @@ async def get_card_stage_history(
             if record.get("new_stage_id") is None:
                 continue
 
-            history_records.append(StageHistory(
-                id=record["id"],
-                card_id=record["card_id"],
-                changed_at=record["created_at"],  # Map created_at to changed_at
-                old_stage_id=record.get("old_stage_id"),
-                new_stage_id=record["new_stage_id"],
-                old_horizon=record.get("old_horizon"),
-                new_horizon=record.get("new_horizon", "H3"),  # Default to H3 if not set
-                trigger=record.get("trigger"),
-                reason=record.get("reason")
-            ))
+            history_records.append(
+                StageHistory(
+                    id=record["id"],
+                    card_id=record["card_id"],
+                    changed_at=record["created_at"],  # Map created_at to changed_at
+                    old_stage_id=record.get("old_stage_id"),
+                    new_stage_id=record["new_stage_id"],
+                    old_horizon=record.get("old_horizon"),
+                    new_horizon=record.get(
+                        "new_horizon", "H3"
+                    ),  # Default to H3 if not set
+                    trigger=record.get("trigger"),
+                    reason=record.get("reason"),
+                )
+            )
 
     return StageHistoryList(
-        history=history_records,
-        total_count=len(history_records),
-        card_id=card_id
+        history=history_records, total_count=len(history_records), card_id=card_id
     )
 
 
 @app.get("/api/v1/cards/{card_id}/related", response_model=RelatedCardsList)
 async def get_related_cards(
-    card_id: str,
-    limit: int = 20,
-    current_user: dict = Depends(get_current_user)
+    card_id: str, limit: int = 20, current_user: dict = Depends(get_current_user)
 ):
     """
     Get cards related to the specified card for concept network visualization.
@@ -1562,14 +1793,26 @@ async def get_related_cards(
 
     # Query relationships where this card is either source or target
     # Get relationships where card is the source
-    source_response = supabase.table("card_relationships").select(
-        "id, source_card_id, target_card_id, relationship_type, strength, created_at"
-    ).eq("source_card_id", card_id).limit(limit).execute()
+    source_response = (
+        supabase.table("card_relationships")
+        .select(
+            "id, source_card_id, target_card_id, relationship_type, strength, created_at"
+        )
+        .eq("source_card_id", card_id)
+        .limit(limit)
+        .execute()
+    )
 
     # Get relationships where card is the target
-    target_response = supabase.table("card_relationships").select(
-        "id, source_card_id, target_card_id, relationship_type, strength, created_at"
-    ).eq("target_card_id", card_id).limit(limit).execute()
+    target_response = (
+        supabase.table("card_relationships")
+        .select(
+            "id, source_card_id, target_card_id, relationship_type, strength, created_at"
+        )
+        .eq("target_card_id", card_id)
+        .limit(limit)
+        .execute()
+    )
 
     # Combine and deduplicate relationships
     all_relationships = []
@@ -1582,11 +1825,7 @@ async def get_related_cards(
 
     # If no relationships found, return empty list
     if not all_relationships:
-        return RelatedCardsList(
-            related_cards=[],
-            total_count=0,
-            source_card_id=card_id
-        )
+        return RelatedCardsList(related_cards=[], total_count=0, source_card_id=card_id)
 
     # Get the related card IDs (the "other" card in each relationship)
     related_card_ids = set()
@@ -1597,9 +1836,12 @@ async def get_related_cards(
             related_card_ids.add(rel["source_card_id"])
 
     # Fetch full card details for all related cards
-    cards_response = supabase.table("cards").select(
-        "id, name, slug, summary, pillar_id, stage_id, horizon"
-    ).in_("id", list(related_card_ids)).execute()
+    cards_response = (
+        supabase.table("cards")
+        .select("id, name, slug, summary, pillar_id, stage_id, horizon")
+        .in_("id", list(related_card_ids))
+        .execute()
+    )
 
     # Create a lookup map for cards
     cards_map = {card["id"]: card for card in (cards_response.data or [])}
@@ -1619,18 +1861,20 @@ async def get_related_cards(
             # Skip if card doesn't exist (orphaned relationship)
             continue
 
-        related_cards.append(RelatedCard(
-            id=card_data["id"],
-            name=card_data["name"],
-            slug=card_data["slug"],
-            summary=card_data.get("summary"),
-            pillar_id=card_data.get("pillar_id"),
-            stage_id=card_data.get("stage_id"),
-            horizon=card_data.get("horizon"),
-            relationship_type=rel["relationship_type"],
-            relationship_strength=rel.get("strength"),
-            relationship_id=rel["id"]
-        ))
+        related_cards.append(
+            RelatedCard(
+                id=card_data["id"],
+                name=card_data["name"],
+                slug=card_data["slug"],
+                summary=card_data.get("summary"),
+                pillar_id=card_data.get("pillar_id"),
+                stage_id=card_data.get("stage_id"),
+                horizon=card_data.get("horizon"),
+                relationship_type=rel["relationship_type"],
+                relationship_strength=rel.get("strength"),
+                relationship_id=rel["id"],
+            )
+        )
 
     # Limit the results to the specified limit
     related_cards = related_cards[:limit]
@@ -1638,7 +1882,7 @@ async def get_related_cards(
     return RelatedCardsList(
         related_cards=related_cards,
         total_count=len(related_cards),
-        source_card_id=card_id
+        source_card_id=card_id,
     )
 
 
@@ -1647,7 +1891,7 @@ async def compare_cards(
     card_ids: str,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Compare two cards side-by-side with their historical data.
@@ -1673,7 +1917,7 @@ async def compare_cards(
     if len(ids) != 2:
         raise HTTPException(
             status_code=400,
-            detail="Exactly 2 card IDs must be provided (comma-separated)"
+            detail="Exactly 2 card IDs must be provided (comma-separated)",
         )
 
     card_id_1, card_id_2 = ids
@@ -1681,11 +1925,16 @@ async def compare_cards(
     # Helper function to fetch all data for a single card (synchronous)
     def fetch_card_comparison_data(card_id: str) -> CardComparisonItem:
         # Fetch card data
-        card_response = supabase.table("cards").select(
-            "id, name, slug, summary, pillar_id, goal_id, stage_id, horizon, "
-            "maturity_score, velocity_score, novelty_score, impact_score, "
-            "relevance_score, risk_score, opportunity_score, created_at, updated_at"
-        ).eq("id", card_id).execute()
+        card_response = (
+            supabase.table("cards")
+            .select(
+                "id, name, slug, summary, pillar_id, goal_id, stage_id, horizon, "
+                "maturity_score, velocity_score, novelty_score, impact_score, "
+                "relevance_score, risk_score, opportunity_score, created_at, updated_at"
+            )
+            .eq("id", card_id)
+            .execute()
+        )
 
         if not card_response.data:
             raise HTTPException(status_code=404, detail=f"Card not found: {card_id}")
@@ -1693,41 +1942,54 @@ async def compare_cards(
         card_data = CardData(**card_response.data[0])
 
         # Fetch score history
-        score_query = supabase.table("card_score_history").select("*").eq("card_id", card_id)
+        score_query = (
+            supabase.table("card_score_history").select("*").eq("card_id", card_id)
+        )
         if start_date:
             score_query = score_query.gte("recorded_at", start_date.isoformat())
         if end_date:
             score_query = score_query.lte("recorded_at", end_date.isoformat())
         score_response = score_query.order("recorded_at", desc=True).execute()
 
-        score_history = [ScoreHistory(**record) for record in score_response.data] if score_response.data else []
+        score_history = (
+            [ScoreHistory(**record) for record in score_response.data]
+            if score_response.data
+            else []
+        )
 
         # Fetch stage history from card_timeline
-        stage_response = supabase.table("card_timeline").select(
-            "id, card_id, created_at, old_stage_id, new_stage_id, old_horizon, new_horizon, trigger, reason"
-        ).eq("card_id", card_id).eq("event_type", "stage_changed").order("created_at", desc=True).execute()
+        stage_response = (
+            supabase.table("card_timeline")
+            .select(
+                "id, card_id, created_at, old_stage_id, new_stage_id, old_horizon, new_horizon, trigger, reason"
+            )
+            .eq("card_id", card_id)
+            .eq("event_type", "stage_changed")
+            .order("created_at", desc=True)
+            .execute()
+        )
 
         stage_history = []
         if stage_response.data:
             for record in stage_response.data:
                 if record.get("new_stage_id") is None:
                     continue
-                stage_history.append(StageHistory(
-                    id=record["id"],
-                    card_id=record["card_id"],
-                    changed_at=record["created_at"],
-                    old_stage_id=record.get("old_stage_id"),
-                    new_stage_id=record["new_stage_id"],
-                    old_horizon=record.get("old_horizon"),
-                    new_horizon=record.get("new_horizon", "H3"),
-                    trigger=record.get("trigger"),
-                    reason=record.get("reason")
-                ))
+                stage_history.append(
+                    StageHistory(
+                        id=record["id"],
+                        card_id=record["card_id"],
+                        changed_at=record["created_at"],
+                        old_stage_id=record.get("old_stage_id"),
+                        new_stage_id=record["new_stage_id"],
+                        old_horizon=record.get("old_horizon"),
+                        new_horizon=record.get("new_horizon", "H3"),
+                        trigger=record.get("trigger"),
+                        reason=record.get("reason"),
+                    )
+                )
 
         return CardComparisonItem(
-            card=card_data,
-            score_history=score_history,
-            stage_history=stage_history
+            card=card_data, score_history=score_history, stage_history=stage_history
         )
 
     # Fetch data for both cards in parallel using asyncio.gather with to_thread
@@ -1735,7 +1997,7 @@ async def compare_cards(
     try:
         card1_data, card2_data = await asyncio.gather(
             asyncio.to_thread(fetch_card_comparison_data, card_id_1),
-            asyncio.to_thread(fetch_card_comparison_data, card_id_2)
+            asyncio.to_thread(fetch_card_comparison_data, card_id_2),
         )
     except HTTPException:
         # Re-raise HTTP exceptions as-is
@@ -1745,65 +2007,80 @@ async def compare_cards(
         raise HTTPException(status_code=500, detail="Failed to fetch comparison data")
 
     return CardComparisonResponse(
-        card1=card1_data,
-        card2=card2_data,
-        comparison_generated_at=datetime.now()
+        card1=card1_data, card2=card2_data, comparison_generated_at=datetime.now()
     )
 
 
 @app.post("/api/v1/cards/{card_id}/follow")
-async def follow_card(
-    card_id: str,
-    current_user: dict = Depends(get_current_user)
-):
+async def follow_card(card_id: str, current_user: dict = Depends(get_current_user)):
     """Follow a card"""
-    response = supabase.table("card_follows").insert({
-        "user_id": current_user["id"],
-        "card_id": card_id
-    }).execute()
+    response = (
+        supabase.table("card_follows")
+        .insert({"user_id": current_user["id"], "card_id": card_id})
+        .execute()
+    )
     return {"status": "followed"}
 
+
 @app.delete("/api/v1/cards/{card_id}/follow")
-async def unfollow_card(
-    card_id: str,
-    current_user: dict = Depends(get_current_user)
-):
+async def unfollow_card(card_id: str, current_user: dict = Depends(get_current_user)):
     """Unfollow a card"""
-    response = supabase.table("card_follows").delete().eq("user_id", current_user["id"]).eq("card_id", card_id).execute()
+    response = (
+        supabase.table("card_follows")
+        .delete()
+        .eq("user_id", current_user["id"])
+        .eq("card_id", card_id)
+        .execute()
+    )
     return {"status": "unfollowed"}
+
 
 @app.get("/api/v1/me/following")
 async def get_following_cards(current_user: dict = Depends(get_current_user)):
     """Get cards followed by current user"""
-    response = supabase.table("card_follows").select("""
+    response = (
+        supabase.table("card_follows")
+        .select(
+            """
         *,
         cards!inner(*)
-    """).eq("user_id", current_user["id"]).execute()
+    """
+        )
+        .eq("user_id", current_user["id"])
+        .execute()
+    )
     return response.data
+
 
 # Notes endpoints
 @app.get("/api/v1/cards/{card_id}/notes")
 async def get_card_notes(card_id: str, current_user: dict = Depends(get_current_user)):
     """Get notes for a card"""
-    response = supabase.table("card_notes").select("*").eq("card_id", card_id).or_(
-        f"user_id.eq.{current_user['id']},is_private.eq.false"
-    ).order("created_at", desc=True).execute()
+    response = (
+        supabase.table("card_notes")
+        .select("*")
+        .eq("card_id", card_id)
+        .or_(f"user_id.eq.{current_user['id']},is_private.eq.false")
+        .order("created_at", desc=True)
+        .execute()
+    )
     return [Note(**note) for note in response.data]
+
 
 @app.post("/api/v1/cards/{card_id}/notes")
 async def create_note(
-    card_id: str,
-    note_data: NoteCreate,
-    current_user: dict = Depends(get_current_user)
+    card_id: str, note_data: NoteCreate, current_user: dict = Depends(get_current_user)
 ):
     """Create note for a card"""
     note_dict = note_data.dict()
-    note_dict.update({
-        "user_id": current_user["id"],
-        "card_id": card_id,
-        "created_at": datetime.now().isoformat()
-    })
-    
+    note_dict.update(
+        {
+            "user_id": current_user["id"],
+            "card_id": card_id,
+            "created_at": datetime.now().isoformat(),
+        }
+    )
+
     response = supabase.table("card_notes").insert(note_dict).execute()
     if response.data:
         return Note(**response.data[0])
@@ -1815,12 +2092,13 @@ async def create_note(
 # Card Export Endpoints
 # ============================================================================
 
+
 @app.get("/api/v1/cards/{card_id}/export/{format}")
 async def export_card(
     card_id: str,
     format: str,
     include_charts: bool = True,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Export a single card in the specified format.
@@ -1845,44 +2123,60 @@ async def export_card(
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid export format: {format}. Supported formats: pdf, pptx, csv"
+            detail=f"Invalid export format: {format}. Supported formats: pdf, pptx, csv",
         )
 
     # Fetch card from database with joined reference data
-    response = supabase.table("cards").select(
-        "*, pillars(name), goals(name), stages(name)"
-    ).eq("id", card_id).single().execute()
+    response = (
+        supabase.table("cards")
+        .select("*, pillars(name), goals(name), stages(name)")
+        .eq("id", card_id)
+        .single()
+        .execute()
+    )
 
     if not response.data:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Card not found: {card_id}"
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Card not found: {card_id}"
         )
 
     card_data = response.data
 
     # Extract joined names
-    pillar_name = card_data.get("pillars", {}).get("name") if card_data.get("pillars") else None
-    goal_name = card_data.get("goals", {}).get("name") if card_data.get("goals") else None
-    stage_name = card_data.get("stages", {}).get("name") if card_data.get("stages") else None
+    pillar_name = (
+        card_data.get("pillars", {}).get("name") if card_data.get("pillars") else None
+    )
+    goal_name = (
+        card_data.get("goals", {}).get("name") if card_data.get("goals") else None
+    )
+    stage_name = (
+        card_data.get("stages", {}).get("name") if card_data.get("stages") else None
+    )
 
     # Fetch latest completed deep research report for this card
     research_report = None
     research_reports = []
     try:
-        research_response = supabase.table("research_tasks").select(
-            "id, task_type, result_summary, completed_at"
-        ).eq("card_id", card_id).eq("status", "completed").eq(
-            "task_type", "deep_research"
-        ).order("completed_at", desc=True).limit(3).execute()
+        research_response = (
+            supabase.table("research_tasks")
+            .select("id, task_type, result_summary, completed_at")
+            .eq("card_id", card_id)
+            .eq("status", "completed")
+            .eq("task_type", "deep_research")
+            .order("completed_at", desc=True)
+            .limit(3)
+            .execute()
+        )
 
         if research_response.data:
             for task in research_response.data:
                 if task.get("result_summary", {}).get("report_preview"):
-                    research_reports.append({
-                        "completed_at": task.get("completed_at"),
-                        "report": task["result_summary"]["report_preview"]
-                    })
+                    research_reports.append(
+                        {
+                            "completed_at": task.get("completed_at"),
+                            "report": task["result_summary"]["report_preview"],
+                        }
+                    )
             # Use the most recent report as the main one
             if research_reports:
                 research_report = research_reports[0]["report"]
@@ -1921,7 +2215,7 @@ async def export_card(
         logger.error(f"Failed to create CardExportData: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to prepare card data for export"
+            detail="Failed to prepare card data for export",
         )
 
     # Initialize export service
@@ -1930,7 +2224,9 @@ async def export_card(
     # Generate export based on format
     try:
         if export_format == ExportFormat.PDF:
-            file_path = await export_service.generate_pdf(export_data, include_charts=include_charts)
+            file_path = await export_service.generate_pdf(
+                export_data, include_charts=include_charts
+            )
             filename = get_export_filename(export_data.name, export_format)
             content_type = EXPORT_CONTENT_TYPES[export_format]
 
@@ -1939,11 +2235,13 @@ async def export_card(
                 path=file_path,
                 filename=filename,
                 media_type=content_type,
-                background=None  # File will be cleaned up after response is sent
+                background=None,  # File will be cleaned up after response is sent
             )
 
         elif export_format == ExportFormat.PPTX:
-            file_path = await export_service.generate_pptx(export_data, include_charts=include_charts)
+            file_path = await export_service.generate_pptx(
+                export_data, include_charts=include_charts
+            )
             filename = get_export_filename(export_data.name, export_format)
             content_type = EXPORT_CONTENT_TYPES[export_format]
 
@@ -1951,7 +2249,7 @@ async def export_card(
                 path=file_path,
                 filename=filename,
                 media_type=content_type,
-                background=None
+                background=None,
             )
 
         elif export_format == ExportFormat.CSV:
@@ -1961,17 +2259,15 @@ async def export_card(
 
             # Return streaming response for CSV
             return StreamingResponse(
-                io.BytesIO(csv_content.encode('utf-8')),
+                io.BytesIO(csv_content.encode("utf-8")),
                 media_type=content_type,
-                headers={
-                    "Content-Disposition": f'attachment; filename="{filename}"'
-                }
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
             )
 
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Unsupported export format: {format}"
+                detail=f"Unsupported export format: {format}",
             )
 
     except HTTPException:
@@ -1980,7 +2276,7 @@ async def export_card(
         logger.error(f"Export generation failed: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate export: {str(e)}"
+            detail=f"Failed to generate export: {str(e)}",
         )
 
 
@@ -1988,13 +2284,14 @@ async def export_card(
 # Workstream Export Endpoints
 # ============================================================================
 
+
 @app.get("/api/v1/workstreams/{workstream_id}/export/{format}")
 async def export_workstream_report(
     workstream_id: str,
     format: str,
     current_user: dict = Depends(get_current_user),
     include_charts: bool = True,
-    max_cards: int = 50
+    max_cards: int = 50,
 ):
     """
     Export a workstream report in the specified format.
@@ -2032,7 +2329,7 @@ async def export_workstream_report(
     if format_lower not in ["pdf", "pptx"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid export format '{format}'. Workstream reports support 'pdf' or 'pptx' formats only. Use individual card export for CSV."
+            detail=f"Invalid export format '{format}'. Workstream reports support 'pdf' or 'pptx' formats only. Use individual card export for CSV.",
         )
 
     # Validate max_cards
@@ -2040,11 +2337,12 @@ async def export_workstream_report(
         max_cards = min(max(max_cards, 1), 100)
 
     # Verify workstream exists and belongs to user
-    ws_response = supabase.table("workstreams").select("*").eq("id", workstream_id).execute()
+    ws_response = (
+        supabase.table("workstreams").select("*").eq("id", workstream_id).execute()
+    )
     if not ws_response.data:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Workstream not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Workstream not found"
         )
 
     workstream = ws_response.data[0]
@@ -2053,7 +2351,7 @@ async def export_workstream_report(
     if workstream.get("user_id") != current_user["id"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to export this workstream"
+            detail="Not authorized to export this workstream",
         )
 
     # Initialize export service
@@ -2071,34 +2369,32 @@ async def export_workstream_report(
             export_path = await export_service.generate_workstream_pdf(
                 workstream_id=workstream_id,
                 include_charts=include_charts,
-                max_cards=max_cards
+                max_cards=max_cards,
             )
         else:
             # Generate PowerPoint report
             # First fetch workstream and cards for PPTX generation
             workstream_data, cards = await export_service.get_workstream_cards(
-                workstream_id=workstream_id,
-                max_cards=max_cards
+                workstream_id=workstream_id, max_cards=max_cards
             )
 
             if not workstream_data:
                 raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Workstream not found"
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Workstream not found"
                 )
 
             export_path = await export_service.generate_workstream_pptx(
                 workstream=workstream_data,
                 cards=cards,
                 include_charts=include_charts,
-                include_card_details=True
+                include_card_details=True,
             )
 
         # Verify file was created
         if not export_path or not Path(export_path).exists():
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Export generation failed - file not created"
+                detail="Export generation failed - file not created",
             )
 
         # Generate filename for download
@@ -2106,7 +2402,9 @@ async def export_workstream_report(
         filename = get_export_filename(workstream_name, export_format)
 
         # Get content type
-        content_type = EXPORT_CONTENT_TYPES.get(export_format, "application/octet-stream")
+        content_type = EXPORT_CONTENT_TYPES.get(
+            export_format, "application/octet-stream"
+        )
 
         logger.info(f"Workstream export generated: {workstream_id} as {format_lower}")
 
@@ -2116,7 +2414,7 @@ async def export_workstream_report(
             path=export_path,
             filename=filename,
             media_type=content_type,
-            background=None  # Let FileResponse handle the response
+            background=None,  # Let FileResponse handle the response
         )
 
     except HTTPException:
@@ -2132,7 +2430,7 @@ async def export_workstream_report(
                 pass
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Export generation failed: {str(e)}"
+            detail=f"Export generation failed: {str(e)}",
         )
 
 
@@ -2140,10 +2438,9 @@ async def export_workstream_report(
 # Card Review Workflow Endpoints
 # ============================================================================
 
+
 @app.get("/api/v1/discovery/pending/count")
-async def get_pending_review_count(
-    current_user: dict = Depends(get_current_user)
-):
+async def get_pending_review_count(current_user: dict = Depends(get_current_user)):
     """
     Get count of cards pending review.
 
@@ -2168,7 +2465,7 @@ async def get_pending_review_count(
 async def review_card(
     card_id: str,
     review_data: CardReviewRequest,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Review a discovered card.
@@ -2204,7 +2501,7 @@ async def review_card(
             "status": "active",
             "reviewed_at": now,
             "reviewed_by": current_user["id"],
-            "updated_at": now
+            "updated_at": now,
         }
 
     elif review_data.action == "reject":
@@ -2214,43 +2511,58 @@ async def review_card(
             "rejected_at": now,
             "rejected_by": current_user["id"],
             "rejection_reason": review_data.reason,
-            "updated_at": now
+            "updated_at": now,
         }
 
     elif review_data.action == "edit_approve":
         # Apply updates then approve
         if not review_data.updates:
             raise HTTPException(
-                status_code=400,
-                detail="Updates required for edit_approve action"
+                status_code=400, detail="Updates required for edit_approve action"
             )
 
         # Allowed fields for editing
         allowed_fields = {
-            "name", "summary", "description", "pillar_id", "goal_id",
-            "anchor_id", "stage_id", "horizon", "novelty_score",
-            "maturity_score", "impact_score", "relevance_score"
+            "name",
+            "summary",
+            "description",
+            "pillar_id",
+            "goal_id",
+            "anchor_id",
+            "stage_id",
+            "horizon",
+            "novelty_score",
+            "maturity_score",
+            "impact_score",
+            "relevance_score",
         }
 
         # Filter updates to only allowed fields
         update_data = {
-            k: v for k, v in review_data.updates.items()
-            if k in allowed_fields
+            k: v for k, v in review_data.updates.items() if k in allowed_fields
         }
 
         # Add approval metadata
-        update_data.update({
-            "review_status": "active",
-            "status": "active",
-            "reviewed_at": now,
-            "reviewed_by": current_user["id"],
-            "review_notes": review_data.reason,
-            "updated_at": now
-        })
+        update_data.update(
+            {
+                "review_status": "active",
+                "status": "active",
+                "reviewed_at": now,
+                "reviewed_by": current_user["id"],
+                "review_notes": review_data.reason,
+                "updated_at": now,
+            }
+        )
 
         # Update slug if name changed
         if "name" in update_data:
-            update_data["slug"] = update_data["name"].lower().replace(" ", "-").replace(":", "").replace("/", "-")
+            update_data["slug"] = (
+                update_data["name"]
+                .lower()
+                .replace(" ", "-")
+                .replace(":", "")
+                .replace("/", "-")
+            )
 
     else:
         raise HTTPException(status_code=400, detail="Invalid review action")
@@ -2270,9 +2582,13 @@ async def review_card(
             "metadata": {
                 "action": review_data.action,
                 "reason": review_data.reason,
-                "updates_applied": list(update_data.keys()) if review_data.action == "edit_approve" else None
+                "updates_applied": (
+                    list(update_data.keys())
+                    if review_data.action == "edit_approve"
+                    else None
+                ),
             },
-            "created_at": now
+            "created_at": now,
         }
         supabase.table("card_timeline").insert(timeline_entry).execute()
 
@@ -2280,9 +2596,7 @@ async def review_card(
         if review_data.action == "edit_approve":
             # Record score history if any score fields changed
             _record_score_history(
-                old_card_data=card,
-                new_card_data=updated_card,
-                card_id=card_id
+                old_card_data=card, new_card_data=updated_card, card_id=card_id
             )
 
             # Record stage history if stage or horizon changed
@@ -2292,7 +2606,7 @@ async def review_card(
                 card_id=card_id,
                 user_id=current_user.get("id"),
                 trigger="review",
-                reason=review_data.reason
+                reason=review_data.reason,
             )
 
         return updated_card
@@ -2305,7 +2619,7 @@ async def review_card(
 async def bulk_review_cards(
     request: Request,
     bulk_data: BulkReviewRequest,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Bulk approve or reject multiple cards using batch operations.
@@ -2325,8 +2639,14 @@ async def bulk_review_cards(
 
     try:
         # Step 1: Verify all cards exist in a single query
-        existing_cards = supabase.table("cards").select("id").in_("id", card_ids).execute()
-        existing_ids = {card["id"] for card in existing_cards.data} if existing_cards.data else set()
+        existing_cards = (
+            supabase.table("cards").select("id").in_("id", card_ids).execute()
+        )
+        existing_ids = (
+            {card["id"] for card in existing_cards.data}
+            if existing_cards.data
+            else set()
+        )
 
         # Identify cards that don't exist
         missing_ids = set(card_ids) - existing_ids
@@ -2337,10 +2657,7 @@ async def bulk_review_cards(
         valid_ids = list(existing_ids)
 
         if not valid_ids:
-            return {
-                "processed": 0,
-                "failed": failed
-            }
+            return {"processed": 0, "failed": failed}
 
         # Step 2: Prepare update data based on action
         if bulk_data.action == "approve":
@@ -2349,7 +2666,7 @@ async def bulk_review_cards(
                 "status": "active",
                 "reviewed_at": now,
                 "reviewed_by": current_user["id"],
-                "updated_at": now
+                "updated_at": now,
             }
         else:  # reject
             update_data = {
@@ -2357,20 +2674,19 @@ async def bulk_review_cards(
                 "rejected_at": now,
                 "rejected_by": current_user["id"],
                 "rejection_reason": bulk_data.reason,
-                "updated_at": now
+                "updated_at": now,
             }
 
         # Step 3: Batch update all valid cards in a single query
-        update_response = supabase.table("cards").update(update_data).in_("id", valid_ids).execute()
+        update_response = (
+            supabase.table("cards").update(update_data).in_("id", valid_ids).execute()
+        )
 
         if not update_response.data:
             # If batch update fails entirely, mark all as failed
             for card_id in valid_ids:
                 failed.append({"id": card_id, "error": "Batch update failed"})
-            return {
-                "processed": 0,
-                "failed": failed
-            }
+            return {"processed": 0, "failed": failed}
 
         # Get the IDs that were actually updated
         updated_ids = [card["id"] for card in update_response.data]
@@ -2390,31 +2706,25 @@ async def bulk_review_cards(
                     "description": f"Card bulk {bulk_data.action}d",
                     "user_id": current_user["id"],
                     "metadata": {"bulk_action": True, "reason": bulk_data.reason},
-                    "created_at": now
+                    "created_at": now,
                 }
                 for card_id in updated_ids
             ]
             # Insert all timeline entries in a single batch
             supabase.table("card_timeline").insert(timeline_entries).execute()
 
-        return {
-            "processed": processed_count,
-            "failed": failed
-        }
+        return {"processed": processed_count, "failed": failed}
 
     except Exception as e:
         # If an unexpected error occurs, report it with context
-        return {
-            "processed": 0,
-            "failed": [{"id": "batch_operation", "error": str(e)}]
-        }
+        return {"processed": 0, "failed": [{"id": "batch_operation", "error": str(e)}]}
 
 
 @app.post("/api/v1/cards/{card_id}/dismiss")
 async def dismiss_card(
     card_id: str,
     dismiss_data: Optional[CardDismissRequest] = None,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Dismiss a card for the current user (soft-delete).
@@ -2438,9 +2748,13 @@ async def dismiss_card(
     now = datetime.now().isoformat()
 
     # Check if user already dismissed this card
-    existing = supabase.table("user_card_dismissals").select("id").eq(
-        "user_id", current_user["id"]
-    ).eq("card_id", card_id).execute()
+    existing = (
+        supabase.table("user_card_dismissals")
+        .select("id")
+        .eq("user_id", current_user["id"])
+        .eq("card_id", card_id)
+        .execute()
+    )
 
     if existing.data:
         raise HTTPException(status_code=400, detail="Card already dismissed by user")
@@ -2450,21 +2764,27 @@ async def dismiss_card(
         "user_id": current_user["id"],
         "card_id": card_id,
         "reason": dismiss_data.reason if dismiss_data else None,
-        "dismissed_at": now
+        "dismissed_at": now,
     }
     supabase.table("user_card_dismissals").insert(dismissal_record).execute()
 
     # Check total dismissal count for this card
-    dismissal_count = supabase.table("user_card_dismissals").select(
-        "id", count="exact"
-    ).eq("card_id", card_id).execute()
+    dismissal_count = (
+        supabase.table("user_card_dismissals")
+        .select("id", count="exact")
+        .eq("card_id", card_id)
+        .execute()
+    )
 
     blocked = False
     if dismissal_count.count >= 3:
         # Add to discovery_blocks if not already blocked
-        block_check = supabase.table("discovery_blocks").select("id").eq(
-            "card_id", card_id
-        ).execute()
+        block_check = (
+            supabase.table("discovery_blocks")
+            .select("id")
+            .eq("card_id", card_id)
+            .execute()
+        )
 
         if not block_check.data:
             block_record = {
@@ -2472,25 +2792,24 @@ async def dismiss_card(
                 "topic_pattern": card["name"].lower(),
                 "reason": "Dismissed by multiple users",
                 "blocked_by_count": dismissal_count.count,
-                "created_at": now
+                "created_at": now,
             }
             supabase.table("discovery_blocks").insert(block_record).execute()
             blocked = True
-            logger.info(f"Card {card_id} blocked from discovery after {dismissal_count.count} dismissals")
+            logger.info(
+                f"Card {card_id} blocked from discovery after {dismissal_count.count} dismissals"
+            )
 
     return {
         "status": "dismissed",
         "card_id": card_id,
         "blocked": blocked,
-        "total_dismissals": dismissal_count.count
+        "total_dismissals": dismissal_count.count,
     }
 
 
 @app.get("/api/v1/cards/{card_id}/similar", response_model=List[SimilarCard])
-async def get_similar_cards(
-    card_id: str,
-    limit: int = 5
-):
+async def get_similar_cards(card_id: str, limit: int = 5):
     """
     Get cards similar to the specified card.
 
@@ -2505,7 +2824,12 @@ async def get_similar_cards(
         List of similar cards with similarity scores
     """
     # Get the source card's embedding
-    card_check = supabase.table("cards").select("id, name, embedding").eq("id", card_id).execute()
+    card_check = (
+        supabase.table("cards")
+        .select("id, name, embedding")
+        .eq("id", card_id)
+        .execute()
+    )
     if not card_check.data:
         raise HTTPException(status_code=404, detail="Card not found")
 
@@ -2523,8 +2847,8 @@ async def get_similar_cards(
             {
                 "query_embedding": card["embedding"],
                 "match_threshold": 0.7,
-                "match_count": limit + 1  # +1 to exclude self
-            }
+                "match_count": limit + 1,  # +1 to exclude self
+            },
         ).execute()
 
         # Filter out the source card itself
@@ -2534,7 +2858,7 @@ async def get_similar_cards(
                 name=c["name"],
                 summary=c.get("summary"),
                 similarity=c["similarity"],
-                pillar_id=c.get("pillar_id")
+                pillar_id=c.get("pillar_id"),
             )
             for c in response.data
             if c["id"] != card_id
@@ -2550,9 +2874,7 @@ async def get_similar_cards(
 
 @app.get("/api/v1/discovery/blocked-topics", response_model=List[BlockedTopic])
 async def list_blocked_topics(
-    current_user: dict = Depends(get_current_user),
-    limit: int = 50,
-    offset: int = 0
+    current_user: dict = Depends(get_current_user), limit: int = 50, offset: int = 0
 ):
     """
     List blocked discovery topics.
@@ -2567,9 +2889,13 @@ async def list_blocked_topics(
     Returns:
         List of blocked topic records
     """
-    response = supabase.table("discovery_blocks").select("*").order(
-        "created_at", desc=True
-    ).range(offset, offset + limit - 1).execute()
+    response = (
+        supabase.table("discovery_blocks")
+        .select("*")
+        .order("created_at", desc=True)
+        .range(offset, offset + limit - 1)
+        .execute()
+    )
 
     return [BlockedTopic(**block) for block in response.data]
 
@@ -2578,14 +2904,14 @@ async def list_blocked_topics(
 # Classification Validation Endpoints
 # ============================================================================
 
+
 @app.post(
     "/api/v1/validation/submit",
     response_model=ValidationSubmissionResponse,
-    status_code=status.HTTP_201_CREATED
+    status_code=status.HTTP_201_CREATED,
 )
 async def submit_validation_label(
-    submission: ValidationSubmission,
-    current_user: dict = Depends(get_current_user)
+    submission: ValidationSubmission, current_user: dict = Depends(get_current_user)
 ):
     """
     Submit a ground truth classification label for a card.
@@ -2607,9 +2933,12 @@ async def submit_validation_label(
     now = datetime.now().isoformat()
 
     # Verify the card exists and get its predicted pillar
-    card_check = supabase.table("cards").select("id, pillar_id").eq(
-        "id", submission.card_id
-    ).execute()
+    card_check = (
+        supabase.table("cards")
+        .select("id, pillar_id")
+        .eq("id", submission.card_id)
+        .execute()
+    )
 
     if not card_check.data:
         raise HTTPException(status_code=404, detail="Card not found")
@@ -2618,20 +2947,23 @@ async def submit_validation_label(
     predicted_pillar = card.get("pillar_id")
 
     # Check for duplicate validation by same reviewer
-    existing_check = supabase.table("classification_validations").select("id").eq(
-        "card_id", submission.card_id
-    ).eq("reviewer_id", submission.reviewer_id).execute()
+    existing_check = (
+        supabase.table("classification_validations")
+        .select("id")
+        .eq("card_id", submission.card_id)
+        .eq("reviewer_id", submission.reviewer_id)
+        .execute()
+    )
 
     if existing_check.data:
         raise HTTPException(
             status_code=400,
-            detail="Validation already exists for this card by this reviewer"
+            detail="Validation already exists for this card by this reviewer",
         )
 
     # Determine if classification is correct
     is_correct = (
-        predicted_pillar == submission.ground_truth_pillar
-        if predicted_pillar else None
+        predicted_pillar == submission.ground_truth_pillar if predicted_pillar else None
     )
 
     # Create validation record
@@ -2643,15 +2975,17 @@ async def submit_validation_label(
         "reviewer_id": submission.reviewer_id,
         "notes": submission.notes,
         "created_at": now,
-        "created_by": current_user["id"]
+        "created_by": current_user["id"],
     }
 
-    response = supabase.table("classification_validations").insert(
-        validation_record
-    ).execute()
+    response = (
+        supabase.table("classification_validations").insert(validation_record).execute()
+    )
 
     if not response.data:
-        raise HTTPException(status_code=500, detail="Failed to create validation record")
+        raise HTTPException(
+            status_code=500, detail="Failed to create validation record"
+        )
 
     logger.info(
         f"Validation submitted for card {submission.card_id}: "
@@ -2663,9 +2997,7 @@ async def submit_validation_label(
 
 
 @app.get("/api/v1/validation/stats")
-async def get_validation_stats(
-    current_user: dict = Depends(get_current_user)
-):
+async def get_validation_stats(current_user: dict = Depends(get_current_user)):
     """
     Get classification validation statistics.
 
@@ -2676,9 +3008,12 @@ async def get_validation_stats(
         Dictionary with total validations, correct count, accuracy percentage
     """
     # Get all validations with correctness determined
-    validations_response = supabase.table("classification_validations").select(
-        "is_correct"
-    ).not_.is_("is_correct", "null").execute()
+    validations_response = (
+        supabase.table("classification_validations")
+        .select("is_correct")
+        .not_.is_("is_correct", "null")
+        .execute()
+    )
 
     if not validations_response.data:
         return {
@@ -2686,7 +3021,7 @@ async def get_validation_stats(
             "correct_count": 0,
             "incorrect_count": 0,
             "accuracy_percentage": None,
-            "target_accuracy": 85.0
+            "target_accuracy": 85.0,
         }
 
     total = len(validations_response.data)
@@ -2700,15 +3035,13 @@ async def get_validation_stats(
         "incorrect_count": incorrect,
         "accuracy_percentage": round(accuracy, 2),
         "target_accuracy": 85.0,
-        "meets_target": accuracy >= 85.0
+        "meets_target": accuracy >= 85.0,
     }
 
 
 @app.get("/api/v1/validation/pending")
 async def get_cards_pending_validation(
-    current_user: dict = Depends(get_current_user),
-    limit: int = 20,
-    offset: int = 0
+    current_user: dict = Depends(get_current_user), limit: int = 20, offset: int = 0
 ):
     """
     Get cards that need validation (have predictions but no ground truth labels).
@@ -2724,22 +3057,33 @@ async def get_cards_pending_validation(
         List of cards needing validation
     """
     # Get cards with predictions
-    cards_response = supabase.table("cards").select(
-        "id, name, summary, pillar_id, created_at"
-    ).eq("status", "active").not_.is_("pillar_id", "null").order(
-        "created_at", desc=True
-    ).range(offset, offset + limit - 1).execute()
+    cards_response = (
+        supabase.table("cards")
+        .select("id, name, summary, pillar_id, created_at")
+        .eq("status", "active")
+        .not_.is_("pillar_id", "null")
+        .order("created_at", desc=True)
+        .range(offset, offset + limit - 1)
+        .execute()
+    )
 
     if not cards_response.data:
         return []
 
     # Get card IDs that already have validations
     card_ids = [c["id"] for c in cards_response.data]
-    validated_response = supabase.table("classification_validations").select(
-        "card_id"
-    ).in_("card_id", card_ids).execute()
+    validated_response = (
+        supabase.table("classification_validations")
+        .select("card_id")
+        .in_("card_id", card_ids)
+        .execute()
+    )
 
-    validated_ids = {v["card_id"] for v in validated_response.data} if validated_response.data else set()
+    validated_ids = (
+        {v["card_id"] for v in validated_response.data}
+        if validated_response.data
+        else set()
+    )
 
     # Filter to only cards without validations
     pending_cards = [c for c in cards_response.data if c["id"] not in validated_ids]
@@ -2749,8 +3093,7 @@ async def get_cards_pending_validation(
 
 @app.get("/api/v1/validation/accuracy", response_model=ClassificationMetrics)
 async def get_classification_accuracy(
-    current_user: dict = Depends(get_current_user),
-    days: Optional[int] = None
+    current_user: dict = Depends(get_current_user), days: Optional[int] = None
 ):
     """
     Compute classification accuracy from validation data.
@@ -2778,9 +3121,11 @@ async def get_classification_accuracy(
     from datetime import timedelta
 
     # Build query for validations with correctness determined
-    query = supabase.table("classification_validations").select(
-        "is_correct, ground_truth_pillar, predicted_pillar, created_at"
-    ).not_.is_("is_correct", "null")
+    query = (
+        supabase.table("classification_validations")
+        .select("is_correct, ground_truth_pillar, predicted_pillar, created_at")
+        .not_.is_("is_correct", "null")
+    )
 
     # Apply date filter if specified
     if days is not None and days > 0:
@@ -2796,33 +3141,37 @@ async def get_classification_accuracy(
             correct_count=0,
             accuracy_percentage=None,
             target_accuracy=85.0,
-            meets_target=False
+            meets_target=False,
         )
 
     # Compute accuracy metrics
     total_validations = len(validations_response.data)
     correct_count = sum(1 for v in validations_response.data if v.get("is_correct"))
-    accuracy_percentage = (correct_count / total_validations * 100) if total_validations > 0 else None
+    accuracy_percentage = (
+        (correct_count / total_validations * 100) if total_validations > 0 else None
+    )
 
     logger.info(
         f"Classification accuracy computed: {correct_count}/{total_validations} "
-        f"({accuracy_percentage:.2f}% accuracy)" if accuracy_percentage else
-        f"Classification accuracy: No validations available"
+        f"({accuracy_percentage:.2f}% accuracy)"
+        if accuracy_percentage
+        else f"Classification accuracy: No validations available"
     )
 
     return ClassificationMetrics(
         total_validations=total_validations,
         correct_count=correct_count,
-        accuracy_percentage=round(accuracy_percentage, 2) if accuracy_percentage else None,
+        accuracy_percentage=(
+            round(accuracy_percentage, 2) if accuracy_percentage else None
+        ),
         target_accuracy=85.0,
-        meets_target=accuracy_percentage >= 85.0 if accuracy_percentage else False
+        meets_target=accuracy_percentage >= 85.0 if accuracy_percentage else False,
     )
 
 
 @app.get("/api/v1/validation/accuracy/by-pillar")
 async def get_accuracy_by_pillar(
-    current_user: dict = Depends(get_current_user),
-    days: Optional[int] = None
+    current_user: dict = Depends(get_current_user), days: Optional[int] = None
 ):
     """
     Get classification accuracy broken down by pillar.
@@ -2843,9 +3192,11 @@ async def get_accuracy_by_pillar(
     from collections import defaultdict
 
     # Build query for validations with correctness determined
-    query = supabase.table("classification_validations").select(
-        "is_correct, ground_truth_pillar, predicted_pillar, created_at"
-    ).not_.is_("is_correct", "null")
+    query = (
+        supabase.table("classification_validations")
+        .select("is_correct, ground_truth_pillar, predicted_pillar, created_at")
+        .not_.is_("is_correct", "null")
+    )
 
     # Apply date filter if specified
     if days is not None and days > 0:
@@ -2861,16 +3212,18 @@ async def get_accuracy_by_pillar(
                 "correct_count": 0,
                 "accuracy_percentage": None,
                 "target_accuracy": 85.0,
-                "meets_target": False
+                "meets_target": False,
             },
             "by_pillar": {},
-            "confusion_summary": []
+            "confusion_summary": [],
         }
 
     # Compute overall metrics
     total_validations = len(validations_response.data)
     correct_count = sum(1 for v in validations_response.data if v.get("is_correct"))
-    accuracy_percentage = (correct_count / total_validations * 100) if total_validations > 0 else None
+    accuracy_percentage = (
+        (correct_count / total_validations * 100) if total_validations > 0 else None
+    )
 
     # Compute per-pillar metrics
     pillar_stats = defaultdict(lambda: {"total": 0, "correct": 0})
@@ -2892,38 +3245,42 @@ async def get_accuracy_by_pillar(
     # Format per-pillar results
     by_pillar = {}
     for pillar, stats in pillar_stats.items():
-        pillar_accuracy = (stats["correct"] / stats["total"] * 100) if stats["total"] > 0 else None
+        pillar_accuracy = (
+            (stats["correct"] / stats["total"] * 100) if stats["total"] > 0 else None
+        )
         by_pillar[pillar] = {
             "total_validations": stats["total"],
             "correct_count": stats["correct"],
-            "accuracy_percentage": round(pillar_accuracy, 2) if pillar_accuracy else None,
-            "meets_target": pillar_accuracy >= 85.0 if pillar_accuracy else False
+            "accuracy_percentage": (
+                round(pillar_accuracy, 2) if pillar_accuracy else None
+            ),
+            "meets_target": pillar_accuracy >= 85.0 if pillar_accuracy else False,
         }
 
     # Format confusion summary (top misclassifications)
     confusion_summary = [
-        {
-            "predicted": pred,
-            "actual": actual,
-            "count": count
-        }
+        {"predicted": pred, "actual": actual, "count": count}
         for (pred, actual), count in sorted(
-            confusion_pairs.items(),
-            key=lambda x: x[1],
-            reverse=True
-        )[:10]  # Top 10 confusion pairs
+            confusion_pairs.items(), key=lambda x: x[1], reverse=True
+        )[
+            :10
+        ]  # Top 10 confusion pairs
     ]
 
     return {
         "overall": {
             "total_validations": total_validations,
             "correct_count": correct_count,
-            "accuracy_percentage": round(accuracy_percentage, 2) if accuracy_percentage else None,
+            "accuracy_percentage": (
+                round(accuracy_percentage, 2) if accuracy_percentage else None
+            ),
             "target_accuracy": 85.0,
-            "meets_target": accuracy_percentage >= 85.0 if accuracy_percentage else False
+            "meets_target": (
+                accuracy_percentage >= 85.0 if accuracy_percentage else False
+            ),
         },
         "by_pillar": by_pillar,
-        "confusion_summary": confusion_summary
+        "confusion_summary": confusion_summary,
     }
 
 
@@ -2931,10 +3288,10 @@ async def get_accuracy_by_pillar(
 # Processing Metrics Endpoints
 # ============================================================================
 
+
 @app.get("/api/v1/metrics/processing", response_model=ProcessingMetrics)
 async def get_processing_metrics(
-    current_user: dict = Depends(get_current_user),
-    days: int = 7
+    current_user: dict = Depends(get_current_user), days: int = 7
 ):
     """
     Get comprehensive processing metrics for monitoring dashboard.
@@ -2962,17 +3319,26 @@ async def get_processing_metrics(
     # -------------------------------------------------------------------------
     # Discovery Run Metrics
     # -------------------------------------------------------------------------
-    discovery_runs_response = supabase.table("discovery_runs").select(
-        "id, status, cards_created, cards_enriched, sources_found, sources_relevant, summary_report, started_at, completed_at"
-    ).gte("started_at", period_start_iso).execute()
+    discovery_runs_response = (
+        supabase.table("discovery_runs")
+        .select(
+            "id, status, cards_created, cards_enriched, sources_found, sources_relevant, summary_report, started_at, completed_at"
+        )
+        .gte("started_at", period_start_iso)
+        .execute()
+    )
 
     discovery_runs_data = discovery_runs_response.data or []
 
     completed_runs = [r for r in discovery_runs_data if r.get("status") == "completed"]
     failed_runs = [r for r in discovery_runs_data if r.get("status") == "failed"]
 
-    total_cards_created = sum(r.get("cards_created", 0) or 0 for r in discovery_runs_data)
-    total_cards_enriched = sum(r.get("cards_enriched", 0) or 0 for r in discovery_runs_data)
+    total_cards_created = sum(
+        r.get("cards_created", 0) or 0 for r in discovery_runs_data
+    )
+    total_cards_enriched = sum(
+        r.get("cards_enriched", 0) or 0 for r in discovery_runs_data
+    )
     total_sources = sum(r.get("sources_found", 0) or 0 for r in discovery_runs_data)
 
     avg_cards_per_run = (
@@ -2989,7 +3355,7 @@ async def get_processing_metrics(
         avg_cards_per_run=round(avg_cards_per_run, 2),
         avg_sources_per_run=round(avg_sources_per_run, 2),
         total_cards_created=total_cards_created,
-        total_cards_enriched=total_cards_enriched
+        total_cards_enriched=total_cards_enriched,
     )
 
     # Extract source category metrics from discovery run summary_report
@@ -3004,23 +3370,30 @@ async def get_processing_metrics(
                     sources_fetched=0,
                     articles_processed=0,
                     cards_generated=0,
-                    errors=0
+                    errors=0,
                 )
-            sources_by_category[category].sources_fetched += count if isinstance(count, int) else 0
+            sources_by_category[category].sources_fetched += (
+                count if isinstance(count, int) else 0
+            )
 
     # -------------------------------------------------------------------------
     # Research Task Metrics
     # -------------------------------------------------------------------------
-    research_tasks_response = supabase.table("research_tasks").select(
-        "id, status, started_at, completed_at"
-    ).gte("created_at", period_start_iso).execute()
+    research_tasks_response = (
+        supabase.table("research_tasks")
+        .select("id, status, started_at, completed_at")
+        .gte("created_at", period_start_iso)
+        .execute()
+    )
 
     research_tasks_data = research_tasks_response.data or []
 
     completed_tasks = [t for t in research_tasks_data if t.get("status") == "completed"]
     failed_tasks = [t for t in research_tasks_data if t.get("status") == "failed"]
     queued_tasks = [t for t in research_tasks_data if t.get("status") == "queued"]
-    processing_tasks = [t for t in research_tasks_data if t.get("status") == "processing"]
+    processing_tasks = [
+        t for t in research_tasks_data if t.get("status") == "processing"
+    ]
 
     # Calculate average processing time for completed tasks
     processing_times = []
@@ -3045,42 +3418,55 @@ async def get_processing_metrics(
         failed_tasks=len(failed_tasks),
         queued_tasks=len(queued_tasks),
         processing_tasks=len(processing_tasks),
-        avg_processing_time_seconds=round(avg_processing_time, 2) if avg_processing_time else None
+        avg_processing_time_seconds=(
+            round(avg_processing_time, 2) if avg_processing_time else None
+        ),
     )
 
     # -------------------------------------------------------------------------
     # Classification Accuracy Metrics
     # -------------------------------------------------------------------------
-    validations_response = supabase.table("classification_validations").select(
-        "is_correct"
-    ).not_.is_("is_correct", "null").execute()
+    validations_response = (
+        supabase.table("classification_validations")
+        .select("is_correct")
+        .not_.is_("is_correct", "null")
+        .execute()
+    )
 
     validations_data = validations_response.data or []
     total_validations = len(validations_data)
     correct_count = sum(1 for v in validations_data if v.get("is_correct"))
-    accuracy = (correct_count / total_validations * 100) if total_validations > 0 else None
+    accuracy = (
+        (correct_count / total_validations * 100) if total_validations > 0 else None
+    )
 
     classification_metrics = ClassificationMetrics(
         total_validations=total_validations,
         correct_count=correct_count,
         accuracy_percentage=round(accuracy, 2) if accuracy else None,
         target_accuracy=85.0,
-        meets_target=accuracy >= 85.0 if accuracy else False
+        meets_target=accuracy >= 85.0 if accuracy else False,
     )
 
     # -------------------------------------------------------------------------
     # Card Generation Summary
     # -------------------------------------------------------------------------
-    cards_response = supabase.table("cards").select(
-        "id, impact_score, velocity_score, novelty_score, risk_score", count="exact"
-    ).gte("created_at", period_start_iso).execute()
+    cards_response = (
+        supabase.table("cards")
+        .select(
+            "id, impact_score, velocity_score, novelty_score, risk_score", count="exact"
+        )
+        .gte("created_at", period_start_iso)
+        .execute()
+    )
 
     cards_data = cards_response.data or []
     cards_generated = len(cards_data)
 
     # Count cards with all 4 scoring dimensions
     cards_with_all_scores = sum(
-        1 for c in cards_data
+        1
+        for c in cards_data
         if c.get("impact_score") is not None
         and c.get("velocity_score") is not None
         and c.get("novelty_score") is not None
@@ -3092,7 +3478,9 @@ async def get_processing_metrics(
     # -------------------------------------------------------------------------
     total_errors = len(failed_runs) + len(failed_tasks)
     total_operations = len(discovery_runs_data) + len(research_tasks_data)
-    error_rate = (total_errors / total_operations * 100) if total_operations > 0 else None
+    error_rate = (
+        (total_errors / total_operations * 100) if total_operations > 0 else None
+    )
 
     # -------------------------------------------------------------------------
     # Build Response
@@ -3109,7 +3497,7 @@ async def get_processing_metrics(
         cards_generated_in_period=cards_generated,
         cards_with_all_scores=cards_with_all_scores,
         total_errors=total_errors,
-        error_rate_percentage=round(error_rate, 2) if error_rate else None
+        error_rate_percentage=round(error_rate, 2) if error_rate else None,
     )
 
 
@@ -3119,21 +3507,23 @@ async def get_processing_metrics(
 
 # Pillar definitions for analytics (matches database pillars table)
 ANALYTICS_PILLAR_DEFINITIONS = {
-    "CH": "Community Health",
-    "MC": "Mobility & Connectivity",
-    "HS": "Housing & Economic Stability",
-    "EC": "Economic Development",
-    "ES": "Environmental Sustainability",
-    "CE": "Cultural & Entertainment"
+    "CH": "Community Health & Sustainability",
+    "EW": "Economic & Workforce Development",
+    "HG": "High-Performing Government",
+    "HH": "Homelessness & Housing",
+    "MC": "Mobility & Critical Infrastructure",
+    "PS": "Public Safety",
 }
 
 
 @app.get("/api/v1/analytics/pillar-coverage", response_model=PillarCoverageResponse)
 async def get_pillar_coverage(
     current_user: dict = Depends(get_current_user),
-    start_date: Optional[str] = Query(None, description="Start date filter (ISO format)"),
+    start_date: Optional[str] = Query(
+        None, description="Start date filter (ISO format)"
+    ),
     end_date: Optional[str] = Query(None, description="End date filter (ISO format)"),
-    stage_id: Optional[str] = Query(None, description="Filter by maturity stage")
+    stage_id: Optional[str] = Query(None, description="Filter by maturity stage"),
 ):
     """
     Get activity distribution across strategic pillars.
@@ -3151,9 +3541,11 @@ async def get_pillar_coverage(
     """
     try:
         # Build query for active cards with velocity_score for avg calculation
-        query = supabase.table("cards").select(
-            "pillar_id, velocity_score"
-        ).eq("status", "active")
+        query = (
+            supabase.table("cards")
+            .select("pillar_id, velocity_score")
+            .eq("status", "active")
+        )
 
         # Apply date filters if provided
         if start_date:
@@ -3195,8 +3587,7 @@ async def get_pillar_coverage(
             count = pillar_counts[pillar_code]
             percentage = (count / total_cards * 100) if total_cards > 0 else 0.0
             avg_velocity = (
-                pillar_velocity_sums[pillar_code] / count
-                if count > 0 else None
+                pillar_velocity_sums[pillar_code] / count if count > 0 else None
             )
             coverage_data.append(
                 PillarCoverageItem(
@@ -3204,7 +3595,9 @@ async def get_pillar_coverage(
                     pillar_name=pillar_name,
                     count=count,
                     percentage=round(percentage, 2),
-                    avg_velocity=round(avg_velocity, 2) if avg_velocity is not None else None
+                    avg_velocity=(
+                        round(avg_velocity, 2) if avg_velocity is not None else None
+                    ),
                 )
             )
 
@@ -3220,14 +3613,14 @@ async def get_pillar_coverage(
             data=coverage_data,
             total_cards=total_cards,
             period_start=start_date,
-            period_end=end_date
+            period_end=end_date,
         )
 
     except Exception as e:
         logger.error(f"Failed to get pillar coverage: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get pillar coverage: {str(e)}"
+            detail=f"Failed to get pillar coverage: {str(e)}",
         )
 
 
@@ -3260,26 +3653,33 @@ Keep each insight concise (2-3 sentences) and actionable. Focus on municipal rel
 def _compute_card_data_hash(cards: list) -> str:
     """Compute a hash of card data to detect changes for cache invalidation."""
     import hashlib
-    data_str = "|".join([
-        f"{c.get('id', '')}:{c.get('velocity_score', 0)}:{c.get('impact_score', 0)}"
-        for c in sorted(cards, key=lambda x: x.get('id', ''))
-    ])
+
+    data_str = "|".join(
+        [
+            f"{c.get('id', '')}:{c.get('velocity_score', 0)}:{c.get('impact_score', 0)}"
+            for c in sorted(cards, key=lambda x: x.get("id", ""))
+        ]
+    )
     return hashlib.md5(data_str.encode()).hexdigest()
 
 
 @app.get("/api/v1/analytics/insights", response_model=InsightsResponse)
 async def get_analytics_insights(
-    pillar_id: Optional[str] = Query(None, pattern=r"^[A-Z]{2}$", description="Filter by pillar code"),
+    pillar_id: Optional[str] = Query(
+        None, pattern=r"^[A-Z]{2}$", description="Filter by pillar code"
+    ),
     limit: int = Query(5, ge=1, le=10, description="Number of insights to generate"),
-    force_refresh: bool = Query(False, description="Force regeneration, bypassing cache"),
-    current_user: dict = Depends(get_current_user)
+    force_refresh: bool = Query(
+        False, description="Force regeneration, bypassing cache"
+    ),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Get AI-generated strategic insights for top emerging trends.
 
     Returns insights for the highest-scoring active cards, optionally filtered by pillar.
     Uses OpenAI to generate strategic insights based on trend data.
-    
+
     Implements 24-hour caching to avoid redundant API calls:
     - Cache key: pillar_id + limit + date
     - Cache invalidated: when top card scores change significantly
@@ -3289,14 +3689,18 @@ async def get_analytics_insights(
     """
     import json
     from datetime import date as date_type, timedelta
-    
+
     try:
         # -------------------------------------------------------------------------
         # Step 1: Fetch top cards (needed for both cache check and generation)
         # -------------------------------------------------------------------------
-        query = supabase.table("cards").select(
-            "id, name, slug, summary, pillar_id, horizon, velocity_score, impact_score, relevance_score, novelty_score"
-        ).eq("status", "active")
+        query = (
+            supabase.table("cards")
+            .select(
+                "id, name, slug, summary, pillar_id, horizon, velocity_score, impact_score, relevance_score, novelty_score"
+            )
+            .eq("status", "active")
+        )
 
         if pillar_id:
             query = query.eq("pillar_id", pillar_id)
@@ -3308,7 +3712,7 @@ async def get_analytics_insights(
                 insights=[],
                 generated_at=datetime.now(),
                 ai_available=True,
-                period_analyzed="No active cards found"
+                period_analyzed="No active cards found",
             )
 
         # Calculate combined scores and sort
@@ -3326,9 +3730,7 @@ async def get_analytics_insights(
 
         if not top_cards:
             return InsightsResponse(
-                insights=[],
-                generated_at=datetime.now(),
-                ai_available=True
+                insights=[], generated_at=datetime.now(), ai_available=True
             )
 
         # Compute hash for cache validation
@@ -3340,35 +3742,39 @@ async def get_analytics_insights(
         # -------------------------------------------------------------------------
         if not force_refresh:
             try:
-                cache_response = supabase.table("cached_insights").select(
-                    "insights_json, generated_at, card_data_hash"
-                ).eq(
-                    "pillar_filter", pillar_id
-                ).eq(
-                    "insight_limit", limit
-                ).eq(
-                    "cache_date", date_type.today().isoformat()
-                ).gt(
-                    "expires_at", datetime.now().isoformat()
-                ).limit(1).execute()
+                cache_response = (
+                    supabase.table("cached_insights")
+                    .select("insights_json, generated_at, card_data_hash")
+                    .eq("pillar_filter", pillar_id)
+                    .eq("insight_limit", limit)
+                    .eq("cache_date", date_type.today().isoformat())
+                    .gt("expires_at", datetime.now().isoformat())
+                    .limit(1)
+                    .execute()
+                )
 
                 if cache_response.data:
                     cached = cache_response.data[0]
                     # Validate cache - check if underlying data changed
                     if cached.get("card_data_hash") == current_hash:
-                        logger.info(f"Serving cached insights for pillar={pillar_id}, limit={limit}")
+                        logger.info(
+                            f"Serving cached insights for pillar={pillar_id}, limit={limit}"
+                        )
                         cached_json = cached["insights_json"]
-                        
+
                         # Reconstruct response from cached JSON
                         cached_insights = [
-                            InsightItem(**item) for item in cached_json.get("insights", [])
+                            InsightItem(**item)
+                            for item in cached_json.get("insights", [])
                         ]
                         return InsightsResponse(
                             insights=cached_insights,
-                            generated_at=datetime.fromisoformat(cached["generated_at"].replace("Z", "+00:00")),
+                            generated_at=datetime.fromisoformat(
+                                cached["generated_at"].replace("Z", "+00:00")
+                            ),
                             ai_available=cached_json.get("ai_available", True),
                             period_analyzed=cached_json.get("period_analyzed"),
-                            fallback_message=cached_json.get("fallback_message")
+                            fallback_message=cached_json.get("fallback_message"),
                         )
                     else:
                         logger.info("Cache invalidated - card data changed")
@@ -3380,13 +3786,15 @@ async def get_analytics_insights(
         # Step 3: Generate new insights via AI
         # -------------------------------------------------------------------------
         start_time = datetime.now()
-        
-        trends_data = "\n".join([
-            f"- {card['name']}: {card.get('summary', 'No summary available')[:200]} "
-            f"(Pillar: {card.get('pillar_id', 'N/A')}, Horizon: {card.get('horizon', 'N/A')}, "
-            f"Score: {card['combined_score']:.1f})"
-            for card in top_cards
-        ])
+
+        trends_data = "\n".join(
+            [
+                f"- {card['name']}: {card.get('summary', 'No summary available')[:200]} "
+                f"(Pillar: {card.get('pillar_id', 'N/A')}, Horizon: {card.get('horizon', 'N/A')}, "
+                f"Score: {card['combined_score']:.1f})"
+                for card in top_cards
+            ]
+        )
 
         ai_available = True
         fallback_message = None
@@ -3400,7 +3808,7 @@ async def get_analytics_insights(
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"},
                 max_tokens=1000,
-                timeout=30
+                timeout=30,
             )
 
             result = json.loads(ai_response.choices[0].message.content)
@@ -3408,37 +3816,47 @@ async def get_analytics_insights(
             for i, insight_data in enumerate(result.get("insights", [])):
                 if i < len(top_cards):
                     card = top_cards[i]
-                    insights.append(InsightItem(
-                        trend_name=insight_data.get("trend_name", card["name"]),
-                        score=card["combined_score"],
-                        insight=insight_data.get("insight", ""),
-                        pillar_id=card.get("pillar_id"),
-                        card_id=card.get("id"),
-                        card_slug=card.get("slug"),
-                        velocity_score=card.get("velocity_score")
-                    ))
+                    insights.append(
+                        InsightItem(
+                            trend_name=insight_data.get("trend_name", card["name"]),
+                            score=card["combined_score"],
+                            insight=insight_data.get("insight", ""),
+                            pillar_id=card.get("pillar_id"),
+                            card_id=card.get("id"),
+                            card_slug=card.get("slug"),
+                            velocity_score=card.get("velocity_score"),
+                        )
+                    )
 
         except Exception as ai_error:
             logger.warning(f"AI insights generation failed: {str(ai_error)}")
             ai_available = False
-            fallback_message = "AI insights temporarily unavailable. Showing trend summaries instead."
+            fallback_message = (
+                "AI insights temporarily unavailable. Showing trend summaries instead."
+            )
 
             insights = [
                 InsightItem(
                     trend_name=card["name"],
                     score=card["combined_score"],
-                    insight=card.get("summary", "No summary available")[:300] if card.get("summary") else "Strategic analysis pending.",
+                    insight=(
+                        card.get("summary", "No summary available")[:300]
+                        if card.get("summary")
+                        else "Strategic analysis pending."
+                    ),
                     pillar_id=card.get("pillar_id"),
                     card_id=card.get("id"),
                     card_slug=card.get("slug"),
-                    velocity_score=card.get("velocity_score")
+                    velocity_score=card.get("velocity_score"),
                 )
                 for card in top_cards
             ]
 
         generation_time_ms = int((datetime.now() - start_time).total_seconds() * 1000)
         generated_at = datetime.now()
-        period_analyzed = f"Top {len(top_cards)} trending cards" + (f" in {pillar_id}" if pillar_id else "")
+        period_analyzed = f"Top {len(top_cards)} trending cards" + (
+            f" in {pillar_id}" if pillar_id else ""
+        )
 
         # -------------------------------------------------------------------------
         # Step 4: Store in cache
@@ -3448,24 +3866,31 @@ async def get_analytics_insights(
                 "insights": [i.dict() for i in insights],
                 "ai_available": ai_available,
                 "period_analyzed": period_analyzed,
-                "fallback_message": fallback_message
+                "fallback_message": fallback_message,
             }
-            
+
             # Upsert cache entry
-            supabase.table("cached_insights").upsert({
-                "pillar_filter": pillar_id,
-                "insight_limit": limit,
-                "cache_date": date_type.today().isoformat(),
-                "insights_json": cache_json,
-                "top_card_ids": top_card_ids,
-                "card_data_hash": current_hash,
-                "ai_model_used": get_chat_mini_deployment() if ai_available else None,
-                "generation_time_ms": generation_time_ms,
-                "generated_at": generated_at.isoformat(),
-                "expires_at": (generated_at + timedelta(hours=24)).isoformat()
-            }, on_conflict="pillar_filter,insight_limit,cache_date").execute()
-            
-            logger.info(f"Cached insights for pillar={pillar_id}, limit={limit}, took {generation_time_ms}ms")
+            supabase.table("cached_insights").upsert(
+                {
+                    "pillar_filter": pillar_id,
+                    "insight_limit": limit,
+                    "cache_date": date_type.today().isoformat(),
+                    "insights_json": cache_json,
+                    "top_card_ids": top_card_ids,
+                    "card_data_hash": current_hash,
+                    "ai_model_used": (
+                        get_chat_mini_deployment() if ai_available else None
+                    ),
+                    "generation_time_ms": generation_time_ms,
+                    "generated_at": generated_at.isoformat(),
+                    "expires_at": (generated_at + timedelta(hours=24)).isoformat(),
+                },
+                on_conflict="pillar_filter,insight_limit,cache_date",
+            ).execute()
+
+            logger.info(
+                f"Cached insights for pillar={pillar_id}, limit={limit}, took {generation_time_ms}ms"
+            )
         except Exception as cache_err:
             logger.warning(f"Failed to cache insights: {cache_err}")
 
@@ -3474,7 +3899,7 @@ async def get_analytics_insights(
             generated_at=generated_at,
             ai_available=ai_available,
             period_analyzed=period_analyzed,
-            fallback_message=fallback_message
+            fallback_message=fallback_message,
         )
 
     except Exception as e:
@@ -3485,6 +3910,7 @@ async def get_analytics_insights(
 # ============================================================================
 # Weekly Discovery Scheduler
 # ============================================================================
+
 
 async def run_weekly_discovery():
     """
@@ -3518,7 +3944,7 @@ async def run_weekly_discovery():
             "cards_deduplicated": 0,
             "sources_found": 0,
             "started_at": datetime.now().isoformat(),
-            "summary_report": {"stage": "queued", "config": config.dict()}
+            "summary_report": {"stage": "queued", "config": config.dict()},
         }
 
         supabase.table("discovery_runs").insert(run_record).execute()
@@ -3533,21 +3959,29 @@ async def run_weekly_discovery():
 @app.get("/api/v1/me/workstreams")
 async def get_user_workstreams(current_user: dict = Depends(get_current_user)):
     """Get user's workstreams"""
-    response = supabase.table("workstreams").select("*").eq("user_id", current_user["id"]).order("created_at", desc=True).execute()
+    response = (
+        supabase.table("workstreams")
+        .select("*")
+        .eq("user_id", current_user["id"])
+        .order("created_at", desc=True)
+        .execute()
+    )
     return [Workstream(**ws) for ws in response.data]
+
 
 @app.post("/api/v1/me/workstreams")
 async def create_workstream(
-    workstream_data: WorkstreamCreate,
-    current_user: dict = Depends(get_current_user)
+    workstream_data: WorkstreamCreate, current_user: dict = Depends(get_current_user)
 ):
     """Create new workstream"""
     ws_dict = workstream_data.dict()
-    ws_dict.update({
-        "user_id": current_user["id"],
-        "created_at": datetime.now().isoformat(),
-        "updated_at": datetime.now().isoformat()
-    })
+    ws_dict.update(
+        {
+            "user_id": current_user["id"],
+            "created_at": datetime.now().isoformat(),
+            "updated_at": datetime.now().isoformat(),
+        }
+    )
 
     response = supabase.table("workstreams").insert(ws_dict).execute()
     if response.data:
@@ -3560,7 +3994,7 @@ async def create_workstream(
 async def update_workstream(
     workstream_id: str,
     workstream_data: WorkstreamUpdate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Update an existing workstream.
@@ -3582,13 +4016,17 @@ async def update_workstream(
         HTTPException 403: Workstream belongs to another user
     """
     # First check if workstream exists
-    ws_check = supabase.table("workstreams").select("*").eq("id", workstream_id).execute()
+    ws_check = (
+        supabase.table("workstreams").select("*").eq("id", workstream_id).execute()
+    )
     if not ws_check.data:
         raise HTTPException(status_code=404, detail="Workstream not found")
 
     # Verify ownership
     if ws_check.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Not authorized to update this workstream")
+        raise HTTPException(
+            status_code=403, detail="Not authorized to update this workstream"
+        )
 
     # Build update dict with only non-None values
     update_dict = {k: v for k, v in workstream_data.dict().items() if v is not None}
@@ -3601,7 +4039,12 @@ async def update_workstream(
     update_dict["updated_at"] = datetime.now().isoformat()
 
     # Perform update
-    response = supabase.table("workstreams").update(update_dict).eq("id", workstream_id).execute()
+    response = (
+        supabase.table("workstreams")
+        .update(update_dict)
+        .eq("id", workstream_id)
+        .execute()
+    )
     if response.data:
         return Workstream(**response.data[0])
     else:
@@ -3610,8 +4053,7 @@ async def update_workstream(
 
 @app.delete("/api/v1/me/workstreams/{workstream_id}")
 async def delete_workstream(
-    workstream_id: str,
-    current_user: dict = Depends(get_current_user)
+    workstream_id: str, current_user: dict = Depends(get_current_user)
 ):
     """
     Delete a workstream.
@@ -3631,13 +4073,17 @@ async def delete_workstream(
         HTTPException 403: Workstream belongs to another user
     """
     # First check if workstream exists
-    ws_check = supabase.table("workstreams").select("*").eq("id", workstream_id).execute()
+    ws_check = (
+        supabase.table("workstreams").select("*").eq("id", workstream_id).execute()
+    )
     if not ws_check.data:
         raise HTTPException(status_code=404, detail="Workstream not found")
 
     # Verify ownership
     if ws_check.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Not authorized to delete this workstream")
+        raise HTTPException(
+            status_code=403, detail="Not authorized to delete this workstream"
+        )
 
     # Perform delete
     response = supabase.table("workstreams").delete().eq("id", workstream_id).execute()
@@ -3650,7 +4096,7 @@ async def get_workstream_feed(
     workstream_id: str,
     current_user: dict = Depends(get_current_user),
     limit: int = 20,
-    offset: int = 0
+    offset: int = 0,
 ):
     """
     Get cards for a workstream with filtering support.
@@ -3675,7 +4121,13 @@ async def get_workstream_feed(
         HTTPException 404: Workstream not found or not owned by user
     """
     # Verify workstream belongs to user
-    ws_response = supabase.table("workstreams").select("*").eq("id", workstream_id).eq("user_id", current_user["id"]).execute()
+    ws_response = (
+        supabase.table("workstreams")
+        .select("*")
+        .eq("id", workstream_id)
+        .eq("user_id", current_user["id"])
+        .execute()
+    )
     if not ws_response.data:
         raise HTTPException(status_code=404, detail="Workstream not found")
 
@@ -3699,7 +4151,9 @@ async def get_workstream_feed(
     if workstream.get("horizon") and workstream["horizon"] != "ALL":
         query = query.eq("horizon", workstream["horizon"])
 
-    response = query.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
+    response = (
+        query.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
+    )
     cards = response.data or []
 
     # Apply stage filtering (extract number prefix from stage_id like "5_implementing")
@@ -3708,7 +4162,9 @@ async def get_workstream_feed(
         filtered_by_stage = []
         for card in cards:
             card_stage_id = card.get("stage_id") or ""
-            stage_num = card_stage_id.split("_")[0] if "_" in card_stage_id else card_stage_id
+            stage_num = (
+                card_stage_id.split("_")[0] if "_" in card_stage_id else card_stage_id
+            )
             if stage_num in stage_ids:
                 filtered_by_stage.append(card)
         cards = filtered_by_stage
@@ -3718,11 +4174,13 @@ async def get_workstream_feed(
     if keywords:
         filtered_cards = []
         for card in cards:
-            card_text = " ".join([
-                (card.get("name") or "").lower(),
-                (card.get("summary") or "").lower(),
-                (card.get("description") or "").lower()
-            ])
+            card_text = " ".join(
+                [
+                    (card.get("name") or "").lower(),
+                    (card.get("summary") or "").lower(),
+                    (card.get("description") or "").lower(),
+                ]
+            )
             # Check if any keyword matches (case-insensitive)
             if any(keyword.lower() in card_text for keyword in keywords):
                 filtered_cards.append(card)
@@ -3735,10 +4193,13 @@ async def get_workstream_feed(
 # Workstream Kanban Card Endpoints
 # ============================================================================
 
-@app.get("/api/v1/me/workstreams/{workstream_id}/cards", response_model=WorkstreamCardsGroupedResponse)
+
+@app.get(
+    "/api/v1/me/workstreams/{workstream_id}/cards",
+    response_model=WorkstreamCardsGroupedResponse,
+)
 async def get_workstream_cards(
-    workstream_id: str,
-    current_user: dict = Depends(get_current_user)
+    workstream_id: str, current_user: dict = Depends(get_current_user)
 ):
     """
     Get all cards in a workstream grouped by status (Kanban view).
@@ -3764,17 +4225,28 @@ async def get_workstream_cards(
         HTTPException 404: Workstream not found or not owned by user
     """
     # Verify workstream belongs to user
-    ws_response = supabase.table("workstreams").select("id, user_id").eq("id", workstream_id).execute()
+    ws_response = (
+        supabase.table("workstreams")
+        .select("id, user_id")
+        .eq("id", workstream_id)
+        .execute()
+    )
     if not ws_response.data:
         raise HTTPException(status_code=404, detail="Workstream not found")
 
     if ws_response.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Not authorized to access this workstream")
+        raise HTTPException(
+            status_code=403, detail="Not authorized to access this workstream"
+        )
 
     # Fetch all cards with joined card details, ordered by position
-    cards_response = supabase.table("workstream_cards").select(
-        "*, cards(*)"
-    ).eq("workstream_id", workstream_id).order("position").execute()
+    cards_response = (
+        supabase.table("workstream_cards")
+        .select("*, cards(*)")
+        .eq("workstream_id", workstream_id)
+        .order("position")
+        .execute()
+    )
 
     # Group cards by status
     grouped = {
@@ -3783,7 +4255,7 @@ async def get_workstream_cards(
         "research": [],
         "brief": [],
         "watching": [],
-        "archived": []
+        "archived": [],
     }
 
     for item in cards_response.data or []:
@@ -3803,18 +4275,21 @@ async def get_workstream_cards(
             reminder_at=item.get("reminder_at"),
             added_from=item.get("added_from", "manual"),
             updated_at=item.get("updated_at"),
-            card=item.get("cards")
+            card=item.get("cards"),
         )
         grouped[card_status].append(card_with_details)
 
     return WorkstreamCardsGroupedResponse(**grouped)
 
 
-@app.post("/api/v1/me/workstreams/{workstream_id}/cards", response_model=WorkstreamCardWithDetails)
+@app.post(
+    "/api/v1/me/workstreams/{workstream_id}/cards",
+    response_model=WorkstreamCardWithDetails,
+)
 async def add_card_to_workstream(
     workstream_id: str,
     card_data: WorkstreamCardCreate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Add a card to a workstream.
@@ -3836,30 +4311,51 @@ async def add_card_to_workstream(
         HTTPException 409: Card already in workstream
     """
     # Verify workstream belongs to user
-    ws_response = supabase.table("workstreams").select("id, user_id").eq("id", workstream_id).execute()
+    ws_response = (
+        supabase.table("workstreams")
+        .select("id, user_id")
+        .eq("id", workstream_id)
+        .execute()
+    )
     if not ws_response.data:
         raise HTTPException(status_code=404, detail="Workstream not found")
 
     if ws_response.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Not authorized to add cards to this workstream")
+        raise HTTPException(
+            status_code=403, detail="Not authorized to add cards to this workstream"
+        )
 
     # Verify card exists
-    card_response = supabase.table("cards").select("*").eq("id", card_data.card_id).execute()
+    card_response = (
+        supabase.table("cards").select("*").eq("id", card_data.card_id).execute()
+    )
     if not card_response.data:
         raise HTTPException(status_code=404, detail="Card not found")
 
     # Check if card is already in workstream
-    existing = supabase.table("workstream_cards").select("id").eq(
-        "workstream_id", workstream_id
-    ).eq("card_id", card_data.card_id).execute()
+    existing = (
+        supabase.table("workstream_cards")
+        .select("id")
+        .eq("workstream_id", workstream_id)
+        .eq("card_id", card_data.card_id)
+        .execute()
+    )
     if existing.data:
-        raise HTTPException(status_code=409, detail="Card is already in this workstream")
+        raise HTTPException(
+            status_code=409, detail="Card is already in this workstream"
+        )
 
     # Get max position for the target status column
     status = card_data.status or "inbox"
-    position_response = supabase.table("workstream_cards").select("position").eq(
-        "workstream_id", workstream_id
-    ).eq("status", status).order("position", desc=True).limit(1).execute()
+    position_response = (
+        supabase.table("workstream_cards")
+        .select("position")
+        .eq("workstream_id", workstream_id)
+        .eq("status", status)
+        .order("position", desc=True)
+        .limit(1)
+        .execute()
+    )
 
     next_position = 0
     if position_response.data:
@@ -3876,7 +4372,7 @@ async def add_card_to_workstream(
         "position": next_position,
         "notes": card_data.notes,
         "added_from": "manual",
-        "updated_at": now
+        "updated_at": now,
     }
 
     result = supabase.table("workstream_cards").insert(new_card).execute()
@@ -3896,16 +4392,19 @@ async def add_card_to_workstream(
         reminder_at=inserted.get("reminder_at"),
         added_from=inserted.get("added_from", "manual"),
         updated_at=inserted.get("updated_at"),
-        card=card_response.data[0]
+        card=card_response.data[0],
     )
 
 
-@app.patch("/api/v1/me/workstreams/{workstream_id}/cards/{card_id}", response_model=WorkstreamCardWithDetails)
+@app.patch(
+    "/api/v1/me/workstreams/{workstream_id}/cards/{card_id}",
+    response_model=WorkstreamCardWithDetails,
+)
 async def update_workstream_card(
     workstream_id: str,
     card_id: str,
     update_data: WorkstreamCardUpdate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Update a workstream card's status, position, notes, or reminder.
@@ -3927,18 +4426,29 @@ async def update_workstream_card(
         HTTPException 403: Not authorized
     """
     # Verify workstream belongs to user
-    ws_response = supabase.table("workstreams").select("id, user_id").eq("id", workstream_id).execute()
+    ws_response = (
+        supabase.table("workstreams")
+        .select("id, user_id")
+        .eq("id", workstream_id)
+        .execute()
+    )
     if not ws_response.data:
         raise HTTPException(status_code=404, detail="Workstream not found")
 
     if ws_response.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Not authorized to update cards in this workstream")
+        raise HTTPException(
+            status_code=403, detail="Not authorized to update cards in this workstream"
+        )
 
     # Fetch the workstream card by its junction table ID (card_id param is actually workstream_card.id)
     # The frontend passes the workstream_card junction table ID, not the underlying card UUID
-    wsc_response = supabase.table("workstream_cards").select("*, cards(*)").eq(
-        "workstream_id", workstream_id
-    ).eq("id", card_id).execute()
+    wsc_response = (
+        supabase.table("workstream_cards")
+        .select("*, cards(*)")
+        .eq("workstream_id", workstream_id)
+        .eq("id", card_id)
+        .execute()
+    )
 
     if not wsc_response.data:
         raise HTTPException(status_code=404, detail="Card not found in this workstream")
@@ -3953,16 +4463,26 @@ async def update_workstream_card(
         # If status changed, recalculate position
         if update_data.status != existing.get("status"):
             # Get max position in new column
-            position_response = supabase.table("workstream_cards").select("position").eq(
-                "workstream_id", workstream_id
-            ).eq("status", update_data.status).order("position", desc=True).limit(1).execute()
+            position_response = (
+                supabase.table("workstream_cards")
+                .select("position")
+                .eq("workstream_id", workstream_id)
+                .eq("status", update_data.status)
+                .order("position", desc=True)
+                .limit(1)
+                .execute()
+            )
 
             next_position = 0
             if position_response.data:
                 next_position = position_response.data[0]["position"] + 1
 
             update_dict["status"] = update_data.status
-            update_dict["position"] = update_data.position if update_data.position is not None else next_position
+            update_dict["position"] = (
+                update_data.position
+                if update_data.position is not None
+                else next_position
+            )
         else:
             update_dict["status"] = update_data.status
             if update_data.position is not None:
@@ -3977,7 +4497,12 @@ async def update_workstream_card(
         update_dict["reminder_at"] = update_data.reminder_at
 
     # Perform update
-    result = supabase.table("workstream_cards").update(update_dict).eq("id", workstream_card_id).execute()
+    result = (
+        supabase.table("workstream_cards")
+        .update(update_dict)
+        .eq("id", workstream_card_id)
+        .execute()
+    )
 
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to update workstream card")
@@ -3985,9 +4510,12 @@ async def update_workstream_card(
     updated = result.data[0]
 
     # Re-fetch with card details for response
-    final_response = supabase.table("workstream_cards").select("*, cards(*)").eq(
-        "id", workstream_card_id
-    ).execute()
+    final_response = (
+        supabase.table("workstream_cards")
+        .select("*, cards(*)")
+        .eq("id", workstream_card_id)
+        .execute()
+    )
 
     if not final_response.data:
         raise HTTPException(status_code=500, detail="Failed to retrieve updated card")
@@ -4005,15 +4533,13 @@ async def update_workstream_card(
         reminder_at=item.get("reminder_at"),
         added_from=item.get("added_from", "manual"),
         updated_at=item.get("updated_at"),
-        card=item.get("cards")
+        card=item.get("cards"),
     )
 
 
 @app.delete("/api/v1/me/workstreams/{workstream_id}/cards/{card_id}")
 async def remove_card_from_workstream(
-    workstream_id: str,
-    card_id: str,
-    current_user: dict = Depends(get_current_user)
+    workstream_id: str, card_id: str, current_user: dict = Depends(get_current_user)
 ):
     """
     Remove a card from a workstream.
@@ -4033,34 +4559,47 @@ async def remove_card_from_workstream(
         HTTPException 403: Not authorized
     """
     # Verify workstream belongs to user
-    ws_response = supabase.table("workstreams").select("id, user_id").eq("id", workstream_id).execute()
+    ws_response = (
+        supabase.table("workstreams")
+        .select("id, user_id")
+        .eq("id", workstream_id)
+        .execute()
+    )
     if not ws_response.data:
         raise HTTPException(status_code=404, detail="Workstream not found")
 
     if ws_response.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Not authorized to remove cards from this workstream")
+        raise HTTPException(
+            status_code=403,
+            detail="Not authorized to remove cards from this workstream",
+        )
 
     # Check card exists in workstream (card_id param is actually workstream_card.id - the junction table ID)
-    existing = supabase.table("workstream_cards").select("id").eq(
-        "workstream_id", workstream_id
-    ).eq("id", card_id).execute()
+    existing = (
+        supabase.table("workstream_cards")
+        .select("id")
+        .eq("workstream_id", workstream_id)
+        .eq("id", card_id)
+        .execute()
+    )
 
     if not existing.data:
         raise HTTPException(status_code=404, detail="Card not found in this workstream")
 
     # Delete the association
-    supabase.table("workstream_cards").delete().eq(
-        "workstream_id", workstream_id
-    ).eq("id", card_id).execute()
+    supabase.table("workstream_cards").delete().eq("workstream_id", workstream_id).eq(
+        "id", card_id
+    ).execute()
 
     return {"status": "removed", "message": "Card removed from workstream"}
 
 
-@app.post("/api/v1/me/workstreams/{workstream_id}/cards/{card_id}/deep-dive", response_model=ResearchTask)
+@app.post(
+    "/api/v1/me/workstreams/{workstream_id}/cards/{card_id}/deep-dive",
+    response_model=ResearchTask,
+)
 async def trigger_card_deep_dive(
-    workstream_id: str,
-    card_id: str,
-    current_user: dict = Depends(get_current_user)
+    workstream_id: str, card_id: str, current_user: dict = Depends(get_current_user)
 ):
     """
     Trigger deep research for a card in the workstream.
@@ -4084,17 +4623,28 @@ async def trigger_card_deep_dive(
         HTTPException 429: Daily rate limit exceeded
     """
     # Verify workstream belongs to user
-    ws_response = supabase.table("workstreams").select("id, user_id").eq("id", workstream_id).execute()
+    ws_response = (
+        supabase.table("workstreams")
+        .select("id, user_id")
+        .eq("id", workstream_id)
+        .execute()
+    )
     if not ws_response.data:
         raise HTTPException(status_code=404, detail="Workstream not found")
 
     if ws_response.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Not authorized to access this workstream")
+        raise HTTPException(
+            status_code=403, detail="Not authorized to access this workstream"
+        )
 
     # Verify card exists in workstream (card_id param is actually workstream_card.id - the junction table ID)
-    wsc_response = supabase.table("workstream_cards").select("id, card_id").eq(
-        "workstream_id", workstream_id
-    ).eq("id", card_id).execute()
+    wsc_response = (
+        supabase.table("workstream_cards")
+        .select("id, card_id")
+        .eq("workstream_id", workstream_id)
+        .eq("id", card_id)
+        .execute()
+    )
 
     if not wsc_response.data:
         raise HTTPException(status_code=404, detail="Card not found in this workstream")
@@ -4105,14 +4655,16 @@ async def trigger_card_deep_dive(
     # Check rate limit for deep research
     service = ResearchService(supabase, openai_client)
     if not await service.check_rate_limit(actual_card_id):
-        raise HTTPException(status_code=429, detail="Daily deep research limit reached (2 per card)")
+        raise HTTPException(
+            status_code=429, detail="Daily deep research limit reached (2 per card)"
+        )
 
     # Create research task using the actual underlying card UUID
     task_record = {
         "user_id": current_user["id"],
         "card_id": actual_card_id,
         "task_type": "deep_research",
-        "status": "queued"
+        "status": "queued",
     }
 
     task_result = supabase.table("research_tasks").insert(task_record).execute()
@@ -4126,11 +4678,12 @@ async def trigger_card_deep_dive(
     return ResearchTask(**task)
 
 
-@app.post("/api/v1/me/workstreams/{workstream_id}/cards/{card_id}/quick-update", response_model=ResearchTask)
+@app.post(
+    "/api/v1/me/workstreams/{workstream_id}/cards/{card_id}/quick-update",
+    response_model=ResearchTask,
+)
 async def trigger_card_quick_update(
-    workstream_id: str,
-    card_id: str,
-    current_user: dict = Depends(get_current_user)
+    workstream_id: str, card_id: str, current_user: dict = Depends(get_current_user)
 ):
     """
     Trigger a quick 5-source update for a card in the workstream.
@@ -4152,17 +4705,28 @@ async def trigger_card_quick_update(
         HTTPException 403: Not authorized
     """
     # Verify workstream belongs to user
-    ws_response = supabase.table("workstreams").select("id, user_id").eq("id", workstream_id).execute()
+    ws_response = (
+        supabase.table("workstreams")
+        .select("id, user_id")
+        .eq("id", workstream_id)
+        .execute()
+    )
     if not ws_response.data:
         raise HTTPException(status_code=404, detail="Workstream not found")
 
     if ws_response.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Not authorized to access this workstream")
+        raise HTTPException(
+            status_code=403, detail="Not authorized to access this workstream"
+        )
 
     # Verify card exists in workstream (card_id param is actually workstream_card.id - the junction table ID)
-    wsc_response = supabase.table("workstream_cards").select("id, card_id").eq(
-        "workstream_id", workstream_id
-    ).eq("id", card_id).execute()
+    wsc_response = (
+        supabase.table("workstream_cards")
+        .select("id, card_id")
+        .eq("workstream_id", workstream_id)
+        .eq("id", card_id)
+        .execute()
+    )
 
     if not wsc_response.data:
         raise HTTPException(status_code=404, detail="Card not found in this workstream")
@@ -4176,7 +4740,7 @@ async def trigger_card_quick_update(
         "user_id": current_user["id"],
         "card_id": actual_card_id,
         "task_type": "quick_update",
-        "status": "queued"
+        "status": "queued",
     }
 
     task_result = supabase.table("research_tasks").insert(task_record).execute()
@@ -4190,11 +4754,12 @@ async def trigger_card_quick_update(
     return ResearchTask(**task)
 
 
-@app.post("/api/v1/me/workstreams/{workstream_id}/cards/{card_id}/check-updates", response_model=ResearchTask)
+@app.post(
+    "/api/v1/me/workstreams/{workstream_id}/cards/{card_id}/check-updates",
+    response_model=ResearchTask,
+)
 async def trigger_card_check_updates(
-    workstream_id: str,
-    card_id: str,
-    current_user: dict = Depends(get_current_user)
+    workstream_id: str, card_id: str, current_user: dict = Depends(get_current_user)
 ):
     """
     Check for updates on a watched card.
@@ -4220,23 +4785,35 @@ async def trigger_card_check_updates(
 
 class WorkstreamResearchStatus(BaseModel):
     """Research status for a card in a workstream."""
+
     card_id: str = Field(..., description="UUID of the underlying card")
     task_id: str = Field(..., description="UUID of the research task")
-    task_type: str = Field(..., description="Type of research (quick_update, deep_research)")
-    status: str = Field(..., description="Task status (queued, processing, completed, failed)")
+    task_type: str = Field(
+        ..., description="Type of research (quick_update, deep_research)"
+    )
+    status: str = Field(
+        ..., description="Task status (queued, processing, completed, failed)"
+    )
     started_at: Optional[datetime] = Field(None, description="When research started")
-    completed_at: Optional[datetime] = Field(None, description="When research completed")
+    completed_at: Optional[datetime] = Field(
+        None, description="When research completed"
+    )
 
 
 class WorkstreamResearchStatusResponse(BaseModel):
     """Response containing active research tasks for a workstream's cards."""
-    tasks: List[WorkstreamResearchStatus] = Field(default=[], description="Active research tasks")
+
+    tasks: List[WorkstreamResearchStatus] = Field(
+        default=[], description="Active research tasks"
+    )
 
 
-@app.get("/api/v1/me/workstreams/{workstream_id}/research-status", response_model=WorkstreamResearchStatusResponse)
+@app.get(
+    "/api/v1/me/workstreams/{workstream_id}/research-status",
+    response_model=WorkstreamResearchStatusResponse,
+)
 async def get_workstream_research_status(
-    workstream_id: str,
-    current_user: dict = Depends(get_current_user)
+    workstream_id: str, current_user: dict = Depends(get_current_user)
 ):
     """
     Get active research tasks for cards in a workstream.
@@ -4256,23 +4833,33 @@ async def get_workstream_research_status(
         HTTPException 403: Not authorized
     """
     # Verify workstream belongs to user
-    ws_response = supabase.table("workstreams").select("id, user_id").eq("id", workstream_id).execute()
+    ws_response = (
+        supabase.table("workstreams")
+        .select("id, user_id")
+        .eq("id", workstream_id)
+        .execute()
+    )
     if not ws_response.data:
         raise HTTPException(status_code=404, detail="Workstream not found")
 
     if ws_response.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Not authorized to access this workstream")
+        raise HTTPException(
+            status_code=403, detail="Not authorized to access this workstream"
+        )
 
     # Get all card_ids in this workstream
-    wsc_response = supabase.table("workstream_cards").select("card_id").eq(
-        "workstream_id", workstream_id
-    ).execute()
+    wsc_response = (
+        supabase.table("workstream_cards")
+        .select("card_id")
+        .eq("workstream_id", workstream_id)
+        .execute()
+    )
 
     if not wsc_response.data:
         return WorkstreamResearchStatusResponse(tasks=[])
 
     card_ids = [item["card_id"] for item in wsc_response.data if item.get("card_id")]
-    
+
     # If no valid card_ids, return empty response
     if not card_ids:
         return WorkstreamResearchStatusResponse(tasks=[])
@@ -4284,18 +4871,23 @@ async def get_workstream_research_status(
         one_hour_ago = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
 
         # Query active tasks
-        active_tasks = supabase.table("research_tasks").select(
-            "id, card_id, task_type, status, started_at, completed_at"
-        ).in_("card_id", card_ids).in_(
-            "status", ["queued", "processing"]
-        ).execute()
+        active_tasks = (
+            supabase.table("research_tasks")
+            .select("id, card_id, task_type, status, started_at, completed_at")
+            .in_("card_id", card_ids)
+            .in_("status", ["queued", "processing"])
+            .execute()
+        )
 
         # Query recently completed tasks
-        recent_tasks = supabase.table("research_tasks").select(
-            "id, card_id, task_type, status, started_at, completed_at"
-        ).in_("card_id", card_ids).in_(
-            "status", ["completed", "failed"]
-        ).gte("completed_at", one_hour_ago).execute()
+        recent_tasks = (
+            supabase.table("research_tasks")
+            .select("id, card_id, task_type, status, started_at, completed_at")
+            .in_("card_id", card_ids)
+            .in_("status", ["completed", "failed"])
+            .gte("completed_at", one_hour_ago)
+            .execute()
+        )
     except Exception as e:
         logger.warning(f"Error querying research tasks: {e}")
         return WorkstreamResearchStatusResponse(tasks=[])
@@ -4326,7 +4918,7 @@ async def get_workstream_research_status(
             task_type=t["task_type"],
             status=t["status"],
             started_at=t.get("started_at"),
-            completed_at=t.get("completed_at")
+            completed_at=t.get("completed_at"),
         )
         for t in task_by_card.values()
     ]
@@ -4336,23 +4928,36 @@ async def get_workstream_research_status(
 
 class FilterPreviewRequest(BaseModel):
     """Request model for filter preview (estimate matching cards)."""
-    pillar_ids: List[str] = Field(default=[], description="List of pillar codes to filter by")
-    goal_ids: List[str] = Field(default=[], description="List of goal codes to filter by")
-    stage_ids: List[str] = Field(default=[], description="List of stage numbers to filter by")
-    horizon: Optional[str] = Field(default=None, description="Horizon filter (H1, H2, H3, or ALL)")
-    keywords: List[str] = Field(default=[], description="Keywords to match in card content")
+
+    pillar_ids: List[str] = Field(
+        default=[], description="List of pillar codes to filter by"
+    )
+    goal_ids: List[str] = Field(
+        default=[], description="List of goal codes to filter by"
+    )
+    stage_ids: List[str] = Field(
+        default=[], description="List of stage numbers to filter by"
+    )
+    horizon: Optional[str] = Field(
+        default=None, description="Horizon filter (H1, H2, H3, or ALL)"
+    )
+    keywords: List[str] = Field(
+        default=[], description="Keywords to match in card content"
+    )
 
 
 class FilterPreviewResponse(BaseModel):
     """Response model for filter preview."""
+
     estimated_count: int = Field(..., description="Estimated number of matching cards")
-    sample_cards: List[dict] = Field(default=[], description="Sample of matching cards (up to 5)")
+    sample_cards: List[dict] = Field(
+        default=[], description="Sample of matching cards (up to 5)"
+    )
 
 
 @app.post("/api/v1/cards/filter-preview", response_model=FilterPreviewResponse)
 async def preview_filter_count(
-    filters: FilterPreviewRequest,
-    current_user: dict = Depends(get_current_user)
+    filters: FilterPreviewRequest, current_user: dict = Depends(get_current_user)
 ):
     """
     Preview how many cards match the given filter criteria.
@@ -4368,7 +4973,11 @@ async def preview_filter_count(
         FilterPreviewResponse with estimated count and sample cards
     """
     # Build base query for active cards
-    query = supabase.table("cards").select("id, name, pillar_id, horizon, stage_id").eq("status", "active")
+    query = (
+        supabase.table("cards")
+        .select("id, name, pillar_id, horizon, stage_id")
+        .eq("status", "active")
+    )
 
     # Apply filters
     if filters.pillar_ids:
@@ -4389,7 +4998,9 @@ async def preview_filter_count(
         filtered_by_stage = []
         for card in cards:
             card_stage_id = card.get("stage_id") or ""
-            stage_num = card_stage_id.split("_")[0] if "_" in card_stage_id else card_stage_id
+            stage_num = (
+                card_stage_id.split("_")[0] if "_" in card_stage_id else card_stage_id
+            )
             if stage_num in filters.stage_ids:
                 filtered_by_stage.append(card)
         cards = filtered_by_stage
@@ -4399,37 +5010,49 @@ async def preview_filter_count(
         # Fetch full card data for keyword matching
         if cards:
             card_ids = [c["id"] for c in cards]
-            full_response = supabase.table("cards").select("id, name, summary, description, pillar_id, horizon, stage_id").in_("id", card_ids).execute()
+            full_response = (
+                supabase.table("cards")
+                .select("id, name, summary, description, pillar_id, horizon, stage_id")
+                .in_("id", card_ids)
+                .execute()
+            )
             full_cards = full_response.data or []
 
             filtered_cards = []
             for card in full_cards:
-                card_text = " ".join([
-                    (card.get("name") or "").lower(),
-                    (card.get("summary") or "").lower(),
-                    (card.get("description") or "").lower()
-                ])
+                card_text = " ".join(
+                    [
+                        (card.get("name") or "").lower(),
+                        (card.get("summary") or "").lower(),
+                        (card.get("description") or "").lower(),
+                    ]
+                )
                 if any(keyword.lower() in card_text for keyword in filters.keywords):
                     filtered_cards.append(card)
             cards = filtered_cards
 
     # Build response
     sample_cards = [
-        {"id": c["id"], "name": c["name"], "pillar_id": c.get("pillar_id"), "horizon": c.get("horizon")}
+        {
+            "id": c["id"],
+            "name": c["name"],
+            "pillar_id": c.get("pillar_id"),
+            "horizon": c.get("horizon"),
+        }
         for c in cards[:5]
     ]
 
-    return FilterPreviewResponse(
-        estimated_count=len(cards),
-        sample_cards=sample_cards
-    )
+    return FilterPreviewResponse(estimated_count=len(cards), sample_cards=sample_cards)
 
 
-@app.post("/api/v1/me/workstreams/{workstream_id}/auto-populate", response_model=AutoPopulateResponse)
+@app.post(
+    "/api/v1/me/workstreams/{workstream_id}/auto-populate",
+    response_model=AutoPopulateResponse,
+)
 async def auto_populate_workstream(
     workstream_id: str,
     current_user: dict = Depends(get_current_user),
-    limit: int = Query(default=20, ge=1, le=50, description="Maximum cards to add")
+    limit: int = Query(default=20, ge=1, le=50, description="Maximum cards to add"),
 ):
     """
     Auto-populate workstream with matching cards.
@@ -4451,16 +5074,25 @@ async def auto_populate_workstream(
         HTTPException 403: Not authorized
     """
     # Verify workstream belongs to user
-    ws_response = supabase.table("workstreams").select("*").eq("id", workstream_id).eq("user_id", current_user["id"]).execute()
+    ws_response = (
+        supabase.table("workstreams")
+        .select("*")
+        .eq("id", workstream_id)
+        .eq("user_id", current_user["id"])
+        .execute()
+    )
     if not ws_response.data:
         raise HTTPException(status_code=404, detail="Workstream not found")
 
     workstream = ws_response.data[0]
 
     # Get existing card IDs in workstream
-    existing_response = supabase.table("workstream_cards").select("card_id").eq(
-        "workstream_id", workstream_id
-    ).execute()
+    existing_response = (
+        supabase.table("workstream_cards")
+        .select("card_id")
+        .eq("workstream_id", workstream_id)
+        .execute()
+    )
     existing_card_ids = {item["card_id"] for item in existing_response.data or []}
 
     # Build query based on workstream filters
@@ -4492,7 +5124,9 @@ async def auto_populate_workstream(
         for card in cards:
             card_stage_id = card.get("stage_id") or ""
             # Extract number prefix (e.g., "5" from "5_implementing")
-            stage_num = card_stage_id.split("_")[0] if "_" in card_stage_id else card_stage_id
+            stage_num = (
+                card_stage_id.split("_")[0] if "_" in card_stage_id else card_stage_id
+            )
             if stage_num in stage_ids:
                 filtered_by_stage.append(card)
         cards = filtered_by_stage
@@ -4502,11 +5136,13 @@ async def auto_populate_workstream(
     if keywords:
         filtered_cards = []
         for card in cards:
-            card_text = " ".join([
-                (card.get("name") or "").lower(),
-                (card.get("summary") or "").lower(),
-                (card.get("description") or "").lower()
-            ])
+            card_text = " ".join(
+                [
+                    (card.get("name") or "").lower(),
+                    (card.get("summary") or "").lower(),
+                    (card.get("description") or "").lower(),
+                ]
+            )
             if any(keyword.lower() in card_text for keyword in keywords):
                 filtered_cards.append(card)
         cards = filtered_cards
@@ -4518,9 +5154,15 @@ async def auto_populate_workstream(
         return AutoPopulateResponse(added=0, cards=[])
 
     # Get current max position in inbox
-    position_response = supabase.table("workstream_cards").select("position").eq(
-        "workstream_id", workstream_id
-    ).eq("status", "inbox").order("position", desc=True).limit(1).execute()
+    position_response = (
+        supabase.table("workstream_cards")
+        .select("position")
+        .eq("workstream_id", workstream_id)
+        .eq("status", "inbox")
+        .order("position", desc=True)
+        .limit(1)
+        .execute()
+    )
 
     start_position = 0
     if position_response.data:
@@ -4530,43 +5172,51 @@ async def auto_populate_workstream(
     now = datetime.now().isoformat()
     new_records = []
     for idx, card in enumerate(candidates):
-        new_records.append({
-            "workstream_id": workstream_id,
-            "card_id": card["id"],
-            "added_by": current_user["id"],
-            "added_at": now,
-            "status": "inbox",
-            "position": start_position + idx,
-            "added_from": "auto",
-            "updated_at": now
-        })
+        new_records.append(
+            {
+                "workstream_id": workstream_id,
+                "card_id": card["id"],
+                "added_by": current_user["id"],
+                "added_at": now,
+                "status": "inbox",
+                "position": start_position + idx,
+                "added_from": "auto",
+                "updated_at": now,
+            }
+        )
 
     # Insert all records
     result = supabase.table("workstream_cards").insert(new_records).execute()
 
     if not result.data:
-        raise HTTPException(status_code=500, detail="Failed to auto-populate workstream")
+        raise HTTPException(
+            status_code=500, detail="Failed to auto-populate workstream"
+        )
 
     # Build response with card details
     added_cards = []
     card_map = {c["id"]: c for c in candidates}
     for item in result.data:
-        added_cards.append(WorkstreamCardWithDetails(
-            id=item["id"],
-            workstream_id=item["workstream_id"],
-            card_id=item["card_id"],
-            added_by=item["added_by"],
-            added_at=item["added_at"],
-            status=item.get("status", "inbox"),
-            position=item.get("position", 0),
-            notes=item.get("notes"),
-            reminder_at=item.get("reminder_at"),
-            added_from=item.get("added_from", "auto"),
-            updated_at=item.get("updated_at"),
-            card=card_map.get(item["card_id"])
-        ))
+        added_cards.append(
+            WorkstreamCardWithDetails(
+                id=item["id"],
+                workstream_id=item["workstream_id"],
+                card_id=item["card_id"],
+                added_by=item["added_by"],
+                added_at=item["added_at"],
+                status=item.get("status", "inbox"),
+                position=item.get("position", 0),
+                notes=item.get("notes"),
+                reminder_at=item.get("reminder_at"),
+                added_from=item.get("added_from", "auto"),
+                updated_at=item.get("updated_at"),
+                card=card_map.get(item["card_id"]),
+            )
+        )
 
-    logger.info(f"Auto-populated workstream {workstream_id} with {len(added_cards)} cards")
+    logger.info(
+        f"Auto-populated workstream {workstream_id} with {len(added_cards)} cards"
+    )
 
     return AutoPopulateResponse(added=len(added_cards), cards=added_cards)
 
@@ -4575,16 +5225,21 @@ async def auto_populate_workstream(
 # Workstream Targeted Scan Endpoints
 # ============================================================================
 
+
 class WorkstreamScanResponse(BaseModel):
     """Response for starting a workstream scan."""
+
     scan_id: str = Field(..., description="UUID of the scan job")
     workstream_id: str = Field(..., description="UUID of the workstream")
-    status: str = Field(..., description="Scan status (queued, running, completed, failed)")
+    status: str = Field(
+        ..., description="Scan status (queued, running, completed, failed)"
+    )
     message: str = Field(..., description="User-friendly status message")
 
 
 class WorkstreamScanStatusResponse(BaseModel):
     """Response for scan status check."""
+
     scan_id: str
     workstream_id: str
     status: str
@@ -4598,33 +5253,35 @@ class WorkstreamScanStatusResponse(BaseModel):
 
 class WorkstreamScanHistoryResponse(BaseModel):
     """Response for scan history."""
+
     scans: List[WorkstreamScanStatusResponse]
     total: int
     scans_remaining_today: int
 
 
-@app.post("/api/v1/me/workstreams/{workstream_id}/scan", response_model=WorkstreamScanResponse)
+@app.post(
+    "/api/v1/me/workstreams/{workstream_id}/scan", response_model=WorkstreamScanResponse
+)
 async def start_workstream_scan(
-    workstream_id: str,
-    current_user: dict = Depends(get_current_user)
+    workstream_id: str, current_user: dict = Depends(get_current_user)
 ):
     """
     Start a targeted discovery scan for a workstream.
-    
+
     Generates queries from workstream keywords and pillars, fetches content
     from all 5 source categories, and creates new cards that are added to
     the global pool and auto-added to the workstream inbox.
-    
+
     Rate limited to 2 scans per workstream per day.
     Only one scan can be active (queued/running) per workstream at a time.
-    
+
     Args:
         workstream_id: UUID of the workstream
         current_user: Authenticated user (injected)
-    
+
     Returns:
         WorkstreamScanResponse with scan_id and queued status
-    
+
     Raises:
         HTTPException 404: Workstream not found
         HTTPException 403: Not authorized
@@ -4632,35 +5289,40 @@ async def start_workstream_scan(
         HTTPException 429: Rate limit exceeded (2 scans/day)
     """
     user_id = current_user["id"]
-    
+
     # Validate UUID format
     try:
         uuid.UUID(workstream_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid workstream ID format")
-    
+
     # Verify workstream belongs to user
-    ws_response = supabase.table("workstreams").select(
-        "id, user_id, name, keywords, pillar_ids, horizon"
-    ).eq("id", workstream_id).execute()
-    
+    ws_response = (
+        supabase.table("workstreams")
+        .select("id, user_id, name, keywords, pillar_ids, horizon")
+        .eq("id", workstream_id)
+        .execute()
+    )
+
     if not ws_response.data:
         raise HTTPException(status_code=404, detail="Workstream not found")
-    
+
     workstream = ws_response.data[0]
     if workstream["user_id"] != user_id:
-        raise HTTPException(status_code=403, detail="Not authorized to access this workstream")
-    
+        raise HTTPException(
+            status_code=403, detail="Not authorized to access this workstream"
+        )
+
     # Validate workstream has keywords or pillars to scan
     keywords = workstream.get("keywords") or []
     pillar_ids = workstream.get("pillar_ids") or []
-    
+
     if not keywords and not pillar_ids:
         raise HTTPException(
             status_code=400,
-            detail="Workstream needs keywords or pillars configured for scanning. Edit the workstream to add search criteria."
+            detail="Workstream needs keywords or pillars configured for scanning. Edit the workstream to add search criteria.",
         )
-    
+
     # Build config for the scan
     config = {
         "workstream_id": workstream_id,
@@ -4669,14 +5331,18 @@ async def start_workstream_scan(
         "pillar_ids": pillar_ids,
         "horizon": workstream.get("horizon") or "ALL",
     }
-    
+
     try:
         import json
         import os
-        
+
         # Check if rate limiting is disabled (for testing)
-        skip_rate_limit = os.getenv("DISABLE_SCAN_RATE_LIMIT", "").lower() in ("true", "1", "yes")
-        
+        skip_rate_limit = os.getenv("DISABLE_SCAN_RATE_LIMIT", "").lower() in (
+            "true",
+            "1",
+            "yes",
+        )
+
         if skip_rate_limit:
             # Direct insert without rate limit check
             scan_record = {
@@ -4695,37 +5361,36 @@ async def start_workstream_scan(
                     "p_workstream_id": workstream_id,
                     "p_user_id": user_id,
                     "p_config": json.dumps(config),
-                }
+                },
             ).execute()
             scan_id = result.data
-        
+
         if not scan_id:
             # Determine which check failed for better error message
             active_check = supabase.rpc(
-                "has_active_workstream_scan",
-                {"p_workstream_id": workstream_id}
+                "has_active_workstream_scan", {"p_workstream_id": workstream_id}
             ).execute()
-            
+
             if active_check.data:
                 raise HTTPException(
                     status_code=409,
-                    detail="A scan is already in progress for this workstream. Please wait for it to complete."
+                    detail="A scan is already in progress for this workstream. Please wait for it to complete.",
                 )
             else:
                 raise HTTPException(
                     status_code=429,
-                    detail="Rate limit exceeded: Maximum 2 scans per workstream per day. Try again tomorrow."
+                    detail="Rate limit exceeded: Maximum 2 scans per workstream per day. Try again tomorrow.",
                 )
-        
+
         logger.info(f"Created workstream scan {scan_id} for workstream {workstream_id}")
-        
+
         return WorkstreamScanResponse(
             scan_id=scan_id,
             workstream_id=workstream_id,
             status="queued",
-            message=f"Scan started for '{workstream['name']}'. New cards will be added to your inbox."
+            message=f"Scan started for '{workstream['name']}'. New cards will be added to your inbox.",
         )
-    
+
     except HTTPException:
         raise  # Re-raise HTTP exceptions as-is
     except Exception as e:
@@ -4733,63 +5398,80 @@ async def start_workstream_scan(
         raise HTTPException(status_code=500, detail=f"Failed to start scan: {str(e)}")
 
 
-@app.get("/api/v1/me/workstreams/{workstream_id}/scan/status", response_model=WorkstreamScanStatusResponse)
+@app.get(
+    "/api/v1/me/workstreams/{workstream_id}/scan/status",
+    response_model=WorkstreamScanStatusResponse,
+)
 async def get_workstream_scan_status(
     workstream_id: str,
-    scan_id: Optional[str] = Query(None, description="Specific scan ID, or latest if not provided"),
-    current_user: dict = Depends(get_current_user)
+    scan_id: Optional[str] = Query(
+        None, description="Specific scan ID, or latest if not provided"
+    ),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Get the status of a workstream scan.
-    
+
     Returns the latest scan status by default, or a specific scan if scan_id provided.
-    
+
     Args:
         workstream_id: UUID of the workstream
         scan_id: Optional specific scan ID
         current_user: Authenticated user (injected)
-    
+
     Returns:
         WorkstreamScanStatusResponse with scan details and results
     """
     user_id = current_user["id"]
-    
+
     # Verify workstream belongs to user
-    ws_response = supabase.table("workstreams").select("id, user_id").eq("id", workstream_id).execute()
+    ws_response = (
+        supabase.table("workstreams")
+        .select("id, user_id")
+        .eq("id", workstream_id)
+        .execute()
+    )
     if not ws_response.data:
         raise HTTPException(status_code=404, detail="Workstream not found")
     if ws_response.data[0]["user_id"] != user_id:
         raise HTTPException(status_code=403, detail="Not authorized")
-    
+
     # Get scan
     try:
-        query = supabase.table("workstream_scans").select("*").eq("workstream_id", workstream_id)
-        
+        query = (
+            supabase.table("workstream_scans")
+            .select("*")
+            .eq("workstream_id", workstream_id)
+        )
+
         if scan_id:
             query = query.eq("id", scan_id)
         else:
             query = query.order("created_at", desc=True).limit(1)
-        
+
         result = query.execute()
     except Exception as e:
         logger.error(f"Error querying workstream_scans: {e}")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-    
+
     if not result.data:
-        raise HTTPException(status_code=404, detail="No scans found for this workstream")
-    
+        raise HTTPException(
+            status_code=404, detail="No scans found for this workstream"
+        )
+
     scan = result.data[0]
-    
+
     try:
         # Parse JSON fields if they come back as strings (Supabase behavior)
         import json
+
         config_data = scan.get("config")
         if isinstance(config_data, str):
             config_data = json.loads(config_data)
         results_data = scan.get("results")
         if isinstance(results_data, str):
             results_data = json.loads(results_data)
-        
+
         return WorkstreamScanStatusResponse(
             scan_id=scan["id"],
             workstream_id=scan["workstream_id"],
@@ -4806,39 +5488,59 @@ async def get_workstream_scan_status(
         raise HTTPException(status_code=500, detail=f"Response error: {str(e)}")
 
 
-@app.get("/api/v1/me/workstreams/{workstream_id}/scan/history", response_model=WorkstreamScanHistoryResponse)
+@app.get(
+    "/api/v1/me/workstreams/{workstream_id}/scan/history",
+    response_model=WorkstreamScanHistoryResponse,
+)
 async def get_workstream_scan_history(
     workstream_id: str,
     limit: int = Query(10, ge=1, le=50),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Get scan history for a workstream.
-    
+
     Returns recent scans and remaining daily quota.
     """
     user_id = current_user["id"]
-    
+
     # Verify workstream belongs to user
-    ws_response = supabase.table("workstreams").select("id, user_id").eq("id", workstream_id).execute()
+    ws_response = (
+        supabase.table("workstreams")
+        .select("id, user_id")
+        .eq("id", workstream_id)
+        .execute()
+    )
     if not ws_response.data:
         raise HTTPException(status_code=404, detail="Workstream not found")
     if ws_response.data[0]["user_id"] != user_id:
         raise HTTPException(status_code=403, detail="Not authorized")
-    
+
     # Get scan history
-    result = supabase.table("workstream_scans").select("*").eq(
-        "workstream_id", workstream_id
-    ).order("created_at", desc=True).limit(limit).execute()
-    
+    result = (
+        supabase.table("workstream_scans")
+        .select("*")
+        .eq("workstream_id", workstream_id)
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+
     scans = result.data or []
-    
+
     # Count scans today
-    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    scans_today = sum(1 for s in scans if s.get("created_at") and s["created_at"] >= today_start.isoformat())
-    
+    today_start = datetime.now(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    scans_today = sum(
+        1
+        for s in scans
+        if s.get("created_at") and s["created_at"] >= today_start.isoformat()
+    )
+
     # Parse JSON fields if they come back as strings
     import json
+
     def parse_json_field(val):
         if isinstance(val, str):
             try:
@@ -4846,7 +5548,7 @@ async def get_workstream_scan_history(
             except:
                 return val
         return val
-    
+
     return WorkstreamScanHistoryResponse(
         scans=[
             WorkstreamScanStatusResponse(
@@ -4871,7 +5573,7 @@ async def get_workstream_scan_history(
 async def execute_workstream_scan_background(scan_id: str, config: dict):
     """Execute a workstream scan in background."""
     from app.workstream_scan_service import WorkstreamScanService, WorkstreamScanConfig
-    
+
     try:
         scan_config = WorkstreamScanConfig(
             workstream_id=config["workstream_id"],
@@ -4881,31 +5583,34 @@ async def execute_workstream_scan_background(scan_id: str, config: dict):
             pillar_ids=config.get("pillar_ids", []),
             horizon=config.get("horizon", "ALL"),
         )
-        
+
         service = WorkstreamScanService(supabase, openai_client)
         result = await service.execute_scan(scan_config)
-        
+
         logger.info(
             f"Workstream scan {scan_id} completed: "
             f"{len(result.cards_created)} created, {len(result.cards_added_to_workstream)} added to workstream"
         )
-        
+
     except Exception as e:
         logger.exception(f"Workstream scan {scan_id} failed: {e}")
         # Update scan status to failed
-        supabase.table("workstream_scans").update({
-            "status": "failed",
-            "error_message": str(e),
-            "completed_at": datetime.now(timezone.utc).isoformat(),
-        }).eq("id", scan_id).execute()
+        supabase.table("workstream_scans").update(
+            {
+                "status": "failed",
+                "error_message": str(e),
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ).eq("id", scan_id).execute()
 
 
 # Executive Brief endpoints
-@app.post("/api/v1/me/workstreams/{workstream_id}/cards/{card_id}/brief", response_model=BriefGenerateResponse)
+@app.post(
+    "/api/v1/me/workstreams/{workstream_id}/cards/{card_id}/brief",
+    response_model=BriefGenerateResponse,
+)
 async def generate_executive_brief(
-    workstream_id: str,
-    card_id: str,
-    current_user: dict = Depends(get_current_user)
+    workstream_id: str, card_id: str, current_user: dict = Depends(get_current_user)
 ):
     """
     Generate a new version of an executive brief for a card in a workstream.
@@ -4927,17 +5632,28 @@ async def generate_executive_brief(
         HTTPException 403: Not authorized to access workstream
     """
     # Verify workstream belongs to user
-    ws_response = supabase.table("workstreams").select("id, user_id").eq("id", workstream_id).execute()
+    ws_response = (
+        supabase.table("workstreams")
+        .select("id, user_id")
+        .eq("id", workstream_id)
+        .execute()
+    )
     if not ws_response.data:
         raise HTTPException(status_code=404, detail="Workstream not found")
 
     if ws_response.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Not authorized to access this workstream")
+        raise HTTPException(
+            status_code=403, detail="Not authorized to access this workstream"
+        )
 
     # Verify card exists in workstream and get the workstream_cards record
-    wsc_response = supabase.table("workstream_cards").select("id, card_id").eq(
-        "workstream_id", workstream_id
-    ).eq("card_id", card_id).execute()
+    wsc_response = (
+        supabase.table("workstream_cards")
+        .select("id, card_id")
+        .eq("workstream_id", workstream_id)
+        .eq("card_id", card_id)
+        .execute()
+    )
 
     if not wsc_response.data:
         raise HTTPException(status_code=404, detail="Card not found in this workstream")
@@ -4949,7 +5665,9 @@ async def generate_executive_brief(
 
     try:
         # Check if there's a brief currently generating
-        existing_brief = await brief_service.get_brief_by_workstream_card(workstream_card_id)
+        existing_brief = await brief_service.get_brief_by_workstream_card(
+            workstream_card_id
+        )
 
         if existing_brief and existing_brief.get("status") in ("pending", "generating"):
             # Don't allow generating while another is in progress
@@ -4957,22 +5675,26 @@ async def generate_executive_brief(
                 id=existing_brief["id"],
                 status=existing_brief["status"],
                 version=existing_brief.get("version", 1),
-                message="Brief generation already in progress"
+                message="Brief generation already in progress",
             )
 
         # Get the last completed brief to determine new sources
-        last_completed = await brief_service.get_latest_completed_brief(workstream_card_id)
+        last_completed = await brief_service.get_latest_completed_brief(
+            workstream_card_id
+        )
         since_timestamp = None
         sources_since_previous = None
 
         if last_completed and last_completed.get("generated_at"):
             since_timestamp = last_completed["generated_at"]
             # Count new sources since last brief
-            new_source_count = await brief_service.count_new_sources(card_id, since_timestamp)
+            new_source_count = await brief_service.count_new_sources(
+                card_id, since_timestamp
+            )
             sources_since_previous = {
                 "count": new_source_count,
                 "since_version": last_completed.get("version", 1),
-                "since_date": since_timestamp
+                "since_date": since_timestamp,
             }
 
         # Create the brief record with pending status (auto-increments version)
@@ -4980,7 +5702,7 @@ async def generate_executive_brief(
             workstream_card_id=workstream_card_id,
             card_id=card_id,
             user_id=current_user["id"],
-            sources_since_previous=sources_since_previous
+            sources_since_previous=sources_since_previous,
         )
 
         brief_id = brief_record["id"]
@@ -4990,20 +5712,25 @@ async def generate_executive_brief(
             id=brief_id,
             status="pending",
             version=brief_version,
-            message=f"Brief v{brief_version} queued for generation"
+            message=f"Brief v{brief_version} queued for generation",
         )
 
     except Exception as e:
         logger.error(f"Failed to initiate brief generation: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to start brief generation: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to start brief generation: {str(e)}"
+        )
 
 
-@app.get("/api/v1/me/workstreams/{workstream_id}/cards/{card_id}/brief", response_model=ExecutiveBriefResponse)
+@app.get(
+    "/api/v1/me/workstreams/{workstream_id}/cards/{card_id}/brief",
+    response_model=ExecutiveBriefResponse,
+)
 async def get_executive_brief(
     workstream_id: str,
     card_id: str,
     version: Optional[int] = None,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Get an executive brief for a card in a workstream.
@@ -5025,17 +5752,28 @@ async def get_executive_brief(
         HTTPException 403: Not authorized to access workstream
     """
     # Verify workstream belongs to user
-    ws_response = supabase.table("workstreams").select("id, user_id").eq("id", workstream_id).execute()
+    ws_response = (
+        supabase.table("workstreams")
+        .select("id, user_id")
+        .eq("id", workstream_id)
+        .execute()
+    )
     if not ws_response.data:
         raise HTTPException(status_code=404, detail="Workstream not found")
 
     if ws_response.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Not authorized to access this workstream")
+        raise HTTPException(
+            status_code=403, detail="Not authorized to access this workstream"
+        )
 
     # Verify card exists in workstream and get the workstream_cards record
-    wsc_response = supabase.table("workstream_cards").select("id").eq(
-        "workstream_id", workstream_id
-    ).eq("card_id", card_id).execute()
+    wsc_response = (
+        supabase.table("workstream_cards")
+        .select("id")
+        .eq("workstream_id", workstream_id)
+        .eq("card_id", card_id)
+        .execute()
+    )
 
     if not wsc_response.data:
         raise HTTPException(status_code=404, detail="Card not found in this workstream")
@@ -5044,21 +5782,26 @@ async def get_executive_brief(
 
     # Fetch the brief (latest or specific version)
     brief_service = ExecutiveBriefService(supabase, openai_client)
-    brief = await brief_service.get_brief_by_workstream_card(workstream_card_id, version=version)
+    brief = await brief_service.get_brief_by_workstream_card(
+        workstream_card_id, version=version
+    )
 
     if not brief:
         if version:
-            raise HTTPException(status_code=404, detail=f"Brief version {version} not found")
+            raise HTTPException(
+                status_code=404, detail=f"Brief version {version} not found"
+            )
         raise HTTPException(status_code=404, detail="No brief found for this card")
 
     return ExecutiveBriefResponse(**brief)
 
 
-@app.get("/api/v1/me/workstreams/{workstream_id}/cards/{card_id}/brief/versions", response_model=BriefVersionsResponse)
+@app.get(
+    "/api/v1/me/workstreams/{workstream_id}/cards/{card_id}/brief/versions",
+    response_model=BriefVersionsResponse,
+)
 async def get_brief_versions(
-    workstream_id: str,
-    card_id: str,
-    current_user: dict = Depends(get_current_user)
+    workstream_id: str, card_id: str, current_user: dict = Depends(get_current_user)
 ):
     """
     Get all versions of executive briefs for a card in a workstream.
@@ -5078,17 +5821,28 @@ async def get_brief_versions(
         HTTPException 403: Not authorized to access workstream
     """
     # Verify workstream belongs to user
-    ws_response = supabase.table("workstreams").select("id, user_id").eq("id", workstream_id).execute()
+    ws_response = (
+        supabase.table("workstreams")
+        .select("id, user_id")
+        .eq("id", workstream_id)
+        .execute()
+    )
     if not ws_response.data:
         raise HTTPException(status_code=404, detail="Workstream not found")
 
     if ws_response.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Not authorized to access this workstream")
+        raise HTTPException(
+            status_code=403, detail="Not authorized to access this workstream"
+        )
 
     # Verify card exists in workstream and get the workstream_cards record
-    wsc_response = supabase.table("workstream_cards").select("id").eq(
-        "workstream_id", workstream_id
-    ).eq("card_id", card_id).execute()
+    wsc_response = (
+        supabase.table("workstream_cards")
+        .select("id")
+        .eq("workstream_id", workstream_id)
+        .eq("card_id", card_id)
+        .execute()
+    )
 
     if not wsc_response.data:
         raise HTTPException(status_code=404, detail="Card not found in this workstream")
@@ -5109,7 +5863,7 @@ async def get_brief_versions(
             sources_since_previous=v.get("sources_since_previous"),
             generated_at=v.get("generated_at"),
             created_at=v["created_at"],
-            model_used=v.get("model_used")
+            model_used=v.get("model_used"),
         )
         for v in versions
     ]
@@ -5118,15 +5872,16 @@ async def get_brief_versions(
         workstream_card_id=workstream_card_id,
         card_id=card_id,
         total_versions=len(version_items),
-        versions=version_items
+        versions=version_items,
     )
 
 
-@app.get("/api/v1/me/workstreams/{workstream_id}/cards/{card_id}/brief/status", response_model=BriefStatusResponse)
+@app.get(
+    "/api/v1/me/workstreams/{workstream_id}/cards/{card_id}/brief/status",
+    response_model=BriefStatusResponse,
+)
 async def get_brief_status(
-    workstream_id: str,
-    card_id: str,
-    current_user: dict = Depends(get_current_user)
+    workstream_id: str, card_id: str, current_user: dict = Depends(get_current_user)
 ):
     """
     Get the status of brief generation for a card.
@@ -5147,17 +5902,28 @@ async def get_brief_status(
         HTTPException 403: Not authorized to access workstream
     """
     # Verify workstream belongs to user
-    ws_response = supabase.table("workstreams").select("id, user_id").eq("id", workstream_id).execute()
+    ws_response = (
+        supabase.table("workstreams")
+        .select("id, user_id")
+        .eq("id", workstream_id)
+        .execute()
+    )
     if not ws_response.data:
         raise HTTPException(status_code=404, detail="Workstream not found")
 
     if ws_response.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Not authorized to access this workstream")
+        raise HTTPException(
+            status_code=403, detail="Not authorized to access this workstream"
+        )
 
     # Verify card exists in workstream and get the workstream_cards record
-    wsc_response = supabase.table("workstream_cards").select("id").eq(
-        "workstream_id", workstream_id
-    ).eq("card_id", card_id).execute()
+    wsc_response = (
+        supabase.table("workstream_cards")
+        .select("id")
+        .eq("workstream_id", workstream_id)
+        .eq("card_id", card_id)
+        .execute()
+    )
 
     if not wsc_response.data:
         raise HTTPException(status_code=404, detail="Card not found in this workstream")
@@ -5185,7 +5951,7 @@ async def get_brief_status(
         summary=brief.get("summary"),
         error_message=brief.get("error_message"),
         generated_at=brief.get("generated_at"),
-        progress_message=progress_message
+        progress_message=progress_message,
     )
 
 
@@ -5195,7 +5961,7 @@ async def export_brief(
     card_id: str,
     format: str,
     version: Optional[int] = None,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Export an executive brief in the specified format.
@@ -5223,21 +5989,32 @@ async def export_brief(
     if format_lower not in ("pdf", "pptx"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid export format: {format}. Supported formats: pdf, pptx"
+            detail=f"Invalid export format: {format}. Supported formats: pdf, pptx",
         )
 
     # Verify workstream belongs to user
-    ws_response = supabase.table("workstreams").select("id, user_id").eq("id", workstream_id).execute()
+    ws_response = (
+        supabase.table("workstreams")
+        .select("id, user_id")
+        .eq("id", workstream_id)
+        .execute()
+    )
     if not ws_response.data:
         raise HTTPException(status_code=404, detail="Workstream not found")
 
     if ws_response.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Not authorized to access this workstream")
+        raise HTTPException(
+            status_code=403, detail="Not authorized to access this workstream"
+        )
 
     # Verify card exists in workstream and get the workstream_cards record
-    wsc_response = supabase.table("workstream_cards").select("id").eq(
-        "workstream_id", workstream_id
-    ).eq("card_id", card_id).execute()
+    wsc_response = (
+        supabase.table("workstream_cards")
+        .select("id")
+        .eq("workstream_id", workstream_id)
+        .eq("card_id", card_id)
+        .execute()
+    )
 
     if not wsc_response.data:
         raise HTTPException(status_code=404, detail="Card not found in this workstream")
@@ -5246,7 +6023,9 @@ async def export_brief(
 
     # Fetch the brief
     brief_service = ExecutiveBriefService(supabase, openai_client)
-    brief = await brief_service.get_brief_by_workstream_card(workstream_card_id, version=version)
+    brief = await brief_service.get_brief_by_workstream_card(
+        workstream_card_id, version=version
+    )
 
     if not brief:
         raise HTTPException(status_code=404, detail="No brief found for this card")
@@ -5254,14 +6033,18 @@ async def export_brief(
     if brief["status"] != "completed":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Brief is not yet complete. Please wait for generation to finish."
+            detail="Brief is not yet complete. Please wait for generation to finish.",
         )
 
     # Fetch card info for the export (including classification)
-    card_response = supabase.table("cards").select(
-        "name, pillar_id, horizon, stage_id"
-    ).eq("id", card_id).single().execute()
-    
+    card_response = (
+        supabase.table("cards")
+        .select("name, pillar_id, horizon, stage_id")
+        .eq("id", card_id)
+        .single()
+        .execute()
+    )
+
     card_name = "Unknown Card"
     classification = {}
     if card_response.data:
@@ -5281,8 +6064,11 @@ async def export_brief(
         generated_at = None
         if brief.get("generated_at"):
             from datetime import datetime
+
             if isinstance(brief["generated_at"], str):
-                generated_at = datetime.fromisoformat(brief["generated_at"].replace("Z", "+00:00"))
+                generated_at = datetime.fromisoformat(
+                    brief["generated_at"].replace("Z", "+00:00")
+                )
             else:
                 generated_at = brief["generated_at"]
 
@@ -5295,7 +6081,7 @@ async def export_brief(
                 content_markdown=brief.get("content_markdown", ""),
                 generated_at=generated_at,
                 version=brief.get("version", 1),
-                classification=classification
+                classification=classification,
             )
             content_type = "application/pdf"
             extension = "pdf"
@@ -5308,7 +6094,7 @@ async def export_brief(
                 generated_at=generated_at,
                 version=brief.get("version", 1),
                 classification=classification,
-                use_gamma=True  # Try Gamma.app first, fallback to local
+                use_gamma=True,  # Try Gamma.app first, fallback to local
             )
             content_type = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
             extension = "pptx"
@@ -5316,21 +6102,20 @@ async def export_brief(
         # Generate safe filename
         safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in card_name)
         safe_name = safe_name[:50]  # Limit length
-        version_str = f"_v{brief.get('version', 1)}" if brief.get('version', 1) > 1 else ""
+        version_str = (
+            f"_v{brief.get('version', 1)}" if brief.get("version", 1) > 1 else ""
+        )
         filename = f"Brief_{safe_name}{version_str}.{extension}"
 
         return FileResponse(
-            path=file_path,
-            filename=filename,
-            media_type=content_type,
-            background=None
+            path=file_path, filename=filename, media_type=content_type, background=None
         )
 
     except Exception as e:
         logger.error(f"Brief export generation failed: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate export: {str(e)}"
+            detail=f"Failed to generate export: {str(e)}",
         )
 
 
@@ -5338,22 +6123,22 @@ async def export_brief(
 # Bulk Brief Export (Portfolio)
 # =============================================================================
 
+
 class BulkExportRequest(BaseModel):
     """Request body for bulk brief export."""
+
     format: str = "pptx"  # "pptx" or "pdf"
     card_order: List[str]  # Ordered list of card IDs (from Kanban position)
-    
+
     class Config:
         json_schema_extra = {
-            "example": {
-                "format": "pptx",
-                "card_order": ["uuid-1", "uuid-2", "uuid-3"]
-            }
+            "example": {"format": "pptx", "card_order": ["uuid-1", "uuid-2", "uuid-3"]}
         }
 
 
 class BulkBriefCardStatus(BaseModel):
     """Status of a single card for bulk export."""
+
     card_id: str
     card_name: str
     has_brief: bool
@@ -5363,6 +6148,7 @@ class BulkBriefCardStatus(BaseModel):
 
 class BulkBriefStatusResponse(BaseModel):
     """Response for bulk brief status check."""
+
     total_cards: int
     cards_with_briefs: int
     cards_ready: int
@@ -5371,69 +6157,85 @@ class BulkBriefStatusResponse(BaseModel):
 
 @app.get("/api/v1/me/workstreams/{workstream_id}/bulk-brief-status")
 async def get_bulk_brief_status(
-    workstream_id: str,
-    current_user: dict = Depends(get_current_user)
+    workstream_id: str, current_user: dict = Depends(get_current_user)
 ) -> BulkBriefStatusResponse:
     """
     Get brief status for all cards in the Brief column.
-    
+
     Used by the frontend to show which cards have completed briefs
     before initiating a bulk export.
-    
+
     Args:
         workstream_id: UUID of the workstream
         current_user: Authenticated user (injected)
-    
+
     Returns:
         BulkBriefStatusResponse with summary counts and per-card status
     """
     # Verify workstream belongs to user
-    ws_response = supabase.table("workstreams").select("id, user_id, name").eq("id", workstream_id).execute()
+    ws_response = (
+        supabase.table("workstreams")
+        .select("id, user_id, name")
+        .eq("id", workstream_id)
+        .execute()
+    )
     if not ws_response.data:
         raise HTTPException(status_code=404, detail="Workstream not found")
     if ws_response.data[0]["user_id"] != current_user["id"]:
         raise HTTPException(status_code=403, detail="Not authorized")
-    
+
     # Get all cards in brief column
-    wsc_response = supabase.table("workstream_cards").select(
-        "id, card_id, status, position, cards(id, name, pillar_id, horizon)"
-    ).eq("workstream_id", workstream_id).eq("status", "brief").order("position").execute()
-    
+    wsc_response = (
+        supabase.table("workstream_cards")
+        .select("id, card_id, status, position, cards(id, name, pillar_id, horizon)")
+        .eq("workstream_id", workstream_id)
+        .eq("status", "brief")
+        .order("position")
+        .execute()
+    )
+
     card_statuses = []
     cards_with_briefs = 0
     cards_ready = 0
-    
+
     for wsc in wsc_response.data or []:
         card = wsc.get("cards", {})
         card_id = wsc.get("card_id")
         position = wsc.get("position", 0)
-        
+
         # Check for completed brief
-        brief_response = supabase.table("executive_briefs").select(
-            "id, status"
-        ).eq("workstream_card_id", wsc["id"]).eq("status", "completed").limit(1).execute()
-        
+        brief_response = (
+            supabase.table("executive_briefs")
+            .select("id, status")
+            .eq("workstream_card_id", wsc["id"])
+            .eq("status", "completed")
+            .limit(1)
+            .execute()
+        )
+
         has_brief = len(brief_response.data or []) > 0
         brief_status = brief_response.data[0]["status"] if has_brief else None
-        
+
         if has_brief:
             cards_with_briefs += 1
             if brief_status == "completed":
                 cards_ready += 1
-        
-        card_statuses.append(BulkBriefCardStatus(
-            card_id=card_id,
-            card_name=card.get("name", "Unknown"),
-            has_brief=has_brief,
-            brief_status=brief_status,
-            position=position
-        ))
-    
+
+        card_statuses.append(
+            BulkBriefCardStatus(
+                card_id=card_id,
+                card_name=card.get("name", "Unknown"),
+                has_brief=has_brief,
+                brief_status=brief_status,
+                position=position,
+            )
+        )
+
     return BulkBriefStatusResponse(
         total_cards=len(card_statuses),
         cards_with_briefs=cards_with_briefs,
         cards_ready=cards_ready,
-        card_statuses=card_statuses
+        card_statuses=card_statuses,
     )
 
 
@@ -5441,23 +6243,23 @@ async def get_bulk_brief_status(
 async def bulk_brief_export(
     workstream_id: str,
     request: BulkExportRequest,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Export multiple briefs as a single portfolio presentation.
-    
+
     Generates an AI-synthesized portfolio deck combining briefs from
     multiple cards in the Brief column. Uses Gamma.app for PPTX with
     fallback to local generation.
-    
+
     Args:
         workstream_id: UUID of the workstream
         request: BulkExportRequest with format and card order
         current_user: Authenticated user (injected)
-    
+
     Returns:
         FileResponse with the exported portfolio document
-    
+
     Raises:
         HTTPException 400: Invalid format, no cards, or >15 cards
         HTTPException 403: Not authorized
@@ -5465,104 +6267,121 @@ async def bulk_brief_export(
     """
     from .brief_service import ExecutiveBriefService, PortfolioBrief
     from .gamma_service import (
-        GammaPortfolioService, 
-        PortfolioCard, 
+        GammaPortfolioService,
+        PortfolioCard,
         PortfolioSynthesisData,
-        calculate_slides_per_card
+        calculate_slides_per_card,
     )
-    
+
     # Validate format
     format_lower = request.format.lower()
     if format_lower not in ("pdf", "pptx"):
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid format: {request.format}. Supported: pdf, pptx"
+            detail=f"Invalid format: {request.format}. Supported: pdf, pptx",
         )
-    
+
     # Validate card count
     if not request.card_order:
         raise HTTPException(status_code=400, detail="No cards provided for export")
-    
+
     if len(request.card_order) > 15:
         raise HTTPException(
-            status_code=400, 
-            detail="Maximum 15 cards per portfolio. Archive some cards or create separate workstreams."
+            status_code=400,
+            detail="Maximum 15 cards per portfolio. Archive some cards or create separate workstreams.",
         )
-    
+
     # Verify workstream belongs to user
-    ws_response = supabase.table("workstreams").select("id, user_id, name").eq("id", workstream_id).execute()
+    ws_response = (
+        supabase.table("workstreams")
+        .select("id, user_id, name")
+        .eq("id", workstream_id)
+        .execute()
+    )
     if not ws_response.data:
         raise HTTPException(status_code=404, detail="Workstream not found")
     if ws_response.data[0]["user_id"] != current_user["id"]:
         raise HTTPException(status_code=403, detail="Not authorized")
-    
+
     workstream_name = ws_response.data[0].get("name", "Strategic Portfolio")
-    
+
     # Fetch briefs in the specified order
     brief_service = ExecutiveBriefService(supabase, openai_client)
     portfolio_briefs = []
     skipped_cards = []
-    
+
     for card_id in request.card_order:
         # Get workstream_card record
-        wsc_response = supabase.table("workstream_cards").select("id").eq(
-            "workstream_id", workstream_id
-        ).eq("card_id", card_id).execute()
-        
+        wsc_response = (
+            supabase.table("workstream_cards")
+            .select("id")
+            .eq("workstream_id", workstream_id)
+            .eq("card_id", card_id)
+            .execute()
+        )
+
         if not wsc_response.data:
             skipped_cards.append(card_id)
             continue
-        
+
         workstream_card_id = wsc_response.data[0]["id"]
-        
+
         # Get latest completed brief
         brief = await brief_service.get_latest_completed_brief(workstream_card_id)
         if not brief:
             skipped_cards.append(card_id)
             continue
-        
+
         # Get card data
-        card_response = supabase.table("cards").select(
-            "id, name, pillar_id, horizon, stage_id, impact_score, relevance_score, velocity_score"
-        ).eq("id", card_id).execute()
-        
+        card_response = (
+            supabase.table("cards")
+            .select(
+                "id, name, pillar_id, horizon, stage_id, impact_score, relevance_score, velocity_score"
+            )
+            .eq("id", card_id)
+            .execute()
+        )
+
         if not card_response.data:
             skipped_cards.append(card_id)
             continue
-        
+
         card_data = card_response.data[0]
-        
-        portfolio_briefs.append(PortfolioBrief(
-            card_id=card_id,
-            card_name=card_data.get("name", "Unknown"),
-            pillar_id=card_data.get("pillar_id", ""),
-            horizon=card_data.get("horizon", ""),
-            stage_id=card_data.get("stage_id", ""),
-            brief_summary=brief.get("summary", ""),
-            brief_content_markdown=brief.get("content_markdown", ""),
-            impact_score=card_data.get("impact_score", 50),
-            relevance_score=card_data.get("relevance_score", 50),
-            velocity_score=card_data.get("velocity_score", 50)
-        ))
-    
+
+        portfolio_briefs.append(
+            PortfolioBrief(
+                card_id=card_id,
+                card_name=card_data.get("name", "Unknown"),
+                pillar_id=card_data.get("pillar_id", ""),
+                horizon=card_data.get("horizon", ""),
+                stage_id=card_data.get("stage_id", ""),
+                brief_summary=brief.get("summary", ""),
+                brief_content_markdown=brief.get("content_markdown", ""),
+                impact_score=card_data.get("impact_score", 50),
+                relevance_score=card_data.get("relevance_score", 50),
+                velocity_score=card_data.get("velocity_score", 50),
+            )
+        )
+
     if not portfolio_briefs:
         raise HTTPException(
             status_code=400,
-            detail="No completed briefs found for the specified cards. Generate briefs first."
+            detail="No completed briefs found for the specified cards. Generate briefs first.",
         )
-    
-    logger.info(f"Generating portfolio export: {len(portfolio_briefs)} briefs, format={format_lower}")
+
+    logger.info(
+        f"Generating portfolio export: {len(portfolio_briefs)} briefs, format={format_lower}"
+    )
     if skipped_cards:
         logger.warning(f"Skipped {len(skipped_cards)} cards without completed briefs")
-    
+
     try:
         # Step 1: Generate AI synthesis
         logger.info("Generating portfolio synthesis...")
         synthesis = await brief_service.synthesize_portfolio(
-            briefs=portfolio_briefs,
-            workstream_name=workstream_name
+            briefs=portfolio_briefs, workstream_name=workstream_name
         )
-        
+
         # Convert to Gamma format
         gamma_cards = [
             PortfolioCard(
@@ -5574,11 +6393,11 @@ async def bulk_brief_export(
                 brief_summary=b.brief_summary,
                 brief_content=b.brief_content_markdown[:1500],  # Truncate for slides
                 impact_score=b.impact_score,
-                relevance_score=b.relevance_score
+                relevance_score=b.relevance_score,
             )
             for b in portfolio_briefs
         ]
-        
+
         synthesis_data = PortfolioSynthesisData(
             executive_overview=synthesis.executive_overview,
             key_themes=synthesis.key_themes,
@@ -5589,96 +6408,108 @@ async def bulk_brief_export(
             implementation_guidance=synthesis.implementation_guidance,
             ninety_day_actions=synthesis.ninety_day_actions,
             risk_summary=synthesis.risk_summary,
-            opportunity_summary=synthesis.opportunity_summary
+            opportunity_summary=synthesis.opportunity_summary,
         )
-        
+
         # Step 2: Generate presentation
         if format_lower == "pptx":
             # Try Gamma first
             gamma_service = GammaPortfolioService()
-            
+
             if gamma_service.is_available():
-                logger.info(f"Generating portfolio via Gamma for {len(gamma_cards)} cards...")
+                logger.info(
+                    f"Generating portfolio via Gamma for {len(gamma_cards)} cards..."
+                )
                 result = await gamma_service.generate_portfolio_presentation(
                     workstream_name=workstream_name,
                     cards=gamma_cards,
                     synthesis=synthesis_data,
                     include_images=True,
-                    export_format="pptx"
+                    export_format="pptx",
                 )
-                
+
                 if result.success and result.pptx_url:
                     # Download from Gamma
                     from .gamma_service import GammaService
+
                     gamma_dl = GammaService()
                     pptx_bytes = await gamma_dl.download_export(result.pptx_url)
-                    
+
                     if pptx_bytes:
                         import tempfile
+
                         temp_file = tempfile.NamedTemporaryFile(
-                            suffix='.pptx',
-                            delete=False,
-                            prefix='foresight_portfolio_'
+                            suffix=".pptx", delete=False, prefix="foresight_portfolio_"
                         )
                         temp_file.write(pptx_bytes)
                         temp_file.close()
-                        
-                        safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in workstream_name)[:40]
+
+                        safe_name = "".join(
+                            c if c.isalnum() or c in " -_" else "_"
+                            for c in workstream_name
+                        )[:40]
                         filename = f"Portfolio_{safe_name}.pptx"
-                        
-                        logger.info(f"Portfolio generated via Gamma: {len(portfolio_briefs)} cards")
-                        
+
+                        logger.info(
+                            f"Portfolio generated via Gamma: {len(portfolio_briefs)} cards"
+                        )
+
                         return FileResponse(
                             path=temp_file.name,
                             filename=filename,
-                            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                         )
-                
-                logger.warning(f"Gamma portfolio failed: {result.error_message}, falling back to local")
+
+                logger.warning(
+                    f"Gamma portfolio failed: {result.error_message}, falling back to local"
+                )
             else:
-                logger.info("Gamma API not available (no API key or disabled), using local generation")
-            
+                logger.info(
+                    "Gamma API not available (no API key or disabled), using local generation"
+                )
+
             # Fallback to local PPTX generation
             logger.info("Generating portfolio locally...")
             export_service = ExportService(supabase)
             file_path = await export_service.generate_portfolio_pptx_local(
                 workstream_name=workstream_name,
                 briefs=portfolio_briefs,
-                synthesis=synthesis_data
+                synthesis=synthesis_data,
             )
-            
-            safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in workstream_name)[:40]
+
+            safe_name = "".join(
+                c if c.isalnum() or c in " -_" else "_" for c in workstream_name
+            )[:40]
             filename = f"Portfolio_{safe_name}.pptx"
-            
+
             return FileResponse(
                 path=file_path,
                 filename=filename,
-                media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
             )
-        
+
         else:
             # PDF generation - expanded detail format
             export_service = ExportService(supabase)
             file_path = await export_service.generate_portfolio_pdf(
                 workstream_name=workstream_name,
                 briefs=portfolio_briefs,
-                synthesis=synthesis_data
+                synthesis=synthesis_data,
             )
-            
-            safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in workstream_name)[:40]
+
+            safe_name = "".join(
+                c if c.isalnum() or c in " -_" else "_" for c in workstream_name
+            )[:40]
             filename = f"Portfolio_{safe_name}.pdf"
-            
+
             return FileResponse(
-                path=file_path,
-                filename=filename,
-                media_type="application/pdf"
+                path=file_path, filename=filename, media_type="application/pdf"
             )
-    
+
     except Exception as e:
         logger.error(f"Portfolio export failed: {str(e)}")
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to generate portfolio: {str(e)}"
+            status_code=500, detail=f"Failed to generate portfolio: {str(e)}"
         )
 
 
@@ -5686,8 +6517,10 @@ async def bulk_brief_export(
 # Card Assets Endpoint
 # =============================================================================
 
+
 class CardAsset(BaseModel):
     """Represents a generated asset (brief, research report, export) for a card."""
+
     id: str
     type: str  # 'brief', 'research', 'pdf_export', 'pptx_export'
     title: str
@@ -5703,84 +6536,108 @@ class CardAsset(BaseModel):
 
 class CardAssetsResponse(BaseModel):
     """Response containing all assets for a card."""
+
     card_id: str
     assets: List[CardAsset]
     total_count: int
 
 
 @app.get("/api/v1/cards/{card_id}/assets", response_model=CardAssetsResponse)
-async def get_card_assets(
-    card_id: str,
-    current_user: dict = Depends(get_current_user)
-):
+async def get_card_assets(card_id: str, current_user: dict = Depends(get_current_user)):
     """
     Get all generated assets for a card.
-    
+
     Returns a list of all briefs, research reports, and exports
     associated with the card across all workstreams.
-    
+
     Args:
         card_id: UUID of the card
         current_user: Authenticated user (injected)
-    
+
     Returns:
         CardAssetsResponse with list of assets
-    
+
     Raises:
         HTTPException 404: Card not found
     """
     try:
         # Verify card exists
-        card_response = supabase.table("cards").select("id, name").eq("id", card_id).execute()
+        card_response = (
+            supabase.table("cards").select("id, name").eq("id", card_id).execute()
+        )
         if not card_response.data:
             raise HTTPException(status_code=404, detail="Card not found")
-        
+
         card_name = card_response.data[0].get("name", "Unknown Card")
         assets = []
-        
+
         # 1. Fetch executive briefs for this card
-        briefs_response = supabase.table("executive_briefs").select(
-            "id, version, status, summary, generated_at, model_used, created_at"
-        ).eq("card_id", card_id).order("created_at", desc=True).execute()
-        
+        briefs_response = (
+            supabase.table("executive_briefs")
+            .select(
+                "id, version, status, summary, generated_at, model_used, created_at"
+            )
+            .eq("card_id", card_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+
         for brief in briefs_response.data or []:
             # Map status
-            brief_status = "ready" if brief.get("status") == "completed" else brief.get("status", "ready")
+            brief_status = (
+                "ready"
+                if brief.get("status") == "completed"
+                else brief.get("status", "ready")
+            )
             if brief_status == "generating":
                 brief_status = "generating"
             elif brief_status in ("pending", "failed"):
                 brief_status = "failed" if brief_status == "failed" else "ready"
-            
+
             title = f"Executive Brief v{brief.get('version', 1)}"
             if brief.get("summary"):
                 # Truncate summary for title if needed
-                summary_preview = brief["summary"][:50] + "..." if len(brief.get("summary", "")) > 50 else brief.get("summary", "")
+                summary_preview = (
+                    brief["summary"][:50] + "..."
+                    if len(brief.get("summary", "")) > 50
+                    else brief.get("summary", "")
+                )
                 title = f"Executive Brief v{brief.get('version', 1)}"
-            
-            assets.append(CardAsset(
-                id=brief["id"],
-                type="brief",
-                title=title,
-                created_at=brief.get("generated_at") or brief.get("created_at"),
-                version=brief.get("version", 1),
-                ai_generated=True,
-                ai_model=brief.get("model_used"),
-                status=brief_status,
-                metadata={
-                    "summary_preview": brief.get("summary", "")[:200] if brief.get("summary") else None
-                }
-            ))
-        
+
+            assets.append(
+                CardAsset(
+                    id=brief["id"],
+                    type="brief",
+                    title=title,
+                    created_at=brief.get("generated_at") or brief.get("created_at"),
+                    version=brief.get("version", 1),
+                    ai_generated=True,
+                    ai_model=brief.get("model_used"),
+                    status=brief_status,
+                    metadata={
+                        "summary_preview": (
+                            brief.get("summary", "")[:200]
+                            if brief.get("summary")
+                            else None
+                        )
+                    },
+                )
+            )
+
         # 2. Fetch research tasks (deep research reports)
-        research_response = supabase.table("research_tasks").select(
-            "id, task_type, status, result_summary, completed_at, created_at"
-        ).eq("card_id", card_id).order("created_at", desc=True).execute()
-        
+        research_response = (
+            supabase.table("research_tasks")
+            .select("id, task_type, status, result_summary, completed_at, created_at")
+            .eq("card_id", card_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+
         for task in research_response.data or []:
             # Only include completed or failed tasks as assets
             if task.get("status") not in ("completed", "failed"):
                 continue
-            
+
             task_type = task.get("task_type", "research")
             if task_type == "deep_research":
                 asset_type = "research"
@@ -5791,39 +6648,39 @@ async def get_card_assets(
             else:
                 asset_type = "research"
                 title = f"{task_type.replace('_', ' ').title()} Report"
-            
+
             result = task.get("result_summary", {}) or {}
-            
-            assets.append(CardAsset(
-                id=task["id"],
-                type=asset_type,
-                title=title,
-                created_at=task.get("completed_at") or task.get("created_at"),
-                ai_generated=True,
-                status="ready" if task.get("status") == "completed" else "failed",
-                metadata={
-                    "task_type": task_type,
-                    "sources_found": result.get("sources_found"),
-                    "sources_added": result.get("sources_added"),
-                }
-            ))
-        
+
+            assets.append(
+                CardAsset(
+                    id=task["id"],
+                    type=asset_type,
+                    title=title,
+                    created_at=task.get("completed_at") or task.get("created_at"),
+                    ai_generated=True,
+                    status="ready" if task.get("status") == "completed" else "failed",
+                    metadata={
+                        "task_type": task_type,
+                        "sources_found": result.get("sources_found"),
+                        "sources_added": result.get("sources_added"),
+                    },
+                )
+            )
+
         # Sort all assets by created_at descending
         assets.sort(key=lambda x: x.created_at or "", reverse=True)
-        
+
         return CardAssetsResponse(
-            card_id=card_id,
-            assets=assets,
-            total_count=len(assets)
+            card_id=card_id, assets=assets, total_count=len(assets)
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error fetching card assets: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch card assets: {str(e)}"
+            detail=f"Failed to fetch card assets: {str(e)}",
         )
 
 
@@ -5832,21 +6689,26 @@ async def get_card_assets(
 async def get_taxonomy():
     """Get all taxonomy data"""
     pillars = supabase.table("pillars").select("*").order("name").execute()
-    goals = supabase.table("goals").select("*").order("pillar_id", "sort_order").execute()
+    goals = (
+        supabase.table("goals").select("*").order("pillar_id", "sort_order").execute()
+    )
     anchors = supabase.table("anchors").select("*").order("name").execute()
     stages = supabase.table("stages").select("*").order("sort_order").execute()
-    
+
     return {
         "pillars": pillars.data,
         "goals": goals.data,
         "anchors": anchors.data,
-        "stages": stages.data
+        "stages": stages.data,
     }
+
 
 # Admin endpoints
 @app.post("/api/v1/admin/scan")
 @limiter.limit("3/minute")
-async def trigger_manual_scan(request: Request, current_user: dict = Depends(get_current_user)):
+async def trigger_manual_scan(
+    request: Request, current_user: dict = Depends(get_current_user)
+):
     """
     Manually trigger content scan for all active cards.
 
@@ -5858,14 +6720,24 @@ async def trigger_manual_scan(request: Request, current_user: dict = Depends(get
     try:
         # Get cards that need updates (not updated in last 24 hours)
         from datetime import timedelta
+
         cutoff = (datetime.now() - timedelta(hours=24)).isoformat()
 
-        cards_result = supabase.table("cards").select("id, name").eq(
-            "status", "active"
-        ).lt("updated_at", cutoff).limit(10).execute()
+        cards_result = (
+            supabase.table("cards")
+            .select("id, name")
+            .eq("status", "active")
+            .lt("updated_at", cutoff)
+            .limit(10)
+            .execute()
+        )
 
         if not cards_result.data:
-            return {"status": "skipped", "message": "No cards need updating", "cards_queued": 0}
+            return {
+                "status": "skipped",
+                "message": "No cards need updating",
+                "cards_queued": 0,
+            }
 
         # Queue update tasks for each card
         tasks_created = 0
@@ -5874,7 +6746,7 @@ async def trigger_manual_scan(request: Request, current_user: dict = Depends(get
                 "user_id": current_user["id"],
                 "card_id": card["id"],
                 "task_type": "update",
-                "status": "queued"
+                "status": "queued",
             }
             result = supabase.table("research_tasks").insert(task_record).execute()
             if result.data:
@@ -5884,24 +6756,27 @@ async def trigger_manual_scan(request: Request, current_user: dict = Depends(get
         return {
             "status": "scan_triggered",
             "message": f"Queued {tasks_created} update tasks",
-            "cards_queued": tasks_created
+            "cards_queued": tasks_created,
         }
 
     except Exception as e:
         logger.error(f"Manual scan failed: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
 
 
 # ============================================================================
 # Research endpoints
 # ============================================================================
 
+
 @app.post("/api/v1/research", response_model=ResearchTask)
 @limiter.limit("5/minute")
 async def create_research_task(
     request: Request,
     task_data: ResearchTaskCreate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Create and execute a research task.
@@ -5915,22 +6790,29 @@ async def create_research_task(
     """
     # Validate input
     if not task_data.card_id and not task_data.workstream_id:
-        raise HTTPException(status_code=400, detail="Either card_id or workstream_id required")
+        raise HTTPException(
+            status_code=400, detail="Either card_id or workstream_id required"
+        )
 
     if task_data.task_type not in ["update", "deep_research", "workstream_analysis"]:
-        raise HTTPException(status_code=400, detail="Invalid task_type. Use: update, deep_research, workstream_analysis")
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid task_type. Use: update, deep_research, workstream_analysis",
+        )
 
     # Check rate limit for deep research
     if task_data.task_type == "deep_research" and task_data.card_id:
         service = ResearchService(supabase, openai_client)
         if not await service.check_rate_limit(task_data.card_id):
-            raise HTTPException(status_code=429, detail="Daily deep research limit reached (2 per card)")
+            raise HTTPException(
+                status_code=429, detail="Daily deep research limit reached (2 per card)"
+            )
 
     # Create task record
     task_record = {
         "user_id": current_user["id"],
         "task_type": task_data.task_type,
-        "status": "queued"
+        "status": "queued",
     }
 
     if task_data.card_id:
@@ -5953,9 +6835,7 @@ async def create_research_task(
 
 
 async def execute_research_task_background(
-    task_id: str,
-    task_data: ResearchTaskCreate,
-    user_id: str
+    task_id: str, task_data: ResearchTaskCreate, user_id: str
 ):
     """
     Background task to execute research.
@@ -5972,6 +6852,7 @@ async def execute_research_task_background(
     service = ResearchService(supabase, openai_client)
 
     try:
+
         def _get_timeout_seconds(task_type: str) -> int:
             defaults = {
                 "update": 15 * 60,
@@ -5986,21 +6867,25 @@ async def execute_research_task_background(
             env_key = env_keys.get(task_type)
             if env_key:
                 try:
-                    return int(os.getenv(env_key, str(defaults.get(task_type, 45 * 60))))
+                    return int(
+                        os.getenv(env_key, str(defaults.get(task_type, 45 * 60)))
+                    )
                 except ValueError:
                     return defaults.get(task_type, 45 * 60)
             return defaults.get(task_type, 45 * 60)
 
         # Update status to processing
         now = datetime.now(timezone.utc).isoformat()
-        supabase.table("research_tasks").update({
-            "status": "processing",
-            "started_at": now,
-            "result_summary": {
-                "stage": f"running:{task_data.task_type}",
-                "heartbeat_at": now,
+        supabase.table("research_tasks").update(
+            {
+                "status": "processing",
+                "started_at": now,
+                "result_summary": {
+                    "stage": f"running:{task_data.task_type}",
+                    "heartbeat_at": now,
+                },
             }
-        }).eq("id", task_id).execute()
+        ).eq("id", task_id).execute()
 
         timeout_seconds = _get_timeout_seconds(task_data.task_type)
 
@@ -6008,19 +6893,19 @@ async def execute_research_task_background(
         if task_data.task_type == "update":
             result = await asyncio.wait_for(
                 service.execute_update(task_data.card_id, task_id),
-                timeout=timeout_seconds
+                timeout=timeout_seconds,
             )
         elif task_data.task_type == "deep_research":
             result = await asyncio.wait_for(
                 service.execute_deep_research(task_data.card_id, task_id),
-                timeout=timeout_seconds
+                timeout=timeout_seconds,
             )
         elif task_data.task_type == "workstream_analysis":
             result = await asyncio.wait_for(
                 service.execute_workstream_analysis(
                     task_data.workstream_id, task_id, user_id
                 ),
-                timeout=timeout_seconds
+                timeout=timeout_seconds,
             )
         else:
             raise ValueError(f"Unknown task type: {task_data.task_type}")
@@ -6038,33 +6923,38 @@ async def execute_research_task_background(
         }
 
         # Update as completed
-        supabase.table("research_tasks").update({
-            "status": "completed",
-            "completed_at": datetime.now(timezone.utc).isoformat(),
-            "result_summary": result_summary
-        }).eq("id", task_id).execute()
+        supabase.table("research_tasks").update(
+            {
+                "status": "completed",
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "result_summary": result_summary,
+            }
+        ).eq("id", task_id).execute()
 
     except asyncio.TimeoutError:
         # Update as failed (timeout)
-        supabase.table("research_tasks").update({
-            "status": "failed",
-            "completed_at": datetime.now(timezone.utc).isoformat(),
-            "error_message": f"Research task timed out while {task_data.task_type} was running"
-        }).eq("id", task_id).execute()
+        supabase.table("research_tasks").update(
+            {
+                "status": "failed",
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "error_message": f"Research task timed out while {task_data.task_type} was running",
+            }
+        ).eq("id", task_id).execute()
 
     except Exception as e:
         # Update as failed
-        supabase.table("research_tasks").update({
-            "status": "failed",
-            "completed_at": datetime.now(timezone.utc).isoformat(),
-            "error_message": str(e)
-        }).eq("id", task_id).execute()
+        supabase.table("research_tasks").update(
+            {
+                "status": "failed",
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "error_message": str(e),
+            }
+        ).eq("id", task_id).execute()
 
 
 @app.get("/api/v1/research/{task_id}", response_model=ResearchTask)
 async def get_research_task(
-    task_id: str,
-    current_user: dict = Depends(get_current_user)
+    task_id: str, current_user: dict = Depends(get_current_user)
 ):
     """
     Get research task status.
@@ -6072,9 +6962,14 @@ async def get_research_task(
     Use this endpoint to poll for task completion after creating a research task.
     Status values: queued, processing, completed, failed
     """
-    result = supabase.table("research_tasks").select("*").eq(
-        "id", task_id
-    ).eq("user_id", current_user["id"]).single().execute()
+    result = (
+        supabase.table("research_tasks")
+        .select("*")
+        .eq("id", task_id)
+        .eq("user_id", current_user["id"])
+        .single()
+        .execute()
+    )
 
     if not result.data:
         raise HTTPException(status_code=404, detail="Research task not found")
@@ -6125,18 +7020,28 @@ async def get_research_task(
             return task_row
 
         summary = task_row.get("result_summary") or {}
-        heartbeat_dt = _parse_dt(summary.get("heartbeat_at")) if isinstance(summary, dict) else None
+        heartbeat_dt = (
+            _parse_dt(summary.get("heartbeat_at"))
+            if isinstance(summary, dict)
+            else None
+        )
 
         base_dt = None
         if status_val == "processing":
-            base_dt = heartbeat_dt or _parse_dt(task_row.get("started_at")) or _parse_dt(task_row.get("created_at"))
+            base_dt = (
+                heartbeat_dt
+                or _parse_dt(task_row.get("started_at"))
+                or _parse_dt(task_row.get("created_at"))
+            )
         else:
             base_dt = _parse_dt(task_row.get("created_at"))
 
         if not base_dt:
             return task_row
 
-        timeout_seconds = _get_timeout_seconds(task_row.get("task_type", ""), status_val)
+        timeout_seconds = _get_timeout_seconds(
+            task_row.get("task_type", ""), status_val
+        )
         age_seconds = (datetime.now(timezone.utc) - base_dt).total_seconds()
 
         if age_seconds <= timeout_seconds:
@@ -6149,11 +7054,13 @@ async def get_research_task(
         )
 
         new_summary = dict(summary) if isinstance(summary, dict) else {}
-        new_summary.update({
-            "timed_out": True,
-            "timed_out_at": datetime.now(timezone.utc).isoformat(),
-            "timeout_seconds": timeout_seconds,
-        })
+        new_summary.update(
+            {
+                "timed_out": True,
+                "timed_out_at": datetime.now(timezone.utc).isoformat(),
+                "timeout_seconds": timeout_seconds,
+            }
+        )
 
         updates = {
             "status": "failed",
@@ -6163,7 +7070,9 @@ async def get_research_task(
         }
 
         try:
-            supabase.table("research_tasks").update(updates).eq("id", task_id).eq("user_id", current_user["id"]).execute()
+            supabase.table("research_tasks").update(updates).eq("id", task_id).eq(
+                "user_id", current_user["id"]
+            ).execute()
             task_row.update(updates)
         except Exception:
             # If we can't update, return original task row.
@@ -6178,17 +7087,21 @@ async def get_research_task(
 
 @app.get("/api/v1/me/research-tasks", response_model=List[ResearchTask])
 async def list_research_tasks(
-    current_user: dict = Depends(get_current_user),
-    limit: int = 10
+    current_user: dict = Depends(get_current_user), limit: int = 10
 ):
     """
     List user's recent research tasks.
 
     Returns the most recent tasks, ordered by creation date descending.
     """
-    result = supabase.table("research_tasks").select("*").eq(
-        "user_id", current_user["id"]
-    ).order("created_at", desc=True).limit(limit).execute()
+    result = (
+        supabase.table("research_tasks")
+        .select("*")
+        .eq("user_id", current_user["id"])
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
 
     return [ResearchTask(**t) for t in result.data]
 
@@ -6196,6 +7109,7 @@ async def list_research_tasks(
 # ============================================================================
 # Discovery endpoints
 # ============================================================================
+
 
 @app.get("/api/v1/discovery/config")
 async def get_discovery_config(current_user: dict = Depends(get_current_user)):
@@ -6208,9 +7122,11 @@ async def get_discovery_config(current_user: dict = Depends(get_current_user)):
     return {
         "max_queries_per_run": get_discovery_max_queries(),
         "max_sources_total": get_discovery_max_sources(),
-        "max_sources_per_query": int(os.getenv("DISCOVERY_MAX_SOURCES_PER_QUERY", "10")),
+        "max_sources_per_query": int(
+            os.getenv("DISCOVERY_MAX_SOURCES_PER_QUERY", "10")
+        ),
         "auto_approve_threshold": 0.95,
-        "similarity_threshold": 0.92
+        "similarity_threshold": 0.92,
     }
 
 
@@ -6219,7 +7135,7 @@ async def get_discovery_config(current_user: dict = Depends(get_current_user)):
 async def trigger_discovery_run(
     request: Request,
     config: DiscoveryConfigRequest = DiscoveryConfigRequest(),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Trigger a new discovery run.
@@ -6231,11 +7147,13 @@ async def trigger_discovery_run(
     try:
         # Apply env defaults for any unset values
         resolved_config = {
-            "max_queries_per_run": config.max_queries_per_run or get_discovery_max_queries(),
-            "max_sources_total": config.max_sources_total or get_discovery_max_sources(),
+            "max_queries_per_run": config.max_queries_per_run
+            or get_discovery_max_queries(),
+            "max_sources_total": config.max_sources_total
+            or get_discovery_max_sources(),
             "auto_approve_threshold": config.auto_approve_threshold,
             "pillars_filter": config.pillars_filter,
-            "dry_run": config.dry_run
+            "dry_run": config.dry_run,
         }
 
         # Create discovery run record with resolved config
@@ -6243,21 +7161,20 @@ async def trigger_discovery_run(
             "status": "running",
             "triggered_by": "manual",
             "triggered_by_user": current_user["id"],
-            "summary_report": {
-                "stage": "queued",
-                "config": resolved_config
-            },
+            "summary_report": {"stage": "queued", "config": resolved_config},
             "cards_created": 0,
             "cards_enriched": 0,
             "cards_deduplicated": 0,
             "sources_found": 0,
-            "started_at": datetime.now().isoformat()
+            "started_at": datetime.now().isoformat(),
         }
 
         result = supabase.table("discovery_runs").insert(run_record).execute()
 
         if not result.data:
-            raise HTTPException(status_code=500, detail="Failed to create discovery run")
+            raise HTTPException(
+                status_code=500, detail="Failed to create discovery run"
+            )
 
         run = result.data[0]
         run_id = run["id"]
@@ -6270,13 +7187,13 @@ async def trigger_discovery_run(
         raise
     except Exception as e:
         logger.error(f"Failed to trigger discovery run: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to trigger discovery run: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to trigger discovery run: {str(e)}"
+        )
 
 
 async def execute_discovery_run_background(
-    run_id: str,
-    config: DiscoveryConfigRequest,
-    user_id: str
+    run_id: str, config: DiscoveryConfigRequest, user_id: str
 ):
     """
     Background task to execute discovery run using DiscoveryService.
@@ -6294,43 +7211,52 @@ async def execute_discovery_run_background(
             max_sources_total=config.max_sources_total,
             auto_approve_threshold=config.auto_approve_threshold,
             pillars_filter=config.pillars_filter or [],
-            dry_run=config.dry_run
+            dry_run=config.dry_run,
         )
 
         # Execute discovery using the service (pass existing run_id to avoid duplicate)
-        service = DiscoveryService(supabase, openai_client, triggered_by_user_id=user_id)
-        result = await service.execute_discovery_run(discovery_config, existing_run_id=run_id)
+        service = DiscoveryService(
+            supabase, openai_client, triggered_by_user_id=user_id
+        )
+        result = await service.execute_discovery_run(
+            discovery_config, existing_run_id=run_id
+        )
 
         # Update the run record with results (service already updates its own record,
         # but we update the one we created in the endpoint)
-        supabase.table("discovery_runs").update({
-            "status": result.status.value,
-            "completed_at": datetime.now().isoformat(),
-            "queries_generated": result.queries_generated,
-            "sources_found": result.sources_discovered,
-            "sources_relevant": result.sources_triaged,
-            "cards_created": len(result.cards_created),
-            "cards_enriched": len(result.cards_enriched),
-            "cards_deduplicated": result.sources_duplicate,
-            "estimated_cost": result.estimated_cost,
-        }).eq("id", run_id).execute()
+        supabase.table("discovery_runs").update(
+            {
+                "status": result.status.value,
+                "completed_at": datetime.now().isoformat(),
+                "queries_generated": result.queries_generated,
+                "sources_found": result.sources_discovered,
+                "sources_relevant": result.sources_triaged,
+                "cards_created": len(result.cards_created),
+                "cards_enriched": len(result.cards_enriched),
+                "cards_deduplicated": result.sources_duplicate,
+                "estimated_cost": result.estimated_cost,
+            }
+        ).eq("id", run_id).execute()
 
-        logger.info(f"Discovery run {run_id} completed: {len(result.cards_created)} cards created, {len(result.cards_enriched)} enriched")
+        logger.info(
+            f"Discovery run {run_id} completed: {len(result.cards_created)} cards created, {len(result.cards_enriched)} enriched"
+        )
 
     except Exception as e:
         logger.error(f"Discovery run {run_id} failed: {str(e)}", exc_info=True)
         # Update as failed
-        supabase.table("discovery_runs").update({
-            "status": "failed",
-            "completed_at": datetime.now().isoformat(),
-            "error_message": str(e)
-        }).eq("id", run_id).execute()
+        supabase.table("discovery_runs").update(
+            {
+                "status": "failed",
+                "completed_at": datetime.now().isoformat(),
+                "error_message": str(e),
+            }
+        ).eq("id", run_id).execute()
 
 
 @app.get("/api/v1/discovery/runs/{run_id}", response_model=DiscoveryRun)
 async def get_discovery_run(
-    run_id: str,
-    current_user: dict = Depends(get_current_user)
+    run_id: str, current_user: dict = Depends(get_current_user)
 ):
     """
     Get discovery run status.
@@ -6338,9 +7264,9 @@ async def get_discovery_run(
     Use this endpoint to poll for run completion after triggering a discovery run.
     Status values: running, completed, failed, cancelled
     """
-    result = supabase.table("discovery_runs").select("*").eq(
-        "id", run_id
-    ).single().execute()
+    result = (
+        supabase.table("discovery_runs").select("*").eq("id", run_id).single().execute()
+    )
 
     if not result.data:
         raise HTTPException(status_code=404, detail="Discovery run not found")
@@ -6350,25 +7276,27 @@ async def get_discovery_run(
 
 @app.get("/api/v1/discovery/runs", response_model=List[DiscoveryRun])
 async def list_discovery_runs(
-    current_user: dict = Depends(get_current_user),
-    limit: int = 20
+    current_user: dict = Depends(get_current_user), limit: int = 20
 ):
     """
     List recent discovery runs.
 
     Returns the most recent runs, ordered by start time descending.
     """
-    result = supabase.table("discovery_runs").select("*").order(
-        "started_at", desc=True
-    ).limit(limit).execute()
+    result = (
+        supabase.table("discovery_runs")
+        .select("*")
+        .order("started_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
 
     return [DiscoveryRun(**r) for r in result.data]
 
 
 @app.post("/api/v1/discovery/runs/{run_id}/cancel")
 async def cancel_discovery_run(
-    run_id: str,
-    current_user: dict = Depends(get_current_user)
+    run_id: str, current_user: dict = Depends(get_current_user)
 ):
     """
     Cancel a running discovery run.
@@ -6387,15 +7315,22 @@ async def cancel_discovery_run(
     if run["status"] != "running":
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot cancel run with status '{run['status']}'. Only 'running' runs can be cancelled."
+            detail=f"Cannot cancel run with status '{run['status']}'. Only 'running' runs can be cancelled.",
         )
 
     # Update status to cancelled
-    update_response = supabase.table("discovery_runs").update({
-        "status": "cancelled",
-        "completed_at": datetime.now().isoformat(),
-        "error_message": f"Cancelled by user {current_user['id']}"
-    }).eq("id", run_id).execute()
+    update_response = (
+        supabase.table("discovery_runs")
+        .update(
+            {
+                "status": "cancelled",
+                "completed_at": datetime.now().isoformat(),
+                "error_message": f"Cancelled by user {current_user['id']}",
+            }
+        )
+        .eq("id", run_id)
+        .execute()
+    )
 
     if update_response.data:
         logger.info(f"Discovery run {run_id} cancelled by user {current_user['id']}")
@@ -6408,19 +7343,22 @@ async def cancel_discovery_run(
 # Saved Searches API
 # =============================================================================
 
+
 @app.get("/api/v1/saved-searches", response_model=SavedSearchList)
-async def list_saved_searches(
-    current_user: dict = Depends(get_current_user)
-):
+async def list_saved_searches(current_user: dict = Depends(get_current_user)):
     """
     List all saved searches for the current user.
 
     Returns saved searches ordered by last_used_at descending (most recently used first).
     """
     try:
-        response = supabase.table("saved_searches").select("*").eq(
-            "user_id", current_user["id"]
-        ).order("last_used_at", desc=True).execute()
+        response = (
+            supabase.table("saved_searches")
+            .select("*")
+            .eq("user_id", current_user["id"])
+            .order("last_used_at", desc=True)
+            .execute()
+        )
     except Exception as e:
         if _is_missing_supabase_table_error(e, "saved_searches"):
             logger.warning("saved_searches table missing; returning empty list")
@@ -6430,15 +7368,17 @@ async def list_saved_searches(
 
     saved_searches = [SavedSearch(**ss) for ss in (response.data or [])]
     return SavedSearchList(
-        saved_searches=saved_searches,
-        total_count=len(saved_searches)
+        saved_searches=saved_searches, total_count=len(saved_searches)
     )
 
 
-@app.post("/api/v1/saved-searches", response_model=SavedSearch, status_code=status.HTTP_201_CREATED)
+@app.post(
+    "/api/v1/saved-searches",
+    response_model=SavedSearch,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_saved_search(
-    saved_search_data: SavedSearchCreate,
-    current_user: dict = Depends(get_current_user)
+    saved_search_data: SavedSearchCreate, current_user: dict = Depends(get_current_user)
 ):
     """
     Create a new saved search.
@@ -6463,14 +7403,17 @@ async def create_saved_search(
         "query_config": saved_search_data.query_config,
         "created_at": now,
         "last_used_at": now,
-        "updated_at": now
+        "updated_at": now,
     }
 
     try:
         response = supabase.table("saved_searches").insert(ss_dict).execute()
     except Exception as e:
         if _is_missing_supabase_table_error(e, "saved_searches"):
-            raise HTTPException(status_code=503, detail="Saved searches are not configured (missing saved_searches table)")
+            raise HTTPException(
+                status_code=503,
+                detail="Saved searches are not configured (missing saved_searches table)",
+            )
         logger.error(f"Failed to create saved search: {e}")
         raise HTTPException(status_code=500, detail="Failed to create saved search")
     if response.data:
@@ -6481,8 +7424,7 @@ async def create_saved_search(
 
 @app.get("/api/v1/saved-searches/{saved_search_id}", response_model=SavedSearch)
 async def get_saved_search(
-    saved_search_id: str,
-    current_user: dict = Depends(get_current_user)
+    saved_search_id: str, current_user: dict = Depends(get_current_user)
 ):
     """
     Get a specific saved search by ID.
@@ -6502,12 +7444,18 @@ async def get_saved_search(
     """
     # Fetch the saved search
     try:
-        response = supabase.table("saved_searches").select("*").eq(
-            "id", saved_search_id
-        ).execute()
+        response = (
+            supabase.table("saved_searches")
+            .select("*")
+            .eq("id", saved_search_id)
+            .execute()
+        )
     except Exception as e:
         if _is_missing_supabase_table_error(e, "saved_searches"):
-            raise HTTPException(status_code=503, detail="Saved searches are not configured (missing saved_searches table)")
+            raise HTTPException(
+                status_code=503,
+                detail="Saved searches are not configured (missing saved_searches table)",
+            )
         logger.error(f"Failed to fetch saved search {saved_search_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch saved search")
 
@@ -6518,17 +7466,27 @@ async def get_saved_search(
 
     # Verify ownership
     if saved_search["user_id"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Not authorized to access this saved search")
+        raise HTTPException(
+            status_code=403, detail="Not authorized to access this saved search"
+        )
 
     # Update last_used_at timestamp
     try:
-        update_response = supabase.table("saved_searches").update({
-            "last_used_at": datetime.now().isoformat()
-        }).eq("id", saved_search_id).execute()
+        update_response = (
+            supabase.table("saved_searches")
+            .update({"last_used_at": datetime.now().isoformat()})
+            .eq("id", saved_search_id)
+            .execute()
+        )
     except Exception as e:
         if _is_missing_supabase_table_error(e, "saved_searches"):
-            raise HTTPException(status_code=503, detail="Saved searches are not configured (missing saved_searches table)")
-        logger.error(f"Failed to update saved search last_used_at {saved_search_id}: {e}")
+            raise HTTPException(
+                status_code=503,
+                detail="Saved searches are not configured (missing saved_searches table)",
+            )
+        logger.error(
+            f"Failed to update saved search last_used_at {saved_search_id}: {e}"
+        )
         raise HTTPException(status_code=500, detail="Failed to update saved search")
 
     if update_response.data:
@@ -6541,7 +7499,7 @@ async def get_saved_search(
 async def update_saved_search(
     saved_search_id: str,
     saved_search_data: SavedSearchUpdate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Update an existing saved search.
@@ -6564,12 +7522,18 @@ async def update_saved_search(
     """
     # First check if saved search exists
     try:
-        ss_check = supabase.table("saved_searches").select("*").eq(
-            "id", saved_search_id
-        ).execute()
+        ss_check = (
+            supabase.table("saved_searches")
+            .select("*")
+            .eq("id", saved_search_id)
+            .execute()
+        )
     except Exception as e:
         if _is_missing_supabase_table_error(e, "saved_searches"):
-            raise HTTPException(status_code=503, detail="Saved searches are not configured (missing saved_searches table)")
+            raise HTTPException(
+                status_code=503,
+                detail="Saved searches are not configured (missing saved_searches table)",
+            )
         logger.error(f"Failed to fetch saved search for update {saved_search_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch saved search")
 
@@ -6578,7 +7542,9 @@ async def update_saved_search(
 
     # Verify ownership
     if ss_check.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Not authorized to update this saved search")
+        raise HTTPException(
+            status_code=403, detail="Not authorized to update this saved search"
+        )
 
     # Build update dict with only non-None values
     update_dict = {k: v for k, v in saved_search_data.dict().items() if v is not None}
@@ -6592,12 +7558,18 @@ async def update_saved_search(
 
     # Perform update
     try:
-        response = supabase.table("saved_searches").update(update_dict).eq(
-            "id", saved_search_id
-        ).execute()
+        response = (
+            supabase.table("saved_searches")
+            .update(update_dict)
+            .eq("id", saved_search_id)
+            .execute()
+        )
     except Exception as e:
         if _is_missing_supabase_table_error(e, "saved_searches"):
-            raise HTTPException(status_code=503, detail="Saved searches are not configured (missing saved_searches table)")
+            raise HTTPException(
+                status_code=503,
+                detail="Saved searches are not configured (missing saved_searches table)",
+            )
         logger.error(f"Failed to update saved search {saved_search_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to update saved search")
 
@@ -6609,8 +7581,7 @@ async def update_saved_search(
 
 @app.delete("/api/v1/saved-searches/{saved_search_id}")
 async def delete_saved_search(
-    saved_search_id: str,
-    current_user: dict = Depends(get_current_user)
+    saved_search_id: str, current_user: dict = Depends(get_current_user)
 ):
     """
     Delete a saved search.
@@ -6631,12 +7602,18 @@ async def delete_saved_search(
     """
     # First check if saved search exists
     try:
-        ss_check = supabase.table("saved_searches").select("*").eq(
-            "id", saved_search_id
-        ).execute()
+        ss_check = (
+            supabase.table("saved_searches")
+            .select("*")
+            .eq("id", saved_search_id)
+            .execute()
+        )
     except Exception as e:
         if _is_missing_supabase_table_error(e, "saved_searches"):
-            raise HTTPException(status_code=503, detail="Saved searches are not configured (missing saved_searches table)")
+            raise HTTPException(
+                status_code=503,
+                detail="Saved searches are not configured (missing saved_searches table)",
+            )
         logger.error(f"Failed to fetch saved search for delete {saved_search_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch saved search")
 
@@ -6645,14 +7622,19 @@ async def delete_saved_search(
 
     # Verify ownership
     if ss_check.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Not authorized to delete this saved search")
+        raise HTTPException(
+            status_code=403, detail="Not authorized to delete this saved search"
+        )
 
     # Perform delete
     try:
         supabase.table("saved_searches").delete().eq("id", saved_search_id).execute()
     except Exception as e:
         if _is_missing_supabase_table_error(e, "saved_searches"):
-            raise HTTPException(status_code=503, detail="Saved searches are not configured (missing saved_searches table)")
+            raise HTTPException(
+                status_code=503,
+                detail="Saved searches are not configured (missing saved_searches table)",
+            )
         logger.error(f"Failed to delete saved search {saved_search_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete saved search")
 
@@ -6674,26 +7656,52 @@ def start_scheduler():
     # Nightly content scan at 6:00 AM UTC
     scheduler.add_job(
         run_nightly_scan,
-        'cron',
+        "cron",
         hour=6,
         minute=0,
-        id='nightly_scan',
-        replace_existing=True
+        id="nightly_scan",
+        replace_existing=True,
     )
 
     # Weekly discovery run - Sunday at 2:00 AM UTC
     scheduler.add_job(
         run_weekly_discovery,
-        'cron',
-        day_of_week='sun',
+        "cron",
+        day_of_week="sun",
         hour=2,
         minute=0,
-        id='weekly_discovery',
-        replace_existing=True
+        id="weekly_discovery",
+        replace_existing=True,
+    )
+
+    # Nightly domain reputation aggregation at 5:30 AM UTC
+    # Runs before the 6 AM nightly scan so reputation scores are fresh
+    scheduler.add_job(
+        run_nightly_reputation_aggregation,
+        "cron",
+        hour=5,
+        minute=30,
+        id="nightly_reputation_aggregation",
+        replace_existing=True,
+    )
+
+    # Nightly SQI recalculation at 6:30 AM UTC
+    # Runs after the nightly scan so newly discovered sources are included
+    scheduler.add_job(
+        run_nightly_sqi_recalculation,
+        "cron",
+        hour=6,
+        minute=30,
+        id="nightly_sqi_recalculation",
+        replace_existing=True,
     )
 
     scheduler.start()
-    logger.info("Scheduler started - nightly scan at 6:00 AM UTC, weekly discovery Sundays at 2:00 AM UTC")
+    logger.info(
+        "Scheduler started - reputation aggregation at 5:30 AM UTC, "
+        "nightly scan at 6:00 AM UTC, SQI recalculation at 6:30 AM UTC, "
+        "weekly discovery Sundays at 2:00 AM UTC"
+    )
 
 
 async def run_nightly_scan():
@@ -6711,9 +7719,14 @@ async def run_nightly_scan():
         # Get cards that need updates (not updated in last 48 hours)
         cutoff = (datetime.now() - timedelta(hours=48)).isoformat()
 
-        cards_result = supabase.table("cards").select("id, name").eq(
-            "status", "active"
-        ).lt("updated_at", cutoff).limit(20).execute()
+        cards_result = (
+            supabase.table("cards")
+            .select("id, name")
+            .eq("status", "active")
+            .lt("updated_at", cutoff)
+            .limit(20)
+            .execute()
+        )
 
         if not cards_result.data:
             logger.info("Nightly scan: No cards need updating")
@@ -6738,16 +7751,20 @@ async def run_nightly_scan():
                     "user_id": user_id,
                     "card_id": card["id"],
                     "task_type": "update",
-                    "status": "queued"
+                    "status": "queued",
                 }
-                task_result = supabase.table("research_tasks").insert(task_record).execute()
+                task_result = (
+                    supabase.table("research_tasks").insert(task_record).execute()
+                )
 
                 if task_result.data:
                     tasks_queued += 1
                     logger.info(f"Nightly scan: Queued update for '{card['name']}'")
 
             except Exception as e:
-                logger.error(f"Nightly scan: Failed to queue task for card {card['id']}: {e}")
+                logger.error(
+                    f"Nightly scan: Failed to queue task for card {card['id']}: {e}"
+                )
 
         logger.info(f"Nightly scan complete: {tasks_queued} tasks queued")
 
@@ -6755,14 +7772,86 @@ async def run_nightly_scan():
         logger.error(f"Nightly scan failed: {str(e)}")
 
 
+async def run_nightly_reputation_aggregation():
+    """
+    Recalculate domain reputation composite scores from aggregated data.
+
+    Runs at 5:30 AM UTC daily, before the 6:00 AM nightly content scan,
+    so that reputation scores are fresh when the scanner evaluates new
+    sources.
+
+    Calls ``domain_reputation_service.recalculate_all()`` which:
+    - Aggregates user quality/relevance ratings from source_ratings
+    - Recalculates triage pass rates from discovered_sources
+    - Recomputes composite_score using the weighted formula
+
+    Returns:
+        None.  Results are logged.
+    """
+    logger.info("Starting nightly domain reputation aggregation...")
+    try:
+        result = domain_reputation_service.recalculate_all(supabase)
+        domains_updated = result.get("domains_updated", 0)
+        errors = result.get("errors", [])
+        if errors:
+            logger.warning(
+                "Nightly reputation aggregation completed with %d errors: %s",
+                len(errors),
+                "; ".join(errors[:5]),  # Log first 5 errors to avoid log flooding
+            )
+        logger.info(
+            "Nightly reputation aggregation complete: %d domains updated",
+            domains_updated,
+        )
+    except Exception as e:
+        logger.error("Nightly reputation aggregation failed: %s", str(e))
+
+
+async def run_nightly_sqi_recalculation():
+    """
+    Recalculate Source Quality Index (SQI) for all cards in the system.
+
+    Runs at 6:30 AM UTC daily, after the 6:00 AM nightly content scan
+    and after the 5:30 AM reputation aggregation, so that both fresh
+    sources and up-to-date domain reputations are reflected in the
+    quality scores.
+
+    Calls ``quality_service.recalculate_all_cards()`` which iterates
+    through every card and recomputes its SQI from source authority,
+    diversity, corroboration, recency, and municipal specificity.
+
+    Returns:
+        None.  Results are logged.
+    """
+    logger.info("Starting nightly SQI recalculation...")
+    try:
+        result = quality_service.recalculate_all_cards(supabase)
+        cards_succeeded = result.get("cards_succeeded", 0)
+        cards_failed = result.get("cards_failed", 0)
+        errors = result.get("errors", [])
+        if errors:
+            logger.warning(
+                "Nightly SQI recalculation completed with %d card errors: %s",
+                cards_failed,
+                "; ".join(errors[:5]),  # Log first 5 errors to avoid log flooding
+            )
+        logger.info(
+            "Nightly SQI recalculation complete: %d cards succeeded, %d failed",
+            cards_succeeded,
+            cards_failed,
+        )
+    except Exception as e:
+        logger.error("Nightly SQI recalculation failed: %s", str(e))
+
+
 # ============================================================================
 # Search History endpoints
 # ============================================================================
 
+
 @app.get("/api/v1/search-history", response_model=SearchHistoryList)
 async def list_search_history(
-    current_user: dict = Depends(get_current_user),
-    limit: int = 20
+    current_user: dict = Depends(get_current_user), limit: int = 20
 ):
     """
     Get user's recent search history.
@@ -6780,11 +7869,14 @@ async def list_search_history(
     limit = min(limit, 50)
 
     try:
-        response = supabase.table("search_history").select("*").eq(
-            "user_id", current_user["id"]
-        ).order(
-            "executed_at", desc=True
-        ).limit(limit).execute()
+        response = (
+            supabase.table("search_history")
+            .select("*")
+            .eq("user_id", current_user["id"])
+            .order("executed_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
 
         history_entries = [
             SearchHistoryEntry(
@@ -6792,14 +7884,13 @@ async def list_search_history(
                 user_id=entry["user_id"],
                 query_config=entry.get("query_config", {}),
                 executed_at=entry["executed_at"],
-                result_count=entry.get("result_count", 0)
+                result_count=entry.get("result_count", 0),
             )
             for entry in response.data or []
         ]
 
         return SearchHistoryList(
-            history=history_entries,
-            total_count=len(history_entries)
+            history=history_entries, total_count=len(history_entries)
         )
 
     except Exception as e:
@@ -6809,14 +7900,17 @@ async def list_search_history(
         logger.error(f"Failed to fetch search history: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch search history: {str(e)}"
+            detail=f"Failed to fetch search history: {str(e)}",
         )
 
 
-@app.post("/api/v1/search-history", response_model=SearchHistoryEntry, status_code=status.HTTP_201_CREATED)
+@app.post(
+    "/api/v1/search-history",
+    response_model=SearchHistoryEntry,
+    status_code=status.HTTP_201_CREATED,
+)
 async def record_search_history(
-    history_data: SearchHistoryCreate,
-    current_user: dict = Depends(get_current_user)
+    history_data: SearchHistoryCreate, current_user: dict = Depends(get_current_user)
 ):
     """
     Record a search in the user's history.
@@ -6838,7 +7932,7 @@ async def record_search_history(
             "user_id": current_user["id"],
             "query_config": history_data.query_config,
             "result_count": history_data.result_count,
-            "executed_at": datetime.now().isoformat()
+            "executed_at": datetime.now().isoformat(),
         }
 
         response = supabase.table("search_history").insert(history_record).execute()
@@ -6846,7 +7940,7 @@ async def record_search_history(
         if not response.data:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to record search history"
+                detail="Failed to record search history",
             )
 
         entry = response.data[0]
@@ -6855,25 +7949,27 @@ async def record_search_history(
             user_id=entry["user_id"],
             query_config=entry.get("query_config", {}),
             executed_at=entry["executed_at"],
-            result_count=entry.get("result_count", 0)
+            result_count=entry.get("result_count", 0),
         )
 
     except HTTPException:
         raise
     except Exception as e:
         if _is_missing_supabase_table_error(e, "search_history"):
-            raise HTTPException(status_code=503, detail="Search history is not configured (missing search_history table)")
+            raise HTTPException(
+                status_code=503,
+                detail="Search history is not configured (missing search_history table)",
+            )
         logger.error(f"Failed to record search history: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to record search history: {str(e)}"
+            detail=f"Failed to record search history: {str(e)}",
         )
 
 
 @app.delete("/api/v1/search-history/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_search_history_entry(
-    entry_id: str,
-    current_user: dict = Depends(get_current_user)
+    entry_id: str, current_user: dict = Depends(get_current_user)
 ):
     """
     Delete a specific search history entry.
@@ -6885,20 +7981,24 @@ async def delete_search_history_entry(
     """
     try:
         # Verify entry exists and belongs to user
-        check_response = supabase.table("search_history").select("id").eq(
-            "id", entry_id
-        ).eq("user_id", current_user["id"]).execute()
+        check_response = (
+            supabase.table("search_history")
+            .select("id")
+            .eq("id", entry_id)
+            .eq("user_id", current_user["id"])
+            .execute()
+        )
 
         if not check_response.data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Search history entry not found"
+                detail="Search history entry not found",
             )
 
         # Delete the entry
-        supabase.table("search_history").delete().eq(
-            "id", entry_id
-        ).eq("user_id", current_user["id"]).execute()
+        supabase.table("search_history").delete().eq("id", entry_id).eq(
+            "user_id", current_user["id"]
+        ).execute()
 
         return None
 
@@ -6906,18 +8006,19 @@ async def delete_search_history_entry(
         raise
     except Exception as e:
         if _is_missing_supabase_table_error(e, "search_history"):
-            raise HTTPException(status_code=503, detail="Search history is not configured (missing search_history table)")
+            raise HTTPException(
+                status_code=503,
+                detail="Search history is not configured (missing search_history table)",
+            )
         logger.error(f"Failed to delete search history entry: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete search history entry: {str(e)}"
+            detail=f"Failed to delete search history entry: {str(e)}",
         )
 
 
 @app.delete("/api/v1/search-history", status_code=status.HTTP_204_NO_CONTENT)
-async def clear_search_history(
-    current_user: dict = Depends(get_current_user)
-):
+async def clear_search_history(current_user: dict = Depends(get_current_user)):
     """
     Clear all search history for the current user.
 
@@ -6932,11 +8033,14 @@ async def clear_search_history(
 
     except Exception as e:
         if _is_missing_supabase_table_error(e, "search_history"):
-            raise HTTPException(status_code=503, detail="Search history is not configured (missing search_history table)")
+            raise HTTPException(
+                status_code=503,
+                detail="Search history is not configured (missing search_history table)",
+            )
         logger.error(f"Failed to clear search history: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to clear search history: {str(e)}"
+            detail=f"Failed to clear search history: {str(e)}",
         )
 
 
@@ -6946,7 +8050,7 @@ async def get_trend_velocity(
     stage_id: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Get trend velocity analytics over time.
@@ -6986,20 +8090,22 @@ async def get_trend_velocity(
         if start_dt > end_dt:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="start_date must be before or equal to end_date"
+                detail="start_date must be before or equal to end_date",
             )
 
         # Build query for cards
-        query = supabase.table("cards").select(
-            "id, velocity_score, created_at, updated_at, pillar_id, stage_id"
-        ).eq("status", "active")
+        query = (
+            supabase.table("cards")
+            .select("id, velocity_score, created_at, updated_at, pillar_id, stage_id")
+            .eq("status", "active")
+        )
 
         # Apply filters
         if pillar_id:
             if pillar_id not in ANALYTICS_PILLAR_DEFINITIONS:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Invalid pillar_id. Must be one of: {', '.join(ANALYTICS_PILLAR_DEFINITIONS.keys())}"
+                    detail=f"Invalid pillar_id. Must be one of: {', '.join(ANALYTICS_PILLAR_DEFINITIONS.keys())}",
                 )
             query = query.eq("pillar_id", pillar_id)
 
@@ -7035,14 +8141,18 @@ async def get_trend_velocity(
             day_info = daily_data[date_str]
             avg_velocity = None
             if day_info["scores"]:
-                avg_velocity = round(sum(day_info["scores"]) / len(day_info["scores"]), 2)
+                avg_velocity = round(
+                    sum(day_info["scores"]) / len(day_info["scores"]), 2
+                )
 
-            velocity_data.append(VelocityDataPoint(
-                date=date_str,
-                velocity=day_info["velocity_sum"],
-                count=day_info["count"],
-                avg_velocity_score=avg_velocity
-            ))
+            velocity_data.append(
+                VelocityDataPoint(
+                    date=date_str,
+                    velocity=day_info["velocity_sum"],
+                    count=day_info["count"],
+                    avg_velocity_score=avg_velocity,
+                )
+            )
 
         # Calculate week-over-week change
         week_over_week_change = None
@@ -7056,8 +8166,7 @@ async def get_trend_velocity(
 
             if prev_week_total > 0:
                 week_over_week_change = round(
-                    ((last_week_total - prev_week_total) / prev_week_total) * 100,
-                    2
+                    ((last_week_total - prev_week_total) / prev_week_total) * 100, 2
                 )
             elif last_week_total > 0:
                 week_over_week_change = 100.0  # Infinite increase represented as 100%
@@ -7068,7 +8177,7 @@ async def get_trend_velocity(
             period_start=start_date,
             period_end=end_date,
             week_over_week_change=week_over_week_change,
-            total_cards_analyzed=total_cards
+            total_cards_analyzed=total_cards,
         )
 
     except HTTPException:
@@ -7077,7 +8186,7 @@ async def get_trend_velocity(
         logger.error(f"Failed to fetch velocity analytics: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch velocity analytics: {str(e)}"
+            detail=f"Failed to fetch velocity analytics: {str(e)}",
         )
 
 
@@ -7088,7 +8197,7 @@ async def get_trend_velocity(
 # Stage name mapping
 STAGE_NAMES = {
     "1": "Concept",
-    "2": "Exploring", 
+    "2": "Exploring",
     "3": "Pilot",
     "4": "PoC",
     "5": "Implementing",
@@ -7106,12 +8215,10 @@ HORIZON_LABELS = {
 
 
 @app.get("/api/v1/analytics/system-stats", response_model=SystemWideStats)
-async def get_system_wide_stats(
-    current_user: dict = Depends(get_current_user)
-):
+async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
     """
     Get comprehensive system-wide analytics.
-    
+
     Returns aggregated statistics about:
     - Total cards, sources, and discovery activity
     - Distribution by pillar, stage, and horizon
@@ -7120,43 +8227,59 @@ async def get_system_wide_stats(
     """
     from datetime import timedelta
     from collections import Counter
-    
+
     try:
         now = datetime.now()
         one_week_ago = now - timedelta(days=7)
         one_month_ago = now - timedelta(days=30)
-        
+
         # -------------------------------------------------------------------------
         # Core Card Stats
         # -------------------------------------------------------------------------
-        
+
         # Total cards
         total_cards_resp = supabase.table("cards").select("id", count="exact").execute()
         total_cards = total_cards_resp.count or 0
-        
+
         # Active cards
-        active_cards_resp = supabase.table("cards").select("id", count="exact").eq("status", "active").execute()
+        active_cards_resp = (
+            supabase.table("cards")
+            .select("id", count="exact")
+            .eq("status", "active")
+            .execute()
+        )
         active_cards = active_cards_resp.count or 0
-        
+
         # Cards this week
-        cards_week_resp = supabase.table("cards").select("id", count="exact").gte(
-            "created_at", one_week_ago.isoformat()
-        ).execute()
+        cards_week_resp = (
+            supabase.table("cards")
+            .select("id", count="exact")
+            .gte("created_at", one_week_ago.isoformat())
+            .execute()
+        )
         cards_this_week = cards_week_resp.count or 0
-        
+
         # Cards this month
-        cards_month_resp = supabase.table("cards").select("id", count="exact").gte(
-            "created_at", one_month_ago.isoformat()
-        ).execute()
+        cards_month_resp = (
+            supabase.table("cards")
+            .select("id", count="exact")
+            .gte("created_at", one_month_ago.isoformat())
+            .execute()
+        )
         cards_this_month = cards_month_resp.count or 0
-        
+
         # -------------------------------------------------------------------------
         # Cards by Pillar
         # -------------------------------------------------------------------------
-        
-        pillar_resp = supabase.table("cards").select("pillar_id, velocity_score").eq("status", "active").execute()
+
+        pillar_resp = (
+            supabase.table("cards")
+            .select("pillar_id, velocity_score")
+            .eq("status", "active")
+            .execute()
+        )
         pillar_data = pillar_resp.data or []
-        
+
         pillar_counts = Counter()
         pillar_velocity = {}
         for card in pillar_data:
@@ -7167,82 +8290,99 @@ async def get_system_wide_stats(
                     pillar_velocity[p] = []
                 if card.get("velocity_score"):
                     pillar_velocity[p].append(card["velocity_score"])
-        
+
         cards_by_pillar = []
         for code, name in ANALYTICS_PILLAR_DEFINITIONS.items():
             count = pillar_counts.get(code, 0)
             pct = (count / active_cards * 100) if active_cards > 0 else 0
             avg_vel = None
             if pillar_velocity.get(code):
-                avg_vel = round(sum(pillar_velocity[code]) / len(pillar_velocity[code]), 1)
-            cards_by_pillar.append(PillarCoverageItem(
-                pillar_code=code,
-                pillar_name=name,
-                count=count,
-                percentage=round(pct, 1),
-                avg_velocity=avg_vel
-            ))
-        
+                avg_vel = round(
+                    sum(pillar_velocity[code]) / len(pillar_velocity[code]), 1
+                )
+            cards_by_pillar.append(
+                PillarCoverageItem(
+                    pillar_code=code,
+                    pillar_name=name,
+                    count=count,
+                    percentage=round(pct, 1),
+                    avg_velocity=avg_vel,
+                )
+            )
+
         # -------------------------------------------------------------------------
         # Cards by Stage
         # -------------------------------------------------------------------------
-        
-        stage_resp = supabase.table("cards").select("stage_id").eq("status", "active").execute()
+
+        stage_resp = (
+            supabase.table("cards").select("stage_id").eq("status", "active").execute()
+        )
         stage_data = stage_resp.data or []
-        
+
         stage_counts = Counter()
         for card in stage_data:
             s = card.get("stage_id")
             if s:
                 # Normalize stage_id - extract number from formats like "4_proof", "5_implementing"
                 stage_str = str(s)
-                stage_num = stage_str.split("_")[0] if "_" in stage_str else stage_str.replace("Stage ", "").strip()
+                stage_num = (
+                    stage_str.split("_")[0]
+                    if "_" in stage_str
+                    else stage_str.replace("Stage ", "").strip()
+                )
                 stage_counts[stage_num] += 1
-        
+
         cards_by_stage = []
         for stage_id, stage_name in STAGE_NAMES.items():
             count = stage_counts.get(stage_id, 0)
             pct = (count / active_cards * 100) if active_cards > 0 else 0
-            cards_by_stage.append(StageDistribution(
-                stage_id=stage_id,
-                stage_name=stage_name,
-                count=count,
-                percentage=round(pct, 1)
-            ))
-        
+            cards_by_stage.append(
+                StageDistribution(
+                    stage_id=stage_id,
+                    stage_name=stage_name,
+                    count=count,
+                    percentage=round(pct, 1),
+                )
+            )
+
         # -------------------------------------------------------------------------
         # Cards by Horizon
         # -------------------------------------------------------------------------
-        
-        horizon_resp = supabase.table("cards").select("horizon").eq("status", "active").execute()
+
+        horizon_resp = (
+            supabase.table("cards").select("horizon").eq("status", "active").execute()
+        )
         horizon_data = horizon_resp.data or []
-        
+
         horizon_counts = Counter()
         for card in horizon_data:
             h = card.get("horizon")
             if h:
                 horizon_counts[h] += 1
-        
+
         cards_by_horizon = []
         for horizon, label in HORIZON_LABELS.items():
             count = horizon_counts.get(horizon, 0)
             pct = (count / active_cards * 100) if active_cards > 0 else 0
-            cards_by_horizon.append(HorizonDistribution(
-                horizon=horizon,
-                label=label,
-                count=count,
-                percentage=round(pct, 1)
-            ))
-        
+            cards_by_horizon.append(
+                HorizonDistribution(
+                    horizon=horizon, label=label, count=count, percentage=round(pct, 1)
+                )
+            )
+
         # -------------------------------------------------------------------------
         # Trending Pillars (based on recent card creation)
         # -------------------------------------------------------------------------
-        
-        recent_pillar_resp = supabase.table("cards").select("pillar_id, velocity_score").gte(
-            "created_at", one_week_ago.isoformat()
-        ).eq("status", "active").execute()
+
+        recent_pillar_resp = (
+            supabase.table("cards")
+            .select("pillar_id, velocity_score")
+            .gte("created_at", one_week_ago.isoformat())
+            .eq("status", "active")
+            .execute()
+        )
         recent_pillar_data = recent_pillar_resp.data or []
-        
+
         recent_pillar_counts = Counter()
         recent_pillar_velocity = {}
         for card in recent_pillar_data:
@@ -7253,197 +8393,278 @@ async def get_system_wide_stats(
                     recent_pillar_velocity[p] = []
                 if card.get("velocity_score"):
                     recent_pillar_velocity[p].append(card["velocity_score"])
-        
+
         trending_pillars = []
         for code, count in recent_pillar_counts.most_common(6):
             name = ANALYTICS_PILLAR_DEFINITIONS.get(code, code)
             avg_vel = None
             if recent_pillar_velocity.get(code):
-                avg_vel = round(sum(recent_pillar_velocity[code]) / len(recent_pillar_velocity[code]), 1)
+                avg_vel = round(
+                    sum(recent_pillar_velocity[code])
+                    / len(recent_pillar_velocity[code]),
+                    1,
+                )
             # Determine trend by comparing to historical average
             historical_count = pillar_counts.get(code, 0)
-            weekly_avg = historical_count / 4 if historical_count > 0 else 0  # Rough 4-week avg
+            weekly_avg = (
+                historical_count / 4 if historical_count > 0 else 0
+            )  # Rough 4-week avg
             trend = "stable"
             if count > weekly_avg * 1.5:
                 trend = "up"
             elif count < weekly_avg * 0.5:
                 trend = "down"
-            trending_pillars.append(TrendingTopic(
-                name=name,
-                count=count,
-                trend=trend,
-                velocity_avg=avg_vel
-            ))
-        
+            trending_pillars.append(
+                TrendingTopic(name=name, count=count, trend=trend, velocity_avg=avg_vel)
+            )
+
         # -------------------------------------------------------------------------
         # Hot Topics (high velocity cards recently updated)
         # -------------------------------------------------------------------------
-        
-        hot_cards_resp = supabase.table("cards").select(
-            "name, velocity_score"
-        ).eq("status", "active").gte(
-            "velocity_score", 70
-        ).order("velocity_score", desc=True).limit(5).execute()
+
+        hot_cards_resp = (
+            supabase.table("cards")
+            .select("name, velocity_score")
+            .eq("status", "active")
+            .gte("velocity_score", 70)
+            .order("velocity_score", desc=True)
+            .limit(5)
+            .execute()
+        )
         hot_cards_data = hot_cards_resp.data or []
-        
+
         hot_topics = []
         for card in hot_cards_data:
-            hot_topics.append(TrendingTopic(
-                name=card.get("name", "Unknown"),
-                count=1,
-                trend="up",
-                velocity_avg=card.get("velocity_score")
-            ))
-        
+            hot_topics.append(
+                TrendingTopic(
+                    name=card.get("name", "Unknown"),
+                    count=1,
+                    trend="up",
+                    velocity_avg=card.get("velocity_score"),
+                )
+            )
+
         # -------------------------------------------------------------------------
         # Source Statistics
         # -------------------------------------------------------------------------
-        
+
         # Total sources
         try:
-            sources_resp = supabase.table("sources").select("id, source_type, created_at", count="exact").execute()
+            sources_resp = (
+                supabase.table("sources")
+                .select("id, source_type, created_at", count="exact")
+                .execute()
+            )
             total_sources = sources_resp.count or 0
             sources_data = sources_resp.data or []
-            
+
             # Sources this week
-            sources_week = sum(1 for s in sources_data if s.get("created_at") and 
-                              datetime.fromisoformat(s["created_at"].replace("Z", "+00:00")).replace(tzinfo=None) > one_week_ago)
-            
+            sources_week = sum(
+                1
+                for s in sources_data
+                if s.get("created_at")
+                and datetime.fromisoformat(
+                    s["created_at"].replace("Z", "+00:00")
+                ).replace(tzinfo=None)
+                > one_week_ago
+            )
+
             # Sources by type
             source_types = Counter()
             for s in sources_data:
                 st = s.get("source_type") or "unknown"
                 source_types[st] += 1
-            
+
             source_stats = SourceStats(
                 total_sources=total_sources,
                 sources_this_week=sources_week,
-                sources_by_type=dict(source_types)
+                sources_by_type=dict(source_types),
             )
         except Exception as e:
             logger.warning(f"Could not fetch source stats: {e}")
             source_stats = SourceStats()
-        
+
         # -------------------------------------------------------------------------
         # Discovery Statistics
         # -------------------------------------------------------------------------
-        
+
         try:
             # Discovery runs
-            discovery_resp = supabase.table("discovery_runs").select(
-                "id, cards_created, started_at, status"
-            ).execute()
+            discovery_resp = (
+                supabase.table("discovery_runs")
+                .select("id, cards_created, started_at, status")
+                .execute()
+            )
             discovery_data = discovery_resp.data or []
-            
+
             total_runs = len(discovery_data)
-            completed_runs = [r for r in discovery_data if r.get("status") == "completed"]
-            runs_week = sum(1 for r in discovery_data if r.get("started_at") and 
-                           datetime.fromisoformat(r["started_at"].replace("Z", "+00:00")).replace(tzinfo=None) > one_week_ago)
-            
+            completed_runs = [
+                r for r in discovery_data if r.get("status") == "completed"
+            ]
+            runs_week = sum(
+                1
+                for r in discovery_data
+                if r.get("started_at")
+                and datetime.fromisoformat(
+                    r["started_at"].replace("Z", "+00:00")
+                ).replace(tzinfo=None)
+                > one_week_ago
+            )
+
             total_discovered = sum(r.get("cards_created", 0) for r in completed_runs)
-            avg_per_run = total_discovered / len(completed_runs) if completed_runs else 0
-            
+            avg_per_run = (
+                total_discovered / len(completed_runs) if completed_runs else 0
+            )
+
             # Search history count
             try:
-                search_resp = supabase.table("search_history").select("id, executed_at", count="exact").execute()
+                search_resp = (
+                    supabase.table("search_history")
+                    .select("id, executed_at", count="exact")
+                    .execute()
+                )
                 total_searches = search_resp.count or 0
                 search_data = search_resp.data or []
-                searches_week = sum(1 for s in search_data if s.get("executed_at") and 
-                                   datetime.fromisoformat(s["executed_at"].replace("Z", "+00:00")).replace(tzinfo=None) > one_week_ago)
+                searches_week = sum(
+                    1
+                    for s in search_data
+                    if s.get("executed_at")
+                    and datetime.fromisoformat(
+                        s["executed_at"].replace("Z", "+00:00")
+                    ).replace(tzinfo=None)
+                    > one_week_ago
+                )
             except Exception:
                 total_searches = 0
                 searches_week = 0
-            
+
             discovery_stats = DiscoveryStats(
                 total_discovery_runs=total_runs,
                 runs_this_week=runs_week,
                 total_searches=total_searches,
                 searches_this_week=searches_week,
                 cards_discovered=total_discovered,
-                avg_cards_per_run=round(avg_per_run, 1)
+                avg_cards_per_run=round(avg_per_run, 1),
             )
         except Exception as e:
             logger.warning(f"Could not fetch discovery stats: {e}")
             discovery_stats = DiscoveryStats()
-        
+
         # -------------------------------------------------------------------------
         # Workstream Engagement
         # -------------------------------------------------------------------------
-        
+
         try:
             # Total workstreams
-            ws_resp = supabase.table("workstreams").select("id, updated_at", count="exact").execute()
+            ws_resp = (
+                supabase.table("workstreams")
+                .select("id, updated_at", count="exact")
+                .execute()
+            )
             total_workstreams = ws_resp.count or 0
             ws_data = ws_resp.data or []
-            
+
             # Active workstreams (updated in last 30 days)
-            active_workstreams = sum(1 for w in ws_data if w.get("updated_at") and 
-                                    datetime.fromisoformat(w["updated_at"].replace("Z", "+00:00")).replace(tzinfo=None) > one_month_ago)
-            
+            active_workstreams = sum(
+                1
+                for w in ws_data
+                if w.get("updated_at")
+                and datetime.fromisoformat(
+                    w["updated_at"].replace("Z", "+00:00")
+                ).replace(tzinfo=None)
+                > one_month_ago
+            )
+
             # Unique cards in workstreams
-            ws_cards_resp = supabase.table("workstream_cards").select("card_id").execute()
+            ws_cards_resp = (
+                supabase.table("workstream_cards").select("card_id").execute()
+            )
             ws_cards_data = ws_cards_resp.data or []
-            unique_cards_in_ws = len(set(c.get("card_id") for c in ws_cards_data if c.get("card_id")))
-            
-            avg_cards_per_ws = len(ws_cards_data) / total_workstreams if total_workstreams > 0 else 0
-            
+            unique_cards_in_ws = len(
+                set(c.get("card_id") for c in ws_cards_data if c.get("card_id"))
+            )
+
+            avg_cards_per_ws = (
+                len(ws_cards_data) / total_workstreams if total_workstreams > 0 else 0
+            )
+
             workstream_engagement = WorkstreamEngagement(
                 total_workstreams=total_workstreams,
                 active_workstreams=active_workstreams,
                 unique_cards_in_workstreams=unique_cards_in_ws,
-                avg_cards_per_workstream=round(avg_cards_per_ws, 1)
+                avg_cards_per_workstream=round(avg_cards_per_ws, 1),
             )
         except Exception as e:
             logger.warning(f"Could not fetch workstream stats: {e}")
             workstream_engagement = WorkstreamEngagement()
-        
+
         # -------------------------------------------------------------------------
         # Follow Statistics
         # -------------------------------------------------------------------------
-        
+
         try:
             # Total follows
-            follows_resp = supabase.table("card_follows").select("card_id, user_id").execute()
+            follows_resp = (
+                supabase.table("card_follows").select("card_id, user_id").execute()
+            )
             follows_data = follows_resp.data or []
-            
+
             total_follows = len(follows_data)
-            unique_cards_followed = len(set(f.get("card_id") for f in follows_data if f.get("card_id")))
-            unique_users_following = len(set(f.get("user_id") for f in follows_data if f.get("user_id")))
-            
+            unique_cards_followed = len(
+                set(f.get("card_id") for f in follows_data if f.get("card_id"))
+            )
+            unique_users_following = len(
+                set(f.get("user_id") for f in follows_data if f.get("user_id"))
+            )
+
             # Most followed cards
-            card_follow_counts = Counter(f.get("card_id") for f in follows_data if f.get("card_id"))
+            card_follow_counts = Counter(
+                f.get("card_id") for f in follows_data if f.get("card_id")
+            )
             top_followed = card_follow_counts.most_common(5)
-            
+
             # Get card names for top followed
             most_followed_cards = []
             if top_followed:
                 top_card_ids = [c[0] for c in top_followed]
-                cards_info = supabase.table("cards").select("id, name, slug").in_("id", top_card_ids).execute()
-                cards_map = {c["id"]: {"name": c["name"], "slug": c.get("slug")} for c in (cards_info.data or [])}
-                
+                cards_info = (
+                    supabase.table("cards")
+                    .select("id, name, slug")
+                    .in_("id", top_card_ids)
+                    .execute()
+                )
+                cards_map = {
+                    c["id"]: {"name": c["name"], "slug": c.get("slug")}
+                    for c in (cards_info.data or [])
+                }
+
                 for card_id, count in top_followed:
-                    card_info = cards_map.get(card_id, {"name": "Unknown", "slug": None})
-                    most_followed_cards.append({
-                        "card_id": card_id,
-                        "card_slug": card_info.get("slug"),
-                        "card_name": card_info.get("name", "Unknown"),
-                        "follower_count": count
-                    })
-            
+                    card_info = cards_map.get(
+                        card_id, {"name": "Unknown", "slug": None}
+                    )
+                    most_followed_cards.append(
+                        {
+                            "card_id": card_id,
+                            "card_slug": card_info.get("slug"),
+                            "card_name": card_info.get("name", "Unknown"),
+                            "follower_count": count,
+                        }
+                    )
+
             follow_stats = FollowStats(
                 total_follows=total_follows,
                 unique_cards_followed=unique_cards_followed,
                 unique_users_following=unique_users_following,
-                most_followed_cards=most_followed_cards
+                most_followed_cards=most_followed_cards,
             )
         except Exception as e:
             logger.warning(f"Could not fetch follow stats: {e}")
             follow_stats = FollowStats()
-        
+
         # -------------------------------------------------------------------------
         # Build Response
         # -------------------------------------------------------------------------
-        
+
         return SystemWideStats(
             total_cards=total_cards,
             active_cards=active_cards,
@@ -7458,24 +8679,22 @@ async def get_system_wide_stats(
             discovery_stats=discovery_stats,
             workstream_engagement=workstream_engagement,
             follow_stats=follow_stats,
-            generated_at=now
+            generated_at=now,
         )
-        
+
     except Exception as e:
         logger.error(f"Failed to fetch system-wide stats: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch system-wide stats: {str(e)}"
+            detail=f"Failed to fetch system-wide stats: {str(e)}",
         )
 
 
 @app.get("/api/v1/analytics/personal-stats", response_model=PersonalStats)
-async def get_personal_stats(
-    current_user: dict = Depends(get_current_user)
-):
+async def get_personal_stats(current_user: dict = Depends(get_current_user)):
     """
     Get personal analytics for the current user.
-    
+
     Returns:
     - Cards the user is following
     - Comparison to community engagement
@@ -7484,26 +8703,33 @@ async def get_personal_stats(
     """
     from datetime import timedelta
     from collections import Counter
-    
+
     try:
         user_id = current_user["id"]
         now = datetime.now()
         one_week_ago = now - timedelta(days=7)
-        
+
         # -------------------------------------------------------------------------
         # User's Follows
         # -------------------------------------------------------------------------
-        
-        user_follows_resp = supabase.table("card_follows").select(
-            "card_id, priority, created_at, cards(id, name, slug, pillar_id, horizon, velocity_score)"
-        ).eq("user_id", user_id).execute()
+
+        user_follows_resp = (
+            supabase.table("card_follows")
+            .select(
+                "card_id, priority, created_at, cards(id, name, slug, pillar_id, horizon, velocity_score)"
+            )
+            .eq("user_id", user_id)
+            .execute()
+        )
         user_follows_data = user_follows_resp.data or []
-        
+
         # Get follower counts for each card
         all_follows_resp = supabase.table("card_follows").select("card_id").execute()
         all_follows_data = all_follows_resp.data or []
-        card_follower_counts = Counter(f.get("card_id") for f in all_follows_data if f.get("card_id"))
-        
+        card_follower_counts = Counter(
+            f.get("card_id") for f in all_follows_data if f.get("card_id")
+        )
+
         user_card_ids = set()
         following = []
         for f in user_follows_data:
@@ -7512,198 +8738,265 @@ async def get_personal_stats(
                 continue
             card_id = card.get("id") or f.get("card_id")
             user_card_ids.add(card_id)
-            
+
             followed_at = f.get("created_at")
             if followed_at:
                 try:
-                    followed_at = datetime.fromisoformat(followed_at.replace("Z", "+00:00"))
+                    followed_at = datetime.fromisoformat(
+                        followed_at.replace("Z", "+00:00")
+                    )
                 except:
                     followed_at = now
             else:
                 followed_at = now
-            
-            following.append(UserFollowItem(
-                card_id=card_id,
-                card_slug=card.get("slug"),
-                card_name=card.get("name", "Unknown"),
-                pillar_id=card.get("pillar_id"),
-                horizon=card.get("horizon"),
-                velocity_score=card.get("velocity_score"),
-                followed_at=followed_at,
-                priority=f.get("priority", "medium"),
-                follower_count=card_follower_counts.get(card_id, 1)
-            ))
-        
+
+            following.append(
+                UserFollowItem(
+                    card_id=card_id,
+                    card_slug=card.get("slug"),
+                    card_name=card.get("name", "Unknown"),
+                    pillar_id=card.get("pillar_id"),
+                    horizon=card.get("horizon"),
+                    velocity_score=card.get("velocity_score"),
+                    followed_at=followed_at,
+                    priority=f.get("priority", "medium"),
+                    follower_count=card_follower_counts.get(card_id, 1),
+                )
+            )
+
         total_following = len(following)
-        
+
         # -------------------------------------------------------------------------
         # Engagement Comparison
         # -------------------------------------------------------------------------
-        
+
         # Get all users' follow counts
         users_resp = supabase.table("users").select("id").execute()
         all_users = users_resp.data or []
         total_users = len(all_users)
-        
+
         # User follow counts per user
-        user_follow_counts = Counter(f.get("user_id") for f in all_follows_data if f.get("user_id"))
+        user_follow_counts = Counter(
+            f.get("user_id") for f in all_follows_data if f.get("user_id")
+        )
         all_follow_counts = list(user_follow_counts.values()) or [0]
-        avg_follows = sum(all_follow_counts) / len(all_follow_counts) if all_follow_counts else 0
-        
+        avg_follows = (
+            sum(all_follow_counts) / len(all_follow_counts) if all_follow_counts else 0
+        )
+
         # User workstreams
-        user_ws_resp = supabase.table("workstreams").select("id", count="exact").eq("user_id", user_id).execute()
+        user_ws_resp = (
+            supabase.table("workstreams")
+            .select("id", count="exact")
+            .eq("user_id", user_id)
+            .execute()
+        )
         user_workstream_count = user_ws_resp.count or 0
-        
+
         # All workstreams per user
         all_ws_resp = supabase.table("workstreams").select("user_id").execute()
-        ws_per_user = Counter(w.get("user_id") for w in (all_ws_resp.data or []) if w.get("user_id"))
+        ws_per_user = Counter(
+            w.get("user_id") for w in (all_ws_resp.data or []) if w.get("user_id")
+        )
         all_ws_counts = list(ws_per_user.values()) or [0]
-        avg_workstreams = sum(all_ws_counts) / len(all_ws_counts) if all_ws_counts else 0
-        
+        avg_workstreams = (
+            sum(all_ws_counts) / len(all_ws_counts) if all_ws_counts else 0
+        )
+
         # Calculate percentiles
         user_follows_count = user_follow_counts.get(user_id, 0)
         follows_below = sum(1 for c in all_follow_counts if c < user_follows_count)
-        user_percentile_follows = (follows_below / len(all_follow_counts) * 100) if all_follow_counts else 0
-        
+        user_percentile_follows = (
+            (follows_below / len(all_follow_counts) * 100) if all_follow_counts else 0
+        )
+
         ws_below = sum(1 for c in all_ws_counts if c < user_workstream_count)
-        user_percentile_workstreams = (ws_below / len(all_ws_counts) * 100) if all_ws_counts else 0
-        
+        user_percentile_workstreams = (
+            (ws_below / len(all_ws_counts) * 100) if all_ws_counts else 0
+        )
+
         engagement = UserEngagementComparison(
             user_follow_count=user_follows_count,
             avg_community_follows=round(avg_follows, 1),
             user_workstream_count=user_workstream_count,
             avg_community_workstreams=round(avg_workstreams, 1),
             user_percentile_follows=round(user_percentile_follows, 1),
-            user_percentile_workstreams=round(user_percentile_workstreams, 1)
+            user_percentile_workstreams=round(user_percentile_workstreams, 1),
         )
-        
+
         # -------------------------------------------------------------------------
         # Pillar Affinity
         # -------------------------------------------------------------------------
-        
+
         # User's pillar distribution
         user_pillar_counts = Counter()
         for f in following:
             if f.pillar_id:
                 user_pillar_counts[f.pillar_id] += 1
-        
+
         # Community pillar distribution from all follows
         community_pillar_counts = Counter()
         # Get pillar for all followed cards
-        all_card_ids = list(set(f.get("card_id") for f in all_follows_data if f.get("card_id")))
+        all_card_ids = list(
+            set(f.get("card_id") for f in all_follows_data if f.get("card_id"))
+        )
         if all_card_ids:
-            cards_pillar_resp = supabase.table("cards").select("id, pillar_id").in_("id", all_card_ids).execute()
-            card_pillars = {c["id"]: c.get("pillar_id") for c in (cards_pillar_resp.data or [])}
+            cards_pillar_resp = (
+                supabase.table("cards")
+                .select("id, pillar_id")
+                .in_("id", all_card_ids)
+                .execute()
+            )
+            card_pillars = {
+                c["id"]: c.get("pillar_id") for c in (cards_pillar_resp.data or [])
+            }
             for f in all_follows_data:
                 card_id = f.get("card_id")
                 pillar = card_pillars.get(card_id)
                 if pillar:
                     community_pillar_counts[pillar] += 1
-        
+
         total_community_follows = sum(community_pillar_counts.values()) or 1
-        
+
         pillar_affinity = []
         for code, name in ANALYTICS_PILLAR_DEFINITIONS.items():
             user_count = user_pillar_counts.get(code, 0)
-            user_pct = (user_count / total_following * 100) if total_following > 0 else 0
-            community_pct = (community_pillar_counts.get(code, 0) / total_community_follows * 100)
+            user_pct = (
+                (user_count / total_following * 100) if total_following > 0 else 0
+            )
+            community_pct = (
+                community_pillar_counts.get(code, 0) / total_community_follows * 100
+            )
             affinity = user_pct - community_pct  # Positive = more interested than avg
-            
-            pillar_affinity.append(PillarAffinity(
-                pillar_code=code,
-                pillar_name=name,
-                user_count=user_count,
-                user_percentage=round(user_pct, 1),
-                community_percentage=round(community_pct, 1),
-                affinity_score=round(affinity, 1)
-            ))
-        
+
+            pillar_affinity.append(
+                PillarAffinity(
+                    pillar_code=code,
+                    pillar_name=name,
+                    user_count=user_count,
+                    user_percentage=round(user_pct, 1),
+                    community_percentage=round(community_pct, 1),
+                    affinity_score=round(affinity, 1),
+                )
+            )
+
         # Sort by affinity score descending
         pillar_affinity.sort(key=lambda x: x.affinity_score, reverse=True)
-        
+
         # -------------------------------------------------------------------------
         # Popular Cards Not Followed (Social Discovery)
         # -------------------------------------------------------------------------
-        
+
         # Get most popular cards that user doesn't follow
-        popular_card_ids = [cid for cid, count in card_follower_counts.most_common(20) 
-                           if cid not in user_card_ids and count >= 2][:10]
-        
+        popular_card_ids = [
+            cid
+            for cid, count in card_follower_counts.most_common(20)
+            if cid not in user_card_ids and count >= 2
+        ][:10]
+
         popular_not_followed = []
         if popular_card_ids:
-            popular_cards_resp = supabase.table("cards").select(
-                "id, name, slug, summary, pillar_id, horizon, velocity_score"
-            ).in_("id", popular_card_ids).eq("status", "active").execute()
-            
-            for card in (popular_cards_resp.data or []):
+            popular_cards_resp = (
+                supabase.table("cards")
+                .select("id, name, slug, summary, pillar_id, horizon, velocity_score")
+                .in_("id", popular_card_ids)
+                .eq("status", "active")
+                .execute()
+            )
+
+            for card in popular_cards_resp.data or []:
                 card_id = card.get("id")
-                popular_not_followed.append(PopularCard(
-                    card_id=card_id,
-                    card_slug=card.get("slug"),
-                    card_name=card.get("name", "Unknown"),
-                    summary=card.get("summary", "")[:200],
-                    pillar_id=card.get("pillar_id"),
-                    horizon=card.get("horizon"),
-                    velocity_score=card.get("velocity_score"),
-                    follower_count=card_follower_counts.get(card_id, 0),
-                    is_followed_by_user=False
-                ))
-        
+                popular_not_followed.append(
+                    PopularCard(
+                        card_id=card_id,
+                        card_slug=card.get("slug"),
+                        card_name=card.get("name", "Unknown"),
+                        summary=card.get("summary", "")[:200],
+                        pillar_id=card.get("pillar_id"),
+                        horizon=card.get("horizon"),
+                        velocity_score=card.get("velocity_score"),
+                        follower_count=card_follower_counts.get(card_id, 0),
+                        is_followed_by_user=False,
+                    )
+                )
+
         # -------------------------------------------------------------------------
         # Recently Popular (new follows in last week)
         # -------------------------------------------------------------------------
-        
+
         # This would require timestamp on card_follows - using created_at if available
-        recent_follows_resp = supabase.table("card_follows").select("card_id, created_at").execute()
+        recent_follows_resp = (
+            supabase.table("card_follows").select("card_id, created_at").execute()
+        )
         recent_follows_data = recent_follows_resp.data or []
-        
+
         recent_card_counts = Counter()
         for f in recent_follows_data:
             created_at = f.get("created_at")
             if created_at:
                 try:
-                    dt = datetime.fromisoformat(created_at.replace("Z", "+00:00")).replace(tzinfo=None)
+                    dt = datetime.fromisoformat(
+                        created_at.replace("Z", "+00:00")
+                    ).replace(tzinfo=None)
                     if dt > one_week_ago:
                         recent_card_counts[f.get("card_id")] += 1
                 except:
                     pass
-        
-        recently_popular_ids = [cid for cid, count in recent_card_counts.most_common(10) 
-                                if cid not in user_card_ids and count >= 1][:5]
-        
+
+        recently_popular_ids = [
+            cid
+            for cid, count in recent_card_counts.most_common(10)
+            if cid not in user_card_ids and count >= 1
+        ][:5]
+
         recently_popular = []
         if recently_popular_ids:
-            recent_cards_resp = supabase.table("cards").select(
-                "id, name, slug, summary, pillar_id, horizon, velocity_score"
-            ).in_("id", recently_popular_ids).eq("status", "active").execute()
-            
-            for card in (recent_cards_resp.data or []):
+            recent_cards_resp = (
+                supabase.table("cards")
+                .select("id, name, slug, summary, pillar_id, horizon, velocity_score")
+                .in_("id", recently_popular_ids)
+                .eq("status", "active")
+                .execute()
+            )
+
+            for card in recent_cards_resp.data or []:
                 card_id = card.get("id")
-                recently_popular.append(PopularCard(
-                    card_id=card_id,
-                    card_slug=card.get("slug"),
-                    card_name=card.get("name", "Unknown"),
-                    summary=card.get("summary", "")[:200],
-                    pillar_id=card.get("pillar_id"),
-                    horizon=card.get("horizon"),
-                    velocity_score=card.get("velocity_score"),
-                    follower_count=recent_card_counts.get(card_id, 0),
-                    is_followed_by_user=False
-                ))
-        
+                recently_popular.append(
+                    PopularCard(
+                        card_id=card_id,
+                        card_slug=card.get("slug"),
+                        card_name=card.get("name", "Unknown"),
+                        summary=card.get("summary", "")[:200],
+                        pillar_id=card.get("pillar_id"),
+                        horizon=card.get("horizon"),
+                        velocity_score=card.get("velocity_score"),
+                        follower_count=recent_card_counts.get(card_id, 0),
+                        is_followed_by_user=False,
+                    )
+                )
+
         # -------------------------------------------------------------------------
         # User Workstream Stats
         # -------------------------------------------------------------------------
-        
-        user_ws_cards_resp = supabase.table("workstream_cards").select(
-            "card_id, workstreams!inner(user_id)"
-        ).eq("workstreams.user_id", user_id).execute()
-        cards_in_workstreams = len(set(c.get("card_id") for c in (user_ws_cards_resp.data or []) if c.get("card_id")))
-        
+
+        user_ws_cards_resp = (
+            supabase.table("workstream_cards")
+            .select("card_id, workstreams!inner(user_id)")
+            .eq("workstreams.user_id", user_id)
+            .execute()
+        )
+        cards_in_workstreams = len(
+            set(
+                c.get("card_id")
+                for c in (user_ws_cards_resp.data or [])
+                if c.get("card_id")
+            )
+        )
+
         # -------------------------------------------------------------------------
         # Build Response
         # -------------------------------------------------------------------------
-        
+
         return PersonalStats(
             following=following,
             total_following=total_following,
@@ -7713,14 +9006,645 @@ async def get_personal_stats(
             recently_popular=recently_popular,
             workstream_count=user_workstream_count,
             cards_in_workstreams=cards_in_workstreams,
-            generated_at=now
+            generated_at=now,
         )
-        
+
     except Exception as e:
         logger.error(f"Failed to fetch personal stats: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch personal stats: {str(e)}"
+            detail=f"Failed to fetch personal stats: {str(e)}",
+        )
+
+
+# ============================================================================
+# SOURCE RATING ENDPOINTS (Task 3.1)
+# ============================================================================
+
+
+@app.post("/api/v1/sources/{source_id}/rate", response_model=SourceRatingResponse)
+async def rate_source(
+    source_id: str,
+    rating: SourceRatingCreate,
+    user=Depends(get_current_user),
+):
+    """Create or update user's rating for a source. Upserts on (source_id, user_id)."""
+    try:
+        data = {
+            "source_id": source_id,
+            "user_id": user["id"],
+            "quality_rating": rating.quality_rating,
+            "relevance_rating": rating.relevance_rating.value,
+            "comment": rating.comment,
+        }
+        result = (
+            supabase.table("source_ratings")
+            .upsert(data, on_conflict="source_id,user_id")
+            .execute()
+        )
+        if not result.data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to save rating",
+            )
+
+        # Trigger SQI recalculation for parent card(s) of this source.
+        # Fire-and-forget: rating is saved even if recalculation fails.
+        try:
+            card_links = (
+                supabase.table("card_sources")
+                .select("card_id")
+                .eq("source_id", source_id)
+                .execute()
+            )
+            for link in card_links.data or []:
+                card_id = link.get("card_id")
+                if card_id:
+                    try:
+                        quality_service.calculate_sqi(supabase, card_id)
+                    except Exception as sqi_err:
+                        logger.warning(
+                            f"SQI recalc failed for card {card_id} after rating: {sqi_err}"
+                        )
+        except Exception as lookup_err:
+            logger.warning(
+                f"Failed to look up parent cards for source {source_id}: {lookup_err}"
+            )
+
+        return result.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to rate source {source_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save rating: {str(e)}",
+        )
+
+
+@app.get("/api/v1/sources/{source_id}/ratings", response_model=SourceRatingAggregate)
+async def get_source_ratings(source_id: str, user=Depends(get_current_user)):
+    """Get aggregated ratings for a source plus current user's rating."""
+    try:
+        all_ratings = (
+            supabase.table("source_ratings")
+            .select("*")
+            .eq("source_id", source_id)
+            .execute()
+        )
+
+        ratings = all_ratings.data or []
+        if not ratings:
+            return SourceRatingAggregate(
+                source_id=source_id,
+                avg_quality=0,
+                total_ratings=0,
+                relevance_distribution={
+                    "high": 0,
+                    "medium": 0,
+                    "low": 0,
+                    "not_relevant": 0,
+                },
+            )
+
+        avg_quality = sum(r["quality_rating"] for r in ratings) / len(ratings)
+        relevance_dist = {"high": 0, "medium": 0, "low": 0, "not_relevant": 0}
+        for r in ratings:
+            if r["relevance_rating"] in relevance_dist:
+                relevance_dist[r["relevance_rating"]] += 1
+
+        current_user_rating = next(
+            (r for r in ratings if r["user_id"] == user["id"]), None
+        )
+
+        return SourceRatingAggregate(
+            source_id=source_id,
+            avg_quality=round(avg_quality, 2),
+            total_ratings=len(ratings),
+            relevance_distribution=relevance_dist,
+            current_user_rating=current_user_rating,
+        )
+    except Exception as e:
+        logger.error(f"Failed to get source ratings for {source_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get source ratings: {str(e)}",
+        )
+
+
+@app.delete("/api/v1/sources/{source_id}/rate")
+async def delete_source_rating(source_id: str, user=Depends(get_current_user)):
+    """Remove user's rating for a source."""
+    try:
+        supabase.table("source_ratings").delete().eq("source_id", source_id).eq(
+            "user_id", user["id"]
+        ).execute()
+        return {"status": "deleted"}
+    except Exception as e:
+        logger.error(f"Failed to delete source rating for {source_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete rating: {str(e)}",
+        )
+
+
+# ============================================================================
+# QUALITY / SQI ENDPOINTS (Task 3.2)
+# ============================================================================
+
+
+@app.get("/api/v1/cards/{card_id}/quality")
+async def get_card_quality(card_id: str, user=Depends(get_current_user)):
+    """Get full SQI breakdown for a card."""
+    try:
+        breakdown = quality_service.get_breakdown(supabase, card_id)
+        if not breakdown:
+            # Calculate on-demand if never calculated
+            breakdown = quality_service.calculate_sqi(supabase, card_id)
+        return breakdown
+    except Exception as e:
+        logger.error(f"Failed to get quality for card {card_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get card quality: {str(e)}",
+        )
+
+
+@app.post("/api/v1/cards/{card_id}/quality/recalculate")
+async def recalculate_card_quality(card_id: str, user=Depends(get_current_user)):
+    """Force SQI recalculation for a card."""
+    try:
+        result = quality_service.calculate_sqi(supabase, card_id)
+        return result
+    except Exception as e:
+        logger.error(f"Failed to recalculate quality for card {card_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to recalculate card quality: {str(e)}",
+        )
+
+
+@app.post("/api/v1/admin/quality/recalculate-all")
+async def recalculate_all_quality(user=Depends(get_current_user)):
+    """Batch recalculate SQI for all cards. Admin only."""
+    try:
+        result = quality_service.recalculate_all_cards(supabase)
+        return result
+    except Exception as e:
+        logger.error(f"Failed to batch recalculate quality: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to batch recalculate quality: {str(e)}",
+        )
+
+
+# ============================================================================
+# DOMAIN REPUTATION ENDPOINTS (Task 3.3)
+# ============================================================================
+
+
+@app.get("/api/v1/domain-reputation")
+async def list_domain_reputations(
+    page: int = 1,
+    page_size: int = 50,
+    tier: Optional[int] = None,
+    category: Optional[str] = None,
+    user=Depends(get_current_user),
+):
+    """List all domains with reputation data, paginated and filterable."""
+    try:
+        query = supabase.table("domain_reputation").select("*", count="exact")
+        if tier:
+            query = query.eq("curated_tier", tier)
+        if category:
+            query = query.eq("category", category)
+        query = query.order("composite_score", desc=True)
+        query = query.range((page - 1) * page_size, page * page_size - 1)
+        result = query.execute()
+        return {
+            "items": result.data,
+            "total": result.count,
+            "page": page,
+            "page_size": page_size,
+        }
+    except Exception as e:
+        logger.error(f"Failed to list domain reputations: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list domain reputations: {str(e)}",
+        )
+
+
+@app.get("/api/v1/domain-reputation/{domain_id}")
+async def get_domain_reputation(domain_id: str, user=Depends(get_current_user)):
+    """Get single domain reputation detail."""
+    try:
+        result = (
+            supabase.table("domain_reputation")
+            .select("*")
+            .eq("id", domain_id)
+            .single()
+            .execute()
+        )
+        return result.data
+    except Exception as e:
+        logger.error(f"Failed to get domain reputation {domain_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Domain reputation not found: {str(e)}",
+        )
+
+
+@app.post("/api/v1/admin/domain-reputation")
+async def create_domain_reputation(
+    body: DomainReputationCreate, user=Depends(get_current_user)
+):
+    """Add a new domain to the reputation system. Admin only."""
+    try:
+        data = body.model_dump()
+        # Calculate initial composite score based on tier
+        tier_scores = {1: 85, 2: 60, 3: 35}
+        tier_score = tier_scores.get(data.get("curated_tier"), 20)
+        data["composite_score"] = tier_score * 0.50 + data.get(
+            "texas_relevance_bonus", 0
+        )
+        result = supabase.table("domain_reputation").insert(data).execute()
+        if not result.data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to create domain reputation",
+            )
+        return result.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create domain reputation: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create domain reputation: {str(e)}",
+        )
+
+
+@app.patch("/api/v1/admin/domain-reputation/{domain_id}")
+async def update_domain_reputation(
+    domain_id: str,
+    body: DomainReputationUpdate,
+    user=Depends(get_current_user),
+):
+    """Update a domain's tier, category, or other fields. Admin only."""
+    try:
+        data = body.model_dump(exclude_none=True)
+        if not data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No fields provided for update",
+            )
+        result = (
+            supabase.table("domain_reputation")
+            .update(data)
+            .eq("id", domain_id)
+            .execute()
+        )
+        if not result.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Domain reputation not found",
+            )
+        return result.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update domain reputation {domain_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update domain reputation: {str(e)}",
+        )
+
+
+@app.delete("/api/v1/admin/domain-reputation/{domain_id}")
+async def delete_domain_reputation(domain_id: str, user=Depends(get_current_user)):
+    """Remove a domain from the reputation system. Admin only."""
+    try:
+        supabase.table("domain_reputation").delete().eq("id", domain_id).execute()
+        return {"status": "deleted"}
+    except Exception as e:
+        logger.error(f"Failed to delete domain reputation {domain_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete domain reputation: {str(e)}",
+        )
+
+
+@app.post("/api/v1/admin/domain-reputation/recalculate")
+async def recalculate_domain_reputations(user=Depends(get_current_user)):
+    """Recalculate all composite scores from user ratings + pipeline stats."""
+    try:
+        result = domain_reputation_service.recalculate_all(supabase)
+        return result
+    except Exception as e:
+        logger.error(f"Failed to recalculate domain reputations: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to recalculate domain reputations: {str(e)}",
+        )
+
+
+@app.get("/api/v1/analytics/top-domains")
+async def get_top_domains(
+    limit: int = 20,
+    category: Optional[str] = None,
+    user=Depends(get_current_user),
+):
+    """Top domains leaderboard by composite score."""
+    try:
+        query = supabase.table("domain_reputation").select(
+            "id,domain_pattern,organization_name,category,curated_tier,"
+            "composite_score,user_quality_avg,user_rating_count,triage_pass_rate"
+        )
+        query = query.eq("is_active", True)
+        if category:
+            query = query.eq("category", category)
+        query = query.order("composite_score", desc=True).limit(limit)
+        result = query.execute()
+        return result.data
+    except Exception as e:
+        logger.error(f"Failed to get top domains: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get top domains: {str(e)}",
+        )
+
+
+# ============================================================================
+# CARD CREATION ENDPOINTS (Task 3.4)
+# ============================================================================
+
+
+@app.post("/api/v1/cards/create-from-topic")
+async def create_card_from_topic(
+    body: CreateCardFromTopicRequest, user=Depends(get_current_user)
+):
+    """Quick card creation from a topic phrase. Creates card and optionally starts background scan."""
+    try:
+        card_id = str(uuid.uuid4())
+        card_data = {
+            "id": card_id,
+            "name": body.topic[:200],
+            "description": f"User-created signal: {body.topic}",
+            "origin": "user_created",
+            "is_exploratory": not body.pillar_hints,
+            "created_by": user["id"],
+            "review_status": "approved",
+            "quality_score": 0,
+            "quality_breakdown": {},
+        }
+
+        if body.pillar_hints and len(body.pillar_hints) > 0:
+            card_data["primary_pillar"] = body.pillar_hints[0]
+
+        result = supabase.table("cards").insert(card_data).execute()
+
+        if not result.data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to create card",
+            )
+
+        # If workstream specified, add to workstream
+        if body.workstream_id:
+            try:
+                supabase.table("workstream_cards").insert(
+                    {
+                        "workstream_id": body.workstream_id,
+                        "card_id": card_id,
+                        "column_name": "inbox",
+                    }
+                ).execute()
+            except Exception as ws_err:
+                logger.warning(
+                    f"Card {card_id} created but failed to add to workstream "
+                    f"{body.workstream_id}: {str(ws_err)}"
+                )
+
+        return CreateCardFromTopicResponse(
+            card_id=card_id,
+            card_name=body.topic[:200],
+            status="created",
+            message="Card created. Sources will be discovered in the next scan cycle.",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create card from topic: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create card: {str(e)}",
+        )
+
+
+@app.post("/api/v1/cards/create-manual")
+async def create_manual_card(
+    body: ManualCardCreateRequest, user=Depends(get_current_user)
+):
+    """Create a card from a full manual form with all fields specified.
+
+    Unlike the quick topic-based creation, this endpoint accepts detailed card
+    metadata including pillar assignments, horizon, stage, and optional seed URLs.
+    Cards created manually are marked with origin='user_created' and bypass the
+    discovery pipeline.
+
+    Args:
+        body: ManualCardCreateRequest with name, description, pillars, etc.
+        user: Authenticated user from JWT token.
+
+    Returns:
+        JSON with card_id, card_name, status, and message.
+
+    Raises:
+        400: Invalid request data or failed insert.
+        500: Unexpected server error.
+    """
+    try:
+        card_id = str(uuid.uuid4())
+
+        # Determine primary pillar from the list, or None for exploratory
+        primary_pillar = None
+        if body.pillar_ids and len(body.pillar_ids) > 0:
+            primary_pillar = body.pillar_ids[0]
+
+        card_data = {
+            "id": card_id,
+            "name": body.name,
+            "description": body.description,
+            "origin": "user_created",
+            "is_exploratory": body.is_exploratory or (not primary_pillar),
+            "created_by": user["id"],
+            "review_status": "approved",
+            "quality_score": 0,
+            "quality_breakdown": {},
+            "horizon": body.horizon or "H1",
+            "stage_id": body.stage or "1",
+        }
+
+        if primary_pillar:
+            card_data["primary_pillar"] = primary_pillar
+
+        result = supabase.table("cards").insert(card_data).execute()
+
+        if not result.data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to create card",
+            )
+
+        # Store seed URLs as sources if provided
+        if body.seed_urls and len(body.seed_urls) > 0:
+            for url in body.seed_urls:
+                try:
+                    source_data = {
+                        "id": str(uuid.uuid4()),
+                        "url": url,
+                        "title": url,  # Placeholder title; enrichment happens later
+                        "source_type": "user_submitted",
+                    }
+                    src_result = supabase.table("sources").insert(source_data).execute()
+                    if src_result.data:
+                        supabase.table("card_sources").insert(
+                            {
+                                "card_id": card_id,
+                                "source_id": src_result.data[0]["id"],
+                            }
+                        ).execute()
+                except Exception as url_err:
+                    logger.warning(
+                        f"Card {card_id}: failed to add seed URL {url}: {url_err}"
+                    )
+
+        return {
+            "card_id": card_id,
+            "card_name": body.name,
+            "status": "created",
+            "message": "Card created successfully.",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create manual card: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create card: {str(e)}",
+        )
+
+
+@app.post("/api/v1/ai/suggest-keywords")
+async def suggest_keywords(topic: str, user=Depends(get_current_user)):
+    """Suggest municipal-relevant keywords for a topic."""
+    try:
+        import json
+
+        client = azure_openai_client
+        response = client.chat.completions.create(
+            model=get_chat_deployment(),
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a municipal government research assistant for the "
+                        "City of Austin. Given a topic, suggest 5-10 search keywords "
+                        "that would find relevant sources about this topic in the "
+                        "context of city government operations, policy, and services. "
+                        "Return ONLY a JSON array of strings."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": f"Suggest municipal-relevant search keywords for: {topic}",
+                },
+            ],
+            temperature=0.7,
+            max_tokens=300,
+        )
+
+        try:
+            keywords = json.loads(response.choices[0].message.content)
+        except (json.JSONDecodeError, IndexError):
+            keywords = [topic]
+
+        return KeywordSuggestionResponse(topic=topic, suggestions=keywords)
+    except Exception as e:
+        logger.error(f"Failed to suggest keywords for '{topic}': {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to suggest keywords: {str(e)}",
+        )
+
+
+# ============================================================================
+# WORKSTREAM ENHANCEMENT (Task 3.5)
+# ============================================================================
+
+
+@app.post("/api/v1/me/workstreams/{workstream_id}/auto-scan")
+async def toggle_workstream_auto_scan(
+    workstream_id: str,
+    enable: bool = True,
+    user=Depends(get_current_user),
+):
+    """Enable or disable automatic scanning for a workstream.
+
+    When auto_scan is enabled, the workstream will be included in periodic
+    background source discovery runs.
+    """
+    try:
+        # Verify workstream exists and belongs to user
+        ws_check = (
+            supabase.table("workstreams")
+            .select("id, user_id")
+            .eq("id", workstream_id)
+            .execute()
+        )
+        if not ws_check.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Workstream not found",
+            )
+        if ws_check.data[0]["user_id"] != user["id"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to modify this workstream",
+            )
+
+        # Update auto_scan setting
+        result = (
+            supabase.table("workstreams")
+            .update(
+                {
+                    "auto_scan": enable,
+                    "updated_at": datetime.now().isoformat(),
+                }
+            )
+            .eq("id", workstream_id)
+            .execute()
+        )
+        if result.data:
+            return {
+                "workstream_id": workstream_id,
+                "auto_scan": enable,
+                "status": "enabled" if enable else "disabled",
+            }
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to update auto_scan setting",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            f"Failed to toggle auto_scan for workstream {workstream_id}: {str(e)}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update auto_scan: {str(e)}",
         )
 
 
@@ -7729,11 +9653,15 @@ async def get_personal_stats(
 async def lifespan(app: FastAPI):
     """Manage application lifecycle - startup and shutdown"""
     # Startup
-    enable_scheduler = os.getenv("FORESIGHT_ENABLE_SCHEDULER", "false").strip().lower() in ("1", "true", "yes", "y", "on")
+    enable_scheduler = os.getenv(
+        "FORESIGHT_ENABLE_SCHEDULER", "false"
+    ).strip().lower() in ("1", "true", "yes", "y", "on")
     if enable_scheduler:
         start_scheduler()
     else:
-        logger.info("Scheduler disabled (set FORESIGHT_ENABLE_SCHEDULER=true to enable)")
+        logger.info(
+            "Scheduler disabled (set FORESIGHT_ENABLE_SCHEDULER=true to enable)"
+        )
     logger.info("Foresight API started")
     yield
     # Shutdown
@@ -7751,4 +9679,5 @@ app.router.lifespan_context = lifespan
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)

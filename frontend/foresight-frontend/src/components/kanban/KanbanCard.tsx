@@ -12,24 +12,38 @@
  * - Dark mode support
  */
 
-import React, { memo } from 'react';
-import { useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import { useNavigate } from 'react-router-dom';
-import { StickyNote, Bell, Sparkles, UserPlus, Heart, Check, X, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
-import { cn } from '../../lib/utils';
-import { PillarBadge } from '../PillarBadge';
-import { HorizonBadge } from '../HorizonBadge';
-import { StageBadge } from '../StageBadge';
-import { Top25Badge } from '../Top25Badge';
-import { Tooltip } from '../ui/Tooltip';
-import { CardActions } from './CardActions';
-import { getPillarByCode } from '../../data/taxonomy';
+import React, { memo, useState } from "react";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { useNavigate } from "react-router-dom";
+import {
+  StickyNote,
+  Bell,
+  Sparkles,
+  UserPlus,
+  Heart,
+  Check,
+  X,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  CheckCircle,
+} from "lucide-react";
+import { cn } from "../../lib/utils";
+import { PillarBadge } from "../PillarBadge";
+import { HorizonBadge } from "../HorizonBadge";
+import { StageBadge } from "../StageBadge";
+import { Top25Badge } from "../Top25Badge";
+import { QualityBadge } from "../QualityBadge";
+import { ExploratoryBadge } from "../badges/ExploratoryBadge";
+import { Tooltip } from "../ui/Tooltip";
+import { CardActions } from "./CardActions";
+import { getPillarByCode } from "../../data/taxonomy";
 import type {
   WorkstreamCard as WorkstreamCardType,
   CardActionCallbacks,
   KanbanStatus,
-} from './types';
+} from "./types";
 
 // =============================================================================
 // Types
@@ -58,13 +72,13 @@ export interface KanbanCardProps {
  * Get color class for the card's left border accent.
  * Based on the card's horizon for visual grouping.
  */
-function getAccentBorderClass(horizon: 'H1' | 'H2' | 'H3'): string {
+function getAccentBorderClass(horizon: "H1" | "H2" | "H3"): string {
   const accentMap: Record<string, string> = {
-    H1: 'border-l-green-500',
-    H2: 'border-l-amber-500',
-    H3: 'border-l-purple-500',
+    H1: "border-l-green-500",
+    H2: "border-l-amber-500",
+    H3: "border-l-purple-500",
   };
-  return accentMap[horizon] || 'border-l-gray-400';
+  return accentMap[horizon] || "border-l-gray-400";
 }
 
 /**
@@ -72,11 +86,11 @@ function getAccentBorderClass(horizon: 'H1' | 'H2' | 'H3'): string {
  * Handles both number and string formats (e.g., "1_concept" -> 1).
  */
 function parseStageNumber(stageId: number | string): number | null {
-  if (typeof stageId === 'number') {
+  if (typeof stageId === "number") {
     return stageId;
   }
   const match = String(stageId).match(/^(\d+)/);
-  return match ? parseInt(match[1], 10) : null;
+  return match?.[1] ? parseInt(match[1], 10) : null;
 }
 
 /**
@@ -86,32 +100,39 @@ function AddedFromTooltipContent({
   addedFrom,
   card,
 }: {
-  addedFrom: 'auto' | 'manual' | 'follow';
-  card: WorkstreamCardType['card'];
+  addedFrom: "auto" | "manual" | "follow";
+  card: WorkstreamCardType["card"];
 }) {
   const pillar = getPillarByCode(card.pillar_id);
 
-  if (addedFrom === 'auto') {
+  if (addedFrom === "auto") {
     return (
       <div className="space-y-2 min-w-[180px] max-w-[240px]">
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-blue-500" />
-          <span className="font-medium text-gray-900 dark:text-gray-100">Auto-matched</span>
+          <span className="font-medium text-gray-900 dark:text-gray-100">
+            Auto-matched
+          </span>
         </div>
         <p className="text-xs text-gray-600 dark:text-gray-400">
-          This card was automatically added because it matched your workstream filters:
+          This card was automatically added because it matched your workstream
+          filters:
         </p>
         <div className="space-y-1 text-xs">
           {pillar && (
             <div className="flex items-center gap-1.5">
               <span className="text-gray-500 dark:text-gray-400">Pillar:</span>
-              <span className="text-gray-700 dark:text-gray-300">{pillar.name}</span>
+              <span className="text-gray-700 dark:text-gray-300">
+                {pillar.name}
+              </span>
             </div>
           )}
           {card.horizon && (
             <div className="flex items-center gap-1.5">
               <span className="text-gray-500 dark:text-gray-400">Horizon:</span>
-              <span className="text-gray-700 dark:text-gray-300">{card.horizon}</span>
+              <span className="text-gray-700 dark:text-gray-300">
+                {card.horizon}
+              </span>
             </div>
           )}
         </div>
@@ -119,12 +140,14 @@ function AddedFromTooltipContent({
     );
   }
 
-  if (addedFrom === 'manual') {
+  if (addedFrom === "manual") {
     return (
       <div className="space-y-2 min-w-[140px]">
         <div className="flex items-center gap-2">
           <UserPlus className="h-4 w-4 text-gray-500" />
-          <span className="font-medium text-gray-900 dark:text-gray-100">Manually added</span>
+          <span className="font-medium text-gray-900 dark:text-gray-100">
+            Manually added
+          </span>
         </div>
         <p className="text-xs text-gray-600 dark:text-gray-400">
           You added this card to your workstream.
@@ -138,7 +161,9 @@ function AddedFromTooltipContent({
     <div className="space-y-2 min-w-[140px]">
       <div className="flex items-center gap-2">
         <Heart className="h-4 w-4 text-pink-500" />
-        <span className="font-medium text-gray-900 dark:text-gray-100">From followed card</span>
+        <span className="font-medium text-gray-900 dark:text-gray-100">
+          From followed card
+        </span>
       </div>
       <p className="text-xs text-gray-600 dark:text-gray-400">
         Added because you followed this card.
@@ -178,7 +203,7 @@ export const KanbanCard = memo(function KanbanCard({
   } = useSortable({
     id: card.id,
     data: {
-      type: 'card',
+      type: "card",
       card,
     },
   });
@@ -194,6 +219,11 @@ export const KanbanCard = memo(function KanbanCard({
   const stageNumber = parseStageNumber(embeddedCard.stage_id);
   const hasNotes = card.notes && card.notes.trim().length > 0;
   const hasReminder = card.reminder_at !== null;
+
+  // Optimistic state for review approval
+  const [isApproved, setIsApproved] = useState(false);
+  const showNeedsReview =
+    card.review_status === "pending_review" && !isApproved;
 
   /**
    * Handle card click navigation.
@@ -217,7 +247,7 @@ export const KanbanCard = memo(function KanbanCard({
    * Handle keyboard navigation for accessibility.
    */
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' || e.key === ' ') {
+    if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       if (onCardClick) {
         onCardClick(card);
@@ -235,26 +265,26 @@ export const KanbanCard = memo(function KanbanCard({
       {...listeners}
       className={cn(
         // Base card styles
-        'group relative bg-white dark:bg-[#2d3166] rounded-lg shadow-sm',
-        'border border-gray-200 dark:border-gray-700',
-        'border-l-4',
+        "group relative bg-white dark:bg-[#2d3166] rounded-lg shadow-sm",
+        "border border-gray-200 dark:border-gray-700",
+        "border-l-4",
         getAccentBorderClass(embeddedCard.horizon),
         // Hover and interaction states
-        'transition-all duration-200',
-        'hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600',
+        "transition-all duration-200",
+        "hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600",
         // Drag states
-        isDragging && 'opacity-50 shadow-lg ring-2 ring-brand-blue/50',
-        isDragOverlay && 'shadow-xl scale-105 rotate-2 cursor-grabbing',
+        isDragging && "opacity-50 shadow-lg ring-2 ring-brand-blue/50",
+        isDragOverlay && "shadow-xl scale-105 rotate-2 cursor-grabbing",
         // Touch optimization and cursor
-        'touch-none cursor-grab active:cursor-grabbing'
+        "touch-none cursor-grab active:cursor-grabbing",
       )}
     >
       {/* Top-right actions: Card Actions Menu */}
       <div
         className={cn(
-          'absolute top-2 right-2 flex items-center gap-0.5 z-10',
-          'opacity-0 group-hover:opacity-100 transition-opacity',
-          isDragOverlay && 'opacity-100'
+          "absolute top-2 right-2 flex items-center gap-0.5 z-10",
+          "opacity-0 group-hover:opacity-100 transition-opacity",
+          isDragOverlay && "opacity-100",
         )}
       >
         {/* Card Actions Menu */}
@@ -297,6 +327,7 @@ export const KanbanCard = memo(function KanbanCard({
             showIcon={false}
             disableTooltip={isDragOverlay}
           />
+          {embeddedCard.is_exploratory && <ExploratoryBadge size="sm" />}
           <HorizonBadge
             horizon={embeddedCard.horizon}
             size="sm"
@@ -310,38 +341,57 @@ export const KanbanCard = memo(function KanbanCard({
               disableTooltip={isDragOverlay}
             />
           )}
+          {embeddedCard.quality_score != null && (
+            <QualityBadge score={embeddedCard.quality_score} size="sm" />
+          )}
         </div>
 
-        {/* Top 25 Badge - if applicable */}
-        {embeddedCard.top25_relevance && embeddedCard.top25_relevance.length > 0 && (
+        {/* Needs Review Badge */}
+        {showNeedsReview && (
           <div className="mb-2">
-            <Top25Badge
-              priorities={embeddedCard.top25_relevance}
-              size="sm"
-              showCount
-            />
+            <span className="inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700">
+              <AlertCircle className="h-3 w-3" />
+              Needs Review
+            </span>
           </div>
         )}
+
+        {/* Top 25 Badge - if applicable */}
+        {embeddedCard.top25_relevance &&
+          embeddedCard.top25_relevance.length > 0 && (
+            <div className="mb-2">
+              <Top25Badge
+                priorities={embeddedCard.top25_relevance}
+                size="sm"
+                showCount
+              />
+            </div>
+          )}
 
         {/* Research Status Indicator */}
         {card.research_status && card.research_status.status && (
           <div
             className={cn(
-              'flex items-center gap-2 mt-2 pt-2 border-t border-gray-100 dark:border-gray-700',
+              "flex items-center gap-2 mt-2 pt-2 border-t border-gray-100 dark:border-gray-700",
               // Pulse animation for active research
-              (card.research_status.status === 'queued' || card.research_status.status === 'processing') &&
-                'animate-pulse'
+              (card.research_status.status === "queued" ||
+                card.research_status.status === "processing") &&
+                "animate-pulse",
             )}
           >
-            {(card.research_status.status === 'queued' || card.research_status.status === 'processing') && (
+            {(card.research_status.status === "queued" ||
+              card.research_status.status === "processing") && (
               <div className="flex items-center gap-1.5 text-purple-600 dark:text-purple-400">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 <span className="text-xs font-medium">
-                  {card.research_status.task_type === 'deep_research' ? 'Deep Dive' : 'Updating'}...
+                  {card.research_status.task_type === "deep_research"
+                    ? "Deep Dive"
+                    : "Updating"}
+                  ...
                 </span>
               </div>
             )}
-            {card.research_status.status === 'completed' && (
+            {card.research_status.status === "completed" && (
               <Tooltip
                 content="Research complete - click to view results"
                 side="top"
@@ -353,7 +403,7 @@ export const KanbanCard = memo(function KanbanCard({
                 </div>
               </Tooltip>
             )}
-            {card.research_status.status === 'failed' && (
+            {card.research_status.status === "failed" && (
               <Tooltip
                 content="Research failed - try again"
                 side="top"
@@ -396,7 +446,7 @@ export const KanbanCard = memo(function KanbanCard({
           <Tooltip
             content={
               <AddedFromTooltipContent
-                addedFrom={card.added_from as 'auto' | 'manual' | 'follow'}
+                addedFrom={card.added_from as "auto" | "manual" | "follow"}
                 card={embeddedCard}
               />
             }
@@ -407,10 +457,13 @@ export const KanbanCard = memo(function KanbanCard({
           >
             <span
               className={cn(
-                'ml-auto text-[10px] uppercase tracking-wide font-medium px-1.5 py-0.5 rounded cursor-help',
-                card.added_from === 'auto' && 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400',
-                card.added_from === 'manual' && 'bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
-                card.added_from === 'follow' && 'bg-pink-50 text-pink-600 dark:bg-pink-900/30 dark:text-pink-400'
+                "ml-auto text-[10px] uppercase tracking-wide font-medium px-1.5 py-0.5 rounded cursor-help",
+                card.added_from === "auto" &&
+                  "bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400",
+                card.added_from === "manual" &&
+                  "bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
+                card.added_from === "follow" &&
+                  "bg-pink-50 text-pink-600 dark:bg-pink-900/30 dark:text-pink-400",
               )}
             >
               {card.added_from}
@@ -419,32 +472,55 @@ export const KanbanCard = memo(function KanbanCard({
         </div>
 
         {/* Quick Actions for Inbox Cards */}
-        {columnId === 'inbox' && cardActions?.onMoveToColumn && !isDragOverlay && (
-          <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                cardActions.onMoveToColumn?.(card.id, 'screening');
-              }}
-              className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-medium text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/40 rounded-md transition-colors"
-              title="Move to Screening"
-            >
-              <Check className="h-3.5 w-3.5" />
-              Accept
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                cardActions.onMoveToColumn?.(card.id, 'archived');
-              }}
-              className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-md transition-colors"
-              title="Move to Archived"
-            >
-              <X className="h-3.5 w-3.5" />
-              Dismiss
-            </button>
-          </div>
-        )}
+        {columnId === "inbox" &&
+          cardActions?.onMoveToColumn &&
+          !isDragOverlay && (
+            <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+              {/* Approve Review button - only for cards pending review */}
+              {showNeedsReview && cardActions.onApproveReview && (
+                <Tooltip
+                  content="Approve content quality"
+                  side="top"
+                  disabled={isDragOverlay}
+                >
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsApproved(true);
+                      cardActions.onApproveReview?.(card.id);
+                    }}
+                    className="inline-flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-medium text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-md transition-colors"
+                    title="Approve Review"
+                  >
+                    <CheckCircle className="h-3.5 w-3.5" />
+                    Approve
+                  </button>
+                </Tooltip>
+              )}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  cardActions.onMoveToColumn?.(card.id, "screening");
+                }}
+                className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-medium text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/40 rounded-md transition-colors"
+                title="Move to Screening"
+              >
+                <Check className="h-3.5 w-3.5" />
+                Accept
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  cardActions.onMoveToColumn?.(card.id, "archived");
+                }}
+                className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-md transition-colors"
+                title="Move to Archived"
+              >
+                <X className="h-3.5 w-3.5" />
+                Dismiss
+              </button>
+            </div>
+          )}
       </div>
     </div>
   );

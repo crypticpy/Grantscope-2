@@ -19,8 +19,14 @@
  * - hooks/useSearchHistory.ts - Search history management
  */
 
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Link, useSearchParams, useNavigate } from 'react-router-dom';
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from "react";
+import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import {
   Search,
   Filter,
@@ -41,26 +47,39 @@ import {
   AlertTriangle,
   RefreshCw,
   ArrowLeftRight,
-} from 'lucide-react';
-import { supabase } from '../../App';
-import { useAuthContext } from '../../hooks/useAuthContext';
-import { useDebouncedValue } from '../../hooks/useDebounce';
-import { useScrollRestoration } from '../../hooks/useScrollRestoration';
-import { SaveSearchModal } from '../../components/SaveSearchModal';
-import { SearchSidebar } from '../../components/SearchSidebar';
-import { VirtualizedGrid, VirtualizedGridHandle } from '../../components/VirtualizedGrid';
-import { VirtualizedList, VirtualizedListHandle } from '../../components/VirtualizedList';
+  Plus,
+  ShieldCheck,
+} from "lucide-react";
+import { supabase } from "../../App";
+import { useAuthContext } from "../../hooks/useAuthContext";
+import { useDebouncedValue } from "../../hooks/useDebounce";
+import { useScrollRestoration } from "../../hooks/useScrollRestoration";
+import { SaveSearchModal } from "../../components/SaveSearchModal";
+import { SearchSidebar } from "../../components/SearchSidebar";
+import {
+  VirtualizedGrid,
+  VirtualizedGridHandle,
+} from "../../components/VirtualizedGrid";
+import {
+  VirtualizedList,
+  VirtualizedListHandle,
+} from "../../components/VirtualizedList";
 import {
   advancedSearch,
   type AdvancedSearchRequest,
   type SavedSearchQueryConfig,
-} from '../../lib/discovery-api';
+} from "../../lib/discovery-api";
 
 // Local imports from modular structure
-import type { Card, Pillar, Stage, SortOption, FilterState } from './types';
-import { getSortConfig, getScoreColorClasses, formatHistoryTime } from './utils';
-import { DiscoverCard } from './components';
-import { useSearchHistory } from './hooks';
+import type { Card, Pillar, Stage, SortOption, FilterState } from "./types";
+import {
+  getSortConfig,
+  getScoreColorClasses,
+  formatHistoryTime,
+} from "./utils";
+import { DiscoverCard } from "./components";
+import { useSearchHistory } from "./hooks";
+import { CreateSignalModal } from "../../components/CreateSignal";
 
 /**
  * Build a short description of a query config for display
@@ -73,7 +92,8 @@ function getHistoryDescription(config: SavedSearchQueryConfig): string {
   }
 
   if (config.filters) {
-    const { pillar_ids, stage_ids, horizon, date_range, score_thresholds } = config.filters;
+    const { pillar_ids, stage_ids, horizon, date_range, score_thresholds } =
+      config.filters;
 
     if (pillar_ids && pillar_ids.length > 0) {
       parts.push(`${pillar_ids.length} pillar(s)`);
@@ -81,22 +101,25 @@ function getHistoryDescription(config: SavedSearchQueryConfig): string {
     if (stage_ids && stage_ids.length > 0) {
       parts.push(`${stage_ids.length} stage(s)`);
     }
-    if (horizon && horizon !== 'ALL') {
+    if (horizon && horizon !== "ALL") {
       parts.push(`${horizon}`);
     }
     if (date_range && (date_range.start || date_range.end)) {
-      parts.push('date filter');
+      parts.push("date filter");
     }
     if (score_thresholds && Object.keys(score_thresholds).length > 0) {
-      parts.push('score filters');
+      parts.push("score filters");
     }
   }
 
   if (parts.length === 0 && !config.use_vector_search) {
-    return 'All cards';
+    return "All cards";
   }
 
-  return parts.join(' • ') || (config.use_vector_search ? 'Semantic search' : 'All cards');
+  return (
+    parts.join(" • ") ||
+    (config.use_vector_search ? "Semantic search" : "All cards")
+  );
 }
 
 /**
@@ -111,17 +134,21 @@ const Discover: React.FC = () => {
   const [stages, setStages] = useState<Stage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedPillar, setSelectedPillar] = useState('');
-  const [selectedStage, setSelectedStage] = useState('');
-  const [selectedHorizon, setSelectedHorizon] = useState('');
-  const [sortOption, setSortOption] = useState<SortOption>('recently_updated');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [followedCardIds, setFollowedCardIds] = useState<Set<string>>(new Set());
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedPillar, setSelectedPillar] = useState("");
+  const [selectedStage, setSelectedStage] = useState("");
+  const [selectedHorizon, setSelectedHorizon] = useState("");
+  const [sortOption, setSortOption] = useState<SortOption>("recently_updated");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [followedCardIds, setFollowedCardIds] = useState<Set<string>>(
+    new Set(),
+  );
 
   // Comparison mode state
   const [compareMode, setCompareMode] = useState(false);
-  const [selectedForCompare, setSelectedForCompare] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedForCompare, setSelectedForCompare] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
 
   // Score threshold filters (minimum values, 0-100)
   const [impactMin, setImpactMin] = useState<number>(0);
@@ -129,11 +156,17 @@ const Discover: React.FC = () => {
   const [noveltyMin, setNoveltyMin] = useState<number>(0);
 
   // Date range filters (YYYY-MM-DD format)
-  const [dateFrom, setDateFrom] = useState<string>('');
-  const [dateTo, setDateTo] = useState<string>('');
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
 
   // Semantic search toggle
   const [useSemanticSearch, setUseSemanticSearch] = useState<boolean>(false);
+
+  // Create Signal modal state
+  const [showCreateSignal, setShowCreateSignal] = useState(false);
+
+  // Quality tier filter: 'all' | 'high' | 'moderate' | 'low'
+  const [qualityFilter, setQualityFilter] = useState<string>("all");
 
   // Debounce filter values that change rapidly
   const filterState = useMemo<FilterState>(
@@ -143,10 +176,11 @@ const Discover: React.FC = () => {
       relevanceMin,
       noveltyMin,
     }),
-    [searchTerm, impactMin, relevanceMin, noveltyMin]
+    [searchTerm, impactMin, relevanceMin, noveltyMin],
   );
 
-  const { debouncedValue: debouncedFilters, isPending: isFilterPending } = useDebouncedValue(filterState, 300);
+  const { debouncedValue: debouncedFilters, isPending: isFilterPending } =
+    useDebouncedValue(filterState, 300);
 
   // Save search modal state
   const [showSaveSearchModal, setShowSaveSearchModal] = useState(false);
@@ -168,7 +202,7 @@ const Discover: React.FC = () => {
   } = useSearchHistory(user?.id);
 
   // Quick filter from URL params
-  const quickFilter = searchParams.get('filter') || '';
+  const quickFilter = searchParams.get("filter") || "";
 
   // Virtualized refs
   const virtualizedListRef = useRef<VirtualizedListHandle>(null);
@@ -182,7 +216,7 @@ const Discover: React.FC = () => {
       return;
     }
 
-    if (viewMode === 'list') {
+    if (viewMode === "list") {
       virtualizedListRef.current?.setScrollOffset(0);
     } else {
       virtualizedGridRef.current?.setScrollOffset(0);
@@ -193,25 +227,25 @@ const Discover: React.FC = () => {
   // Using useCallback to prevent infinite re-renders from unstable function references
   const getListScrollPosition = useCallback(
     () => virtualizedListRef.current?.getScrollOffset() ?? 0,
-    []
+    [],
   );
   const setListScrollPosition = useCallback(
     (position: number) => virtualizedListRef.current?.setScrollOffset(position),
-    []
+    [],
   );
   const getGridScrollPosition = useCallback(
     () => virtualizedGridRef.current?.getScrollOffset() ?? 0,
-    []
+    [],
   );
   const setGridScrollPosition = useCallback(
     (position: number) => virtualizedGridRef.current?.setScrollOffset(position),
-    []
+    [],
   );
 
   // Scroll restoration
   useScrollRestoration({
-    storageKey: 'discover-list',
-    enabled: viewMode === 'list',
+    storageKey: "discover-list",
+    enabled: viewMode === "list",
     clearAfterRestore: true,
     saveOnBeforeUnload: false,
     getScrollPosition: getListScrollPosition,
@@ -219,8 +253,8 @@ const Discover: React.FC = () => {
   });
 
   useScrollRestoration({
-    storageKey: 'discover-grid',
-    enabled: viewMode === 'grid',
+    storageKey: "discover-grid",
+    enabled: viewMode === "grid",
     clearAfterRestore: true,
     saveOnBeforeUnload: false,
     getScrollPosition: getGridScrollPosition,
@@ -237,11 +271,12 @@ const Discover: React.FC = () => {
       config.query = searchTerm.trim();
     }
 
-    const filters: SavedSearchQueryConfig['filters'] = {};
+    const filters: SavedSearchQueryConfig["filters"] = {};
 
     if (selectedPillar) filters.pillar_ids = [selectedPillar];
     if (selectedStage) filters.stage_ids = [selectedStage];
-    if (selectedHorizon) filters.horizon = selectedHorizon as 'H1' | 'H2' | 'H3';
+    if (selectedHorizon)
+      filters.horizon = selectedHorizon as "H1" | "H2" | "H3";
     if (dateFrom || dateTo) {
       filters.date_range = {
         ...(dateFrom && { start: dateFrom }),
@@ -261,7 +296,36 @@ const Discover: React.FC = () => {
     }
 
     return config;
-  }, [searchTerm, selectedPillar, selectedStage, selectedHorizon, dateFrom, dateTo, impactMin, relevanceMin, noveltyMin, useSemanticSearch]);
+  }, [
+    searchTerm,
+    selectedPillar,
+    selectedStage,
+    selectedHorizon,
+    dateFrom,
+    dateTo,
+    impactMin,
+    relevanceMin,
+    noveltyMin,
+    useSemanticSearch,
+  ]);
+
+  // Apply client-side quality tier filter
+  const filteredCards = useMemo(() => {
+    if (qualityFilter === "all") return cards;
+    return cards.filter((card) => {
+      const score = card.quality_score;
+      switch (qualityFilter) {
+        case "high":
+          return score != null && score >= 75;
+        case "moderate":
+          return score != null && score >= 50 && score < 75;
+        case "low":
+          return score == null || score < 50;
+        default:
+          return true;
+      }
+    });
+  }, [cards, qualityFilter]);
 
   // Load initial data
   useEffect(() => {
@@ -272,29 +336,49 @@ const Discover: React.FC = () => {
   // Load cards when filters change
   useEffect(() => {
     loadCards();
-  }, [debouncedFilters, selectedPillar, selectedStage, selectedHorizon, quickFilter, followedCardIds, dateFrom, dateTo, useSemanticSearch, sortOption]);
+  }, [
+    debouncedFilters,
+    selectedPillar,
+    selectedStage,
+    selectedHorizon,
+    quickFilter,
+    followedCardIds,
+    dateFrom,
+    dateTo,
+    useSemanticSearch,
+    sortOption,
+  ]);
 
   const loadDiscoverData = async () => {
     try {
-      const { data: pillarsData } = await supabase.from('pillars').select('*').order('name');
-      const { data: stagesData } = await supabase.from('stages').select('*').order('sort_order');
+      const { data: pillarsData } = await supabase
+        .from("pillars")
+        .select("*")
+        .order("name");
+      const { data: stagesData } = await supabase
+        .from("stages")
+        .select("*")
+        .order("sort_order");
 
       setPillars(pillarsData || []);
       setStages(stagesData || []);
     } catch (error) {
-      console.error('Error loading discover data:', error);
+      console.error("Error loading discover data:", error);
     }
   };
 
   const loadFollowedCards = async () => {
     if (!user?.id) return;
     try {
-      const { data } = await supabase.from('card_follows').select('card_id').eq('user_id', user.id);
+      const { data } = await supabase
+        .from("card_follows")
+        .select("card_id")
+        .eq("user_id", user.id);
       if (data) {
         setFollowedCardIds(new Set(data.map((f) => f.card_id)));
       }
     } catch (error) {
-      console.error('Error loading followed cards:', error);
+      console.error("Error loading followed cards:", error);
     }
   };
 
@@ -303,29 +387,40 @@ const Discover: React.FC = () => {
     setError(null);
     try {
       // Handle "following" filter
-      if (quickFilter === 'following') {
+      if (quickFilter === "following") {
         if (followedCardIds.size === 0) {
           setCards([]);
           setLoading(false);
           return;
         }
 
-        let query = supabase.from('cards').select('*').eq('status', 'active').in('id', Array.from(followedCardIds));
+        let query = supabase
+          .from("cards")
+          .select("*")
+          .eq("status", "active")
+          .in("id", Array.from(followedCardIds));
 
         if (debouncedFilters.searchTerm) {
-          query = query.or(`name.ilike.%${debouncedFilters.searchTerm}%,summary.ilike.%${debouncedFilters.searchTerm}%`);
+          query = query.or(
+            `name.ilike.%${debouncedFilters.searchTerm}%,summary.ilike.%${debouncedFilters.searchTerm}%`,
+          );
         }
-        if (selectedPillar) query = query.eq('pillar_id', selectedPillar);
-        if (selectedStage) query = query.eq('stage_id', selectedStage);
-        if (selectedHorizon) query = query.eq('horizon', selectedHorizon);
-        if (debouncedFilters.impactMin > 0) query = query.gte('impact_score', debouncedFilters.impactMin);
-        if (debouncedFilters.relevanceMin > 0) query = query.gte('relevance_score', debouncedFilters.relevanceMin);
-        if (debouncedFilters.noveltyMin > 0) query = query.gte('novelty_score', debouncedFilters.noveltyMin);
-        if (dateFrom) query = query.gte('created_at', dateFrom);
-        if (dateTo) query = query.lte('created_at', dateTo);
+        if (selectedPillar) query = query.eq("pillar_id", selectedPillar);
+        if (selectedStage) query = query.eq("stage_id", selectedStage);
+        if (selectedHorizon) query = query.eq("horizon", selectedHorizon);
+        if (debouncedFilters.impactMin > 0)
+          query = query.gte("impact_score", debouncedFilters.impactMin);
+        if (debouncedFilters.relevanceMin > 0)
+          query = query.gte("relevance_score", debouncedFilters.relevanceMin);
+        if (debouncedFilters.noveltyMin > 0)
+          query = query.gte("novelty_score", debouncedFilters.noveltyMin);
+        if (dateFrom) query = query.gte("created_at", dateFrom);
+        if (dateTo) query = query.lte("created_at", dateTo);
 
         const sortConfig = getSortConfig(sortOption);
-        const { data } = await query.order(sortConfig.column, { ascending: sortConfig.ascending });
+        const { data } = await query.order(sortConfig.column, {
+          ascending: sortConfig.ascending,
+        });
         setCards(data || []);
         setLoading(false);
         return;
@@ -343,18 +438,28 @@ const Discover: React.FC = () => {
             filters: {
               ...(selectedPillar && { pillar_ids: [selectedPillar] }),
               ...(selectedStage && { stage_ids: [selectedStage] }),
-              ...(selectedHorizon && { horizon: selectedHorizon as 'H1' | 'H2' | 'H3' }),
+              ...(selectedHorizon && {
+                horizon: selectedHorizon as "H1" | "H2" | "H3",
+              }),
               ...((dateFrom || dateTo) && {
                 date_range: {
                   ...(dateFrom && { start: dateFrom }),
                   ...(dateTo && { end: dateTo }),
                 },
               }),
-              ...((debouncedFilters.impactMin > 0 || debouncedFilters.relevanceMin > 0 || debouncedFilters.noveltyMin > 0) && {
+              ...((debouncedFilters.impactMin > 0 ||
+                debouncedFilters.relevanceMin > 0 ||
+                debouncedFilters.noveltyMin > 0) && {
                 score_thresholds: {
-                  ...(debouncedFilters.impactMin > 0 && { impact_score: { min: debouncedFilters.impactMin } }),
-                  ...(debouncedFilters.relevanceMin > 0 && { relevance_score: { min: debouncedFilters.relevanceMin } }),
-                  ...(debouncedFilters.noveltyMin > 0 && { novelty_score: { min: debouncedFilters.noveltyMin } }),
+                  ...(debouncedFilters.impactMin > 0 && {
+                    impact_score: { min: debouncedFilters.impactMin },
+                  }),
+                  ...(debouncedFilters.relevanceMin > 0 && {
+                    relevance_score: { min: debouncedFilters.relevanceMin },
+                  }),
+                  ...(debouncedFilters.noveltyMin > 0 && {
+                    novelty_score: { min: debouncedFilters.noveltyMin },
+                  }),
                 },
               }),
             },
@@ -367,10 +472,10 @@ const Discover: React.FC = () => {
             id: result.id,
             name: result.name,
             slug: result.slug,
-            summary: result.summary || result.description || '',
-            pillar_id: result.pillar_id || '',
-            stage_id: result.stage_id || '',
-            horizon: (result.horizon as 'H1' | 'H2' | 'H3') || 'H1',
+            summary: result.summary || result.description || "",
+            pillar_id: result.pillar_id || "",
+            stage_id: result.stage_id || "",
+            horizon: (result.horizon as "H1" | "H2" | "H3") || "H1",
             novelty_score: result.novelty_score || 0,
             maturity_score: result.maturity_score || 0,
             impact_score: result.impact_score || 0,
@@ -378,7 +483,7 @@ const Discover: React.FC = () => {
             velocity_score: result.velocity_score || 0,
             risk_score: result.risk_score || 0,
             opportunity_score: result.opportunity_score || 0,
-            created_at: result.created_at || '',
+            created_at: result.created_at || "",
             updated_at: result.updated_at,
             anchor_id: result.anchor_id,
             search_relevance: result.search_relevance,
@@ -386,8 +491,14 @@ const Discover: React.FC = () => {
 
           const sortConfig = getSortConfig(sortOption);
           mappedCards = mappedCards.sort((a, b) => {
-            const aVal = sortConfig.column === 'created_at' ? a.created_at : a.updated_at || a.created_at;
-            const bVal = sortConfig.column === 'created_at' ? b.created_at : b.updated_at || b.created_at;
+            const aVal =
+              sortConfig.column === "created_at"
+                ? a.created_at
+                : a.updated_at || a.created_at;
+            const bVal =
+              sortConfig.column === "created_at"
+                ? b.created_at
+                : b.updated_at || b.created_at;
             const comparison = aVal.localeCompare(bVal);
             return sortConfig.ascending ? comparison : -comparison;
           });
@@ -400,28 +511,35 @@ const Discover: React.FC = () => {
       }
 
       // Standard Supabase query
-      let query = supabase.from('cards').select('*').eq('status', 'active');
+      let query = supabase.from("cards").select("*").eq("status", "active");
 
-      if (quickFilter === 'new') {
+      if (quickFilter === "new") {
         const oneWeekAgo = new Date();
         oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-        query = query.gte('created_at', oneWeekAgo.toISOString());
+        query = query.gte("created_at", oneWeekAgo.toISOString());
       }
 
-      if (selectedPillar) query = query.eq('pillar_id', selectedPillar);
-      if (selectedStage) query = query.eq('stage_id', selectedStage);
-      if (selectedHorizon) query = query.eq('horizon', selectedHorizon);
+      if (selectedPillar) query = query.eq("pillar_id", selectedPillar);
+      if (selectedStage) query = query.eq("stage_id", selectedStage);
+      if (selectedHorizon) query = query.eq("horizon", selectedHorizon);
       if (debouncedFilters.searchTerm) {
-        query = query.or(`name.ilike.%${debouncedFilters.searchTerm}%,summary.ilike.%${debouncedFilters.searchTerm}%`);
+        query = query.or(
+          `name.ilike.%${debouncedFilters.searchTerm}%,summary.ilike.%${debouncedFilters.searchTerm}%`,
+        );
       }
-      if (debouncedFilters.impactMin > 0) query = query.gte('impact_score', debouncedFilters.impactMin);
-      if (debouncedFilters.relevanceMin > 0) query = query.gte('relevance_score', debouncedFilters.relevanceMin);
-      if (debouncedFilters.noveltyMin > 0) query = query.gte('novelty_score', debouncedFilters.noveltyMin);
-      if (dateFrom) query = query.gte('created_at', dateFrom);
-      if (dateTo) query = query.lte('created_at', dateTo);
+      if (debouncedFilters.impactMin > 0)
+        query = query.gte("impact_score", debouncedFilters.impactMin);
+      if (debouncedFilters.relevanceMin > 0)
+        query = query.gte("relevance_score", debouncedFilters.relevanceMin);
+      if (debouncedFilters.noveltyMin > 0)
+        query = query.gte("novelty_score", debouncedFilters.noveltyMin);
+      if (dateFrom) query = query.gte("created_at", dateFrom);
+      if (dateTo) query = query.lte("created_at", dateTo);
 
       const sortConfig = getSortConfig(sortOption);
-      const { data } = await query.order(sortConfig.column, { ascending: sortConfig.ascending });
+      const { data } = await query.order(sortConfig.column, {
+        ascending: sortConfig.ascending,
+      });
 
       setCards(data || []);
 
@@ -429,16 +547,24 @@ const Discover: React.FC = () => {
         recordSearch(currentQueryConfig, (data || []).length);
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
+      const errorMessage =
+        err instanceof Error ? err.message : "An unexpected error occurred";
 
-      if (err instanceof TypeError && err.message.includes('fetch')) {
-        setError('Network error: Unable to connect to the server.');
-      } else if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
-        setError('Authentication error: Please sign in to use advanced search features.');
-      } else if (errorMessage.includes('500')) {
-        setError('Server error: The search service is temporarily unavailable.');
-      } else if (errorMessage.includes('timeout')) {
-        setError('Request timeout: Try narrowing your filters.');
+      if (err instanceof TypeError && err.message.includes("fetch")) {
+        setError("Network error: Unable to connect to the server.");
+      } else if (
+        errorMessage.includes("401") ||
+        errorMessage.includes("Unauthorized")
+      ) {
+        setError(
+          "Authentication error: Please sign in to use advanced search features.",
+        );
+      } else if (errorMessage.includes("500")) {
+        setError(
+          "Server error: The search service is temporarily unavailable.",
+        );
+      } else if (errorMessage.includes("timeout")) {
+        setError("Request timeout: Try narrowing your filters.");
       } else {
         setError(`Failed to load cards: ${errorMessage}`);
       }
@@ -466,12 +592,18 @@ const Discover: React.FC = () => {
 
       try {
         if (isFollowing) {
-          await supabase.from('card_follows').delete().eq('user_id', user.id).eq('card_id', cardId);
+          await supabase
+            .from("card_follows")
+            .delete()
+            .eq("user_id", user.id)
+            .eq("card_id", cardId);
         } else {
-          await supabase.from('card_follows').insert({ user_id: user.id, card_id: cardId, priority: 'medium' });
+          await supabase
+            .from("card_follows")
+            .insert({ user_id: user.id, card_id: cardId, priority: "medium" });
         }
       } catch (error) {
-        console.error('Error toggling card follow:', error);
+        console.error("Error toggling card follow:", error);
         // Revert optimistic update
         setFollowedCardIds((prev) => {
           const newSet = new Set(prev);
@@ -484,21 +616,23 @@ const Discover: React.FC = () => {
         });
       }
     },
-    [user?.id, followedCardIds]
+    [user?.id, followedCardIds],
   );
 
   // Apply saved search configuration
   const handleSelectSavedSearch = useCallback(
     (config: SavedSearchQueryConfig) => {
-      setSearchTerm(config.query ?? '');
+      setSearchTerm(config.query ?? "");
       setUseSemanticSearch(config.use_vector_search ?? false);
 
       const filters = config.filters ?? {};
-      setSelectedPillar(filters.pillar_ids?.[0] ?? '');
-      setSelectedStage(filters.stage_ids?.[0] ?? '');
-      setSelectedHorizon(filters.horizon && filters.horizon !== 'ALL' ? filters.horizon : '');
-      setDateFrom(filters.date_range?.start ?? '');
-      setDateTo(filters.date_range?.end ?? '');
+      setSelectedPillar(filters.pillar_ids?.[0] ?? "");
+      setSelectedStage(filters.stage_ids?.[0] ?? "");
+      setSelectedHorizon(
+        filters.horizon && filters.horizon !== "ALL" ? filters.horizon : "",
+      );
+      setDateFrom(filters.date_range?.start ?? "");
+      setDateTo(filters.date_range?.end ?? "");
       setImpactMin(filters.score_thresholds?.impact_score?.min ?? 0);
       setRelevanceMin(filters.score_thresholds?.relevance_score?.min ?? 0);
       setNoveltyMin(filters.score_thresholds?.novelty_score?.min ?? 0);
@@ -506,7 +640,7 @@ const Discover: React.FC = () => {
       setSearchParams({});
       setIsSidebarOpen(false);
     },
-    [setSearchParams]
+    [setSearchParams],
   );
 
   const handleSaveSearchSuccess = useCallback(() => {
@@ -516,10 +650,10 @@ const Discover: React.FC = () => {
 
   // Comparison mode handlers
   useEffect(() => {
-    const isCompareMode = searchParams.get('compare') === 'true';
+    const isCompareMode = searchParams.get("compare") === "true";
     if (isCompareMode) {
       setCompareMode(true);
-      const storedCard = sessionStorage.getItem('compareCard');
+      const storedCard = sessionStorage.getItem("compareCard");
       if (storedCard) {
         try {
           const cardData = JSON.parse(storedCard);
@@ -529,27 +663,31 @@ const Discover: React.FC = () => {
         } catch {
           // Invalid data
         }
-        sessionStorage.removeItem('compareCard');
+        sessionStorage.removeItem("compareCard");
       }
     }
   }, [searchParams]);
 
-  const toggleCardForCompare = useCallback((card: { id: string; name: string }) => {
-    setSelectedForCompare((prev) => {
-      const isSelected = prev.some((c) => c.id === card.id);
-      if (isSelected) {
-        return prev.filter((c) => c.id !== card.id);
-      }
-      if (prev.length >= 2) {
-        return [prev[1], card];
-      }
-      return [...prev, card];
-    });
-  }, []);
+  const toggleCardForCompare = useCallback(
+    (card: { id: string; name: string }) => {
+      setSelectedForCompare((prev): { id: string; name: string }[] => {
+        const isSelected = prev.some((c) => c.id === card.id);
+        if (isSelected) {
+          return prev.filter((c) => c.id !== card.id);
+        }
+        if (prev.length >= 2) {
+          const second = prev[1];
+          return second ? [second, card] : [card];
+        }
+        return [...prev, card];
+      });
+    },
+    [],
+  );
 
   const navigateToCompare = useCallback(() => {
     if (selectedForCompare.length === 2) {
-      const ids = selectedForCompare.map((c) => c.id).join(',');
+      const ids = selectedForCompare.map((c) => c.id).join(",");
       navigate(`/compare?card_ids=${ids}`);
     }
   }, [selectedForCompare, navigate]);
@@ -558,14 +696,16 @@ const Discover: React.FC = () => {
     setCompareMode(false);
     setSelectedForCompare([]);
     const newParams = new URLSearchParams(searchParams);
-    newParams.delete('compare');
+    newParams.delete("compare");
     setSearchParams(newParams);
   }, [searchParams, setSearchParams]);
 
   // Render card item
   const renderCardItem = useCallback(
     (card: Card) => {
-      const isSelectedForCompare = selectedForCompare.some((c) => c.id === card.id);
+      const isSelectedForCompare = selectedForCompare.some(
+        (c) => c.id === card.id,
+      );
 
       return (
         <DiscoverCard
@@ -579,7 +719,14 @@ const Discover: React.FC = () => {
         />
       );
     },
-    [compareMode, selectedForCompare, followedCardIds, searchTerm, toggleCardForCompare, toggleFollowCard]
+    [
+      compareMode,
+      selectedForCompare,
+      followedCardIds,
+      searchTerm,
+      toggleCardForCompare,
+      toggleFollowCard,
+    ],
   );
 
   return (
@@ -597,30 +744,42 @@ const Discover: React.FC = () => {
         <div className="mb-8">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-brand-dark-blue dark:text-white">Discover Intelligence</h1>
+              <h1 className="text-3xl font-bold text-brand-dark-blue dark:text-white">
+                Discover Intelligence
+              </h1>
               <p className="mt-2 text-gray-600 dark:text-gray-400">
-                Explore emerging trends and technologies relevant to Austin&apos;s strategic priorities.
+                Explore emerging trends and technologies relevant to
+                Austin&apos;s strategic priorities.
               </p>
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => (compareMode ? exitCompareMode() : setCompareMode(true))}
+                onClick={() => setShowCreateSignal(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-brand-green border border-brand-green rounded-lg hover:bg-brand-green/90 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Create Signal
+              </button>
+              <button
+                onClick={() =>
+                  compareMode ? exitCompareMode() : setCompareMode(true)
+                }
                 className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
                   compareMode
-                    ? 'text-white bg-extended-purple border border-extended-purple'
-                    : 'text-extended-purple bg-extended-purple/10 border border-extended-purple/30 hover:bg-extended-purple hover:text-white'
+                    ? "text-white bg-extended-purple border border-extended-purple"
+                    : "text-extended-purple bg-extended-purple/10 border border-extended-purple/30 hover:bg-extended-purple hover:text-white"
                 }`}
                 aria-pressed={compareMode}
               >
                 <ArrowLeftRight className="w-4 h-4" />
-                {compareMode ? 'Exit Compare' : 'Compare'}
+                {compareMode ? "Exit Compare" : "Compare"}
               </button>
               <button
                 onClick={() => setIsSidebarOpen(!isSidebarOpen)}
                 className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
                   isSidebarOpen
-                    ? 'text-brand-blue bg-brand-light-blue dark:bg-brand-blue/20 border border-brand-blue/30'
-                    : 'text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+                    ? "text-brand-blue bg-brand-light-blue dark:bg-brand-blue/20 border border-brand-blue/30"
+                    : "text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
                 }`}
                 aria-pressed={isSidebarOpen}
               >
@@ -647,40 +806,74 @@ const Discover: React.FC = () => {
 
         {/* Quick Filter Chips */}
         <div className="flex items-center gap-3 mb-6">
-          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Quick filters:</span>
+          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+            Quick filters:
+          </span>
           <button
             onClick={() => setSearchParams({})}
             className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
               !quickFilter
-                ? 'bg-brand-blue text-white'
-                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                ? "bg-brand-blue text-white"
+                : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
             }`}
           >
             <Eye className="h-4 w-4 mr-1.5" />
             All Cards
           </button>
           <button
-            onClick={() => setSearchParams({ filter: 'new' })}
+            onClick={() => setSearchParams({ filter: "new" })}
             className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-              quickFilter === 'new'
-                ? 'bg-brand-green text-white'
-                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+              quickFilter === "new"
+                ? "bg-brand-green text-white"
+                : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
             }`}
           >
             <Clock className="h-4 w-4 mr-1.5" />
             New This Week
           </button>
           <button
-            onClick={() => setSearchParams({ filter: 'following' })}
+            onClick={() => setSearchParams({ filter: "following" })}
             className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-              quickFilter === 'following'
-                ? 'bg-extended-purple text-white'
-                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+              quickFilter === "following"
+                ? "bg-extended-purple text-white"
+                : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
             }`}
           >
             <Star className="h-4 w-4 mr-1.5" />
             Following
           </button>
+
+          {/* Quality Tier Filter */}
+          <div className="ml-auto flex items-center gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-0.5">
+            <span className="text-xs font-medium text-gray-500 dark:text-gray-400 px-2">
+              <ShieldCheck className="h-3.5 w-3.5 inline mr-1" />
+              Quality:
+            </span>
+            {[
+              { value: "all", label: "All" },
+              { value: "high", label: "High" },
+              { value: "moderate", label: "Moderate" },
+              { value: "low", label: "Needs Verification" },
+            ].map((tier) => (
+              <button
+                key={tier.value}
+                onClick={() => setQualityFilter(tier.value)}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                  qualityFilter === tier.value
+                    ? tier.value === "high"
+                      ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                      : tier.value === "moderate"
+                        ? "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+                        : tier.value === "low"
+                          ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
+                          : "bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm"
+                    : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+                }`}
+              >
+                {tier.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Filters */}
@@ -688,7 +881,10 @@ const Discover: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
             {/* Search */}
             <div className="lg:col-span-2">
-              <label htmlFor="search" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label
+                htmlFor="search"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+              >
                 Search
               </label>
               <div className="relative">
@@ -697,7 +893,11 @@ const Discover: React.FC = () => {
                   type="text"
                   id="search"
                   className="pl-10 block w-full border-gray-300 dark:border-gray-600 dark:bg-[#3d4176] dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
-                  placeholder={useSemanticSearch ? 'Semantic search (finds related concepts)...' : 'Search cards...'}
+                  placeholder={
+                    useSemanticSearch
+                      ? "Semantic search (finds related concepts)..."
+                      : "Search cards..."
+                  }
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
@@ -710,33 +910,44 @@ const Discover: React.FC = () => {
                   aria-checked={useSemanticSearch}
                   onClick={() => setUseSemanticSearch(!useSemanticSearch)}
                   className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 ${
-                    useSemanticSearch ? 'bg-extended-purple' : 'bg-gray-200 dark:bg-gray-600'
+                    useSemanticSearch
+                      ? "bg-extended-purple"
+                      : "bg-gray-200 dark:bg-gray-600"
                   }`}
                 >
                   <span
                     className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                      useSemanticSearch ? 'translate-x-4' : 'translate-x-0'
+                      useSemanticSearch ? "translate-x-4" : "translate-x-0"
                     }`}
                   />
                 </button>
                 <label
                   className={`flex items-center gap-1.5 text-sm cursor-pointer ${
-                    useSemanticSearch ? 'text-extended-purple font-medium' : 'text-gray-600 dark:text-gray-400'
+                    useSemanticSearch
+                      ? "text-extended-purple font-medium"
+                      : "text-gray-600 dark:text-gray-400"
                   }`}
                   onClick={() => setUseSemanticSearch(!useSemanticSearch)}
                 >
-                  <Sparkles className={`h-4 w-4 ${useSemanticSearch ? 'text-extended-purple' : 'text-gray-400'}`} />
+                  <Sparkles
+                    className={`h-4 w-4 ${useSemanticSearch ? "text-extended-purple" : "text-gray-400"}`}
+                  />
                   Semantic Search
                 </label>
                 {useSemanticSearch && (
-                  <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">(finds conceptually related cards)</span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
+                    (finds conceptually related cards)
+                  </span>
                 )}
               </div>
             </div>
 
             {/* Pillar Filter */}
             <div>
-              <label htmlFor="pillar" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label
+                htmlFor="pillar"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+              >
                 Strategic Pillar
               </label>
               <select
@@ -756,7 +967,10 @@ const Discover: React.FC = () => {
 
             {/* Stage Filter */}
             <div>
-              <label htmlFor="stage" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label
+                htmlFor="stage"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+              >
                 Maturity Stage
               </label>
               <select
@@ -776,7 +990,10 @@ const Discover: React.FC = () => {
 
             {/* Horizon Filter */}
             <div>
-              <label htmlFor="horizon" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label
+                htmlFor="horizon"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+              >
                 Horizon
               </label>
               <select
@@ -794,7 +1011,10 @@ const Discover: React.FC = () => {
 
             {/* Sort */}
             <div>
-              <label htmlFor="sort" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label
+                htmlFor="sort"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+              >
                 Sort By
               </label>
               <select
@@ -806,7 +1026,10 @@ const Discover: React.FC = () => {
                 <option value="newest">Newest Created</option>
                 <option value="oldest">Oldest First</option>
                 <option value="recently_updated">Recently Updated</option>
-                <option value="least_recently_updated">Least Recently Updated</option>
+                <option value="least_recently_updated">
+                  Least Recently Updated
+                </option>
+                <option value="quality_score">Quality Score</option>
               </select>
             </div>
           </div>
@@ -815,10 +1038,15 @@ const Discover: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
             <div className="lg:col-span-2 flex items-center gap-2">
               <Calendar className="h-4 w-4 text-gray-400 flex-shrink-0" />
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Date Range:</span>
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Date Range:
+              </span>
             </div>
             <div>
-              <label htmlFor="dateFrom" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label
+                htmlFor="dateFrom"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+              >
                 Created After
               </label>
               <input
@@ -830,7 +1058,10 @@ const Discover: React.FC = () => {
               />
             </div>
             <div>
-              <label htmlFor="dateTo" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label
+                htmlFor="dateTo"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+              >
                 Created Before
               </label>
               <input
@@ -845,16 +1076,23 @@ const Discover: React.FC = () => {
 
           {/* Score Threshold Sliders */}
           <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
-            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Minimum Score Thresholds</h4>
+            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+              Minimum Score Thresholds
+            </h4>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {/* Impact Score Slider */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label htmlFor="impactMin" className="text-sm text-gray-600 dark:text-gray-400">
+                  <label
+                    htmlFor="impactMin"
+                    className="text-sm text-gray-600 dark:text-gray-400"
+                  >
                     Impact
                   </label>
-                  <span className={`text-sm font-medium ${impactMin > 0 ? getScoreColorClasses(impactMin) : 'text-gray-500 dark:text-gray-400'}`}>
-                    {impactMin > 0 ? `≥ ${impactMin}` : 'Any'}
+                  <span
+                    className={`text-sm font-medium ${impactMin > 0 ? getScoreColorClasses(impactMin) : "text-gray-500 dark:text-gray-400"}`}
+                  >
+                    {impactMin > 0 ? `≥ ${impactMin}` : "Any"}
                   </span>
                 </div>
                 <input
@@ -877,11 +1115,16 @@ const Discover: React.FC = () => {
               {/* Relevance Score Slider */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label htmlFor="relevanceMin" className="text-sm text-gray-600 dark:text-gray-400">
+                  <label
+                    htmlFor="relevanceMin"
+                    className="text-sm text-gray-600 dark:text-gray-400"
+                  >
                     Relevance
                   </label>
-                  <span className={`text-sm font-medium ${relevanceMin > 0 ? getScoreColorClasses(relevanceMin) : 'text-gray-500 dark:text-gray-400'}`}>
-                    {relevanceMin > 0 ? `≥ ${relevanceMin}` : 'Any'}
+                  <span
+                    className={`text-sm font-medium ${relevanceMin > 0 ? getScoreColorClasses(relevanceMin) : "text-gray-500 dark:text-gray-400"}`}
+                  >
+                    {relevanceMin > 0 ? `≥ ${relevanceMin}` : "Any"}
                   </span>
                 </div>
                 <input
@@ -904,11 +1147,16 @@ const Discover: React.FC = () => {
               {/* Novelty Score Slider */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label htmlFor="noveltyMin" className="text-sm text-gray-600 dark:text-gray-400">
+                  <label
+                    htmlFor="noveltyMin"
+                    className="text-sm text-gray-600 dark:text-gray-400"
+                  >
                     Novelty
                   </label>
-                  <span className={`text-sm font-medium ${noveltyMin > 0 ? getScoreColorClasses(noveltyMin) : 'text-gray-500 dark:text-gray-400'}`}>
-                    {noveltyMin > 0 ? `≥ ${noveltyMin}` : 'Any'}
+                  <span
+                    className={`text-sm font-medium ${noveltyMin > 0 ? getScoreColorClasses(noveltyMin) : "text-gray-500 dark:text-gray-400"}`}
+                  >
+                    {noveltyMin > 0 ? `≥ ${noveltyMin}` : "Any"}
                   </span>
                 </div>
                 <input
@@ -933,14 +1181,25 @@ const Discover: React.FC = () => {
           {/* Recent Search History */}
           {user?.id && searchHistory.length > 0 && (
             <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
-              <button onClick={toggleHistoryExpanded} className="w-full flex items-center justify-between text-left">
+              <button
+                onClick={toggleHistoryExpanded}
+                className="w-full flex items-center justify-between text-left"
+              >
                 <div className="flex items-center gap-2">
                   <History className="h-4 w-4 text-gray-400" />
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Recent Searches ({searchHistory.length})</span>
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Recent Searches ({searchHistory.length})
+                  </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  {historyLoading && <Loader2 className="h-4 w-4 text-gray-400 animate-spin" />}
-                  {isHistoryExpanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+                  {historyLoading && (
+                    <Loader2 className="h-4 w-4 text-gray-400 animate-spin" />
+                  )}
+                  {isHistoryExpanded ? (
+                    <ChevronUp className="h-4 w-4 text-gray-400" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-gray-400" />
+                  )}
                 </div>
               </button>
 
@@ -958,12 +1217,14 @@ const Discover: React.FC = () => {
                   {searchHistory.map((entry) => (
                     <div
                       key={entry.id}
-                      onClick={() => handleSelectSavedSearch(entry.query_config)}
+                      onClick={() =>
+                        handleSelectSavedSearch(entry.query_config)
+                      }
                       className="group flex items-start justify-between gap-2 p-2 rounded-md border border-gray-200 dark:border-gray-600 hover:border-brand-blue hover:bg-brand-light-blue/50 dark:hover:bg-brand-blue/10 cursor-pointer transition-all"
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
+                        if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
                           handleSelectSavedSearch(entry.query_config);
                         }
@@ -977,13 +1238,18 @@ const Discover: React.FC = () => {
                               AI
                             </span>
                           )}
-                          <span className="text-sm text-gray-900 dark:text-white truncate">{getHistoryDescription(entry.query_config)}</span>
+                          <span className="text-sm text-gray-900 dark:text-white truncate">
+                            {getHistoryDescription(entry.query_config)}
+                          </span>
                         </div>
                         <div className="flex items-center gap-2 mt-1">
-                          <span className="text-xs text-gray-400">{formatHistoryTime(entry.executed_at)}</span>
+                          <span className="text-xs text-gray-400">
+                            {formatHistoryTime(entry.executed_at)}
+                          </span>
                           <span className="text-xs text-gray-400">•</span>
                           <span className="text-xs text-gray-400">
-                            {entry.result_count} result{entry.result_count !== 1 ? 's' : ''}
+                            {entry.result_count} result
+                            {entry.result_count !== 1 ? "s" : ""}
                           </span>
                         </div>
                       </div>
@@ -994,7 +1260,11 @@ const Discover: React.FC = () => {
                         className="p-1 text-gray-400 hover:text-red-500 rounded opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50 shrink-0"
                         title="Remove from history"
                       >
-                        {deletingHistoryId === entry.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
+                        {deletingHistoryId === entry.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <X className="h-3.5 w-3.5" />
+                        )}
                       </button>
                     </div>
                   ))}
@@ -1006,7 +1276,10 @@ const Discover: React.FC = () => {
           {/* View Controls and Save Search */}
           <div className="mt-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Showing {cards.length} cards</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Showing {filteredCards.length}
+                {qualityFilter !== "all" ? ` of ${cards.length}` : ""} cards
+              </p>
               {isFilterPending && (
                 <span className="inline-flex items-center gap-1 text-xs text-brand-blue">
                   <Loader2 className="h-3 w-3 animate-spin" />
@@ -1024,26 +1297,26 @@ const Discover: React.FC = () => {
               </button>
               <div className="flex items-center space-x-2">
                 <button
-                  onClick={() => setViewMode('grid')}
+                  onClick={() => setViewMode("grid")}
                   className={`p-2 rounded-md transition-colors ${
-                    viewMode === 'grid'
-                      ? 'bg-brand-light-blue text-brand-blue dark:bg-brand-blue/20'
-                      : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                    viewMode === "grid"
+                      ? "bg-brand-light-blue text-brand-blue dark:bg-brand-blue/20"
+                      : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                   }`}
                   aria-label="Grid view"
-                  aria-pressed={viewMode === 'grid'}
+                  aria-pressed={viewMode === "grid"}
                 >
                   <Grid className="h-4 w-4" />
                 </button>
                 <button
-                  onClick={() => setViewMode('list')}
+                  onClick={() => setViewMode("list")}
                   className={`p-2 rounded-md transition-colors ${
-                    viewMode === 'list'
-                      ? 'bg-brand-light-blue text-brand-blue dark:bg-brand-blue/20'
-                      : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                    viewMode === "list"
+                      ? "bg-brand-light-blue text-brand-blue dark:bg-brand-blue/20"
+                      : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                   }`}
                   aria-label="List view"
-                  aria-pressed={viewMode === 'list'}
+                  aria-pressed={viewMode === "list"}
                 >
                   <List className="h-4 w-4" />
                 </button>
@@ -1059,19 +1332,24 @@ const Discover: React.FC = () => {
               <div className="flex items-center gap-3">
                 <ArrowLeftRight className="h-5 w-5 text-extended-purple" />
                 <div>
-                  <p className="font-medium text-gray-900 dark:text-white">Compare Mode Active</p>
+                  <p className="font-medium text-gray-900 dark:text-white">
+                    Compare Mode Active
+                  </p>
                   <p className="text-sm text-gray-600 dark:text-gray-300">
                     {selectedForCompare.length === 0
-                      ? 'Click on cards to select them for comparison (max 2)'
+                      ? "Click on cards to select them for comparison (max 2)"
                       : selectedForCompare.length === 1
-                        ? `Selected: ${selectedForCompare[0].name} — Click another card to compare`
-                        : `Ready to compare: ${selectedForCompare[0].name} vs ${selectedForCompare[1].name}`}
+                        ? `Selected: ${selectedForCompare[0]?.name ?? "card"} — Click another card to compare`
+                        : `Ready to compare: ${selectedForCompare[0]?.name ?? "card"} vs ${selectedForCompare[1]?.name ?? "card"}`}
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 {selectedForCompare.length > 0 && (
-                  <button onClick={() => setSelectedForCompare([])} className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900">
+                  <button
+                    onClick={() => setSelectedForCompare([])}
+                    className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900"
+                  >
                     Clear Selection
                   </button>
                 )}
@@ -1083,7 +1361,10 @@ const Discover: React.FC = () => {
                   <ArrowLeftRight className="h-4 w-4" />
                   Compare Cards
                 </button>
-                <button onClick={exitCompareMode} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+                <button
+                  onClick={exitCompareMode}
+                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                >
                   <X className="h-5 w-5" />
                 </button>
               </div>
@@ -1096,9 +1377,16 @@ const Discover: React.FC = () => {
                     key={card.id}
                     className="inline-flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-gray-800 rounded-full text-sm border border-extended-purple/30"
                   >
-                    <span className="font-medium text-extended-purple">{index + 1}.</span>
-                    <span className="text-gray-700 dark:text-gray-200 truncate max-w-[200px]">{card.name}</span>
-                    <button onClick={() => toggleCardForCompare(card)} className="text-gray-400 hover:text-red-500 transition-colors">
+                    <span className="font-medium text-extended-purple">
+                      {index + 1}.
+                    </span>
+                    <span className="text-gray-700 dark:text-gray-200 truncate max-w-[200px]">
+                      {card.name}
+                    </span>
+                    <button
+                      onClick={() => toggleCardForCompare(card)}
+                      className="text-gray-400 hover:text-red-500 transition-colors"
+                    >
                       <X className="h-4 w-4" />
                     </button>
                   </span>
@@ -1114,7 +1402,9 @@ const Discover: React.FC = () => {
             <div className="flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <p className="font-medium text-red-700 dark:text-red-300">{error}</p>
+                <p className="font-medium text-red-700 dark:text-red-300">
+                  {error}
+                </p>
                 <button
                   onClick={() => {
                     setError(null);
@@ -1126,7 +1416,10 @@ const Discover: React.FC = () => {
                   Try again
                 </button>
               </div>
-              <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
+              <button
+                onClick={() => setError(null)}
+                className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+              >
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -1137,48 +1430,75 @@ const Discover: React.FC = () => {
         {loading || isFilterPending ? (
           <div className="flex flex-col items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue"></div>
-            {isFilterPending && !loading && <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">Updating search...</p>}
+            {isFilterPending && !loading && (
+              <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
+                Updating search...
+              </p>
+            )}
           </div>
-        ) : cards.length === 0 && !error ? (
+        ) : filteredCards.length === 0 && !error ? (
           <div className="text-center py-12 bg-white dark:bg-[#2d3166] rounded-lg shadow">
-            {quickFilter === 'following' ? (
+            {quickFilter === "following" ? (
               <Star className="mx-auto h-12 w-12 text-gray-400" />
             ) : useSemanticSearch && searchTerm ? (
               <Sparkles className="mx-auto h-12 w-12 text-gray-400" />
-            ) : searchTerm || selectedPillar || selectedStage || selectedHorizon || dateFrom || dateTo || impactMin > 0 || relevanceMin > 0 || noveltyMin > 0 ? (
+            ) : searchTerm ||
+              selectedPillar ||
+              selectedStage ||
+              selectedHorizon ||
+              dateFrom ||
+              dateTo ||
+              impactMin > 0 ||
+              relevanceMin > 0 ||
+              noveltyMin > 0 ? (
               <Filter className="mx-auto h-12 w-12 text-gray-400" />
             ) : (
               <Inbox className="mx-auto h-12 w-12 text-gray-400" />
             )}
 
             <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
-              {quickFilter === 'following'
+              {quickFilter === "following"
                 ? "You're Not Following Any Cards"
-                : quickFilter === 'new'
-                  ? 'No New Cards This Week'
+                : quickFilter === "new"
+                  ? "No New Cards This Week"
                   : useSemanticSearch && searchTerm
-                    ? 'No Semantic Matches Found'
-                    : searchTerm || selectedPillar || selectedStage || selectedHorizon || dateFrom || dateTo || impactMin > 0 || relevanceMin > 0 || noveltyMin > 0
-                      ? 'No Cards Match Your Filters'
-                      : 'No Cards Available'}
+                    ? "No Semantic Matches Found"
+                    : searchTerm ||
+                        selectedPillar ||
+                        selectedStage ||
+                        selectedHorizon ||
+                        dateFrom ||
+                        dateTo ||
+                        impactMin > 0 ||
+                        relevanceMin > 0 ||
+                        noveltyMin > 0
+                      ? "No Cards Match Your Filters"
+                      : "No Cards Available"}
             </h3>
 
             <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto">
-              {quickFilter === 'following'
-                ? 'Start following cards to build your personalized feed. Click the heart icon on any card to follow it.'
-                : quickFilter === 'new'
-                  ? 'Check back soon for newly discovered intelligence cards.'
+              {quickFilter === "following"
+                ? "Start following cards to build your personalized feed. Click the heart icon on any card to follow it."
+                : quickFilter === "new"
+                  ? "Check back soon for newly discovered intelligence cards."
                   : useSemanticSearch && searchTerm
                     ? `No cards matched your semantic search for "${searchTerm}". Try different keywords, or switch to standard text search.`
                     : searchTerm
                       ? `No cards matched your search for "${searchTerm}". Try different keywords or enable semantic search for broader matches.`
-                      : selectedPillar || selectedStage || selectedHorizon || dateFrom || dateTo || impactMin > 0 || relevanceMin > 0 || noveltyMin > 0
-                        ? 'Your current filter combination returned no results. Try removing some filters or adjusting score thresholds.'
-                        : 'The intelligence library is empty. Cards will appear here as they are discovered.'}
+                      : selectedPillar ||
+                          selectedStage ||
+                          selectedHorizon ||
+                          dateFrom ||
+                          dateTo ||
+                          impactMin > 0 ||
+                          relevanceMin > 0 ||
+                          noveltyMin > 0
+                        ? "Your current filter combination returned no results. Try removing some filters or adjusting score thresholds."
+                        : "The intelligence library is empty. Cards will appear here as they are discovered."}
             </p>
 
             <div className="mt-6 flex flex-wrap justify-center gap-3">
-              {quickFilter === 'following' && (
+              {quickFilter === "following" && (
                 <Link
                   to="/discover"
                   className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-brand-dark-blue transition-colors"
@@ -1187,16 +1507,24 @@ const Discover: React.FC = () => {
                   Browse All Cards
                 </Link>
               )}
-              {(searchTerm || selectedPillar || selectedStage || selectedHorizon || dateFrom || dateTo || impactMin > 0 || relevanceMin > 0 || noveltyMin > 0) &&
+              {(searchTerm ||
+                selectedPillar ||
+                selectedStage ||
+                selectedHorizon ||
+                dateFrom ||
+                dateTo ||
+                impactMin > 0 ||
+                relevanceMin > 0 ||
+                noveltyMin > 0) &&
                 !quickFilter && (
                   <button
                     onClick={() => {
-                      setSearchTerm('');
-                      setSelectedPillar('');
-                      setSelectedStage('');
-                      setSelectedHorizon('');
-                      setDateFrom('');
-                      setDateTo('');
+                      setSearchTerm("");
+                      setSelectedPillar("");
+                      setSelectedStage("");
+                      setSelectedHorizon("");
+                      setDateFrom("");
+                      setDateTo("");
                       setImpactMin(0);
                       setRelevanceMin(0);
                       setNoveltyMin(0);
@@ -1219,11 +1547,11 @@ const Discover: React.FC = () => {
               )}
             </div>
           </div>
-        ) : cards.length > 0 ? (
-          viewMode === 'list' ? (
+        ) : filteredCards.length > 0 ? (
+          viewMode === "list" ? (
             <VirtualizedList
               ref={virtualizedListRef}
-              items={cards}
+              items={filteredCards}
               renderItem={renderCardItem}
               getItemKey={(card) => card.id}
               estimatedSize={180}
@@ -1236,13 +1564,15 @@ const Discover: React.FC = () => {
             <div className="h-[calc(100vh-400px)] min-h-[500px]">
               <VirtualizedGrid
                 ref={virtualizedGridRef}
-                items={cards}
+                items={filteredCards}
                 getItemKey={(card) => card.id}
                 estimatedRowHeight={280}
                 gap={24}
                 columns={{ sm: 1, md: 2, lg: 3 }}
                 overscan={3}
-                renderItem={(card) => <div className="h-full">{renderCardItem(card)}</div>}
+                renderItem={(card) => (
+                  <div className="h-full">{renderCardItem(card)}</div>
+                )}
               />
             </div>
           )
@@ -1254,6 +1584,12 @@ const Discover: React.FC = () => {
           onClose={() => setShowSaveSearchModal(false)}
           onSuccess={handleSaveSearchSuccess}
           queryConfig={currentQueryConfig}
+        />
+
+        {/* Create Signal Modal */}
+        <CreateSignalModal
+          isOpen={showCreateSignal}
+          onClose={() => setShowCreateSignal(false)}
         />
       </div>
     </>

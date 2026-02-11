@@ -2,224 +2,371 @@
  * Discovery API Helpers
  *
  * API functions for interacting with the discovery system backend.
- * Handles pending card reviews, bulk actions, and discovery run management.
+ * Handles pending card reviews, bulk actions, discovery run management,
+ * advanced search, saved searches, trend visualization, and card comparison.
+ *
+ * @module lib/discovery-api
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 /**
- * Base Card interface
+ * Base intelligence card interface.
+ *
+ * Represents the core data model for a strategic intelligence card
+ * with all scoring dimensions and classification metadata.
  */
 export interface Card {
+  /** Unique card identifier (UUID) */
   id: string;
+  /** Display name of the intelligence card */
   name: string;
+  /** URL-friendly slug for routing */
   slug: string;
+  /** Brief text summary of the card topic */
   summary: string;
+  /** Associated strategic pillar code (e.g., 'CH', 'MC', 'HS') */
   pillar_id: string;
+  /** Maturity stage identifier (1-8) */
   stage_id: string;
-  horizon: 'H1' | 'H2' | 'H3';
+  /** Technology horizon classification */
+  horizon: "H1" | "H2" | "H3";
+  /** Novelty score (0-100) */
   novelty_score: number;
+  /** Maturity score (0-100) */
   maturity_score: number;
+  /** Impact score (0-100) */
   impact_score: number;
+  /** Relevance score (0-100) */
   relevance_score: number;
+  /** Velocity score (0-100) */
   velocity_score: number;
+  /** Risk score (0-100) */
   risk_score: number;
+  /** Opportunity score (0-100) */
   opportunity_score: number;
+  /** ISO 8601 timestamp when the card was created */
   created_at: string;
+  /** ISO 8601 timestamp when the card was last updated */
   updated_at?: string;
+  /** Reference to an anchor card for derived cards */
   anchor_id?: string;
+  /** CMO Top 25 priority alignment codes */
   top25_relevance?: string[];
+  /** Card lifecycle status (e.g., 'active', 'pending_review', 'archived') */
   status: string;
 }
 
 /**
- * Discovery run configuration
+ * Configuration for a discovery run.
+ *
+ * Optional parameters that constrain what the discovery pipeline searches for.
+ * Stored alongside the run record for reproducibility.
  */
 export interface DiscoveryRunConfig {
+  /** Source types to include (e.g., 'rss', 'newsapi', 'tavily') */
   source_types?: string[];
+  /** Strategic pillar codes to focus on (e.g., ['CH', 'MC']) */
   pillar_focus?: string[];
+  /** Maximum number of cards to create in this run */
   max_cards?: number;
 }
 
 /**
- * Discovery run metadata - matches backend DiscoveryRun Pydantic model
+ * Discovery run metadata.
+ *
+ * Tracks the execution and results of a single discovery pipeline run.
+ * Matches the backend `DiscoveryRun` Pydantic model.
  */
 export interface DiscoveryRun {
+  /** Unique run identifier (UUID) */
   id: string;
+  /** ISO 8601 timestamp when the run started */
   started_at: string;
+  /** ISO 8601 timestamp when the run completed, or null if still running */
   completed_at: string | null;
-  status: 'running' | 'completed' | 'failed' | 'cancelled';
-  triggered_by: 'manual' | 'scheduled' | 'api';
+  /** Current run status */
+  status: "running" | "completed" | "failed" | "cancelled";
+  /** How the run was initiated */
+  triggered_by: "manual" | "scheduled" | "api";
+  /** User ID of the user who triggered the run, or null for scheduled runs */
   triggered_by_user: string | null;
-  // Discovery metrics
+  /** Strategic pillars that were scanned in this run */
   pillars_scanned: string[] | null;
+  /** Top 25 priorities that were scanned in this run */
   priorities_scanned: string[] | null;
+  /** Number of search queries generated for this run */
   queries_generated: number | null;
+  /** Total number of sources discovered */
   sources_found: number;
+  /** Number of sources that passed relevance triage */
   sources_relevant: number | null;
+  /** Number of new cards created from discovered sources */
   cards_created: number;
+  /** Number of existing cards enriched with new information */
   cards_enriched: number;
+  /** Number of duplicate cards detected and merged */
   cards_deduplicated: number;
-  // Cost and reporting
+  /** Estimated API cost for this run in USD */
   estimated_cost: number | null;
+  /** Structured summary report with run statistics */
   summary_report: Record<string, unknown> | null;
-  // Error handling
+  /** Human-readable error message if the run failed */
   error_message: string | null;
+  /** Detailed error information for debugging */
   error_details: Record<string, unknown> | null;
+  /** List of non-fatal error messages encountered during the run */
   errors?: string[];
-  // Timestamps
+  /** ISO 8601 timestamp when the run record was created */
   created_at: string | null;
-  // Run configuration (optional, populated for detailed run info)
+  /** Run configuration parameters, populated for detailed run views */
   config?: DiscoveryRunConfig;
 }
 
 /**
- * Pending card extends Card with discovery-specific fields
+ * A card pending human review from the discovery pipeline.
+ *
+ * Extends the base Card with discovery-specific metadata including
+ * AI confidence, source provenance, and suggested edits.
  */
 export interface PendingCard extends Card {
+  /** AI confidence score for this card's classification (0-1) */
   ai_confidence: number;
+  /** ISO 8601 timestamp when the card was discovered */
   discovered_at: string;
+  /** URL of the primary source that generated this card */
   source_url?: string;
+  /** Type of the source (e.g., 'rss', 'newsapi', 'tavily') */
   source_type?: string;
+  /** ID of the discovery run that created this card */
   discovery_run_id?: string;
-  suggested_changes?: {
-    field: string;
-    current: string;
-    suggested: string;
-    reason: string;
-  }[];
+  /** AI-suggested field modifications for reviewer consideration */
+  suggested_changes?: SuggestedChange[];
 }
 
 /**
- * Score breakdown showing contribution from each scoring factor
+ * An AI-suggested change to a card field.
+ *
+ * Generated during discovery when AI analysis identifies potential
+ * improvements to card metadata for reviewer consideration.
+ */
+export interface SuggestedChange {
+  /** The card field name to modify (e.g., 'pillar_id', 'stage_id') */
+  field: string;
+  /** Current value of the field */
+  current: string;
+  /** AI-suggested replacement value */
+  suggested: string;
+  /** Explanation of why this change is recommended */
+  reason: string;
+}
+
+/**
+ * Breakdown of the discovery score showing contribution from each scoring factor.
+ *
+ * Used to explain why a card was ranked at a particular position in the
+ * personalized discovery queue.
  */
 export interface ScoreBreakdown {
+  /** Novelty component: higher for recently created or unseen cards (0-1) */
   novelty: number;
+  /** Workstream relevance: match against user's active workstream filters (0-1) */
   workstream_relevance: number;
+  /** Pillar alignment: match against user's active strategic pillars (0-1) */
   pillar_alignment: number;
+  /** Followed context: similarity to cards the user has followed (0-1) */
   followed_context: number;
 }
 
 /**
- * Personalized card extends Card with discovery score for queue ranking
+ * A card with personalized discovery scoring for queue ranking.
+ *
+ * Extends the base Card with a composite discovery_score and optional
+ * breakdown showing how each factor contributed to the ranking.
  */
 export interface PersonalizedCard extends Card {
+  /** Composite discovery score used for queue ordering (0-100) */
   discovery_score: number;
+  /** Optional breakdown of the discovery score components */
   score_breakdown?: ScoreBreakdown;
 }
 
 /**
  * Review action types
  */
-export type ReviewAction = 'approve' | 'reject' | 'edit' | 'defer';
+export type ReviewAction = "approve" | "reject" | "edit" | "defer";
 
 /**
  * Dismiss reasons
  */
 export type DismissReason =
-  | 'duplicate'
-  | 'irrelevant'
-  | 'low_quality'
-  | 'out_of_scope'
-  | 'already_exists'
-  | 'other';
+  | "duplicate"
+  | "irrelevant"
+  | "low_quality"
+  | "out_of_scope"
+  | "already_exists"
+  | "other";
 
 // ============================================================================
 // Advanced Search Types
 // ============================================================================
 
 /**
- * Date range filter for created_at/updated_at filtering
+ * Date range filter for created_at/updated_at filtering.
+ *
+ * Both bounds are optional -- omitting either creates an open-ended range.
  */
 export interface DateRange {
-  start?: string; // ISO date string YYYY-MM-DD
-  end?: string;   // ISO date string YYYY-MM-DD
+  /** Start date (inclusive) in ISO format YYYY-MM-DD */
+  start?: string;
+  /** End date (inclusive) in ISO format YYYY-MM-DD */
+  end?: string;
 }
 
 /**
- * Min/max threshold for a single score field
+ * Min/max threshold for filtering a single score field.
+ *
+ * Both bounds are optional -- omitting either creates an open-ended range.
  */
 export interface ScoreThreshold {
-  min?: number; // 0-100
-  max?: number; // 0-100
+  /** Minimum score value (0-100, inclusive) */
+  min?: number;
+  /** Maximum score value (0-100, inclusive) */
+  max?: number;
 }
 
 /**
- * Collection of score threshold filters
+ * Collection of score threshold filters for all seven scoring dimensions.
+ *
+ * Each threshold is optional -- only provided thresholds are applied.
  */
 export interface ScoreThresholds {
+  /** Impact score threshold filter */
   impact_score?: ScoreThreshold;
+  /** Relevance score threshold filter */
   relevance_score?: ScoreThreshold;
+  /** Novelty score threshold filter */
   novelty_score?: ScoreThreshold;
+  /** Maturity score threshold filter */
   maturity_score?: ScoreThreshold;
+  /** Velocity score threshold filter */
   velocity_score?: ScoreThreshold;
+  /** Risk score threshold filter */
   risk_score?: ScoreThreshold;
+  /** Opportunity score threshold filter */
   opportunity_score?: ScoreThreshold;
 }
 
 /**
  * Advanced search filters for intelligence cards.
- * All filters are optional and combined with AND logic.
+ *
+ * All filters are optional and combined with AND logic when applied.
  */
 export interface SearchFilters {
+  /** Filter by strategic pillar codes */
   pillar_ids?: string[];
+  /** Filter by strategic goal identifiers */
   goal_ids?: string[];
+  /** Filter by maturity stage identifiers */
   stage_ids?: string[];
-  horizon?: 'H1' | 'H2' | 'H3' | 'ALL';
+  /** Filter by technology horizon, or 'ALL' for no horizon filter */
+  horizon?: "H1" | "H2" | "H3" | "ALL";
+  /** Filter by creation/update date range */
   date_range?: DateRange;
+  /** Filter by score thresholds across dimensions */
   score_thresholds?: ScoreThresholds;
+  /** Filter by card lifecycle status */
   status?: string;
 }
 
 /**
- * Request model for advanced card search
+ * Request model for advanced card search.
+ *
+ * Supports both text-based and vector (semantic) search with optional filters.
  */
 export interface AdvancedSearchRequest {
+  /** Free-text search query */
   query?: string;
+  /** Structured filters to apply */
   filters?: SearchFilters;
+  /** Whether to use vector (semantic) search instead of text search */
   use_vector_search?: boolean;
+  /** Maximum number of results to return */
   limit?: number;
+  /** Number of results to skip for pagination */
   offset?: number;
 }
 
 /**
- * Individual search result with relevance score
+ * Individual search result with relevance score.
+ *
+ * Contains card data along with search-specific metadata such as
+ * vector similarity scores and text match highlights.
  */
 export interface SearchResultItem {
+  /** Unique card identifier (UUID) */
   id: string;
+  /** Display name of the card */
   name: string;
+  /** URL-friendly slug */
   slug: string;
+  /** Brief card summary */
   summary?: string;
+  /** Extended card description */
   description?: string;
+  /** Strategic pillar code */
   pillar_id?: string;
+  /** Strategic goal identifier */
   goal_id?: string;
+  /** Anchor card reference */
   anchor_id?: string;
+  /** Maturity stage identifier */
   stage_id?: string;
+  /** Technology horizon */
   horizon?: string;
+  /** Novelty score (0-100) */
   novelty_score?: number;
+  /** Maturity score (0-100) */
   maturity_score?: number;
+  /** Impact score (0-100) */
   impact_score?: number;
+  /** Relevance score (0-100) */
   relevance_score?: number;
+  /** Velocity score (0-100) */
   velocity_score?: number;
+  /** Risk score (0-100) */
   risk_score?: number;
+  /** Opportunity score (0-100) */
   opportunity_score?: number;
+  /** Card lifecycle status */
   status?: string;
+  /** ISO 8601 creation timestamp */
   created_at?: string;
+  /** ISO 8601 last update timestamp */
   updated_at?: string;
-  // Search-specific fields
-  search_relevance?: number; // Vector similarity score (0-1)
+  /** Vector similarity score (0-1), populated when semantic search is used */
+  search_relevance?: number;
+  /** Text snippets with matching terms highlighted */
   match_highlights?: string[];
 }
 
 /**
- * Response model for advanced search results
+ * Response model for advanced search results.
+ *
+ * Contains the matching cards along with pagination metadata
+ * and information about how the search was executed.
  */
 export interface AdvancedSearchResponse {
+  /** List of matching search result items */
   results: SearchResultItem[];
+  /** Total number of matching results across all pages */
   total_count: number;
+  /** The query string that was searched, if provided */
   query?: string;
+  /** The filters that were applied to the search */
   filters_applied?: SearchFilters;
-  search_type: 'vector' | 'text';
+  /** Whether vector (semantic) or text search was used */
+  search_type: "vector" | "text";
 }
 
 // ============================================================================
@@ -227,48 +374,72 @@ export interface AdvancedSearchResponse {
 // ============================================================================
 
 /**
- * Query configuration stored in saved searches
+ * Query configuration stored in saved searches.
+ *
+ * Captures the full search state (query text, filters, search mode) so
+ * it can be replayed later from the saved searches panel.
  */
 export interface SavedSearchQueryConfig {
+  /** Free-text search query */
   query?: string;
+  /** Structured filters to apply */
   filters?: SearchFilters;
+  /** Whether to use vector (semantic) search */
   use_vector_search?: boolean;
 }
 
 /**
- * Request model for creating a saved search
+ * Request model for creating a saved search.
  */
 export interface SavedSearchCreate {
+  /** User-defined name for this saved search */
   name: string;
+  /** The query configuration to save */
   query_config: SavedSearchQueryConfig;
 }
 
 /**
- * Request model for updating a saved search
+ * Request model for updating a saved search.
+ *
+ * All fields are optional -- only provided fields are updated.
  */
 export interface SavedSearchUpdate {
+  /** Updated name for the saved search */
   name?: string;
+  /** Updated query configuration */
   query_config?: SavedSearchQueryConfig;
 }
 
 /**
- * Response model for a saved search record
+ * A saved search record belonging to a user.
+ *
+ * Persists a named search configuration that can be quickly re-executed
+ * from the saved searches panel.
  */
 export interface SavedSearch {
+  /** Unique saved search identifier (UUID) */
   id: string;
+  /** ID of the user who created this saved search */
   user_id: string;
+  /** User-defined name for this saved search */
   name: string;
+  /** The stored query configuration */
   query_config: SavedSearchQueryConfig;
+  /** ISO 8601 timestamp when this saved search was created */
   created_at: string;
+  /** ISO 8601 timestamp when this saved search was last executed */
   last_used_at: string;
+  /** ISO 8601 timestamp when this saved search was last modified */
   updated_at?: string;
 }
 
 /**
- * Response model for listing saved searches
+ * Paginated response for listing saved searches.
  */
 export interface SavedSearchList {
+  /** List of saved search records */
   saved_searches: SavedSearch[];
+  /** Total number of saved searches for this user */
   total_count: number;
 }
 
@@ -277,29 +448,41 @@ export interface SavedSearchList {
 // ============================================================================
 
 /**
- * Response model for a search history record
+ * A search history record capturing a past search execution.
+ *
+ * Automatically recorded when a user executes a search, enabling
+ * quick access to recent searches.
  */
 export interface SearchHistoryEntry {
+  /** Unique history entry identifier (UUID) */
   id: string;
+  /** ID of the user who executed the search */
   user_id: string;
+  /** The query configuration that was executed */
   query_config: SavedSearchQueryConfig;
+  /** ISO 8601 timestamp when the search was executed */
   executed_at: string;
+  /** Number of results returned by this search */
   result_count: number;
 }
 
 /**
- * Request model for recording a search in history
+ * Request model for recording a search execution in history.
  */
 export interface SearchHistoryCreate {
+  /** The query configuration that was executed */
   query_config: SavedSearchQueryConfig;
+  /** Number of results returned */
   result_count: number;
 }
 
 /**
- * Response model for listing search history
+ * Paginated response for listing search history entries.
  */
 export interface SearchHistoryList {
+  /** List of search history entries, most recent first */
   history: SearchHistoryEntry[];
+  /** Total number of history entries for this user */
   total_count: number;
 }
 
@@ -309,19 +492,21 @@ export interface SearchHistoryList {
 async function apiRequest<T>(
   endpoint: string,
   token: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
 ): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
       ...options.headers,
     },
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Request failed' }));
+    const error = await response
+      .json()
+      .catch(() => ({ message: "Request failed" }));
     throw new Error(error.message || `API error: ${response.status}`);
   }
 
@@ -336,8 +521,10 @@ async function apiRequest<T>(
 /**
  * Fetch all pending review cards
  */
-export async function fetchPendingReviewCards(token: string): Promise<PendingCard[]> {
-  return apiRequest<PendingCard[]>('/api/v1/cards/pending-review', token);
+export async function fetchPendingReviewCards(
+  token: string,
+): Promise<PendingCard[]> {
+  return apiRequest<PendingCard[]>("/api/v1/cards/pending-review", token);
 }
 
 /**
@@ -350,16 +537,18 @@ export async function fetchPendingReviewCardsFiltered(
     min_confidence?: number;
     max_confidence?: number;
     source_type?: string;
-  }
+  },
 ): Promise<PendingCard[]> {
   const params = new URLSearchParams();
-  if (filters?.pillar_id) params.append('pillar_id', filters.pillar_id);
-  if (filters?.min_confidence !== undefined) params.append('min_confidence', String(filters.min_confidence));
-  if (filters?.max_confidence !== undefined) params.append('max_confidence', String(filters.max_confidence));
-  if (filters?.source_type) params.append('source_type', filters.source_type);
+  if (filters?.pillar_id) params.append("pillar_id", filters.pillar_id);
+  if (filters?.min_confidence !== undefined)
+    params.append("min_confidence", String(filters.min_confidence));
+  if (filters?.max_confidence !== undefined)
+    params.append("max_confidence", String(filters.max_confidence));
+  if (filters?.source_type) params.append("source_type", filters.source_type);
 
   const queryString = params.toString();
-  const endpoint = `/api/v1/cards/pending-review${queryString ? `?${queryString}` : ''}`;
+  const endpoint = `/api/v1/cards/pending-review${queryString ? `?${queryString}` : ""}`;
 
   return apiRequest<PendingCard[]>(endpoint, token);
 }
@@ -371,10 +560,10 @@ export async function reviewCard(
   token: string,
   cardId: string,
   action: ReviewAction,
-  updates?: Partial<Card>
+  updates?: Partial<Card>,
 ): Promise<void> {
   return apiRequest<void>(`/api/v1/cards/${cardId}/review`, token, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify({ action, updates }),
   });
 }
@@ -385,12 +574,16 @@ export async function reviewCard(
 export async function bulkReviewCards(
   token: string,
   cardIds: string[],
-  action: ReviewAction
+  action: ReviewAction,
 ): Promise<{ processed: number; errors: string[] }> {
-  return apiRequest<{ processed: number; errors: string[] }>('/api/v1/cards/bulk-review', token, {
-    method: 'POST',
-    body: JSON.stringify({ card_ids: cardIds, action }),
-  });
+  return apiRequest<{ processed: number; errors: string[] }>(
+    "/api/v1/cards/bulk-review",
+    token,
+    {
+      method: "POST",
+      body: JSON.stringify({ card_ids: cardIds, action }),
+    },
+  );
 }
 
 /**
@@ -400,10 +593,10 @@ export async function dismissCard(
   token: string,
   cardId: string,
   reason?: DismissReason,
-  notes?: string
+  notes?: string,
 ): Promise<void> {
   return apiRequest<void>(`/api/v1/cards/${cardId}/dismiss`, token, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify({ reason, notes }),
   });
 }
@@ -414,9 +607,9 @@ export async function dismissCard(
 export async function fetchSimilarCards(
   token: string,
   cardId: string,
-  threshold?: number
+  threshold?: number,
 ): Promise<Card[]> {
-  const params = threshold ? `?threshold=${threshold}` : '';
+  const params = threshold ? `?threshold=${threshold}` : "";
   return apiRequest<Card[]>(`/api/v1/cards/${cardId}/similar${params}`, token);
 }
 
@@ -425,9 +618,12 @@ export async function fetchSimilarCards(
  */
 export async function fetchDiscoveryRuns(
   token: string,
-  limit: number = 10
+  limit: number = 10,
 ): Promise<DiscoveryRun[]> {
-  return apiRequest<DiscoveryRun[]>(`/api/v1/discovery/runs?limit=${limit}`, token);
+  return apiRequest<DiscoveryRun[]>(
+    `/api/v1/discovery/runs?limit=${limit}`,
+    token,
+  );
 }
 
 /**
@@ -435,38 +631,55 @@ export async function fetchDiscoveryRuns(
  */
 export async function fetchDiscoveryRun(
   token: string,
-  runId: string
+  runId: string,
 ): Promise<DiscoveryRun> {
   return apiRequest<DiscoveryRun>(`/api/v1/discovery/runs/${runId}`, token);
 }
 
 /**
- * Discovery run configuration - matches backend DiscoveryConfigRequest model
+ * Request model for configuring a discovery run.
+ *
+ * Matches the backend `DiscoveryConfigRequest` Pydantic model.
+ * All fields are optional overrides of the system defaults.
  */
 export interface DiscoveryConfigRequest {
+  /** Maximum number of search queries to generate per run */
   max_queries_per_run?: number;
+  /** Maximum total sources to process across all queries */
   max_sources_total?: number;
+  /** AI confidence threshold for auto-approving cards (0-1) */
   auto_approve_threshold?: number;
+  /** Strategic pillar codes to restrict the scan to */
   pillars_filter?: string[];
+  /** If true, simulate the run without creating cards */
   dry_run?: boolean;
 }
 
 /**
- * Discovery system configuration (from backend env vars)
+ * Current discovery system configuration from backend environment.
+ *
+ * Read-only view of the active system defaults that govern discovery runs.
  */
 export interface DiscoveryConfig {
+  /** Maximum search queries generated per run */
   max_queries_per_run: number;
+  /** Maximum total sources processed across all queries */
   max_sources_total: number;
+  /** Maximum sources fetched per individual query */
   max_sources_per_query: number;
+  /** AI confidence threshold for auto-approving cards (0-1) */
   auto_approve_threshold: number;
+  /** Vector similarity threshold for deduplication (0-1) */
   similarity_threshold: number;
 }
 
 /**
  * Fetch current discovery configuration from server
  */
-export async function fetchDiscoveryConfig(token: string): Promise<DiscoveryConfig> {
-  return apiRequest<DiscoveryConfig>('/api/v1/discovery/config', token);
+export async function fetchDiscoveryConfig(
+  token: string,
+): Promise<DiscoveryConfig> {
+  return apiRequest<DiscoveryConfig>("/api/v1/discovery/config", token);
 }
 
 /**
@@ -474,10 +687,10 @@ export async function fetchDiscoveryConfig(token: string): Promise<DiscoveryConf
  */
 export async function triggerDiscoveryRun(
   token: string,
-  config?: DiscoveryConfigRequest
+  config?: DiscoveryConfigRequest,
 ): Promise<{ run_id: string }> {
-  return apiRequest<{ run_id: string }>('/api/v1/discovery/run', token, {
-    method: 'POST',
+  return apiRequest<{ run_id: string }>("/api/v1/discovery/run", token, {
+    method: "POST",
     body: JSON.stringify(config || {}),
   });
 }
@@ -487,10 +700,10 @@ export async function triggerDiscoveryRun(
  */
 export async function cancelDiscoveryRun(
   token: string,
-  runId: string
+  runId: string,
 ): Promise<void> {
   return apiRequest<void>(`/api/v1/discovery/runs/${runId}/cancel`, token, {
-    method: 'POST',
+    method: "POST",
   });
 }
 
@@ -498,7 +711,10 @@ export async function cancelDiscoveryRun(
  * Get count of pending cards (lightweight endpoint)
  */
 export async function fetchPendingCount(token: string): Promise<number> {
-  const result = await apiRequest<{ count: number }>('/api/v1/discovery/pending/count', token);
+  const result = await apiRequest<{ count: number }>(
+    "/api/v1/discovery/pending/count",
+    token,
+  );
   return result.count;
 }
 
@@ -511,10 +727,10 @@ export async function fetchPendingCount(token: string): Promise<number> {
  */
 export async function advancedSearch(
   token: string,
-  request: AdvancedSearchRequest
+  request: AdvancedSearchRequest,
 ): Promise<AdvancedSearchResponse> {
-  return apiRequest<AdvancedSearchResponse>('/api/v1/cards/search', token, {
-    method: 'POST',
+  return apiRequest<AdvancedSearchResponse>("/api/v1/cards/search", token, {
+    method: "POST",
     body: JSON.stringify(request),
   });
 }
@@ -528,12 +744,12 @@ export async function advancedSearch(
  */
 export async function listSavedSearches(
   token: string,
-  limit?: number
+  limit?: number,
 ): Promise<SavedSearchList> {
   const params = new URLSearchParams();
-  if (limit !== undefined) params.append('limit', String(limit));
+  if (limit !== undefined) params.append("limit", String(limit));
   const queryString = params.toString();
-  const endpoint = `/api/v1/saved-searches${queryString ? `?${queryString}` : ''}`;
+  const endpoint = `/api/v1/saved-searches${queryString ? `?${queryString}` : ""}`;
   return apiRequest<SavedSearchList>(endpoint, token);
 }
 
@@ -542,10 +758,10 @@ export async function listSavedSearches(
  */
 export async function createSavedSearch(
   token: string,
-  savedSearch: SavedSearchCreate
+  savedSearch: SavedSearchCreate,
 ): Promise<SavedSearch> {
-  return apiRequest<SavedSearch>('/api/v1/saved-searches', token, {
-    method: 'POST',
+  return apiRequest<SavedSearch>("/api/v1/saved-searches", token, {
+    method: "POST",
     body: JSON.stringify(savedSearch),
   });
 }
@@ -555,7 +771,7 @@ export async function createSavedSearch(
  */
 export async function getSavedSearch(
   token: string,
-  searchId: string
+  searchId: string,
 ): Promise<SavedSearch> {
   return apiRequest<SavedSearch>(`/api/v1/saved-searches/${searchId}`, token);
 }
@@ -566,10 +782,10 @@ export async function getSavedSearch(
 export async function updateSavedSearch(
   token: string,
   searchId: string,
-  updates: SavedSearchUpdate
+  updates: SavedSearchUpdate,
 ): Promise<SavedSearch> {
   return apiRequest<SavedSearch>(`/api/v1/saved-searches/${searchId}`, token, {
-    method: 'PATCH',
+    method: "PATCH",
     body: JSON.stringify(updates),
   });
 }
@@ -579,10 +795,10 @@ export async function updateSavedSearch(
  */
 export async function deleteSavedSearch(
   token: string,
-  searchId: string
+  searchId: string,
 ): Promise<void> {
   return apiRequest<void>(`/api/v1/saved-searches/${searchId}`, token, {
-    method: 'DELETE',
+    method: "DELETE",
   });
 }
 
@@ -595,12 +811,12 @@ export async function deleteSavedSearch(
  */
 export async function getSearchHistory(
   token: string,
-  limit?: number
+  limit?: number,
 ): Promise<SearchHistoryList> {
   const params = new URLSearchParams();
-  if (limit !== undefined) params.append('limit', String(limit));
+  if (limit !== undefined) params.append("limit", String(limit));
   const queryString = params.toString();
-  const endpoint = `/api/v1/search-history${queryString ? `?${queryString}` : ''}`;
+  const endpoint = `/api/v1/search-history${queryString ? `?${queryString}` : ""}`;
   return apiRequest<SearchHistoryList>(endpoint, token);
 }
 
@@ -609,10 +825,10 @@ export async function getSearchHistory(
  */
 export async function recordSearchHistory(
   token: string,
-  entry: SearchHistoryCreate
+  entry: SearchHistoryCreate,
 ): Promise<SearchHistoryEntry> {
-  return apiRequest<SearchHistoryEntry>('/api/v1/search-history', token, {
-    method: 'POST',
+  return apiRequest<SearchHistoryEntry>("/api/v1/search-history", token, {
+    method: "POST",
     body: JSON.stringify(entry),
   });
 }
@@ -622,10 +838,10 @@ export async function recordSearchHistory(
  */
 export async function deleteSearchHistoryEntry(
   token: string,
-  entryId: string
+  entryId: string,
 ): Promise<void> {
   return apiRequest<void>(`/api/v1/search-history/${entryId}`, token, {
-    method: 'DELETE',
+    method: "DELETE",
   });
 }
 
@@ -641,11 +857,11 @@ export async function deleteSearchHistoryEntry(
 export async function fetchPersonalizedDiscoveryQueue(
   token: string,
   limit: number = 20,
-  offset: number = 0
+  offset: number = 0,
 ): Promise<PersonalizedCard[]> {
   const params = new URLSearchParams();
-  params.append('limit', String(limit));
-  params.append('offset', String(offset));
+  params.append("limit", String(limit));
+  params.append("offset", String(offset));
 
   const queryString = params.toString();
   const endpoint = `/api/v1/me/discovery/queue?${queryString}`;
@@ -657,8 +873,8 @@ export async function fetchPersonalizedDiscoveryQueue(
  * Clear all search history for the current user
  */
 export async function clearSearchHistory(token: string): Promise<void> {
-  return apiRequest<void>('/api/v1/search-history', token, {
-    method: 'DELETE',
+  return apiRequest<void>("/api/v1/search-history", token, {
+    method: "DELETE",
   });
 }
 
@@ -669,7 +885,13 @@ export async function clearSearchHistory(token: string): Promise<void> {
 /**
  * Valid relationship types for card relationships in the concept network
  */
-export type RelationshipType = 'related' | 'similar' | 'derived' | 'dependent' | 'parent' | 'child';
+export type RelationshipType =
+  | "related"
+  | "similar"
+  | "derived"
+  | "dependent"
+  | "parent"
+  | "child";
 
 /**
  * Historical score snapshot for a card at a specific point in time.
@@ -699,7 +921,7 @@ export interface ScoreHistoryResponse {
   card_id: string;
   total_count: number;
   start_date?: string | null; // ISO timestamp, filter applied
-  end_date?: string | null;   // ISO timestamp, filter applied
+  end_date?: string | null; // ISO timestamp, filter applied
 }
 
 /**
@@ -712,11 +934,11 @@ export interface StageHistory {
   card_id: string;
   changed_at: string; // ISO timestamp
   old_stage_id: number | null; // 1-8, null for first record
-  new_stage_id: number;        // 1-8
-  old_horizon: 'H1' | 'H2' | 'H3' | null; // null for first record
-  new_horizon: 'H1' | 'H2' | 'H3';
-  trigger?: string | null;  // e.g., 'manual', 'auto-calculated', 'score_update'
-  reason?: string | null;   // Optional explanation for the stage change
+  new_stage_id: number; // 1-8
+  old_horizon: "H1" | "H2" | "H3" | null; // null for first record
+  new_horizon: "H1" | "H2" | "H3";
+  trigger?: string | null; // e.g., 'manual', 'auto-calculated', 'score_update'
+  reason?: string | null; // Optional explanation for the stage change
 }
 
 /**
@@ -739,7 +961,7 @@ export interface CardRelationship {
   target_card_id: string;
   relationship_type: RelationshipType;
   strength: number | null; // 0-1 weight for edge visualization
-  created_at: string;      // ISO timestamp
+  created_at: string; // ISO timestamp
 }
 
 /**
@@ -754,7 +976,7 @@ export interface RelatedCard {
   summary?: string | null;
   pillar_id?: string | null;
   stage_id?: string | null;
-  horizon?: 'H1' | 'H2' | 'H3' | null;
+  horizon?: "H1" | "H2" | "H3" | null;
   // Relationship context
   relationship_type: RelationshipType;
   relationship_strength: number | null; // 0-1
@@ -787,7 +1009,7 @@ export interface CardData {
   pillar_id?: string | null;
   goal_id?: string | null;
   stage_id?: string | null;
-  horizon?: 'H1' | 'H2' | 'H3' | null;
+  horizon?: "H1" | "H2" | "H3" | null;
   // Current scores for comparison (0-100)
   maturity_score: number | null;
   velocity_score: number | null;
@@ -840,14 +1062,14 @@ export async function getScoreHistory(
   token: string,
   cardId: string,
   startDate?: string,
-  endDate?: string
+  endDate?: string,
 ): Promise<ScoreHistoryResponse> {
   const params = new URLSearchParams();
-  if (startDate) params.append('start_date', startDate);
-  if (endDate) params.append('end_date', endDate);
+  if (startDate) params.append("start_date", startDate);
+  if (endDate) params.append("end_date", endDate);
 
   const queryString = params.toString();
-  const endpoint = `/api/v1/cards/${cardId}/score-history${queryString ? `?${queryString}` : ''}`;
+  const endpoint = `/api/v1/cards/${cardId}/score-history${queryString ? `?${queryString}` : ""}`;
 
   return apiRequest<ScoreHistoryResponse>(endpoint, token);
 }
@@ -862,9 +1084,12 @@ export async function getScoreHistory(
  */
 export async function getStageHistory(
   token: string,
-  cardId: string
+  cardId: string,
 ): Promise<StageHistoryList> {
-  return apiRequest<StageHistoryList>(`/api/v1/cards/${cardId}/stage-history`, token);
+  return apiRequest<StageHistoryList>(
+    `/api/v1/cards/${cardId}/stage-history`,
+    token,
+  );
 }
 
 /**
@@ -879,14 +1104,14 @@ export async function getStageHistory(
 export async function getRelatedCards(
   token: string,
   cardId: string,
-  limit: number = 20
+  limit: number = 20,
 ): Promise<RelatedCardsList> {
   const params = new URLSearchParams();
-  params.append('limit', String(limit));
+  params.append("limit", String(limit));
 
   return apiRequest<RelatedCardsList>(
     `/api/v1/cards/${cardId}/related?${params.toString()}`,
-    token
+    token,
   );
 }
 
@@ -906,16 +1131,16 @@ export async function compareCards(
   cardId1: string,
   cardId2: string,
   startDate?: string,
-  endDate?: string
+  endDate?: string,
 ): Promise<CardComparisonResponse> {
   const params = new URLSearchParams();
-  params.append('card_ids', `${cardId1},${cardId2}`);
-  if (startDate) params.append('start_date', startDate);
-  if (endDate) params.append('end_date', endDate);
+  params.append("card_ids", `${cardId1},${cardId2}`);
+  if (startDate) params.append("start_date", startDate);
+  if (endDate) params.append("end_date", endDate);
 
   return apiRequest<CardComparisonResponse>(
     `/api/v1/cards/compare?${params.toString()}`,
-    token
+    token,
   );
 }
 
@@ -926,7 +1151,7 @@ export async function compareCards(
 /**
  * Asset type enumeration
  */
-export type AssetType = 'brief' | 'research' | 'pdf_export' | 'pptx_export';
+export type AssetType = "brief" | "research" | "pdf_export" | "pptx_export";
 
 /**
  * Asset data structure returned from the API
@@ -941,7 +1166,7 @@ export interface CardAsset {
   download_count?: number;
   ai_generated: boolean;
   ai_model?: string;
-  status: 'ready' | 'generating' | 'failed';
+  status: "ready" | "generating" | "failed";
   metadata?: Record<string, unknown>;
 }
 
@@ -956,19 +1181,66 @@ export interface CardAssetsResponse {
 
 /**
  * Fetch all generated assets for a card.
- * 
+ *
  * Returns briefs, research reports, and exports associated with the card.
- * 
+ *
  * @param token - Authentication token
  * @param cardId - Card UUID
  * @returns CardAssetsResponse with list of assets
  */
 export async function fetchCardAssets(
   token: string,
-  cardId: string
+  cardId: string,
 ): Promise<CardAssetsResponse> {
   return apiRequest<CardAssetsResponse>(
     `/api/v1/cards/${cardId}/assets`,
-    token
+    token,
+  );
+}
+
+// ============================================================================
+// Signal Creation API Functions
+// ============================================================================
+
+/**
+ * Create a new intelligence card from a topic phrase.
+ *
+ * The backend uses AI to expand the topic into a fully-formed card with
+ * classification, scoring, and initial research context.
+ *
+ * @param data - Topic string and optional workstream/pillar hints
+ * @param token - Authentication token
+ * @returns The newly created card object
+ */
+export async function createCardFromTopic(
+  data: { topic: string; workstream_id?: string; pillar_hints?: string[] },
+  token: string,
+): Promise<Card> {
+  return apiRequest<Card>("/api/v1/cards/create-from-topic", token, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+/**
+ * Get AI-suggested keywords for a given topic phrase.
+ *
+ * Returns a list of keyword suggestions that can help refine
+ * discovery queries and improve card classification.
+ *
+ * @param topic - The topic phrase to get keyword suggestions for
+ * @param token - Authentication token
+ * @returns Object containing an array of suggested keyword strings
+ */
+export async function suggestKeywords(
+  topic: string,
+  token: string,
+): Promise<{ keywords: string[] }> {
+  const params = new URLSearchParams();
+  params.append("topic", topic);
+  return apiRequest<{ keywords: string[] }>(
+    `/api/v1/ai/suggest-keywords?${params.toString()}`,
+    token,
+    { method: "POST" },
   );
 }
