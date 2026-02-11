@@ -17,6 +17,7 @@ Foresight is an AI-powered strategic horizon scanning system for the City of Aus
 ## Development Commands
 
 ### Backend
+
 ```bash
 cd backend
 source venv/bin/activate
@@ -28,6 +29,7 @@ ruff check .                                                # Lint
 ```
 
 ### Frontend
+
 ```bash
 cd frontend/foresight-frontend
 pnpm dev                    # Development server (port 5173)
@@ -40,11 +42,27 @@ pnpm test:e2e:headed        # E2E with browser visible
 ```
 
 ### Database
-Migrations are in `supabase/migrations/`. Apply via Supabase dashboard or CLI.
+
+Migrations are in `supabase/migrations/`. Push to remote with:
+
+```bash
+npx supabase db push    # Pushes pending migrations to remote Supabase
+```
+
+### Available CLIs
+
+The following CLIs are installed, authenticated, and ready to use directly:
+
+- **Supabase CLI** (`npx supabase`) — push migrations, manage DB, run SQL
+- **Vercel CLI** (`vercel`) — check deployments, manage environment variables
+- **GitHub CLI** (`gh`) — create PRs, view issues, manage repos
+
+Use these tools directly rather than asking the user to perform manual steps.
 
 ## Architecture
 
 ### Backend Structure (`backend/app/`)
+
 - `main.py` - FastAPI app with all API endpoints (monolithic, ~210KB)
 - `worker.py` - Background job processor for long-running tasks
 - `ai_service.py` - AI classification, scoring, and analysis
@@ -58,6 +76,7 @@ Migrations are in `supabase/migrations/`. Apply via Supabase dashboard or CLI.
 - `source_fetchers/` - RSS, NewsAPI, and other content fetchers
 
 ### Frontend Structure (`frontend/foresight-frontend/src/`)
+
 - `pages/` - Route components (Dashboard, Discover, Workstreams, etc.)
 - `components/` - Reusable UI components, badges, cards
 - `components/ui/` - shadcn/ui base components
@@ -68,6 +87,7 @@ Migrations are in `supabase/migrations/`. Apply via Supabase dashboard or CLI.
   - `analytics-api.ts` - Analytics endpoints
 
 ### Key Concepts
+
 - **Cards**: Atomic units of strategic intelligence with metadata (pillar, stage, horizon, scores)
 - **Strategic Pillars**: CH (Community Health), MC (Mobility), HS (Housing), EC (Economic), ES (Environmental), CE (Cultural)
 - **Maturity Stages**: Concept → Exploring → Pilot → PoC → Implementing → Scaling → Mature → Declining
@@ -78,6 +98,7 @@ Migrations are in `supabase/migrations/`. Apply via Supabase dashboard or CLI.
 ## Environment Variables
 
 ### Backend (`backend/.env`)
+
 ```
 SUPABASE_URL=
 SUPABASE_KEY=
@@ -91,6 +112,7 @@ FIRECRAWL_API_KEY=      # For gpt-researcher
 ```
 
 ### Frontend (`frontend/foresight-frontend/.env`)
+
 ```
 VITE_SUPABASE_URL=
 VITE_SUPABASE_ANON_KEY=
@@ -113,6 +135,7 @@ VITE_API_URL=http://localhost:8000
 ## Worker Jobs
 
 The worker (`app/worker.py`) handles:
+
 - Discovery pipeline runs (content fetching, triage, classification)
 - Deep research tasks (gpt-researcher integration)
 - Executive brief generation
@@ -123,5 +146,6 @@ The worker (`app/worker.py`) handles:
 Backend tests use pytest with async support. Frontend uses Vitest for unit tests and Playwright for E2E.
 
 Test user credentials for local development:
+
 - Email: `test@foresight.austintexas.gov`
 - Password: `TestPassword123!`

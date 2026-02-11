@@ -17,7 +17,7 @@ import React, {
   useRef,
   useMemo,
 } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
 import {
   ArrowLeft,
   RefreshCw,
@@ -357,7 +357,12 @@ function FormModal({
 const WorkstreamKanban: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuthContext();
+
+  // Check if we arrived from the wizard with a scan just started
+  const scanJustStarted =
+    (location.state as { scanJustStarted?: boolean })?.scanJustStarted === true;
 
   // Workstream and card state
   const [workstream, setWorkstream] = useState<Workstream | null>(null);
@@ -1441,6 +1446,114 @@ const WorkstreamKanban: React.FC = () => {
       }
     };
   }, []);
+
+  // Auto-start scan polling when arriving from wizard with scanJustStarted
+  useEffect(() => {
+    if (!scanJustStarted || !id || !workstream) return;
+
+    // Clear location state so refreshing doesn't re-trigger
+    navigate(location.pathname, { replace: true, state: {} });
+
+    // Show initial feedback toast
+    showToast(
+      "info",
+      "Scan started! We're looking for signals matching your workstream...",
+    );
+
+    // Start polling for the active scan without triggering a new one
+    const startScanPolling = async () => {
+      const token = await getAuthToken();
+      if (!token) return;
+
+      try {
+        // Get the latest scan status (the one just started by the wizard)
+        const status = await getWorkstreamScanStatus(token, id);
+        if (
+          status &&
+          (status.status === "queued" || status.status === "running")
+        ) {
+          setScanning(true);
+          setScanStatus(status);
+
+          const scanId = status.scan_id;
+          const MAX_POLL_ATTEMPTS = 200;
+          let pollAttempts = 0;
+
+          const pollScanStatus = async () => {
+            pollAttempts++;
+
+            if (pollAttempts > MAX_POLL_ATTEMPTS) {
+              setScanning(false);
+              showToast(
+                "error",
+                "Scan timed out. Check back later for results.",
+              );
+              if (scanPollRef.current) {
+                clearInterval(scanPollRef.current);
+                scanPollRef.current = null;
+              }
+              return;
+            }
+
+            try {
+              const freshToken = await getAuthToken();
+              if (!freshToken) {
+                setScanning(false);
+                if (scanPollRef.current) {
+                  clearInterval(scanPollRef.current);
+                  scanPollRef.current = null;
+                }
+                return;
+              }
+
+              const pollStatus = await getWorkstreamScanStatus(
+                freshToken,
+                id,
+                scanId,
+              );
+              setScanStatus(pollStatus);
+
+              if (pollStatus.status === "completed") {
+                setScanning(false);
+                const cardsAdded =
+                  pollStatus.results?.cards_added_to_workstream ?? 0;
+                const cardsCreated = pollStatus.results?.cards_created ?? 0;
+                if (cardsAdded > 0 || cardsCreated > 0) {
+                  showToast(
+                    "success",
+                    `Scan complete! ${cardsCreated} new signal${cardsCreated !== 1 ? "s" : ""} created, ${cardsAdded} added to inbox`,
+                  );
+                  await loadCards();
+                } else {
+                  showToast("info", "Scan complete - no new signals found");
+                }
+                if (scanPollRef.current) {
+                  clearInterval(scanPollRef.current);
+                  scanPollRef.current = null;
+                }
+              } else if (pollStatus.status === "failed") {
+                setScanning(false);
+                showToast("error", pollStatus.error_message || "Scan failed");
+                if (scanPollRef.current) {
+                  clearInterval(scanPollRef.current);
+                  scanPollRef.current = null;
+                }
+              }
+            } catch (err) {
+              console.error("Error polling scan status:", err);
+            }
+          };
+
+          scanPollRef.current = setInterval(pollScanStatus, 3000);
+          pollScanStatus();
+        }
+      } catch (err) {
+        console.error("Error fetching initial scan status:", err);
+      }
+    };
+
+    startScanPolling();
+  }, [scanJustStarted, id, workstream]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
    * Handle form modal success.
