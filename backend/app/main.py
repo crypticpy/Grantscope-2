@@ -2087,10 +2087,14 @@ async def get_my_signals(
     search: Optional[str] = Query(None, description="Search term"),
     pillar: Optional[str] = Query(None, description="Filter by pillar"),
     horizon: Optional[str] = Query(None, description="Filter by horizon"),
+    source: Optional[str] = Query(
+        None, description="Filter by: followed, created, workstream"
+    ),
     quality_min: Optional[int] = Query(None, ge=0, le=100),
     current_user: dict = Depends(get_current_user),
 ):
     """Get user's personal intelligence hub: followed, created, and workstream signals."""
+    import re
     from datetime import timedelta
 
     user_id = current_user["id"]
@@ -2141,8 +2145,15 @@ async def get_my_signals(
                 ws_card_map[cid] = []
             ws_card_map[cid].append(ws_name_map.get(wc["workstream_id"], "Unknown"))
 
-    # 4. Union all unique card IDs
-    all_ids = list(set(followed_ids + created_ids + ws_card_ids))
+    # 4. Union unique card IDs, applying source filter if specified
+    if source == "followed":
+        all_ids = list(set(followed_ids))
+    elif source == "created":
+        all_ids = list(set(created_ids))
+    elif source == "workstream":
+        all_ids = list(set(ws_card_ids))
+    else:
+        all_ids = list(set(followed_ids + created_ids + ws_card_ids))
 
     if not all_ids:
         return {
@@ -2164,7 +2175,10 @@ async def get_my_signals(
     )
 
     if search:
-        cards_query = cards_query.or_(f"name.ilike.%{search}%,summary.ilike.%{search}%")
+        safe_search = re.sub(r"[,.()\[\]]", "", search)
+        cards_query = cards_query.or_(
+            f"name.ilike.%{safe_search}%,summary.ilike.%{safe_search}%"
+        )
     if pillar:
         cards_query = cards_query.eq("pillar_id", pillar)
     if horizon:
@@ -2175,14 +2189,18 @@ async def get_my_signals(
     cards_resp = cards_query.execute()
     cards = cards_resp.data or []
 
-    # 6. Get user signal preferences (pins)
-    prefs_resp = (
-        supabase.table("user_signal_preferences")
-        .select("*")
-        .eq("user_id", user_id)
-        .execute()
-    )
-    prefs_map = {p["card_id"]: p for p in (prefs_resp.data or [])}
+    # 6. Get user signal preferences (pins) — gracefully degrade if table missing
+    try:
+        prefs_resp = (
+            supabase.table("user_signal_preferences")
+            .select("*")
+            .eq("user_id", user_id)
+            .execute()
+        )
+        prefs_map = {p["card_id"]: p for p in (prefs_resp.data or [])}
+    except Exception:
+        logger.warning("user_signal_preferences table may not exist; skipping pin data")
+        prefs_map = {}
 
     # 7. Enrich cards with personal metadata
     one_week_ago = (datetime.now() - timedelta(days=7)).isoformat()

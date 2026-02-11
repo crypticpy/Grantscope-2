@@ -205,7 +205,14 @@ const Signals: React.FC = () => {
       if (selectedHorizon) params.horizon = selectedHorizon;
       if (sourceFilter) params.source = sourceFilter;
       if (qualityMin > 0) params.quality_min = String(qualityMin);
-      if (sortOption) params.sort = sortOption;
+      // Map frontend sort values to backend sort_by parameter
+      const sortMap: Record<string, string> = {
+        recently_updated: "updated",
+        date_followed: "followed",
+        quality_desc: "quality",
+        name_asc: "name",
+      };
+      if (sortOption) params.sort_by = sortMap[sortOption] || sortOption;
 
       const data = await fetchMySignals(params);
       setSignals(data.signals);

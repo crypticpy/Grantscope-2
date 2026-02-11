@@ -325,7 +325,7 @@ export function CreateSignalModal({
         const { data } = await supabase
           .from("workstreams")
           .select("id, name")
-          .eq("created_by", session.user.id)
+          .eq("user_id", session.user.id)
           .order("name");
 
         if (data) {
@@ -539,7 +539,7 @@ export function CreateSignalModal({
           pillar_ids: state.isExploratory ? [] : state.selectedPillars,
           is_exploratory: state.isExploratory,
           horizon: state.horizon,
-          stage_id: parseInt(state.stage, 10),
+          stage: state.stage,
           seed_urls: state.seedUrls.length > 0 ? state.seedUrls : undefined,
           source_preferences: state.sourcePreferences,
           research_depth: state.researchDepth,

@@ -113,6 +113,12 @@ class CreateCardFromTopicRequest(BaseModel):
     source_preferences: Optional[SourcePreferences] = Field(
         None, description="Optional source discovery preferences"
     )
+    research_depth: Optional[str] = Field(
+        None, description="Research depth: 'quick' or 'deep'"
+    )
+    keywords: Optional[List[str]] = Field(
+        None, description="Optional keyword list for research steering"
+    )
 
     @validator("topic")
     def clean_topic(cls, v):
@@ -187,6 +193,9 @@ class ManualCardCreateRequest(BaseModel):
     )
     source_preferences: Optional[SourcePreferences] = Field(
         None, description="Optional source discovery preferences"
+    )
+    research_depth: Optional[str] = Field(
+        None, description="Research depth: 'quick' or 'deep'"
     )
 
     @validator("name")
