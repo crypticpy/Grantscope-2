@@ -48,6 +48,19 @@ interface FollowingCard {
 }
 
 /**
+ * Explicit type for rows returned by the Supabase join query
+ * `card_follows.select("id, priority, cards (*)")`.
+ *
+ * `cards` may be `null` when the related card has been deleted or the
+ * join yields no match, so consumers must guard before accessing fields.
+ */
+interface SupabaseFollowRow {
+  id: string;
+  priority: string;
+  cards: Card | null;
+}
+
+/**
  * TypeScript interface for the get_dashboard_stats RPC response.
  * This interface ensures type safety when calling the Supabase RPC function
  * that consolidates dashboard statistics into a single database call.
@@ -57,6 +70,11 @@ interface DashboardStatsResponse {
   new_this_week: number;
   following: number;
   workstreams: number;
+}
+
+/** Extract a numeric count from a Supabase head-only response, defaulting to 0 on error. */
+function safeCount(r: { error: unknown; count: number | null }): number {
+  return r.error ? 0 : (r.count ?? 0);
 }
 
 const Dashboard: React.FC = () => {
@@ -100,8 +118,6 @@ const Dashboard: React.FC = () => {
 
   const loadDashboardData = async () => {
     try {
-      // Parallelize all dashboard queries using Promise.all
-      // This reduces 5 sequential network calls to 3 parallel calls
       const oneWeekAgo = new Date();
       oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
@@ -114,7 +130,7 @@ const Dashboard: React.FC = () => {
         qualityModResult,
         qualityLowResult,
       ] = await Promise.all([
-        // Query 1: Load recent cards
+        // Recent cards
         supabase
           .from("cards")
           .select("*")
@@ -122,42 +138,34 @@ const Dashboard: React.FC = () => {
           .order("created_at", { ascending: false })
           .limit(6),
 
-        // Query 2: Load following cards
+        // Following cards (join)
         supabase
           .from("card_follows")
-          .select(
-            `
-            id,
-            priority,
-            cards (*)
-          `,
-          )
+          .select(`id, priority, cards (*)`)
           .eq("user_id", user?.id),
 
-        // Query 3: Load dashboard stats via RPC (replaces 4 separate count queries)
+        // Dashboard stats via RPC
         supabase.rpc("get_dashboard_stats", { p_user_id: user?.id }),
 
-        // Query 4: Count cards updated this week
+        // Updated this week
         supabase
           .from("cards")
           .select("id", { count: "exact", head: true })
           .eq("status", "active")
           .gte("updated_at", oneWeekAgo.toISOString()),
 
-        // Query 5-7: Quality distribution counts
+        // Quality distribution buckets (high ≥75 / moderate 50-74 / low <50)
         supabase
           .from("cards")
           .select("id", { count: "exact", head: true })
           .eq("status", "active")
           .gte("quality_score", 75),
-
         supabase
           .from("cards")
           .select("id", { count: "exact", head: true })
           .eq("status", "active")
           .gte("quality_score", 50)
           .lt("quality_score", 75),
-
         supabase
           .from("cards")
           .select("id", { count: "exact", head: true })
@@ -165,19 +173,7 @@ const Dashboard: React.FC = () => {
           .lt("quality_score", 50),
       ]);
 
-      // Extract data from results, handling potential errors for each query
-      const recentData = recentCardsResult.error ? [] : recentCardsResult.data;
-
-      const followingData = followingCardsResult.error
-        ? []
-        : followingCardsResult.data;
-
-      // Type the stats response and handle potential errors
-      const statsData: DashboardStatsResponse | null = statsResult.error
-        ? null
-        : statsResult.data;
-
-      // Log any errors for debugging (non-blocking)
+      // Log errors for debugging (non-blocking)
       if (recentCardsResult.error) {
         console.error("Error loading recent cards:", recentCardsResult.error);
       }
@@ -191,33 +187,50 @@ const Dashboard: React.FC = () => {
         console.error("Error loading dashboard stats:", statsResult.error);
       }
 
-      setRecentCards(recentData || []);
-      // Transform Supabase nested response to match our interface.
-      // Supabase returns `cards (*)` as a nested object matching our Card shape,
-      // but the generated types don't reflect this join, so we use `as unknown as`.
-      const transformedFollowing = (
-        (followingData || []) as unknown as FollowingCard[]
-      ).map((item) => ({
-        id: item.id,
-        priority: item.priority,
-        cards: item.cards,
-      }));
+      // --- Recent cards ---
+      setRecentCards(
+        recentCardsResult.error ? [] : (recentCardsResult.data ?? []),
+      );
+
+      // --- Following cards ---
+      // Supabase infers `cards (*)` as `any[]`, but the actual runtime shape
+      // is a single Card object (or null when the join has no match).
+      // We cast through `unknown` to our explicit SupabaseFollowRow type,
+      // then filter out rows where the related card was deleted.
+      const rawFollowing: SupabaseFollowRow[] = followingCardsResult.error
+        ? []
+        : ((followingCardsResult.data ?? []) as unknown as SupabaseFollowRow[]);
+
+      const transformedFollowing: FollowingCard[] = rawFollowing
+        .filter(
+          (row): row is SupabaseFollowRow & { cards: Card } =>
+            row.cards !== null,
+        )
+        .map((row) => ({
+          id: row.id,
+          priority: row.priority,
+          cards: row.cards,
+        }));
       setFollowingCards(transformedFollowing);
 
-      // Set stats from RPC response or use fallback values
+      // --- Stats ---
+      const statsData: DashboardStatsResponse | null = statsResult.error
+        ? null
+        : statsResult.data;
+
       setStats({
         totalCards: statsData?.total_cards ?? 0,
         newThisWeek: statsData?.new_this_week ?? 0,
         following: statsData?.following ?? 0,
         workstreams: statsData?.workstreams ?? 0,
-        updatedThisWeek: updatedResult.error ? 0 : (updatedResult.count ?? 0),
+        updatedThisWeek: safeCount(updatedResult),
       });
 
-      // Set quality distribution counts
+      // --- Quality distribution ---
       setQualityDistribution({
-        high: qualityHighResult.error ? 0 : (qualityHighResult.count ?? 0),
-        moderate: qualityModResult.error ? 0 : (qualityModResult.count ?? 0),
-        low: qualityLowResult.error ? 0 : (qualityLowResult.count ?? 0),
+        high: safeCount(qualityHighResult),
+        moderate: safeCount(qualityModResult),
+        low: safeCount(qualityLowResult),
       });
     } catch (error) {
       console.error("Error loading dashboard data:", error);

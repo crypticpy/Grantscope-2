@@ -489,6 +489,22 @@ const Discover: React.FC = () => {
             search_relevance: result.search_relevance,
           }));
 
+          // Apply quick filters client-side for semantic search results
+          if (quickFilter === "new") {
+            const oneWeekAgo = new Date();
+            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+            mappedCards = mappedCards.filter(
+              (c) => c.created_at >= oneWeekAgo.toISOString(),
+            );
+          }
+          if (quickFilter === "updated") {
+            const oneWeekAgo = new Date();
+            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+            mappedCards = mappedCards.filter(
+              (c) => (c.updated_at ?? c.created_at) >= oneWeekAgo.toISOString(),
+            );
+          }
+
           const sortConfig = getSortConfig(sortOption);
           mappedCards = mappedCards.sort((a, b) => {
             const aVal =
