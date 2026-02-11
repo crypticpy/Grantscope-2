@@ -9420,7 +9420,7 @@ async def create_card_from_topic(
         }
 
         if body.pillar_hints and len(body.pillar_hints) > 0:
-            card_data["primary_pillar"] = body.pillar_hints[0]
+            card_data["pillar_id"] = body.pillar_hints[0]
 
         result = supabase.table("cards").insert(card_data).execute()
 
@@ -9508,7 +9508,7 @@ async def create_manual_card(
         }
 
         if primary_pillar:
-            card_data["primary_pillar"] = primary_pillar
+            card_data["pillar_id"] = primary_pillar
 
         result = supabase.table("cards").insert(card_data).execute()
 

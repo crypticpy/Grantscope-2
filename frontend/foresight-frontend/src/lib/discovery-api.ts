@@ -1208,18 +1208,30 @@ export async function fetchCardAssets(
  * The backend uses AI to expand the topic into a fully-formed card with
  * classification, scoring, and initial research context.
  *
- * @param data - Topic string and optional workstream/pillar hints
+ * @param data - Topic string and optional workstream ID
  * @param token - Authentication token
- * @returns The newly created card object
+ * @returns The create-from-topic response with card_id, card_name, status, message
  */
+export interface CreateCardFromTopicResponse {
+  card_id: string;
+  card_name: string;
+  status: string;
+  scan_job_id?: string | null;
+  message: string;
+}
+
 export async function createCardFromTopic(
-  data: { topic: string; workstream_id?: string; pillar_hints?: string[] },
+  data: { topic: string; workstream_id?: string },
   token: string,
-): Promise<Card> {
-  return apiRequest<Card>("/api/v1/cards/create-from-topic", token, {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
+): Promise<CreateCardFromTopicResponse> {
+  return apiRequest<CreateCardFromTopicResponse>(
+    "/api/v1/cards/create-from-topic",
+    token,
+    {
+      method: "POST",
+      body: JSON.stringify(data),
+    },
+  );
 }
 
 /**

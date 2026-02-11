@@ -54,14 +54,10 @@ interface DomainEntry {
 }
 
 /**
- * Response shape from GET /api/v1/domain-reputation/top
+ * The backend GET /api/v1/analytics/top-domains returns a bare JSON array
+ * of domain entries. The total is derived from the array length.
  */
-interface TopDomainsResponse {
-  /** List of top-ranked domain entries */
-  domains: DomainEntry[];
-  /** Total number of domains in the system */
-  total: number;
-}
+type TopDomainsResponse = DomainEntry[];
 
 // ============================================================================
 // API Helper
@@ -263,8 +259,8 @@ const TopDomainsLeaderboard: React.FC = () => {
         throw new Error("Not authenticated");
       }
       const result = await fetchTopDomains(session.access_token, 20);
-      setDomains(result.domains);
-      setTotal(result.total);
+      setDomains(result);
+      setTotal(result.length);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to load domain data",
