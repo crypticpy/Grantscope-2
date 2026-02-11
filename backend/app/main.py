@@ -2561,23 +2561,16 @@ async def review_card(
             "relevance_score",
         }
 
-        # Filter updates to only allowed fields
         update_data = {
             k: v for k, v in review_data.updates.items() if k in allowed_fields
+        } | {
+            "review_status": "active",
+            "status": "active",
+            "reviewed_at": now,
+            "reviewed_by": current_user["id"],
+            "review_notes": review_data.reason,
+            "updated_at": now,
         }
-
-        # Add approval metadata
-        update_data.update(
-            {
-                "review_status": "active",
-                "status": "active",
-                "reviewed_at": now,
-                "reviewed_by": current_user["id"],
-                "review_notes": review_data.reason,
-                "updated_at": now,
-            }
-        )
-
         # Update slug if name changed
         if "name" in update_data:
             update_data["slug"] = (
@@ -2594,59 +2587,58 @@ async def review_card(
     # Perform the update
     response = supabase.table("cards").update(update_data).eq("id", card_id).execute()
 
-    if response.data:
-        updated_card = response.data[0]
-
-        # Log the review action to card timeline
-        timeline_entry = {
-            "card_id": card_id,
-            "event_type": f"review_{review_data.action}",
-            "description": f"Card {review_data.action}d by reviewer",
-            "user_id": current_user["id"],
-            "metadata": {
-                "action": review_data.action,
-                "reason": review_data.reason,
-                "updates_applied": (
-                    list(update_data.keys())
-                    if review_data.action == "edit_approve"
-                    else None
-                ),
-            },
-            "created_at": now,
-        }
-        supabase.table("card_timeline").insert(timeline_entry).execute()
-
-        # Track score and stage history for edit_approve actions
-        if review_data.action == "edit_approve":
-            # Record score history if any score fields changed
-            _record_score_history(
-                old_card_data=card, new_card_data=updated_card, card_id=card_id
-            )
-
-            # Record stage history if stage or horizon changed
-            _record_stage_history(
-                old_card_data=card,
-                new_card_data=updated_card,
-                card_id=card_id,
-                user_id=current_user.get("id"),
-                trigger="review",
-                reason=review_data.reason,
-            )
-
-        # Update signal quality score after approval
-        if review_data.action in ("approve", "edit_approve"):
-            try:
-                from app.signal_quality import update_signal_quality_score
-
-                update_signal_quality_score(supabase, card_id)
-            except Exception as e:
-                logger.warning(
-                    f"Failed to update signal quality score for {card_id}: {e}"
-                )
-
-        return updated_card
-    else:
+    if not response.data:
         raise HTTPException(status_code=400, detail="Failed to update card")
+    updated_card = response.data[0]
+
+    # Log the review action to card timeline
+    timeline_entry = {
+        "card_id": card_id,
+        "event_type": f"review_{review_data.action}",
+        "description": f"Card {review_data.action}d by reviewer",
+        "user_id": current_user["id"],
+        "metadata": {
+            "action": review_data.action,
+            "reason": review_data.reason,
+            "updates_applied": (
+                list(update_data.keys())
+                if review_data.action == "edit_approve"
+                else None
+            ),
+        },
+        "created_at": now,
+    }
+    supabase.table("card_timeline").insert(timeline_entry).execute()
+
+    # Track score and stage history for edit_approve actions
+    if review_data.action == "edit_approve":
+        # Record score history if any score fields changed
+        _record_score_history(
+            old_card_data=card, new_card_data=updated_card, card_id=card_id
+        )
+
+        # Record stage history if stage or horizon changed
+        _record_stage_history(
+            old_card_data=card,
+            new_card_data=updated_card,
+            card_id=card_id,
+            user_id=current_user.get("id"),
+            trigger="review",
+            reason=review_data.reason,
+        )
+
+    # Update signal quality score after approval
+    if review_data.action in ("approve", "edit_approve"):
+        try:
+            from app.signal_quality import update_signal_quality_score
+
+            update_signal_quality_score(supabase, card_id)
+        except Exception as e:
+            logger.warning(
+                f"Failed to update signal quality score for {card_id}: {e}"
+            )
+
+    return updated_card
 
 
 @app.post("/api/v1/cards/bulk-review")
@@ -9274,8 +9266,7 @@ async def get_signal_quality_score(card_id: str):
     """Get computed signal quality score for a card."""
     from app.signal_quality import compute_signal_quality_score
 
-    result = compute_signal_quality_score(supabase, card_id)
-    return result
+    return compute_signal_quality_score(supabase, card_id)
 
 
 @app.post("/api/v1/cards/{card_id}/quality-score/refresh")

@@ -54,9 +54,7 @@ def _score_avg_credibility(avg_credibility: Optional[float]) -> int:
 
 def _score_avg_triage_confidence(avg_confidence: Optional[float]) -> int:
     """Score based on average triage confidence (0-1 scale). avg*100."""
-    if avg_confidence is None:
-        return 0
-    return int(avg_confidence * 100)
+    return 0 if avg_confidence is None else int(avg_confidence * 100)
 
 
 def _score_deep_research(has_deep_research: bool) -> int:
@@ -149,7 +147,11 @@ def compute_signal_quality_score(supabase: Client, card_id: str) -> dict:
         diversity_data = diversity_result.data or []
 
         unique_types = len(
-            set(row["source_type"] for row in diversity_data if row.get("source_type"))
+            {
+                row["source_type"]
+                for row in diversity_data
+                if row.get("source_type")
+            }
         )
         unique_domains = len(
             set(row["domain"] for row in diversity_data if row.get("domain"))
@@ -175,9 +177,7 @@ def compute_signal_quality_score(supabase: Client, card_id: str) -> dict:
             .not_.is_("analysis_credibility", "null")
             .execute()
         )
-        credibility_data = credibility_result.data or []
-
-        if credibility_data:
+        if credibility_data := credibility_result.data or []:
             avg_credibility = sum(
                 row["analysis_credibility"] for row in credibility_data
             ) / len(credibility_data)
@@ -203,9 +203,7 @@ def compute_signal_quality_score(supabase: Client, card_id: str) -> dict:
             .not_.is_("triage_confidence", "null")
             .execute()
         )
-        triage_data = triage_result.data or []
-
-        if triage_data:
+        if triage_data := triage_result.data or []:
             avg_triage = sum(row["triage_confidence"] for row in triage_data) / len(
                 triage_data
             )
