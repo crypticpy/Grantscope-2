@@ -9,8 +9,16 @@ Supports:
 - ChatSuggestRequest: Request model for the suggestion endpoint
 """
 
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel, Field
+
+
+class MentionRef(BaseModel):
+    """A structured @mention reference to a signal or workstream."""
+
+    id: str = Field(..., description="Entity UUID (card_id or workstream_id)")
+    type: str = Field(..., description="Entity type: 'signal' or 'workstream'")
+    title: str = Field(..., description="Display title of the mentioned entity")
 
 
 class ChatRequest(BaseModel):
@@ -25,6 +33,9 @@ class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000, description="User message")
     conversation_id: Optional[str] = Field(
         None, description="Existing conversation ID for multi-turn chat"
+    )
+    mentions: Optional[List[MentionRef]] = Field(
+        None, description="Structured @mention references resolved by the frontend"
     )
 
 

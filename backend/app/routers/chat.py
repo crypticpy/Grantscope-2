@@ -148,6 +148,11 @@ async def chat_endpoint(
             detail=f"scope_id is required for '{request.scope}' scope.",
         )
 
+    # Convert MentionRef models to dicts for the service layer
+    mention_dicts = None
+    if request.mentions:
+        mention_dicts = [m.model_dump() for m in request.mentions]
+
     async def event_generator():
         async for event in chat_service_chat(
             scope=request.scope,
@@ -156,6 +161,7 @@ async def chat_endpoint(
             conversation_id=request.conversation_id,
             user_id=user_id,
             supabase_client=supabase,
+            mentions=mention_dicts,
         ):
             yield event
 

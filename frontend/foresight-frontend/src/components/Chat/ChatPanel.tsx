@@ -27,6 +27,7 @@ import { ChatSuggestionChips } from "./ChatSuggestionChips";
 import { ChatHistoryPopover } from "./ChatHistoryPopover";
 import { ChatMentionAutocomplete } from "./ChatMentionAutocomplete";
 import type {
+  ChatMention,
   Citation,
   SmartSuggestion,
   MentionResult,
@@ -189,6 +190,9 @@ export function ChatPanel({
   const [mentionPosition, setMentionPosition] = useState({ top: 0, left: 0 });
   const inputWrapperRef = useRef<HTMLDivElement>(null);
 
+  // Accumulated structured mention data for the current message draft
+  const [activeMentions, setActiveMentions] = useState<ChatMention[]>([]);
+
   // "Continuing conversation" banner state
   const userHasSentMessage = useRef(false);
   const [showContinueBanner, setShowContinueBanner] = useState(false);
@@ -316,10 +320,11 @@ export function ChatPanel({
     return undefined;
   }, [isStreaming, conversationId, messages.length, scope, scopeId]);
 
-  // Clear smart suggestions when starting a new conversation
+  // Clear smart suggestions and active mentions when starting a new conversation
   useEffect(() => {
     if (messages.length === 0) {
       setSmartSuggestions([]);
+      setActiveMentions([]);
     }
   }, [messages.length]);
 
@@ -329,8 +334,12 @@ export function ChatPanel({
 
   const handleSubmit = useCallback(() => {
     if (!inputValue.trim() || isStreaming) return;
-    sendMessage(inputValue.trim());
+    sendMessage(
+      inputValue.trim(),
+      activeMentions.length > 0 ? activeMentions : undefined,
+    );
     setInputValue("");
+    setActiveMentions([]);
     setMentionActive(false);
 
     // Mark that user has sent a message and dismiss the banner
@@ -345,7 +354,7 @@ export function ChatPanel({
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
-  }, [inputValue, isStreaming, sendMessage]);
+  }, [inputValue, isStreaming, sendMessage, activeMentions]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -442,6 +451,16 @@ export function ChatPanel({
       setMentionActive(false);
       setMentionQuery("");
       setMentionStartIndex(-1);
+
+      // Track the structured mention data for the API payload
+      setActiveMentions((prev) => {
+        // Avoid duplicates (same entity mentioned twice)
+        if (prev.some((m) => m.id === mention.id)) return prev;
+        return [
+          ...prev,
+          { id: mention.id, type: mention.type, title: mention.title },
+        ];
+      });
 
       // Refocus the textarea and position cursor after the mention
       requestAnimationFrame(() => {

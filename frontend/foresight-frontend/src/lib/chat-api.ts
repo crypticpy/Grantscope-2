@@ -92,6 +92,19 @@ export interface SSEEvent {
   data?: unknown;
 }
 
+/**
+ * Structured mention data for an @-referenced signal or workstream.
+ * Sent alongside the message text so the backend can resolve mentions.
+ */
+export interface ChatMention {
+  /** UUID of the mentioned entity */
+  id: string;
+  /** The entity type: "signal" or "workstream" */
+  type: "signal" | "workstream";
+  /** Display title of the mentioned entity */
+  title: string;
+}
+
 // ============================================================================
 // Auth Helper
 // ============================================================================
@@ -130,6 +143,7 @@ export async function sendChatMessage(
     scope_id?: string;
     message: string;
     conversation_id?: string;
+    mentions?: ChatMention[];
   },
   signal?: AbortSignal,
 ): Promise<Response> {
@@ -150,6 +164,7 @@ export async function sendChatMessage(
       scope_id: params.scope_id,
       message: params.message,
       conversation_id: params.conversation_id,
+      ...(params.mentions?.length ? { mentions: params.mentions } : {}),
     }),
     signal,
   });

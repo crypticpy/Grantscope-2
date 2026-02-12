@@ -17,6 +17,7 @@ import {
   fetchSuggestions,
   fetchChatStats,
   type ChatMessage,
+  type ChatMention,
   type Citation,
 } from "../lib/chat-api";
 
@@ -55,7 +56,7 @@ export interface UseChatReturn {
   /** Current error message, if any */
   error: string | null;
   /** Send a user message and begin streaming the assistant response */
-  sendMessage: (message: string) => Promise<void>;
+  sendMessage: (message: string, mentions?: ChatMention[]) => Promise<void>;
   /** Abort the current streaming response */
   stopGenerating: () => void;
   /** Load an existing conversation by ID */
@@ -172,7 +173,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
   // ============================================================================
 
   const sendMessage = useCallback(
-    async (message: string) => {
+    async (message: string, mentions?: ChatMention[]) => {
       if (!message.trim() || isStreaming) return;
 
       lastFailedMessageRef.current = message.trim();
@@ -206,6 +207,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
             scope_id: scopeId,
             message: message.trim(),
             conversation_id: conversationId ?? undefined,
+            mentions: mentions?.length ? mentions : undefined,
           },
           abortController.signal,
         );

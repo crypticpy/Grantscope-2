@@ -604,6 +604,281 @@ async def _retrieve_global_context(
 
 
 # ---------------------------------------------------------------------------
+# Context Retrieval — @Mention Resolution
+# ---------------------------------------------------------------------------
+
+MAX_MENTION_CONTEXT_CHARS = 8000  # Cap for mention context to stay within budget
+
+
+async def _resolve_mention_context(
+    supabase_client: Client,
+    message: str,
+    mentions: Optional[List[Dict[str, Any]]] = None,
+) -> str:
+    """
+    Resolve @mention references and return formatted context for the LLM.
+
+    Supports two resolution paths:
+    1. Structured mentions from the frontend (preferred) — list of dicts with
+       id, type, and title.
+    2. Regex fallback — parses @[Title] patterns from the message text and
+       searches cards/workstreams by name.
+
+    Returns a formatted context string capped at MAX_MENTION_CONTEXT_CHARS,
+    or an empty string if no mentions are found or resolved.
+    """
+    # Collect mention descriptors: list of {"id": ..., "type": ..., "title": ...}
+    mention_refs: List[Dict[str, Any]] = []
+
+    if mentions:
+        # Path 1: structured mentions from the frontend
+        for m in mentions:
+            mention_refs.append(
+                {
+                    "id": m.get("id"),
+                    "type": m.get("type", "signal"),
+                    "title": m.get("title", ""),
+                }
+            )
+    else:
+        # Path 2: regex fallback — parse @[Title] from message text
+        pattern = r"@\[([^\]]+)\]"
+        matches = re.findall(pattern, message)
+        for title in matches:
+            mention_refs.append({"id": None, "type": None, "title": title})
+
+    if not mention_refs:
+        return ""
+
+    parts: List[str] = ["## Referenced Entities"]
+
+    for ref in mention_refs:
+        try:
+            resolved = False
+
+            # --- Attempt signal resolution ---
+            if ref["type"] in ("signal", None):
+                card = await _resolve_signal_mention(
+                    supabase_client, ref.get("id"), ref["title"]
+                )
+                if card:
+                    parts.append(_format_signal_mention(card))
+                    resolved = True
+
+            # --- Attempt workstream resolution ---
+            if ref["type"] in ("workstream", None) and not resolved:
+                ws = await _resolve_workstream_mention(
+                    supabase_client, ref.get("id"), ref["title"]
+                )
+                if ws:
+                    parts.append(_format_workstream_mention(ws))
+
+        except Exception as e:
+            logger.warning(f"Failed to resolve mention '{ref.get('title')}': {e}")
+            continue
+
+    # If only the header was added, nothing was resolved
+    if len(parts) <= 1:
+        return ""
+
+    context = "\n\n".join(parts)
+    if len(context) > MAX_MENTION_CONTEXT_CHARS:
+        context = (
+            context[:MAX_MENTION_CONTEXT_CHARS] + "\n\n[Mention context truncated]"
+        )
+
+    return context
+
+
+async def _resolve_signal_mention(
+    supabase_client: Client,
+    card_id: Optional[str],
+    title: str,
+) -> Optional[Dict[str, Any]]:
+    """
+    Resolve a signal mention by ID or by title (ILIKE).
+
+    Returns a dict with card details and top 5 sources, or None if not found.
+    """
+    card_data = None
+
+    if card_id:
+        result = (
+            supabase_client.table("cards")
+            .select(
+                "id, slug, name, summary, description, pillar_id, "
+                "horizon, stage_id, impact_score, relevance_score"
+            )
+            .eq("id", card_id)
+            .execute()
+        )
+        if result.data:
+            card_data = result.data[0]
+
+    if not card_data and title:
+        result = (
+            supabase_client.table("cards")
+            .select(
+                "id, slug, name, summary, description, pillar_id, "
+                "horizon, stage_id, impact_score, relevance_score"
+            )
+            .ilike("name", f"%{title}%")
+            .limit(1)
+            .execute()
+        )
+        if result.data:
+            card_data = result.data[0]
+
+    if not card_data:
+        return None
+
+    # Fetch top 5 sources for the card
+    try:
+        src_result = (
+            supabase_client.table("sources")
+            .select("title, url, ai_summary, key_excerpts")
+            .eq("card_id", card_data["id"])
+            .order("relevance_score", desc=True)
+            .limit(5)
+            .execute()
+        )
+        card_data["_sources"] = src_result.data or []
+    except Exception as e:
+        logger.warning(
+            f"Failed to fetch sources for mentioned card {card_data['id']}: {e}"
+        )
+        card_data["_sources"] = []
+
+    return card_data
+
+
+async def _resolve_workstream_mention(
+    supabase_client: Client,
+    workstream_id: Optional[str],
+    title: str,
+) -> Optional[Dict[str, Any]]:
+    """
+    Resolve a workstream mention by ID or by title (ILIKE).
+
+    Returns a dict with workstream details and its card names, or None if not found.
+    """
+    ws_data = None
+
+    if workstream_id:
+        result = (
+            supabase_client.table("workstreams")
+            .select("id, name, description")
+            .eq("id", workstream_id)
+            .execute()
+        )
+        if result.data:
+            ws_data = result.data[0]
+
+    if not ws_data and title:
+        result = (
+            supabase_client.table("workstreams")
+            .select("id, name, description")
+            .ilike("name", f"%{title}%")
+            .limit(1)
+            .execute()
+        )
+        if result.data:
+            ws_data = result.data[0]
+
+    if not ws_data:
+        return None
+
+    # Fetch card names belonging to this workstream
+    try:
+        wc_result = (
+            supabase_client.table("workstream_cards")
+            .select("card_id")
+            .eq("workstream_id", ws_data["id"])
+            .limit(20)
+            .execute()
+        )
+        card_ids = [wc["card_id"] for wc in (wc_result.data or [])]
+
+        if card_ids:
+            cards_result = (
+                supabase_client.table("cards")
+                .select("name")
+                .in_("id", card_ids)
+                .execute()
+            )
+            ws_data["_card_names"] = [
+                c["name"] for c in (cards_result.data or []) if c.get("name")
+            ]
+        else:
+            ws_data["_card_names"] = []
+    except Exception as e:
+        logger.warning(
+            f"Failed to fetch cards for mentioned workstream {ws_data['id']}: {e}"
+        )
+        ws_data["_card_names"] = []
+
+    return ws_data
+
+
+def _format_signal_mention(card: Dict[str, Any]) -> str:
+    """Format a resolved signal mention into a context block."""
+    lines = [f"### Signal: {card.get('name', 'Unknown')}"]
+
+    if card.get("summary"):
+        lines.append(f"Summary: {card['summary']}")
+    if card.get("description"):
+        lines.append(f"Description: {card['description'][:800]}")
+    if card.get("pillar_id") or card.get("horizon"):
+        lines.append(
+            f"Pillar: {card.get('pillar_id', 'N/A')} | "
+            f"Horizon: {card.get('horizon', 'N/A')} | "
+            f"Stage: {card.get('stage_id', 'N/A')}"
+        )
+
+    scores = []
+    for key in ("impact_score", "relevance_score"):
+        val = card.get(key)
+        if val is not None:
+            label = key.replace("_score", "").replace("_", " ").title()
+            scores.append(f"{label}: {val}")
+    if scores:
+        lines.append(f"Scores: {', '.join(scores)}")
+
+    sources = card.get("_sources", [])
+    if sources:
+        lines.append("Key Sources:")
+        for src in sources:
+            src_title = src.get("title", "Untitled")
+            excerpt = ""
+            if src.get("ai_summary"):
+                excerpt = (src["ai_summary"] or "")[:200]
+            elif src.get("key_excerpts"):
+                excerpts = src["key_excerpts"]
+                if isinstance(excerpts, list) and excerpts:
+                    excerpt = str(excerpts[0])[:200]
+            if excerpt:
+                lines.append(f"- {src_title}: {excerpt}")
+            else:
+                lines.append(f"- {src_title}")
+
+    return "\n".join(lines)
+
+
+def _format_workstream_mention(ws: Dict[str, Any]) -> str:
+    """Format a resolved workstream mention into a context block."""
+    lines = [f"### Workstream: {ws.get('name', 'Unknown')}"]
+
+    if ws.get("description"):
+        lines.append(f"Description: {ws['description'][:600]}")
+
+    card_names = ws.get("_card_names", [])
+    if card_names:
+        lines.append(f"Cards ({len(card_names)}): {', '.join(card_names)}")
+
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # System Prompt Builder
 # ---------------------------------------------------------------------------
 
@@ -870,6 +1145,7 @@ async def chat(
     conversation_id: Optional[str],
     user_id: str,
     supabase_client: Client,
+    mentions: Optional[List[Dict[str, Any]]] = None,
 ) -> AsyncGenerator[str, None]:
     """
     Main chat function that returns an async generator of SSE events.
@@ -942,6 +1218,51 @@ async def chat(
             return
 
         source_map = scope_metadata.get("source_map", {})
+
+        # 3b. Resolve @mention context (if any)
+        mention_context = ""
+        if mentions or re.search(r"@\[[^\]]+\]", message):
+            try:
+                # Convert MentionRef models to dicts if needed
+                mention_dicts = None
+                if mentions:
+                    mention_dicts = [
+                        (
+                            m
+                            if isinstance(m, dict)
+                            else (
+                                m.dict()
+                                if hasattr(m, "dict")
+                                else {"id": m.id, "type": m.type, "title": m.title}
+                            )
+                        )
+                        for m in mentions
+                    ]
+
+                yield _sse_event(
+                    "progress",
+                    {
+                        "step": "mentions",
+                        "detail": (
+                            f"Loading context for {len(mention_dicts or [])} mentioned entities..."
+                            if mention_dicts
+                            else "Resolving @mentions from message..."
+                        ),
+                    },
+                )
+
+                mention_context = await _resolve_mention_context(
+                    supabase_client, message, mention_dicts
+                )
+                if mention_context:
+                    context_text = context_text + "\n\n" + mention_context
+                    # Re-enforce the overall context cap
+                    if len(context_text) > MAX_CONTEXT_CHARS:
+                        context_text = (
+                            context_text[:MAX_CONTEXT_CHARS] + "\n\n[Context truncated]"
+                        )
+            except Exception as e:
+                logger.warning(f"Mention context resolution failed: {e}")
 
         yield _sse_event(
             "progress",
