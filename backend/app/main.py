@@ -67,6 +67,9 @@ from app.research_service import ResearchService
 
 # Executive brief service import
 from app.brief_service import ExecutiveBriefService
+
+# Digest service import
+from app.digest_service import DigestService
 from app.models.brief import (
     ExecutiveBriefResponse,
     BriefGenerateResponse,
@@ -642,6 +645,88 @@ class ResearchTask(BaseModel):
     created_at: datetime
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+
+
+# ============================================================================
+# Notification Preferences Models
+# ============================================================================
+
+VALID_DIGEST_FREQUENCIES = {"daily", "weekly", "none"}
+VALID_DIGEST_DAYS = {"monday", "tuesday", "wednesday", "thursday", "friday"}
+
+
+class NotificationPreferencesResponse(BaseModel):
+    """Response model for notification preferences."""
+
+    id: str
+    user_id: str
+    notification_email: Optional[str] = None
+    digest_frequency: str = "weekly"
+    digest_day: str = "monday"
+    include_new_signals: bool = True
+    include_velocity_changes: bool = True
+    include_pattern_insights: bool = True
+    include_workstream_updates: bool = True
+    last_digest_sent_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class NotificationPreferencesUpdate(BaseModel):
+    """Request model for updating notification preferences."""
+
+    notification_email: Optional[str] = Field(
+        None,
+        max_length=254,
+        description="Email for digest delivery (NULL = use auth email)",
+    )
+    digest_frequency: Optional[str] = Field(
+        None, description="Frequency: daily, weekly, or none"
+    )
+    digest_day: Optional[str] = Field(None, description="Day of week for weekly digest")
+    include_new_signals: Optional[bool] = None
+    include_velocity_changes: Optional[bool] = None
+    include_pattern_insights: Optional[bool] = None
+    include_workstream_updates: Optional[bool] = None
+
+    @validator("digest_frequency")
+    def validate_frequency(cls, v):
+        if v is not None and v not in VALID_DIGEST_FREQUENCIES:
+            raise ValueError(
+                f"Invalid digest_frequency. Must be one of: "
+                f"{', '.join(VALID_DIGEST_FREQUENCIES)}"
+            )
+        return v
+
+    @validator("digest_day")
+    def validate_day(cls, v):
+        if v is not None and v not in VALID_DIGEST_DAYS:
+            raise ValueError(
+                f"Invalid digest_day. Must be one of: "
+                f"{', '.join(VALID_DIGEST_DAYS)}"
+            )
+        return v
+
+    @validator("notification_email")
+    def validate_email_format(cls, v):
+        if v is not None:
+            import re
+
+            email_pattern = re.compile(
+                r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+            )
+            if not email_pattern.match(v):
+                raise ValueError("Invalid email format")
+        return v
+
+
+class DigestPreviewResponse(BaseModel):
+    """Response model for digest preview."""
+
+    subject: str
+    html_content: str
+    summary_json: Dict[str, Any]
+    sections_included: List[str]
 
 
 # ============================================================================
@@ -8332,11 +8417,35 @@ def start_scheduler():
         replace_existing=True,
     )
 
+    # Nightly cross-signal pattern detection at 7:00 AM UTC
+    # Runs after SQI recalculation so scores/embeddings are fresh
+    scheduler.add_job(
+        run_nightly_pattern_detection,
+        "cron",
+        hour=7,
+        minute=0,
+        id="nightly_pattern_detection",
+        replace_existing=True,
+    )
+
+    # Daily email digest batch at 8:00 AM UTC
+    # Runs after all nightly data jobs so digests reflect fresh data
+    scheduler.add_job(
+        run_digest_batch,
+        "cron",
+        hour=8,
+        minute=0,
+        id="daily_digest_batch",
+        replace_existing=True,
+    )
+
     scheduler.start()
     logger.info(
         "Scheduler started - workstream auto-scans at 4:00 AM UTC, "
         "reputation aggregation at 5:30 AM UTC, "
         "nightly scan at 6:00 AM UTC, SQI recalculation at 6:30 AM UTC, "
+        "pattern detection at 7:00 AM UTC, "
+        "digest batch at 8:00 AM UTC, "
         "weekly discovery Sundays at 2:00 AM UTC"
     )
 
@@ -8571,6 +8680,29 @@ async def run_nightly_sqi_recalculation():
         )
     except Exception as e:
         logger.error("Nightly SQI recalculation failed: %s", str(e))
+
+
+async def run_nightly_pattern_detection():
+    """
+    Run cross-signal pattern detection to find emergent connections.
+
+    Runs at 7:00 AM UTC daily, after SQI recalculation so that embeddings
+    and quality scores are fresh. Analyzes up to 200 active cards for
+    cross-pillar semantic similarity and synthesizes actionable insights.
+    """
+    from app.pattern_detection_service import PatternDetectionService
+
+    logger.info("Starting nightly pattern detection...")
+    try:
+        service = PatternDetectionService(supabase, openai_client)
+        result = await service.run_detection()
+        logger.info(
+            "Nightly pattern detection complete: %d insights stored (analyzed %d cards)",
+            result.get("insights_stored", 0),
+            result.get("cards_analyzed", 0),
+        )
+    except Exception as e:
+        logger.error("Nightly pattern detection failed: %s", str(e))
 
 
 # ============================================================================
@@ -10499,6 +10631,323 @@ async def toggle_workstream_auto_scan(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("auto_scan update", e),
         )
+
+
+# =============================================================================
+# Pattern Insights Endpoints - Cross-Signal Pattern Detection
+# =============================================================================
+
+
+@app.get("/api/v1/pattern-insights")
+async def get_pattern_insights(
+    status_filter: str = Query("active", alias="status"),
+    urgency: Optional[str] = Query(None),
+    limit: int = Query(10, ge=1, le=50),
+    current_user: dict = Depends(get_current_user),
+):
+    """Get AI-detected cross-signal pattern insights."""
+    try:
+        query = (
+            supabase.table("pattern_insights").select("*").eq("status", status_filter)
+        )
+        if urgency:
+            query = query.eq("urgency", urgency)
+        result = query.order("created_at", desc=True).limit(limit).execute()
+        return result.data or []
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("fetching pattern insights", e),
+        )
+
+
+@app.get("/api/v1/pattern-insights/{insight_id}")
+async def get_pattern_insight_by_id(
+    insight_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Get a single pattern insight by ID, including related card details."""
+    try:
+        result = (
+            supabase.table("pattern_insights")
+            .select("*")
+            .eq("id", insight_id)
+            .execute()
+        )
+        if not result.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Pattern insight not found",
+            )
+        insight = result.data[0]
+
+        # Fetch related cards for richer context
+        related_ids = insight.get("related_card_ids", [])
+        if related_ids:
+            cards_result = (
+                supabase.table("cards")
+                .select("id, name, summary, pillar_id, stage_id, horizon")
+                .in_("id", related_ids)
+                .execute()
+            )
+            insight["related_cards"] = cards_result.data or []
+        else:
+            insight["related_cards"] = []
+
+        return insight
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("fetching pattern insight", e),
+        )
+
+
+@app.patch("/api/v1/pattern-insights/{insight_id}")
+async def update_pattern_insight_status(
+    insight_id: str,
+    body: dict,
+    current_user: dict = Depends(get_current_user),
+):
+    """Update a pattern insight status (e.g., dismiss or mark as acted on)."""
+    allowed_statuses = {"active", "dismissed", "acted_on"}
+    new_status = body.get("status")
+    if new_status not in allowed_statuses:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid status. Must be one of: {', '.join(allowed_statuses)}",
+        )
+    try:
+        result = (
+            supabase.table("pattern_insights")
+            .update({"status": new_status})
+            .eq("id", insight_id)
+            .execute()
+        )
+        if not result.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Pattern insight not found",
+            )
+        return result.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("updating pattern insight", e),
+        )
+
+
+@app.post("/api/v1/pattern-insights/generate")
+async def generate_pattern_insights(
+    current_user: dict = Depends(get_current_user),
+):
+    """Trigger cross-signal pattern detection. Runs in background."""
+    from app.pattern_detection_service import PatternDetectionService
+
+    async def _run_pattern_detection():
+        try:
+            service = PatternDetectionService(supabase, openai_client)
+            result = await service.run_detection()
+            logger.info("On-demand pattern detection completed: %s", result)
+        except Exception as exc:
+            logger.exception("On-demand pattern detection failed: %s", exc)
+
+    asyncio.create_task(_run_pattern_detection())
+    return {
+        "status": "started",
+        "message": "Pattern detection is running in the background.",
+    }
+
+
+# =============================================================================
+# Notification Preferences & Digest Endpoints
+# =============================================================================
+
+
+@app.get(
+    "/api/v1/me/notification-preferences",
+    response_model=NotificationPreferencesResponse,
+)
+async def get_notification_preferences(
+    current_user: dict = Depends(get_current_user),
+):
+    """Get current user's notification preferences.
+
+    Creates default preferences if none exist yet.
+    """
+    user_id = current_user["id"]
+    try:
+        response = (
+            supabase.table("notification_preferences")
+            .select("*")
+            .eq("user_id", user_id)
+            .execute()
+        )
+
+        if response.data:
+            return NotificationPreferencesResponse(**response.data[0])
+
+        # Create default preferences for this user
+        now = datetime.now(timezone.utc).isoformat()
+        default_prefs = {
+            "user_id": user_id,
+            "notification_email": None,
+            "digest_frequency": "weekly",
+            "digest_day": "monday",
+            "include_new_signals": True,
+            "include_velocity_changes": True,
+            "include_pattern_insights": True,
+            "include_workstream_updates": True,
+            "created_at": now,
+            "updated_at": now,
+        }
+        insert_resp = (
+            supabase.table("notification_preferences").insert(default_prefs).execute()
+        )
+        if insert_resp.data:
+            return NotificationPreferencesResponse(**insert_resp.data[0])
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create default notification preferences",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get notification preferences for user {user_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("notification preferences retrieval", e),
+        )
+
+
+@app.put(
+    "/api/v1/me/notification-preferences",
+    response_model=NotificationPreferencesResponse,
+)
+async def update_notification_preferences(
+    updates: NotificationPreferencesUpdate,
+    current_user: dict = Depends(get_current_user),
+):
+    """Update notification preferences.
+
+    Sets the user's preferred notification email, digest frequency,
+    and content inclusion settings. The notification_email field is
+    separate from the login email, allowing users with test/fake
+    auth emails to receive digests at their real address.
+    """
+    user_id = current_user["id"]
+    try:
+        # Ensure preferences row exists (upsert pattern)
+        existing = (
+            supabase.table("notification_preferences")
+            .select("id")
+            .eq("user_id", user_id)
+            .execute()
+        )
+
+        update_data = {
+            k: v
+            for k, v in updates.dict(exclude_unset=True).items()
+            if v is not None or k == "notification_email"
+        }
+        update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+        if existing.data:
+            # Update existing row
+            response = (
+                supabase.table("notification_preferences")
+                .update(update_data)
+                .eq("user_id", user_id)
+                .execute()
+            )
+        else:
+            # Create new row with updates
+            update_data["user_id"] = user_id
+            update_data["created_at"] = datetime.now(timezone.utc).isoformat()
+            response = (
+                supabase.table("notification_preferences").insert(update_data).execute()
+            )
+
+        if response.data:
+            return NotificationPreferencesResponse(**response.data[0])
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update notification preferences",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            f"Failed to update notification preferences for user {user_id}: {e}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("notification preferences update", e),
+        )
+
+
+@app.post("/api/v1/me/digest/preview", response_model=DigestPreviewResponse)
+async def preview_digest(
+    current_user: dict = Depends(get_current_user),
+):
+    """Generate a preview of what the next digest email would look like.
+
+    This endpoint generates the digest content without sending it,
+    allowing users to see what they will receive and verify their
+    notification email before enabling the digest.
+    """
+    user_id = current_user["id"]
+    try:
+        digest_service = DigestService(supabase, openai_client)
+        result = await digest_service.generate_user_digest(user_id)
+
+        if not result:
+            # If no content, generate a sample/empty digest
+            return DigestPreviewResponse(
+                subject="Your Foresight Intelligence Digest — Preview",
+                html_content=(
+                    "<html><body><p>No new activity to report for this period. "
+                    "Follow more signals or add cards to your workstreams to "
+                    "receive digest updates.</p></body></html>"
+                ),
+                summary_json={"sections": {}, "note": "No activity in period"},
+                sections_included=[],
+            )
+
+        return DigestPreviewResponse(**result)
+    except Exception as e:
+        logger.error(f"Failed to generate digest preview for user {user_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("digest preview generation", e),
+        )
+
+
+# =============================================================================
+# Digest Batch Scheduler Job
+# =============================================================================
+
+
+async def run_digest_batch():
+    """
+    Scheduled job: process all users who are due for a digest email.
+
+    Runs daily at 8:00 AM UTC. For weekly digests, the job checks
+    each user's configured digest_day. For daily digests, it runs
+    every day.
+    """
+    logger.info("Starting scheduled digest batch processing...")
+    try:
+        digest_service = DigestService(supabase, openai_client)
+        stats = await digest_service.run_digest_batch()
+        logger.info(f"Digest batch complete: {stats}")
+    except Exception as e:
+        logger.error(f"Digest batch processing failed: {e}")
 
 
 # Lifecycle management
