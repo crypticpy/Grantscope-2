@@ -2,7 +2,11 @@
 Foresight API Models
 
 Pydantic models for data validation and serialization.
+Re-exports every public symbol from all model sub-modules so that
+existing ``from app.models import Foo`` imports continue to work.
 """
+
+# -- Pre-existing model modules ------------------------------------------------
 
 from .validation import (
     ClassificationValidation,
@@ -33,31 +37,31 @@ from .search import (
 )
 
 from .export import (
-    # Export format enum
     ExportFormat,
-    # Chart configuration
     ChartOptions,
-    # Card export models
     ExportRequest,
     ExportResponse,
     CardExportData,
-    # Workstream export models
     WorkstreamExportRequest,
     WorkstreamExportResponse,
-    # Utilities
     EXPORT_CONTENT_TYPES,
     get_export_filename,
 )
 
 from .history import (
-    # Score history models
     ScoreHistory,
     ScoreHistoryCreate,
     ScoreHistoryResponse,
+    StageHistory,
+    StageHistoryList,
+    RelatedCard,
+    RelatedCardsList,
+    CardData,
+    CardComparisonItem,
+    CardComparisonResponse,
 )
 
 from .brief import (
-    # Executive brief models
     BriefStatusEnum,
     BriefSection,
     ExecutiveBriefCreate,
@@ -65,11 +69,12 @@ from .brief import (
     BriefGenerateResponse,
     BriefStatusResponse,
     BriefListItem,
+    BriefVersionsResponse,
+    BriefVersionListItem,
     VALID_BRIEF_STATUSES,
 )
 
 from .source_rating import (
-    # Source rating models
     RelevanceRating,
     SourceRatingCreate,
     SourceRatingResponse,
@@ -77,14 +82,12 @@ from .source_rating import (
 )
 
 from .quality import (
-    # Quality/SQI models
     QualityTier,
     QualityBreakdown,
     QualityTierFilter,
 )
 
 from .domain_reputation import (
-    # Domain reputation models
     DomainReputationResponse,
     DomainReputationCreate,
     DomainReputationUpdate,
@@ -93,38 +96,152 @@ from .domain_reputation import (
 )
 
 from .card_creation import (
-    # Card creation models
     CreateCardFromTopicRequest,
     CreateCardFromTopicResponse,
     ManualCardCreateRequest,
     KeywordSuggestionResponse,
 )
 
+from .analytics import (
+    VelocityDataPoint,
+    VelocityResponse,
+    PillarCoverageItem,
+    PillarCoverageResponse,
+    InsightItem,
+    InsightsResponse,
+    StageDistribution,
+    HorizonDistribution,
+    TrendingTopic,
+    SourceStats,
+    DiscoveryStats,
+    WorkstreamEngagement,
+    FollowStats,
+    SystemWideStats,
+    UserFollowItem,
+    PopularCard,
+    UserEngagementComparison,
+    PillarAffinity,
+    PersonalStats,
+)
+
+# -- New model modules added during Wave 2 decomposition ----------------------
+
+from .core import (
+    UserProfile,
+    Card,
+    CardCreate,
+    SimilarCard,
+    BlockedTopic,
+)
+
+from .workstream import (
+    Workstream,
+    WorkstreamCreate,
+    WorkstreamUpdate,
+    WorkstreamCreateResponse,
+    VALID_WORKSTREAM_CARD_STATUSES,
+    WorkstreamCardBase,
+    WorkstreamCardWithDetails,
+    WorkstreamCardCreate,
+    WorkstreamCardUpdate,
+    WorkstreamCardsGroupedResponse,
+    AutoPopulateResponse,
+    Note,
+    NoteCreate,
+    WorkstreamResearchStatus,
+    WorkstreamResearchStatusResponse,
+    FilterPreviewRequest,
+    FilterPreviewResponse,
+    WorkstreamScanResponse,
+    WorkstreamScanStatusResponse,
+    WorkstreamScanHistoryResponse,
+)
+
+from .discovery_models import (
+    DiscoveryConfigRequest,
+    DiscoveryRun,
+    get_discovery_max_queries,
+    get_discovery_max_sources,
+)
+
+from .review import (
+    CardReviewRequest,
+    BulkReviewRequest,
+    CardDismissRequest,
+)
+
+from .research import (
+    VALID_TASK_TYPES,
+    ResearchTaskCreate,
+    ResearchTask,
+)
+
+from .notification import (
+    VALID_DIGEST_FREQUENCIES,
+    VALID_DIGEST_DAYS,
+    NotificationPreferencesResponse,
+    NotificationPreferencesUpdate,
+    DigestPreviewResponse,
+)
+
+from .processing_metrics import (
+    SourceCategoryMetrics,
+    DiscoveryRunMetrics,
+    ResearchTaskMetrics,
+    ClassificationMetrics,
+    ProcessingMetrics,
+)
+
+from .chat import (
+    ChatRequest,
+    ChatSuggestRequest,
+)
+
+from .classification_models import (
+    VALID_PILLAR_CODES,
+    ValidationSubmission,
+    ValidationSubmissionResponse,
+)
+
+from .assets import (
+    CardAsset,
+    CardAssetsResponse,
+)
+
+from .ai_helpers import (
+    SuggestDescriptionRequest,
+    SuggestDescriptionResponse,
+)
+
+from .briefs_extra import (
+    BulkExportRequest,
+    BulkBriefCardStatus,
+    BulkBriefStatusResponse,
+)
+
+
 __all__ = [
-    # Validation models
+    # validation
     "ClassificationValidation",
     "ClassificationValidationCreate",
     "ClassificationAccuracyMetrics",
     "ValidationSummary",
-    # Search filter components
+    # search
     "DateRange",
     "ScoreThreshold",
     "ScoreThresholds",
     "SearchFilters",
-    # Search request/response
     "AdvancedSearchRequest",
     "SearchResultItem",
     "AdvancedSearchResponse",
-    # Saved searches
     "SavedSearchCreate",
     "SavedSearchUpdate",
     "SavedSearch",
     "SavedSearchList",
-    # Search history
     "SearchHistoryEntry",
     "SearchHistoryCreate",
     "SearchHistoryList",
-    # Export models
+    # export
     "ExportFormat",
     "ChartOptions",
     "ExportRequest",
@@ -134,11 +251,18 @@ __all__ = [
     "WorkstreamExportResponse",
     "EXPORT_CONTENT_TYPES",
     "get_export_filename",
-    # Score history models
+    # history
     "ScoreHistory",
     "ScoreHistoryCreate",
     "ScoreHistoryResponse",
-    # Executive brief models
+    "StageHistory",
+    "StageHistoryList",
+    "RelatedCard",
+    "RelatedCardsList",
+    "CardData",
+    "CardComparisonItem",
+    "CardComparisonResponse",
+    # brief
     "BriefStatusEnum",
     "BriefSection",
     "ExecutiveBriefCreate",
@@ -146,25 +270,116 @@ __all__ = [
     "BriefGenerateResponse",
     "BriefStatusResponse",
     "BriefListItem",
+    "BriefVersionsResponse",
+    "BriefVersionListItem",
     "VALID_BRIEF_STATUSES",
-    # Source rating models
+    # source_rating
     "RelevanceRating",
     "SourceRatingCreate",
     "SourceRatingResponse",
     "SourceRatingAggregate",
-    # Quality/SQI models
+    # quality
     "QualityTier",
     "QualityBreakdown",
     "QualityTierFilter",
-    # Domain reputation models
+    # domain_reputation
     "DomainReputationResponse",
     "DomainReputationCreate",
     "DomainReputationUpdate",
     "TopDomainsResponse",
     "DomainReputationList",
-    # Card creation models
+    # card_creation
     "CreateCardFromTopicRequest",
     "CreateCardFromTopicResponse",
     "ManualCardCreateRequest",
     "KeywordSuggestionResponse",
+    # analytics
+    "VelocityDataPoint",
+    "VelocityResponse",
+    "PillarCoverageItem",
+    "PillarCoverageResponse",
+    "InsightItem",
+    "InsightsResponse",
+    "StageDistribution",
+    "HorizonDistribution",
+    "TrendingTopic",
+    "SourceStats",
+    "DiscoveryStats",
+    "WorkstreamEngagement",
+    "FollowStats",
+    "SystemWideStats",
+    "UserFollowItem",
+    "PopularCard",
+    "UserEngagementComparison",
+    "PillarAffinity",
+    "PersonalStats",
+    # core
+    "UserProfile",
+    "Card",
+    "CardCreate",
+    "SimilarCard",
+    "BlockedTopic",
+    # workstream
+    "Workstream",
+    "WorkstreamCreate",
+    "WorkstreamUpdate",
+    "WorkstreamCreateResponse",
+    "VALID_WORKSTREAM_CARD_STATUSES",
+    "WorkstreamCardBase",
+    "WorkstreamCardWithDetails",
+    "WorkstreamCardCreate",
+    "WorkstreamCardUpdate",
+    "WorkstreamCardsGroupedResponse",
+    "AutoPopulateResponse",
+    "Note",
+    "NoteCreate",
+    "WorkstreamResearchStatus",
+    "WorkstreamResearchStatusResponse",
+    "FilterPreviewRequest",
+    "FilterPreviewResponse",
+    "WorkstreamScanResponse",
+    "WorkstreamScanStatusResponse",
+    "WorkstreamScanHistoryResponse",
+    # discovery_models
+    "DiscoveryConfigRequest",
+    "DiscoveryRun",
+    "get_discovery_max_queries",
+    "get_discovery_max_sources",
+    # review
+    "CardReviewRequest",
+    "BulkReviewRequest",
+    "CardDismissRequest",
+    # research
+    "VALID_TASK_TYPES",
+    "ResearchTaskCreate",
+    "ResearchTask",
+    # notification
+    "VALID_DIGEST_FREQUENCIES",
+    "VALID_DIGEST_DAYS",
+    "NotificationPreferencesResponse",
+    "NotificationPreferencesUpdate",
+    "DigestPreviewResponse",
+    # processing_metrics
+    "SourceCategoryMetrics",
+    "DiscoveryRunMetrics",
+    "ResearchTaskMetrics",
+    "ClassificationMetrics",
+    "ProcessingMetrics",
+    # chat
+    "ChatRequest",
+    "ChatSuggestRequest",
+    # classification_models
+    "VALID_PILLAR_CODES",
+    "ValidationSubmission",
+    "ValidationSubmissionResponse",
+    # assets
+    "CardAsset",
+    "CardAssetsResponse",
+    # ai_helpers
+    "SuggestDescriptionRequest",
+    "SuggestDescriptionResponse",
+    # briefs_extra
+    "BulkExportRequest",
+    "BulkBriefCardStatus",
+    "BulkBriefStatusResponse",
 ]
