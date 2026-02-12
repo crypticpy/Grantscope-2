@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -1097,6 +1098,28 @@ class RAGEngine:
             return result.data or []
         except Exception:
             logger.error("RPC %s failed", fn_name, exc_info=True)
+            return []
+
+    @staticmethod
+    async def web_search(query: str, max_results: int = 5) -> list[dict]:
+        """Search the web via Tavily API. Returns list of {title, url, content, score}."""
+        tavily_key = os.getenv("TAVILY_API_KEY")
+        if not tavily_key:
+            return []
+        try:
+            from tavily import TavilyClient
+
+            client = TavilyClient(api_key=tavily_key)
+            result = await asyncio.to_thread(
+                client.search,
+                query,
+                max_results=max_results,
+                search_depth="basic",
+                include_answer=False,
+            )
+            return result.get("results", [])
+        except Exception as e:
+            logger.warning(f"Web search failed: {e}")
             return []
 
 
