@@ -447,6 +447,19 @@ export async function renameConversation(
   );
 }
 
+/** Search conversations by title and message content. */
+export async function searchConversations(
+  query: string,
+  limit?: number,
+): Promise<Conversation[]> {
+  const searchParams = new URLSearchParams();
+  searchParams.append("q", query);
+  if (limit !== undefined) searchParams.append("limit", String(limit));
+  return apiRequest<Conversation[]>(
+    `/api/v1/chat/conversations/search?${searchParams.toString()}`,
+  );
+}
+
 /**
  * Fetches suggested questions for a given scope.
  *
@@ -467,4 +480,61 @@ export async function fetchSuggestions(
 
   const queryString = searchParams.toString();
   return apiRequest<string[]>(`/api/v1/chat/suggestions?${queryString}`);
+}
+
+// ============================================================================
+// Pin / Save Messages
+// ============================================================================
+
+/** Pin a chat message for quick reference. */
+export async function pinMessage(
+  messageId: string,
+  note?: string,
+): Promise<unknown> {
+  return apiRequest(`/api/v1/chat/messages/${messageId}/pin`, {
+    method: "POST",
+    body: JSON.stringify(note ? { note } : {}),
+  });
+}
+
+/** Unpin a previously pinned chat message. */
+export async function unpinMessage(messageId: string): Promise<void> {
+  return apiRequest<void>(`/api/v1/chat/messages/${messageId}/pin`, {
+    method: "DELETE",
+  });
+}
+
+/** Pinned message with its conversation context. */
+export interface PinnedMessage {
+  id: string;
+  message_id: string;
+  conversation_id: string;
+  note: string | null;
+  created_at: string;
+  chat_messages: {
+    id: string;
+    content: string;
+    role: string;
+    citations: Citation[];
+    created_at: string;
+  };
+  chat_conversations: {
+    id: string;
+    title: string | null;
+    scope: string;
+  };
+}
+
+/** Fetch the current user's pinned messages. */
+export async function fetchPinnedMessages(params?: {
+  limit?: number;
+  offset?: number;
+}): Promise<PinnedMessage[]> {
+  const searchParams = new URLSearchParams();
+  if (params?.limit !== undefined)
+    searchParams.append("limit", String(params.limit));
+  if (params?.offset !== undefined)
+    searchParams.append("offset", String(params.offset));
+  const qs = searchParams.toString();
+  return apiRequest<PinnedMessage[]>(`/api/v1/chat/pins${qs ? `?${qs}` : ""}`);
 }

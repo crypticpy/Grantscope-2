@@ -12,6 +12,7 @@ import React, { useState, useCallback, useMemo } from "react";
 import { Copy, Check, Sparkles, ExternalLink, FileText } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { ChatCitation } from "./ChatCitation";
+import { ChatMessageActions } from "./ChatMessageActions";
 import type { Citation } from "../../lib/chat-api";
 
 // ============================================================================
@@ -21,6 +22,7 @@ import type { Citation } from "../../lib/chat-api";
 export interface ChatMessageProps {
   /** The message data to render */
   message: {
+    id?: string;
     role: "user" | "assistant";
     content: string;
     citations: Citation[];
@@ -611,31 +613,42 @@ export function ChatMessage({
           </div>
         )}
 
-        {/* Copy button for assistant messages (hover) */}
+        {/* Action buttons for assistant messages (hover) */}
         {!isUser && !isStreaming && (
-          <button
-            type="button"
-            onClick={handleCopy}
+          <div
             className={cn(
               "absolute -top-2 -right-2",
-              "inline-flex items-center justify-center",
-              "w-7 h-7 rounded-md",
-              "bg-white dark:bg-dark-surface-elevated",
-              "border border-gray-200 dark:border-gray-600",
-              "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300",
-              "shadow-sm",
-              "focus:outline-none focus:ring-2 focus:ring-brand-blue",
-              "transition-all duration-200",
+              "flex items-center gap-0.5",
               "opacity-0 group-hover:opacity-100",
+              "transition-all duration-200",
             )}
-            aria-label={copied ? "Copied to clipboard" : "Copy message"}
           >
-            {copied ? (
-              <Check className="h-3.5 w-3.5 text-brand-green" />
-            ) : (
-              <Copy className="h-3.5 w-3.5" />
-            )}
-          </button>
+            <ChatMessageActions
+              content={message.content}
+              messageId={message.id}
+            />
+            <button
+              type="button"
+              onClick={handleCopy}
+              className={cn(
+                "inline-flex items-center justify-center",
+                "w-7 h-7 rounded-md",
+                "bg-white dark:bg-dark-surface-elevated",
+                "border border-gray-200 dark:border-gray-600",
+                "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300",
+                "shadow-sm",
+                "focus:outline-none focus:ring-2 focus:ring-brand-blue",
+                "transition-colors duration-200",
+              )}
+              aria-label={copied ? "Copied to clipboard" : "Copy message"}
+            >
+              {copied ? (
+                <Check className="h-3.5 w-3.5 text-brand-green" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+            </button>
+          </div>
         )}
 
         {/* Timestamp on hover */}

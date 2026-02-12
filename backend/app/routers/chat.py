@@ -115,6 +115,73 @@ async def list_chat_conversations(
         ) from e
 
 
+@router.get("/chat/conversations/search")
+async def search_chat_conversations(
+    q: str = Query(..., min_length=1, max_length=200, description="Search term"),
+    limit: int = Query(20, ge=1, le=50),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Search conversations by title and message content.
+    Uses Postgres full-text search across conversation titles and message content.
+    """
+    user_id = current_user["id"]
+    try:
+        # Search conversation titles
+        title_result = (
+            supabase.table("chat_conversations")
+            .select("id, scope, scope_id, title, created_at, updated_at")
+            .eq("user_id", user_id)
+            .ilike("title", f"%{q}%")
+            .order("updated_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+
+        # Search message content
+        msg_result = (
+            supabase.table("chat_messages")
+            .select("conversation_id, content")
+            .ilike("content", f"%{q}%")
+            .limit(50)
+            .execute()
+        )
+
+        # Get unique conversation IDs from message matches
+        msg_conv_ids = list(set(m["conversation_id"] for m in (msg_result.data or [])))
+
+        # Fetch those conversations (with ownership check)
+        msg_conversations = []
+        if msg_conv_ids:
+            conv_result = (
+                supabase.table("chat_conversations")
+                .select("id, scope, scope_id, title, created_at, updated_at")
+                .eq("user_id", user_id)
+                .in_("id", msg_conv_ids)
+                .order("updated_at", desc=True)
+                .execute()
+            )
+            msg_conversations = conv_result.data or []
+
+        # Merge and deduplicate results, title matches first
+        seen = set()
+        results = []
+        for conv in (title_result.data or []) + msg_conversations:
+            if conv["id"] not in seen:
+                seen.add(conv["id"])
+                results.append(conv)
+                if len(results) >= limit:
+                    break
+
+        return results
+    except Exception as e:
+        logger.error(f"Failed to search conversations for user {user_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_error("searching conversations", e),
+        ) from e
+
+
 @router.get("/chat/conversations/{conversation_id}")
 async def get_chat_conversation(
     conversation_id: str,
@@ -305,4 +372,119 @@ async def chat_suggestions(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("generating suggestions", e),
+        ) from e
+
+
+# ---------------------------------------------------------------------------
+# Pin / save messages
+# ---------------------------------------------------------------------------
+
+
+@router.post("/chat/messages/{message_id}/pin")
+async def pin_chat_message(
+    message_id: str,
+    body: dict = None,  # optional { "note": "..." }
+    current_user: dict = Depends(get_current_user),
+):
+    """Pin a chat message for quick reference."""
+    user_id = current_user["id"]
+    try:
+        # Verify the message exists and belongs to user's conversation
+        msg_result = (
+            supabase.table("chat_messages")
+            .select("id, conversation_id")
+            .eq("id", message_id)
+            .execute()
+        )
+        if not msg_result.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Message not found",
+            )
+
+        conversation_id = msg_result.data[0]["conversation_id"]
+
+        # Verify user owns the conversation
+        conv_result = (
+            supabase.table("chat_conversations")
+            .select("id")
+            .eq("id", conversation_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        if not conv_result.data:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized",
+            )
+
+        # Create pin (upsert so re-pinning just updates the note)
+        pin_data = {
+            "user_id": user_id,
+            "message_id": message_id,
+            "conversation_id": conversation_id,
+            "note": (body or {}).get("note"),
+        }
+        result = (
+            supabase.table("chat_pinned_messages")
+            .upsert(pin_data, on_conflict="user_id,message_id")
+            .execute()
+        )
+        return result.data[0] if result.data else pin_data
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to pin message {message_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("pinning message", e),
+        ) from e
+
+
+@router.delete("/chat/messages/{message_id}/pin")
+async def unpin_chat_message(
+    message_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Unpin a chat message."""
+    user_id = current_user["id"]
+    try:
+        supabase.table("chat_pinned_messages").delete().eq("user_id", user_id).eq(
+            "message_id", message_id
+        ).execute()
+        return {"status": "unpinned", "message_id": message_id}
+    except Exception as e:
+        logger.error(f"Failed to unpin message {message_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("unpinning message", e),
+        ) from e
+
+
+@router.get("/chat/pins")
+async def list_pinned_messages(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    current_user: dict = Depends(get_current_user),
+):
+    """List user's pinned messages with conversation context."""
+    user_id = current_user["id"]
+    try:
+        result = (
+            supabase.table("chat_pinned_messages")
+            .select(
+                "*, chat_messages(id, content, role, citations, created_at), "
+                "chat_conversations(id, title, scope)"
+            )
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .range(offset, offset + limit - 1)
+            .execute()
+        )
+        return result.data or []
+    except Exception as e:
+        logger.error(f"Failed to list pins for user {user_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("listing pins", e),
         ) from e
