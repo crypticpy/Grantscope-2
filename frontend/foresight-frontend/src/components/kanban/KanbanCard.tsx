@@ -35,6 +35,7 @@ import { HorizonBadge } from "../HorizonBadge";
 import { StageBadge } from "../StageBadge";
 import { Top25Badge } from "../Top25Badge";
 import { QualityBadge } from "../QualityBadge";
+import { VelocityBadge, type VelocityTrend } from "../VelocityBadge";
 import { ExploratoryBadge } from "../badges/ExploratoryBadge";
 import { Tooltip } from "../ui/Tooltip";
 import { CardActions } from "./CardActions";
@@ -344,6 +345,10 @@ export const KanbanCard = memo(function KanbanCard({
           {embeddedCard.signal_quality_score != null && (
             <QualityBadge score={embeddedCard.signal_quality_score} size="sm" />
           )}
+          <VelocityBadge
+            trend={embeddedCard.velocity_trend as VelocityTrend}
+            score={embeddedCard.velocity_score}
+          />
         </div>
 
         {/* Needs Review Badge */}

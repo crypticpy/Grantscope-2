@@ -23,6 +23,10 @@ import { HorizonBadge } from "../../../components/HorizonBadge";
 import { StageBadge } from "../../../components/StageBadge";
 import { Top25Badge } from "../../../components/Top25Badge";
 import { QualityBadge } from "../../../components/QualityBadge";
+import {
+  VelocityBadge,
+  type VelocityTrend,
+} from "../../../components/VelocityBadge";
 import { highlightText } from "../../../lib/highlight-utils";
 import { parseStageNumber } from "../../../lib/stage-utils";
 import type { Card } from "../types";
@@ -131,6 +135,10 @@ export const DiscoverCard = React.memo(function DiscoverCard({
             )}
             {/* Quality Badge */}
             <QualityBadge score={card.signal_quality_score ?? null} size="sm" />
+            <VelocityBadge
+              trend={card.velocity_trend as VelocityTrend}
+              score={card.velocity_score}
+            />
             {/* Provenance indicator */}
             {card.origin === "user_created" && (
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700">

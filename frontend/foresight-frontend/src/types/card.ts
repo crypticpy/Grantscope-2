@@ -39,6 +39,7 @@ export interface BaseCard {
   updated_at?: string;
   top25_relevance?: string[];
   signal_quality_score?: number | null;
+  velocity_trend?: string | null;
 }
 
 /**

@@ -147,7 +147,13 @@ export function ChatCitation({ citation, onClick }: ChatCitationProps) {
             )}
             {citation.url && !citation.card_id && (
               <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-dark-surface px-1.5 py-0.5 rounded truncate max-w-[200px]">
-                {new URL(citation.url).hostname}
+                {(() => {
+                  try {
+                    return new URL(citation.url).hostname;
+                  } catch {
+                    return citation.url;
+                  }
+                })()}
               </span>
             )}
           </div>

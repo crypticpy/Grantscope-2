@@ -65,6 +65,16 @@ export function WorkstreamChatPanel({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 
+  // Lock body scroll when panel is open (prevents background scrolling on mobile)
+  useEffect(() => {
+    if (!isOpen) return;
+    const original = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = original;
+    };
+  }, [isOpen]);
+
   return (
     <>
       {/* Backdrop */}

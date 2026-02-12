@@ -19,6 +19,7 @@ import { HorizonBadge } from "../components/HorizonBadge";
 import { StageBadge } from "../components/StageBadge";
 import { Top25Badge } from "../components/Top25Badge";
 import { QualityBadge } from "../components/QualityBadge";
+import { VelocityBadge, type VelocityTrend } from "../components/VelocityBadge";
 import { PatternInsightsSection } from "../components/PatternInsightsSection";
 import { AskForesightBar } from "../components/Chat/AskForesightBar";
 import { fetchPendingCount } from "../lib/discovery-api";
@@ -542,6 +543,12 @@ const Dashboard: React.FC = () => {
                             variant="minimal"
                           />
                         )}
+                        <VelocityBadge
+                          trend={
+                            following.cards.velocity_trend as VelocityTrend
+                          }
+                          score={following.cards.velocity_score}
+                        />
                         {following.cards.top25_relevance &&
                           following.cards.top25_relevance.length > 0 && (
                             <Top25Badge
@@ -550,6 +557,10 @@ const Dashboard: React.FC = () => {
                               showCount={true}
                             />
                           )}
+                        <VelocityBadge
+                          trend={following.cards.velocity_trend as any}
+                          score={following.cards.velocity_score}
+                        />
                         <span
                           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(following.priority)}`}
                         >
@@ -659,6 +670,10 @@ const Dashboard: React.FC = () => {
                           variant="minimal"
                         />
                       )}
+                      <VelocityBadge
+                        trend={card.velocity_trend as VelocityTrend}
+                        score={card.velocity_score}
+                      />
                       {card.top25_relevance &&
                         card.top25_relevance.length > 0 && (
                           <Top25Badge
@@ -667,6 +682,10 @@ const Dashboard: React.FC = () => {
                             showCount={true}
                           />
                         )}
+                      <VelocityBadge
+                        trend={card.velocity_trend as any}
+                        score={card.velocity_score}
+                      />
                     </div>
                     <p className="text-gray-600 dark:text-gray-300 mb-3">
                       {card.summary}

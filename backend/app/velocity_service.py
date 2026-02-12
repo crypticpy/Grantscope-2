@@ -26,7 +26,7 @@ Usage:
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 from supabase import Client
@@ -53,7 +53,7 @@ async def calculate_velocity_trends(supabase: Client) -> Dict[str, Any]:
     Returns:
         Summary dict with ``updated`` and ``total`` counts.
     """
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     week_ago = (now - timedelta(days=7)).isoformat()
     two_weeks_ago = (now - timedelta(days=14)).isoformat()
     thirty_days_ago = (now - timedelta(days=30)).isoformat()
@@ -171,7 +171,7 @@ def get_velocity_summary(card_id: str, supabase: Client) -> Optional[Dict[str, A
         Dict with ``trend``, ``score``, ``summary`` text, and source counts,
         or ``None`` if the card is not found.
     """
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     week_ago = (now - timedelta(days=7)).isoformat()
     two_weeks_ago = (now - timedelta(days=14)).isoformat()
 

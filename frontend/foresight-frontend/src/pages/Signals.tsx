@@ -29,6 +29,7 @@ import { HorizonBadge } from "../components/HorizonBadge";
 import { StageBadge } from "../components/StageBadge";
 import { QualityScoreBadge } from "../components/QualityScoreBadge";
 import { Top25Badge } from "../components/Top25Badge";
+import { VelocityBadge, type VelocityTrend } from "../components/VelocityBadge";
 import { parseStageNumber } from "../lib/stage-utils";
 import { CreateSignalModal } from "../components/CreateSignal";
 
@@ -951,6 +952,10 @@ const SignalCard: React.FC<SignalCardProps> = React.memo(
               {signal.top25_relevance && signal.top25_relevance.length > 0 && (
                 <Top25Badge priorities={signal.top25_relevance} size="sm" />
               )}
+              <VelocityBadge
+                trend={signal.velocity_trend as VelocityTrend}
+                score={signal.velocity_score}
+              />
             </div>
 
             {/* Personal source badges */}
@@ -1053,6 +1058,10 @@ const SignalListItem: React.FC<SignalCardProps> = React.memo(
           {signal.top25_relevance && signal.top25_relevance.length > 0 && (
             <Top25Badge priorities={signal.top25_relevance} size="sm" />
           )}
+          <VelocityBadge
+            trend={signal.velocity_trend as VelocityTrend}
+            score={signal.velocity_score}
+          />
         </div>
 
         {/* Scores */}

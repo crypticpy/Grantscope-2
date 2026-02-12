@@ -187,7 +187,7 @@ export function PatternInsightsSection({ className }: PatternInsightsProps) {
           </h2>
         </div>
         <Link
-          to="/ask"
+          to="/ask?q=What cross-signal patterns have been detected?"
           className="text-sm text-brand-blue hover:underline flex items-center gap-1"
         >
           View All

@@ -675,7 +675,7 @@ def _parse_citations(
         if source_info:
             citations.append(
                 {
-                    "ref": ref_num,
+                    "index": ref_num,
                     "card_id": source_info.get("card_id"),
                     "source_id": source_info.get("source_id"),
                     "title": source_info.get("title", ""),

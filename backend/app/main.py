@@ -10813,6 +10813,14 @@ async def trigger_velocity_calculation(
     current_user: dict = Depends(get_current_user),
 ):
     """Trigger velocity trend calculation for all active cards. Runs in background."""
+    # Admin-only endpoint
+    user_role = current_user.get("role", "")
+    if user_role not in ("admin", "service_role"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
     from app.velocity_service import calculate_velocity_trends
 
     async def _run_velocity():
@@ -11176,8 +11184,8 @@ async def get_chat_conversation(
             .execute()
         )
 
-        conversation["messages"] = msg_result.data or []
-        return conversation
+        messages = msg_result.data or []
+        return {"conversation": conversation, "messages": messages}
     except HTTPException:
         raise
     except Exception as e:
@@ -11235,9 +11243,10 @@ async def delete_chat_conversation(
         )
 
 
-@app.post("/api/v1/chat/suggest")
-async def chat_suggest(
-    request: ChatSuggestRequest,
+@app.get("/api/v1/chat/suggestions")
+async def chat_suggestions(
+    scope: str = Query(..., description="Chat scope: signal, workstream, or global"),
+    scope_id: Optional[str] = Query(None, description="ID of the scoped entity"),
     current_user: dict = Depends(get_current_user),
 ):
     """
@@ -11248,7 +11257,7 @@ async def chat_suggest(
     """
     user_id = current_user["id"]
 
-    if request.scope not in ("signal", "workstream", "global"):
+    if scope not in ("signal", "workstream", "global"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid scope. Must be 'signal', 'workstream', or 'global'.",
@@ -11256,12 +11265,12 @@ async def chat_suggest(
 
     try:
         suggestions = await chat_generate_suggestions(
-            scope=request.scope,
-            scope_id=request.scope_id,
+            scope=scope,
+            scope_id=scope_id,
             supabase_client=supabase,
             user_id=user_id,
         )
-        return {"suggestions": suggestions}
+        return suggestions
     except Exception as e:
         logger.error(f"Failed to generate chat suggestions: {e}")
         raise HTTPException(

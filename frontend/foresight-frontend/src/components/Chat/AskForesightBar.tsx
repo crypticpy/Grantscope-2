@@ -8,7 +8,7 @@
  * @module components/Chat/AskForesightBar
  */
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sparkles } from "lucide-react";
 import { cn } from "../../lib/utils";
@@ -31,22 +31,6 @@ export function AskForesightBar({ className }: AskForesightBarProps) {
   const [query, setQuery] = useState("");
   const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  // ============================================================================
-  // Cmd+K global shortcut
-  // ============================================================================
-
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        inputRef.current?.focus();
-      }
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, []);
 
   // ============================================================================
   // Submit handler

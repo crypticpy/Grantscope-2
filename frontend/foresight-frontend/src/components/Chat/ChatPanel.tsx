@@ -35,8 +35,6 @@ export interface ChatPanelProps {
   scopeId?: string;
   /** Additional CSS classes to apply to the root element */
   className?: string;
-  /** Show sidebar with conversation history (not implemented yet) */
-  showConversationList?: boolean;
   /** Compact mode for slide-out panels */
   compact?: boolean;
   /** Pre-fill and auto-send this query on mount */
@@ -92,14 +90,23 @@ export function ChatPanel({
   // Auto-scroll
   // ============================================================================
 
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const scrollToBottom = useCallback((smooth = true) => {
+    messagesEndRef.current?.scrollIntoView({
+      behavior: smooth ? "smooth" : "auto",
+    });
   }, []);
 
-  // Scroll to bottom when new messages arrive or streaming content updates
+  // Scroll to bottom on new committed messages (smooth)
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, streamingContent, scrollToBottom]);
+    scrollToBottom(true);
+  }, [messages, scrollToBottom]);
+
+  // Scroll to bottom during streaming (instant, throttled)
+  useEffect(() => {
+    if (!streamingContent) return;
+    const id = requestAnimationFrame(() => scrollToBottom(false));
+    return () => cancelAnimationFrame(id);
+  }, [streamingContent, scrollToBottom]);
 
   // ============================================================================
   // Auto-grow textarea
@@ -154,8 +161,8 @@ export function ChatPanel({
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      // Cmd+Enter or Ctrl+Enter to send
-      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      // Enter to send (Shift+Enter for newline)
+      if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         handleSubmit();
       }
@@ -395,6 +402,7 @@ export function ChatPanel({
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
             rows={1}
+            maxLength={4000}
             disabled={isStreaming}
             className={cn(
               "flex-1 resize-none bg-transparent",
@@ -414,7 +422,7 @@ export function ChatPanel({
                 "whitespace-nowrap",
               )}
             >
-              {"\u2318"}Enter
+              Enter to send
             </span>
 
             {/* Send / Stop button */}
