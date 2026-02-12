@@ -4,15 +4,18 @@
  * Manages export operations with real-time progress tracking.
  * Supports both regular exports and Gamma-powered AI exports
  * with status polling and download handling.
- * 
+ *
  * Includes proper cleanup to prevent state updates after unmount
  * and handles race conditions during async operations.
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
-import type { ExportStatus, ExportFormat } from '../components/ExportProgressModal';
+import { useState, useCallback, useRef, useEffect } from "react";
+import type {
+  ExportStatus,
+  ExportFormat,
+} from "../components/ExportProgressModal";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 // Gamma exports typically take 30-90 seconds
 const GAMMA_ESTIMATED_TIME = 60;
@@ -40,12 +43,12 @@ export interface UseExportWithProgressReturn {
     cardId: string,
     format: ExportFormat,
     itemName?: string,
-    version?: number
+    version?: number,
   ) => Promise<void>;
   exportCard: (
     cardId: string,
     format: ExportFormat,
-    itemName?: string
+    itemName?: string,
   ) => Promise<void>;
   closeModal: () => void;
   retryExport: () => void;
@@ -55,10 +58,10 @@ export interface UseExportWithProgressReturn {
 const initialState: ExportState = {
   isExporting: false,
   showModal: false,
-  status: 'preparing',
+  status: "preparing",
   format: null,
   progress: 0,
-  statusMessage: '',
+  statusMessage: "",
   errorMessage: null,
   downloadUrl: null,
   filename: null,
@@ -71,49 +74,58 @@ const initialState: ExportState = {
  * Hook for managing exports with progress modal
  */
 export function useExportWithProgress(
-  getToken: () => Promise<string | null>
+  getToken: () => Promise<string | null>,
 ): UseExportWithProgressReturn {
   const [state, setState] = useState<ExportState>(initialState);
-  
+
   // Refs to track active operations and prevent memory leaks
   const lastExportRef = useRef<{
-    type: 'brief' | 'card';
+    type: "brief" | "card";
     workstreamId?: string;
     cardId: string;
     format: ExportFormat;
     itemName?: string;
     version?: number;
   } | null>(null);
-  
+
   // Track if component is mounted to prevent state updates after unmount
   const isMountedRef = useRef(true);
-  
+
   // Track active abort controller for cancellation
   const abortControllerRef = useRef<AbortController | null>(null);
-  
+
   // Track active interval for cleanup
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  
+
+  // Track blob URL revocation timeout for cleanup on unmount
+  const revokeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Track current export ID to detect stale updates
   const exportIdRef = useRef<number>(0);
 
   // Cleanup on unmount
   useEffect(() => {
     isMountedRef.current = true;
-    
+
     return () => {
       isMountedRef.current = false;
-      
+
       // Cleanup any active interval
       if (progressIntervalRef.current) {
         clearInterval(progressIntervalRef.current);
         progressIntervalRef.current = null;
       }
-      
+
       // Abort any active request
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
+      }
+
+      // Clear any pending blob URL revocation timeout
+      if (revokeTimeoutRef.current) {
+        clearTimeout(revokeTimeoutRef.current);
+        revokeTimeoutRef.current = null;
       }
     };
   }, []);
@@ -135,7 +147,7 @@ export function useExportWithProgress(
       setState(initialState);
     }
   }, []);
-  
+
   /**
    * Cleanup active export resources
    */
@@ -165,18 +177,19 @@ export function useExportWithProgress(
    */
   const downloadExport = useCallback(() => {
     if (state.downloadUrl) {
-      const link = document.createElement('a');
+      const link = document.createElement("a");
       link.href = state.downloadUrl;
       link.download = state.filename || `export.${state.format}`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
-      // Revoke URL after download
-      setTimeout(() => {
+
+      // Revoke URL after download (store timeout for cleanup on unmount)
+      revokeTimeoutRef.current = setTimeout(() => {
         if (state.downloadUrl) {
           URL.revokeObjectURL(state.downloadUrl);
         }
+        revokeTimeoutRef.current = null;
       }, 1000);
     }
   }, [state.downloadUrl, state.filename, state.format]);
@@ -190,20 +203,21 @@ export function useExportWithProgress(
       cardId: string,
       format: ExportFormat,
       itemName?: string,
-      version?: number
+      version?: number,
     ) => {
       // Cleanup any previous export in progress
       cleanupExport();
-      
+
       // Generate a unique ID for this export to detect stale updates
       const currentExportId = ++exportIdRef.current;
-      
+
       // Helper to check if this export is still current
-      const isCurrentExport = () => exportIdRef.current === currentExportId && isMountedRef.current;
-      
+      const isCurrentExport = () =>
+        exportIdRef.current === currentExportId && isMountedRef.current;
+
       // Store for retry
       lastExportRef.current = {
-        type: 'brief',
+        type: "brief",
         workstreamId,
         cardId,
         format,
@@ -212,19 +226,19 @@ export function useExportWithProgress(
       };
 
       // PPTX exports use Gamma (AI-powered)
-      const isGamma = format === 'pptx';
+      const isGamma = format === "pptx";
 
       updateState({
         isExporting: true,
         showModal: true,
-        status: 'preparing',
+        status: "preparing",
         format,
         progress: 0,
-        statusMessage: 'Preparing your export...',
+        statusMessage: "Preparing your export...",
         errorMessage: null,
         downloadUrl: null,
         filename: null,
-        itemName: itemName || 'Executive Brief',
+        itemName: itemName || "Executive Brief",
         isGammaPowered: isGamma,
         estimatedTimeSeconds: isGamma ? GAMMA_ESTIMATED_TIME : 15,
       });
@@ -232,22 +246,22 @@ export function useExportWithProgress(
       try {
         const token = await getToken();
         if (!token) {
-          throw new Error('Authentication required');
+          throw new Error("Authentication required");
         }
-        
+
         // Check if still current after async token fetch
         if (!isCurrentExport()) {
-          console.log('[Export] Aborted: export superseded during token fetch');
+          console.log("[Export] Aborted: export superseded during token fetch");
           return;
         }
 
         // Update status to generating
         updateState({
-          status: 'generating',
+          status: "generating",
           progress: 10,
           statusMessage: isGamma
-            ? 'AI is designing your presentation...'
-            : 'Generating PDF document...',
+            ? "AI is designing your presentation..."
+            : "Generating PDF document...",
         });
 
         // Build URL
@@ -276,19 +290,19 @@ export function useExportWithProgress(
               progress: currentProgress,
               statusMessage:
                 currentProgress < 30
-                  ? 'AI is analyzing your brief content...'
+                  ? "AI is analyzing your brief content..."
                   : currentProgress < 50
-                    ? 'Generating slides and images...'
+                    ? "Generating slides and images..."
                     : currentProgress < 70
-                      ? 'Creating data visualizations...'
-                      : 'Finalizing presentation...',
+                      ? "Creating data visualizations..."
+                      : "Finalizing presentation...",
             });
           }, POLL_INTERVAL);
         }
 
         // Make the request with abort signal
         const response = await fetch(url, {
-          method: 'GET',
+          method: "GET",
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -300,17 +314,17 @@ export function useExportWithProgress(
           clearInterval(progressIntervalRef.current);
           progressIntervalRef.current = null;
         }
-        
+
         // Check if still current after fetch
         if (!isCurrentExport()) {
-          console.log('[Export] Aborted: export superseded during fetch');
+          console.log("[Export] Aborted: export superseded during fetch");
           return;
         }
 
         if (!response.ok) {
-          const contentType = response.headers.get('content-type');
+          const contentType = response.headers.get("content-type");
           let errorMsg = `Export failed: ${response.status}`;
-          if (contentType?.includes('application/json')) {
+          if (contentType?.includes("application/json")) {
             const errorData = await response.json().catch(() => ({}));
             errorMsg = errorData.detail || errorData.message || errorMsg;
           }
@@ -319,29 +333,31 @@ export function useExportWithProgress(
 
         // Update to processing
         updateState({
-          status: 'processing',
+          status: "processing",
           progress: 90,
-          statusMessage: 'Processing download...',
+          statusMessage: "Processing download...",
         });
 
         // Get the blob
         const blob = await response.blob();
-        
+
         // Final check before completing
         if (!isCurrentExport()) {
-          console.log('[Export] Aborted: export superseded during blob processing');
+          console.log(
+            "[Export] Aborted: export superseded during blob processing",
+          );
           return;
         }
 
         // Extract filename from Content-Disposition header
-        const contentDisposition = response.headers.get('content-disposition');
+        const contentDisposition = response.headers.get("content-disposition");
         let filename = `brief-export.${format}`;
         if (contentDisposition) {
           const match = contentDisposition.match(
-            /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/
+            /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/,
           );
           if (match && match[1]) {
-            filename = match[1].replace(/['"]/g, '');
+            filename = match[1].replace(/['"]/g, "");
           }
         }
 
@@ -351,33 +367,35 @@ export function useExportWithProgress(
         // Update to completed
         updateState({
           isExporting: false,
-          status: 'completed',
+          status: "completed",
           progress: 100,
-          statusMessage: 'Your export is ready!',
+          statusMessage: "Your export is ready!",
           downloadUrl,
           filename,
         });
       } catch (error) {
         // Don't show error if it was an intentional abort
-        if (error instanceof Error && error.name === 'AbortError') {
-          console.log('[Export] Request aborted');
+        if (error instanceof Error && error.name === "AbortError") {
+          console.log("[Export] Request aborted");
           return;
         }
-        
+
         // Only update state if this export is still current
         if (isMountedRef.current && exportIdRef.current === currentExportId) {
           updateState({
             isExporting: false,
-            status: 'error',
+            status: "error",
             progress: 0,
-            statusMessage: 'Export failed',
+            statusMessage: "Export failed",
             errorMessage:
-              error instanceof Error ? error.message : 'An unexpected error occurred',
+              error instanceof Error
+                ? error.message
+                : "An unexpected error occurred",
           });
         }
       }
     },
-    [getToken, updateState, cleanupExport]
+    [getToken, updateState, cleanupExport],
   );
 
   /**
@@ -387,16 +405,17 @@ export function useExportWithProgress(
     async (cardId: string, format: ExportFormat, itemName?: string) => {
       // Cleanup any previous export in progress
       cleanupExport();
-      
+
       // Generate a unique ID for this export to detect stale updates
       const currentExportId = ++exportIdRef.current;
-      
+
       // Helper to check if this export is still current
-      const isCurrentExport = () => exportIdRef.current === currentExportId && isMountedRef.current;
-      
+      const isCurrentExport = () =>
+        exportIdRef.current === currentExportId && isMountedRef.current;
+
       // Store for retry
       lastExportRef.current = {
-        type: 'card',
+        type: "card",
         cardId,
         format,
         itemName,
@@ -405,14 +424,14 @@ export function useExportWithProgress(
       updateState({
         isExporting: true,
         showModal: true,
-        status: 'preparing',
+        status: "preparing",
         format,
         progress: 0,
-        statusMessage: 'Preparing your export...',
+        statusMessage: "Preparing your export...",
         errorMessage: null,
         downloadUrl: null,
         filename: null,
-        itemName: itemName || 'Card Export',
+        itemName: itemName || "Card Export",
         isGammaPowered: false,
         estimatedTimeSeconds: 15,
       });
@@ -420,19 +439,21 @@ export function useExportWithProgress(
       try {
         const token = await getToken();
         if (!token) {
-          throw new Error('Authentication required');
+          throw new Error("Authentication required");
         }
-        
+
         // Check if still current after async token fetch
         if (!isCurrentExport()) {
-          console.log('[Export] Aborted: card export superseded during token fetch');
+          console.log(
+            "[Export] Aborted: card export superseded during token fetch",
+          );
           return;
         }
 
         updateState({
-          status: 'generating',
+          status: "generating",
           progress: 30,
-          statusMessage: 'Generating export...',
+          statusMessage: "Generating export...",
         });
 
         // Create abort controller for this request
@@ -442,24 +463,24 @@ export function useExportWithProgress(
         const response = await fetch(
           `${API_BASE_URL}/api/v1/cards/${cardId}/export/${format}`,
           {
-            method: 'GET',
+            method: "GET",
             headers: {
               Authorization: `Bearer ${token}`,
             },
             signal: abortController.signal,
-          }
+          },
         );
-        
+
         // Check if still current after fetch
         if (!isCurrentExport()) {
-          console.log('[Export] Aborted: card export superseded during fetch');
+          console.log("[Export] Aborted: card export superseded during fetch");
           return;
         }
 
         if (!response.ok) {
-          const contentType = response.headers.get('content-type');
+          const contentType = response.headers.get("content-type");
           let errorMsg = `Export failed: ${response.status}`;
-          if (contentType?.includes('application/json')) {
+          if (contentType?.includes("application/json")) {
             const errorData = await response.json().catch(() => ({}));
             errorMsg = errorData.detail || errorData.message || errorMsg;
           }
@@ -467,27 +488,29 @@ export function useExportWithProgress(
         }
 
         updateState({
-          status: 'processing',
+          status: "processing",
           progress: 80,
-          statusMessage: 'Processing download...',
+          statusMessage: "Processing download...",
         });
 
         const blob = await response.blob();
-        
+
         // Final check before completing
         if (!isCurrentExport()) {
-          console.log('[Export] Aborted: card export superseded during blob processing');
+          console.log(
+            "[Export] Aborted: card export superseded during blob processing",
+          );
           return;
         }
 
-        const contentDisposition = response.headers.get('content-disposition');
+        const contentDisposition = response.headers.get("content-disposition");
         let filename = `card-export.${format}`;
         if (contentDisposition) {
           const match = contentDisposition.match(
-            /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/
+            /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/,
           );
           if (match && match[1]) {
-            filename = match[1].replace(/['"]/g, '');
+            filename = match[1].replace(/['"]/g, "");
           }
         }
 
@@ -495,33 +518,35 @@ export function useExportWithProgress(
 
         updateState({
           isExporting: false,
-          status: 'completed',
+          status: "completed",
           progress: 100,
-          statusMessage: 'Your export is ready!',
+          statusMessage: "Your export is ready!",
           downloadUrl,
           filename,
         });
       } catch (error) {
         // Don't show error if it was an intentional abort
-        if (error instanceof Error && error.name === 'AbortError') {
-          console.log('[Export] Card request aborted');
+        if (error instanceof Error && error.name === "AbortError") {
+          console.log("[Export] Card request aborted");
           return;
         }
-        
+
         // Only update state if this export is still current
         if (isMountedRef.current && exportIdRef.current === currentExportId) {
           updateState({
             isExporting: false,
-            status: 'error',
+            status: "error",
             progress: 0,
-            statusMessage: 'Export failed',
+            statusMessage: "Export failed",
             errorMessage:
-              error instanceof Error ? error.message : 'An unexpected error occurred',
+              error instanceof Error
+                ? error.message
+                : "An unexpected error occurred",
           });
         }
       }
     },
-    [getToken, updateState, cleanupExport]
+    [getToken, updateState, cleanupExport],
   );
 
   /**
@@ -531,15 +556,15 @@ export function useExportWithProgress(
     const last = lastExportRef.current;
     if (!last) return;
 
-    if (last.type === 'brief' && last.workstreamId) {
+    if (last.type === "brief" && last.workstreamId) {
       exportBrief(
         last.workstreamId,
         last.cardId,
         last.format,
         last.itemName,
-        last.version
+        last.version,
       );
-    } else if (last.type === 'card') {
+    } else if (last.type === "card") {
       exportCard(last.cardId, last.format, last.itemName);
     }
   }, [exportBrief, exportCard]);

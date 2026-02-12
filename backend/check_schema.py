@@ -8,81 +8,165 @@ from supabase import create_client
 
 load_dotenv()
 
-supabase = create_client(
-    os.getenv("SUPABASE_URL"),
-    os.getenv("SUPABASE_SERVICE_KEY")
-)
+supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_SERVICE_KEY"))
 
 # Expected schema based on code usage
 EXPECTED_SCHEMA = {
     "users": [
-        "id", "email", "display_name", "department", "role",
-        "preferences", "created_at", "updated_at"
+        "id",
+        "email",
+        "display_name",
+        "department",
+        "role",
+        "preferences",
+        "created_at",
+        "updated_at",
     ],
     "cards": [
-        "id", "name", "slug", "description", "summary",
-        "horizon", "stage", "triage_score", "status",
-        "pillars", "goals", "steep_categories", "anchors", "top25_relevance",
-        "credibility_score", "novelty_score", "likelihood_score",
-        "impact_score", "relevance_score",
-        "time_to_awareness_months", "time_to_prepare_months",
-        "velocity_score", "follower_count", "source_count",
-        "embedding", "created_at", "updated_at", "created_by", "is_archived"
+        "id",
+        "name",
+        "slug",
+        "description",
+        "summary",
+        "horizon",
+        "stage",
+        "triage_score",
+        "status",
+        "pillars",
+        "goals",
+        "steep_categories",
+        "anchors",
+        "top25_relevance",
+        "credibility_score",
+        "novelty_score",
+        "likelihood_score",
+        "impact_score",
+        "relevance_score",
+        "time_to_awareness_months",
+        "time_to_prepare_months",
+        "velocity_score",
+        "follower_count",
+        "source_count",
+        "embedding",
+        "created_at",
+        "updated_at",
+        "created_by",
+        "is_archived",
     ],
     "sources": [
-        "id", "card_id", "url", "title", "publication", "author", "published_at",
-        "api_source", "full_text", "ai_summary", "key_excerpts",
-        "relevance_score", "relevance_to_card", "embedding",
-        "ingested_at", "created_at"
+        "id",
+        "card_id",
+        "url",
+        "title",
+        "publication",
+        "author",
+        "published_at",
+        "api_source",
+        "full_text",
+        "ai_summary",
+        "key_excerpts",
+        "relevance_score",
+        "relevance_to_card",
+        "embedding",
+        "ingested_at",
+        "created_at",
     ],
     "card_timeline": [
-        "id", "card_id", "event_type", "event_description",
-        "previous_value", "new_value",
-        "triggered_by_source_id", "triggered_by_user_id", "created_at"
+        "id",
+        "card_id",
+        "event_type",
+        "event_description",
+        "previous_value",
+        "new_value",
+        "triggered_by_source_id",
+        "triggered_by_user_id",
+        "created_at",
     ],
     "workstreams": [
-        "id", "user_id", "name", "description",
-        "pillars", "goals", "anchors", "keywords",
-        "min_stage", "max_stage", "horizons",
-        "is_default", "notification_enabled", "created_at", "updated_at"
+        "id",
+        "user_id",
+        "name",
+        "description",
+        "pillars",
+        "goals",
+        "anchors",
+        "keywords",
+        "min_stage",
+        "max_stage",
+        "horizons",
+        "is_default",
+        "notification_enabled",
+        "created_at",
+        "updated_at",
     ],
     "card_follows": [
-        "id", "user_id", "card_id", "workstream_id", "followed_at", "created_at"
+        "id",
+        "user_id",
+        "card_id",
+        "workstream_id",
+        "followed_at",
+        "created_at",
     ],
     "card_notes": [
-        "id", "card_id", "user_id", "content", "is_private", "created_at", "updated_at"
+        "id",
+        "card_id",
+        "user_id",
+        "content",
+        "is_private",
+        "created_at",
+        "updated_at",
     ],
-    "pillars": [
-        "code", "name", "description"
-    ],
-    "goals": [
-        "code", "pillar_id", "name", "description", "sort_order"
-    ],
-    "anchors": [
-        "id", "name", "description"
-    ],
-    "stages": [
-        "id", "name", "horizon", "description", "sort_order"
-    ],
+    "pillars": ["code", "name", "description"],
+    "goals": ["code", "pillar_id", "name", "description", "sort_order"],
+    "anchors": ["id", "name", "description"],
+    "stages": ["id", "name", "horizon", "description", "sort_order"],
     "research_tasks": [
-        "id", "user_id", "card_id", "workstream_id",
-        "task_type", "research_topic", "depth", "status",
-        "created_at", "started_at", "completed_at",
-        "result_summary", "error_message"
+        "id",
+        "user_id",
+        "card_id",
+        "workstream_id",
+        "task_type",
+        "research_topic",
+        "depth",
+        "status",
+        "created_at",
+        "started_at",
+        "completed_at",
+        "result_summary",
+        "error_message",
     ],
     "entities": [
-        "id", "card_id", "source_id", "entity_type", "name",
-        "description", "metadata", "created_at"
+        "id",
+        "card_id",
+        "source_id",
+        "entity_type",
+        "name",
+        "description",
+        "metadata",
+        "created_at",
     ],
     "implications_analyses": [
-        "id", "card_id", "perspective", "perspective_detail",
-        "summary", "created_by", "created_at"
+        "id",
+        "card_id",
+        "perspective",
+        "perspective_detail",
+        "summary",
+        "created_by",
+        "created_at",
     ],
     "implications": [
-        "id", "analysis_id", "parent_id", "order_level", "content",
-        "likelihood_score", "desirability_score", "flag", "created_at"
-    ]
+        "id",
+        "analysis_id",
+        "parent_id",
+        "order_level",
+        "content",
+        "likelihood_score",
+        "desirability_score",
+        "flag",
+        "created_at",
+    ],
 }
+
 
 def get_table_columns(table_name):
     """Get columns for a table using Supabase RPC or direct query."""
@@ -92,7 +176,7 @@ def get_table_columns(table_name):
         # If we get here, table exists but we need columns
         # Try fetching one row to see columns
         result = supabase.table(table_name).select("*").limit(1).execute()
-        if result.data:
+        if result.data and len(result.data) > 0:
             return list(result.data[0].keys())
         else:
             # Table exists but empty - try insert/error method
@@ -102,6 +186,7 @@ def get_table_columns(table_name):
         if "does not exist" in error_msg or "PGRST200" in error_msg:
             return "TABLE_MISSING"
         return f"ERROR: {error_msg}"
+
 
 def check_schema():
     """Check all tables and columns."""
@@ -255,6 +340,7 @@ def check_schema():
         for col in cols:
             col_type = column_types.get(col, "TEXT")
             print(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {col_type};")
+
 
 if __name__ == "__main__":
     check_schema()

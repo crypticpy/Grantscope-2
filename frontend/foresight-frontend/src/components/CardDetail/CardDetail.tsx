@@ -18,7 +18,7 @@
  * @module CardDetail
  */
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, Suspense } from "react";
 import {
   useParams,
   Link,
@@ -56,7 +56,7 @@ import { SourcesTab } from "./tabs/SourcesTab";
 import { TimelineTab } from "./tabs/TimelineTab";
 import { NotesTab } from "./tabs/NotesTab";
 import { AssetsTab } from "./AssetsTab";
-import { ChatTabContent } from "./ChatTabContent";
+const ChatTabContent = React.lazy(() => import("./ChatTabContent"));
 
 // Visualization Components
 import { ScoreTimelineChart } from "../visualizations/ScoreTimelineChart";
@@ -673,11 +673,19 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = "" }) => {
         />
       )}
       {activeTab === "chat" && (
-        <ChatTabContent
-          cardId={card.id}
-          cardName={card.name}
-          primaryPillar={card.pillar_id}
-        />
+        <Suspense
+          fallback={
+            <div className="flex items-center justify-center p-8 text-gray-500">
+              Loading chat...
+            </div>
+          }
+        >
+          <ChatTabContent
+            cardId={card.id}
+            cardName={card.name}
+            primaryPillar={card.pillar_id}
+          />
+        </Suspense>
       )}
       {activeTab === "assets" && (
         <AssetsTab

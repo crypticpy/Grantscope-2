@@ -6127,7 +6127,7 @@ async def get_workstream_scan_history(
         if isinstance(val, str):
             try:
                 return json.loads(val)
-            except:
+            except (ValueError, TypeError, json.JSONDecodeError):
                 return val
         return val
 
@@ -9647,7 +9647,7 @@ async def get_personal_stats(current_user: dict = Depends(get_current_user)):
                     followed_at = datetime.fromisoformat(
                         followed_at.replace("Z", "+00:00")
                     )
-                except:
+                except (ValueError, TypeError):
                     followed_at = now
             else:
                 followed_at = now
@@ -9842,7 +9842,7 @@ async def get_personal_stats(current_user: dict = Depends(get_current_user)):
                     ).replace(tzinfo=None)
                     if dt > one_week_ago:
                         recent_card_counts[f.get("card_id")] += 1
-                except:
+                except (ValueError, TypeError):
                     pass
 
         recently_popular_ids = [

@@ -558,7 +558,9 @@ const Dashboard: React.FC = () => {
                             />
                           )}
                         <VelocityBadge
-                          trend={following.cards.velocity_trend as any}
+                          trend={
+                            following.cards.velocity_trend as VelocityTrend
+                          }
                           score={following.cards.velocity_score}
                         />
                         <span
@@ -683,7 +685,7 @@ const Dashboard: React.FC = () => {
                           />
                         )}
                       <VelocityBadge
-                        trend={card.velocity_trend as any}
+                        trend={card.velocity_trend as VelocityTrend}
                         score={card.velocity_score}
                       />
                     </div>

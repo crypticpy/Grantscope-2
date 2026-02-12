@@ -36,9 +36,11 @@ logger = logging.getLogger(__name__)
 # Data Classes
 # ============================================================================
 
+
 @dataclass
 class AcademicPaper:
     """Represents an academic paper from arXiv."""
+
     arxiv_id: str
     title: str
     abstract: str
@@ -55,6 +57,7 @@ class AcademicPaper:
 @dataclass
 class AcademicFetchResult:
     """Result of an academic paper fetch operation."""
+
     papers: List[AcademicPaper]
     total_results: int
     query: str
@@ -70,11 +73,11 @@ ARXIV_API_BASE = "http://export.arxiv.org/api/query"
 
 # Default categories relevant to municipal technology and strategic planning
 DEFAULT_CATEGORIES = [
-    "cs.AI",    # Artificial Intelligence
-    "cs.CY",    # Computers and Society
-    "cs.LG",    # Machine Learning
-    "cs.SI",    # Social and Information Networks
-    "cs.HC",    # Human-Computer Interaction
+    "cs.AI",  # Artificial Intelligence
+    "cs.CY",  # Computers and Society
+    "cs.LG",  # Machine Learning
+    "cs.SI",  # Social and Information Networks
+    "cs.HC",  # Human-Computer Interaction
     "econ.GN",  # General Economics
     "stat.ML",  # Machine Learning (Statistics)
 ]
@@ -95,11 +98,12 @@ MUNICIPAL_SEARCH_TERMS = [
 # Helper Functions
 # ============================================================================
 
+
 def _build_arxiv_query(
     query: str,
     categories: Optional[List[str]] = None,
     date_from: Optional[datetime] = None,
-    date_to: Optional[datetime] = None
+    date_to: Optional[datetime] = None,
 ) -> str:
     """
     Build an arXiv API search query string.
@@ -169,7 +173,9 @@ def _parse_arxiv_entry(entry: Dict[str, Any]) -> Optional[AcademicPaper]:
 
         # Also check arxiv_primary_category if available
         if hasattr(entry, "arxiv_primary_category"):
-            primary_category = entry.arxiv_primary_category.get("term", primary_category)
+            primary_category = entry.arxiv_primary_category.get(
+                "term", primary_category
+            )
 
         # Extract dates
         published = entry.get("published", "")
@@ -209,7 +215,7 @@ def _parse_arxiv_entry(entry: Dict[str, Any]) -> Optional[AcademicPaper]:
             primary_category=primary_category,
             pdf_url=pdf_url,
             arxiv_url=arxiv_url,
-            source_category="academic"
+            source_category="academic",
         )
 
     except Exception as e:
@@ -221,6 +227,7 @@ def _parse_arxiv_entry(entry: Dict[str, Any]) -> Optional[AcademicPaper]:
 # Main Fetcher Functions
 # ============================================================================
 
+
 async def fetch_academic_papers(
     query: str = "",
     categories: Optional[List[str]] = None,
@@ -230,7 +237,7 @@ async def fetch_academic_papers(
     sort_order: str = "descending",
     timeout: int = 30,
     retry_count: int = 3,
-    retry_delay: float = 1.0
+    retry_delay: float = 1.0,
 ) -> AcademicFetchResult:
     """
     Fetch academic papers from arXiv API.
@@ -273,7 +280,9 @@ async def fetch_academic_papers(
     }
     url = f"{ARXIV_API_BASE}?{urllib.parse.urlencode(params)}"
 
-    logger.info(f"Fetching arXiv papers: query='{query}', categories={categories}, max={max_results}")
+    logger.info(
+        f"Fetching arXiv papers: query='{query}', categories={categories}, max={max_results}"
+    )
     logger.debug(f"arXiv API URL: {url}")
 
     # Fetch with retry logic
@@ -284,7 +293,7 @@ async def fetch_academic_papers(
                 async with session.get(
                     url,
                     timeout=aiohttp.ClientTimeout(total=timeout),
-                    headers={"User-Agent": "Foresight-App/1.0 (Research Pipeline)"}
+                    headers={"User-Agent": "Foresight-App/1.0 (Research Pipeline)"},
                 ) as response:
                     if response.status == 200:
                         content = await response.text()
@@ -294,8 +303,12 @@ async def fetch_academic_papers(
 
                         # Check for feed parsing errors
                         if feed.bozo:
-                            logger.warning(f"arXiv feed parsing warning: {feed.bozo_exception}")
-                            errors.append(f"Feed parsing warning: {str(feed.bozo_exception)[:100]}")
+                            logger.warning(
+                                f"arXiv feed parsing warning: {feed.bozo_exception}"
+                            )
+                            errors.append(
+                                f"Feed parsing warning: {str(feed.bozo_exception)[:100]}"
+                            )
 
                         # Extract total results from feed
                         total_results = 0
@@ -313,12 +326,16 @@ async def fetch_academic_papers(
                             if paper:
                                 papers.append(paper)
 
-                        logger.info(f"arXiv fetch successful: {len(papers)} papers from {total_results} total")
+                        logger.info(
+                            f"arXiv fetch successful: {len(papers)} papers from {total_results} total"
+                        )
                         break
 
                     elif response.status == 503:
                         # arXiv rate limiting
-                        logger.warning(f"arXiv rate limit hit (attempt {attempt + 1}/{retry_count})")
+                        logger.warning(
+                            f"arXiv rate limit hit (attempt {attempt + 1}/{retry_count})"
+                        )
                         errors.append(f"Rate limit hit on attempt {attempt + 1}")
                         if attempt < retry_count - 1:
                             await asyncio.sleep(current_delay)
@@ -356,17 +373,15 @@ async def fetch_academic_papers(
 
     return AcademicFetchResult(
         papers=papers,
-        total_results=total_results if papers else 0,
+        total_results=total_results,
         query=query,
         fetch_time=fetch_time,
-        errors=errors
+        errors=errors,
     )
 
 
 async def fetch_recent_papers(
-    categories: Optional[List[str]] = None,
-    days_back: int = 7,
-    max_results: int = 50
+    categories: Optional[List[str]] = None, days_back: int = 7, max_results: int = 50
 ) -> AcademicFetchResult:
     """
     Fetch recently published papers from specified categories.
@@ -392,13 +407,12 @@ async def fetch_recent_papers(
         categories=categories,
         max_results=max_results,
         sort_by="submittedDate",
-        sort_order="descending"
+        sort_order="descending",
     )
 
 
 async def fetch_municipal_tech_papers(
-    max_results: int = 30,
-    additional_terms: Optional[List[str]] = None
+    max_results: int = 30, additional_terms: Optional[List[str]] = None
 ) -> AcademicFetchResult:
     """
     Fetch papers specifically relevant to municipal technology and smart cities.
@@ -419,13 +433,15 @@ async def fetch_municipal_tech_papers(
         search_terms.extend(additional_terms)
 
     # Build combined query
-    query = " OR ".join([f'"{term}"' for term in search_terms[:5]])  # Limit to avoid too long query
+    query = " OR ".join(
+        [f'"{term}"' for term in search_terms[:5]]
+    )  # Limit to avoid too long query
 
     # Focus on categories most relevant to municipal applications
     municipal_categories = [
-        "cs.CY",    # Computers and Society - most relevant
-        "cs.AI",    # AI applications
-        "cs.HC",    # Human-Computer Interaction
+        "cs.CY",  # Computers and Society - most relevant
+        "cs.AI",  # AI applications
+        "cs.HC",  # Human-Computer Interaction
         "econ.GN",  # Economics
     ]
 
@@ -433,7 +449,7 @@ async def fetch_municipal_tech_papers(
         query=query,
         categories=municipal_categories,
         max_results=max_results,
-        sort_by="relevance"
+        sort_by="relevance",
     )
 
 
@@ -477,14 +493,12 @@ arXiv ID: {paper.arxiv_id}
             "primary_category": paper.primary_category,
             "published_date": paper.published_date,
             "pdf_url": paper.pdf_url,
-        }
+        },
     }
 
 
 async def fetch_and_convert_papers(
-    query: str = "",
-    categories: Optional[List[str]] = None,
-    max_results: int = 20
+    query: str = "", categories: Optional[List[str]] = None, max_results: int = 20
 ) -> List[Dict[str, Any]]:
     """
     Convenience function to fetch papers and convert to raw source format.
@@ -500,9 +514,7 @@ async def fetch_and_convert_papers(
         List of source dicts compatible with research pipeline
     """
     result = await fetch_academic_papers(
-        query=query,
-        categories=categories,
-        max_results=max_results
+        query=query, categories=categories, max_results=max_results
     )
 
     return [convert_to_raw_source(paper) for paper in result.papers]
