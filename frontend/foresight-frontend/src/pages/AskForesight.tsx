@@ -18,6 +18,8 @@ import {
   MessageSquare,
   Menu,
   X,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import { supabase } from "../App";
@@ -171,6 +173,15 @@ export default function AskForesight() {
   // Mobile sidebar
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // Desktop sidebar collapse
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("foresight:ask:sidebarCollapsed") === "true";
+    } catch {
+      return false;
+    }
+  });
+
   // Initial query from URL
   const initialQuery = searchParams.get("q") || undefined;
 
@@ -246,6 +257,18 @@ export default function AskForesight() {
     activeConversationScope,
     activeConversationScopeId,
   ]);
+
+  // Persist sidebar collapsed state to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "foresight:ask:sidebarCollapsed",
+        String(sidebarCollapsed),
+      );
+    } catch {
+      // localStorage unavailable
+    }
+  }, [sidebarCollapsed]);
 
   // ============================================================================
   // Handlers
@@ -466,36 +489,63 @@ export default function AskForesight() {
         {/* Sidebar */}
         <aside
           className={cn(
-            "w-[280px] shrink-0 border-r border-gray-200 dark:border-gray-700",
+            "shrink-0 border-r border-gray-200 dark:border-gray-700",
             "bg-gray-50 dark:bg-dark-surface-deep",
             "flex flex-col",
             "overflow-hidden",
-            // Mobile: absolute overlay
+            // Mobile: absolute overlay — always full width
             "fixed md:relative inset-y-0 left-0 z-30 md:z-auto",
-            "md:translate-x-0 transition-transform duration-200 ease-in-out",
+            "md:translate-x-0 transition-all duration-200 ease-in-out",
             // Account for header height on mobile
             "top-16 md:top-0",
+            // Mobile: always 280px; Desktop: collapsible
             sidebarOpen
-              ? "translate-x-0"
+              ? "translate-x-0 w-[280px]"
               : "-translate-x-full md:translate-x-0",
+            !sidebarOpen && (sidebarCollapsed ? "md:w-[60px]" : "md:w-[280px]"),
           )}
         >
-          {/* New Chat button */}
-          <div className="p-3 shrink-0">
+          {/* Sidebar header: New Chat + collapse toggle */}
+          <div className="p-3 shrink-0 flex items-center gap-2">
             <button
               type="button"
               onClick={handleNewChat}
+              title={sidebarCollapsed ? "New Chat" : undefined}
               className={cn(
-                "w-full inline-flex items-center justify-center gap-2",
-                "px-4 py-2.5 text-sm font-medium rounded-lg",
+                "inline-flex items-center justify-center gap-2",
+                "py-2.5 text-sm font-medium rounded-lg",
                 "bg-brand-blue text-white",
                 "hover:bg-brand-dark-blue",
                 "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2",
                 "transition-colors duration-200",
+                sidebarCollapsed ? "w-9 h-9 px-0 flex-shrink-0" : "flex-1 px-4",
               )}
             >
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              New Chat
+              <Plus className="h-4 w-4 shrink-0" aria-hidden="true" />
+              {!sidebarCollapsed && <span>New Chat</span>}
+            </button>
+
+            {/* Collapse/expand toggle — desktop only */}
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed((prev) => !prev)}
+              className={cn(
+                "hidden md:inline-flex items-center justify-center",
+                "w-7 h-7 rounded-md shrink-0",
+                "text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300",
+                "hover:bg-gray-200 dark:hover:bg-dark-surface-hover",
+                "focus:outline-none focus:ring-1 focus:ring-brand-blue",
+                "transition-colors duration-150",
+              )}
+              aria-label={
+                sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"
+              }
+            >
+              {sidebarCollapsed ? (
+                <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
+              )}
             </button>
           </div>
 
@@ -510,9 +560,11 @@ export default function AskForesight() {
                   className="h-8 w-8 text-gray-300 dark:text-gray-600 mx-auto mb-2"
                   aria-hidden="true"
                 />
-                <p className="text-xs text-gray-400 dark:text-gray-500">
-                  No conversations yet
-                </p>
+                {!sidebarCollapsed && (
+                  <p className="text-xs text-gray-400 dark:text-gray-500">
+                    No conversations yet
+                  </p>
+                )}
               </div>
             ) : (
               <>
@@ -523,6 +575,7 @@ export default function AskForesight() {
                     activeId={activeConversationId}
                     onSelect={handleSelectConversation}
                     onDelete={handleDeleteConversation}
+                    collapsed={sidebarCollapsed}
                   />
                 )}
                 {grouped.thisWeek.length > 0 && (
@@ -532,6 +585,7 @@ export default function AskForesight() {
                     activeId={activeConversationId}
                     onSelect={handleSelectConversation}
                     onDelete={handleDeleteConversation}
+                    collapsed={sidebarCollapsed}
                   />
                 )}
                 {grouped.older.length > 0 && (
@@ -541,6 +595,7 @@ export default function AskForesight() {
                     activeId={activeConversationId}
                     onSelect={handleSelectConversation}
                     onDelete={handleDeleteConversation}
+                    collapsed={sidebarCollapsed}
                   />
                 )}
               </>
@@ -587,6 +642,7 @@ interface ConversationGroupProps {
   activeId: string | null;
   onSelect: (conv: Conversation) => void;
   onDelete: (e: React.MouseEvent, convId: string) => void;
+  collapsed?: boolean;
 }
 
 function ConversationGroup({
@@ -595,12 +651,15 @@ function ConversationGroup({
   activeId,
   onSelect,
   onDelete,
+  collapsed,
 }: ConversationGroupProps) {
   return (
     <div className="mb-3">
-      <p className="px-2 py-1 text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-        {label}
-      </p>
+      {!collapsed && (
+        <p className="px-2 py-1 text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+          {label}
+        </p>
+      )}
       <div className="space-y-0.5">
         {conversations.map((conv) => (
           <ConversationItem
@@ -609,6 +668,7 @@ function ConversationGroup({
             isActive={activeId === conv.id}
             onSelect={onSelect}
             onDelete={onDelete}
+            collapsed={collapsed}
           />
         ))}
       </div>
@@ -625,6 +685,7 @@ interface ConversationItemProps {
   isActive: boolean;
   onSelect: (conv: Conversation) => void;
   onDelete: (e: React.MouseEvent, convId: string) => void;
+  collapsed?: boolean;
 }
 
 function ConversationItem({
@@ -632,7 +693,34 @@ function ConversationItem({
   isActive,
   onSelect,
   onDelete,
+  collapsed,
 }: ConversationItemProps) {
+  if (collapsed) {
+    return (
+      <button
+        type="button"
+        onClick={() => onSelect(conversation)}
+        title={conversation.title || "Untitled conversation"}
+        className={cn(
+          "w-full flex items-center justify-center",
+          "p-2 rounded-lg",
+          "transition-colors duration-150",
+          isActive
+            ? "bg-brand-blue/10 dark:bg-brand-blue/20"
+            : "hover:bg-gray-100 dark:hover:bg-dark-surface-hover",
+        )}
+      >
+        <MessageSquare
+          className={cn(
+            "h-4 w-4 shrink-0",
+            isActive ? "text-brand-blue" : "text-gray-400 dark:text-gray-500",
+          )}
+          aria-hidden="true"
+        />
+      </button>
+    );
+  }
+
   return (
     <button
       type="button"

@@ -37,3 +37,11 @@ class ChatSuggestRequest(BaseModel):
     scope_id: Optional[str] = Field(
         None, description="card_id or workstream_id depending on scope"
     )
+
+
+class ConversationUpdateRequest(BaseModel):
+    """Request model for updating a conversation (e.g., renaming)."""
+
+    title: str = Field(
+        ..., min_length=1, max_length=200, description="New conversation title"
+    )

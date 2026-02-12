@@ -22,6 +22,7 @@ import { cn } from "../../lib/utils";
 import { useChat } from "../../hooks/useChat";
 import { ChatMessage as ChatMessageComponent } from "./ChatMessage";
 import { ChatSuggestionChips } from "./ChatSuggestionChips";
+import { ChatHistoryPopover } from "./ChatHistoryPopover";
 import type { Citation } from "../../lib/chat-api";
 
 // ============================================================================
@@ -56,6 +57,36 @@ export interface ChatPanelProps {
 }
 
 // ============================================================================
+// Helpers
+// ============================================================================
+
+/**
+ * Formats an ISO timestamp into a relative time string for the banner.
+ */
+function formatRelativeTime(isoString: string): string {
+  try {
+    const date = new Date(isoString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffSeconds = Math.floor(diffMs / 1000);
+    const diffMinutes = Math.floor(diffSeconds / 60);
+    const diffHours = Math.floor(diffMinutes / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffSeconds < 60) return "just now";
+    if (diffMinutes < 60) return `${diffMinutes}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return "";
+  }
+}
+
+// ============================================================================
 // Component
 // ============================================================================
 
@@ -79,10 +110,13 @@ export function ChatPanel({
     streamingContent,
     streamingCitations,
     conversationId,
+    conversationTitle,
+    conversationUpdatedAt,
     suggestedQuestions,
     error,
     sendMessage,
     stopGenerating,
+    loadConversation,
     startNewConversation,
   } = useChat({ scope, scopeId, initialConversationId, forceNew });
 
@@ -100,6 +134,11 @@ export function ChatPanel({
 
   // Error dismiss
   const [errorDismissed, setErrorDismissed] = useState(false);
+
+  // "Continuing conversation" banner state
+  const userHasSentMessage = useRef(false);
+  const [showContinueBanner, setShowContinueBanner] = useState(false);
+  const bannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ============================================================================
   // Auto-scroll
@@ -160,6 +199,37 @@ export function ChatPanel({
   }, [error]);
 
   // ============================================================================
+  // "Continuing conversation" banner
+  // ============================================================================
+
+  // Show banner when conversation is auto-restored (messages exist on mount)
+  // and user hasn't sent anything yet.
+  useEffect(() => {
+    if (
+      messages.length > 0 &&
+      !userHasSentMessage.current &&
+      conversationTitle &&
+      conversationUpdatedAt
+    ) {
+      setShowContinueBanner(true);
+
+      // Auto-dismiss after 5 seconds
+      bannerTimerRef.current = setTimeout(() => {
+        setShowContinueBanner(false);
+      }, 5000);
+    }
+
+    return () => {
+      if (bannerTimerRef.current) {
+        clearTimeout(bannerTimerRef.current);
+        bannerTimerRef.current = null;
+      }
+    };
+    // Only trigger on initial load — when conversationTitle/updatedAt become available
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationTitle, conversationUpdatedAt]);
+
+  // ============================================================================
   // Handlers
   // ============================================================================
 
@@ -167,6 +237,14 @@ export function ChatPanel({
     if (!inputValue.trim() || isStreaming) return;
     sendMessage(inputValue.trim());
     setInputValue("");
+
+    // Mark that user has sent a message and dismiss the banner
+    userHasSentMessage.current = true;
+    setShowContinueBanner(false);
+    if (bannerTimerRef.current) {
+      clearTimeout(bannerTimerRef.current);
+      bannerTimerRef.current = null;
+    }
 
     // Reset textarea height
     if (textareaRef.current) {
@@ -219,20 +297,74 @@ export function ChatPanel({
           <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
             Chat
           </span>
+          <div className="flex items-center gap-1">
+            <ChatHistoryPopover
+              scope={scope}
+              scopeId={scopeId}
+              activeConversationId={conversationId}
+              onSelect={loadConversation}
+              onNewChat={startNewConversation}
+            />
+            <button
+              type="button"
+              onClick={startNewConversation}
+              className={cn(
+                "inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md",
+                "text-gray-600 dark:text-gray-400",
+                "hover:bg-gray-100 dark:hover:bg-dark-surface-hover",
+                "focus:outline-none focus:ring-2 focus:ring-brand-blue",
+                "transition-colors duration-200",
+              )}
+              aria-label="Start new conversation"
+            >
+              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+              New Chat
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* "Continuing conversation" banner */}
+      {showContinueBanner && conversationTitle && conversationUpdatedAt && (
+        <div
+          className={cn(
+            "flex items-center justify-between px-4 py-1.5",
+            "bg-blue-50/80 dark:bg-blue-900/15",
+            "border-b border-blue-100 dark:border-blue-800/30",
+            "animate-in fade-in-0 slide-in-from-top-1 duration-200",
+          )}
+        >
+          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+            <span>Continuing from </span>
+            <span className="text-gray-600 dark:text-gray-300">
+              {formatRelativeTime(conversationUpdatedAt)}
+            </span>
+            <span className="mx-1">&middot;</span>
+            <span className="text-gray-600 dark:text-gray-300 font-medium">
+              {conversationTitle.length > 40
+                ? conversationTitle.slice(0, 40).trimEnd() + "\u2026"
+                : conversationTitle}
+            </span>
+          </p>
           <button
             type="button"
-            onClick={startNewConversation}
+            onClick={() => {
+              setShowContinueBanner(false);
+              if (bannerTimerRef.current) {
+                clearTimeout(bannerTimerRef.current);
+                bannerTimerRef.current = null;
+              }
+              startNewConversation();
+            }}
             className={cn(
-              "inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md",
-              "text-gray-600 dark:text-gray-400",
-              "hover:bg-gray-100 dark:hover:bg-dark-surface-hover",
-              "focus:outline-none focus:ring-2 focus:ring-brand-blue",
-              "transition-colors duration-200",
+              "shrink-0 ml-2 text-xs font-medium",
+              "text-brand-blue hover:text-brand-dark-blue",
+              "dark:text-blue-400 dark:hover:text-blue-300",
+              "hover:underline focus:outline-none focus:underline",
+              "transition-colors duration-150",
             )}
-            aria-label="Start new conversation"
           >
-            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-            New Chat
+            Start new
           </button>
         </div>
       )}

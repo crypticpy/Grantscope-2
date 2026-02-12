@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useCallback, useMemo } from "react";
-import { Copy, Check, Sparkles } from "lucide-react";
+import { Copy, Check, Sparkles, ExternalLink } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { ChatCitation } from "./ChatCitation";
 import type { Citation } from "../../lib/chat-api";
@@ -37,9 +37,74 @@ export interface ChatMessageProps {
 // ============================================================================
 
 /**
+ * Represents a parsed bullet list item with its nesting depth and text content.
+ */
+interface NestedListItem {
+  depth: number;
+  text: string;
+}
+
+/**
+ * Recursively renders nested bullet list items grouped by indentation depth.
+ * Items at the current depth are rendered as `<li>`, and deeper items are
+ * wrapped in a nested `<ul>` inside the preceding `<li>`.
+ */
+function renderNestedList(
+  items: NestedListItem[],
+  baseDepth: number,
+  citations: Citation[],
+  onCitationClick?: (citation: Citation) => void,
+  keyPrefix = "ul",
+): React.ReactNode {
+  const elements: React.ReactNode[] = [];
+  let idx = 0;
+
+  while (idx < items.length) {
+    const item = items[idx]!;
+
+    if (item.depth === baseDepth) {
+      // Check if following items are deeper (children of this item)
+      const children: NestedListItem[] = [];
+      let next = idx + 1;
+      while (next < items.length && items[next]!.depth > baseDepth) {
+        children.push(items[next]!);
+        next++;
+      }
+
+      elements.push(
+        <li
+          key={`${keyPrefix}-li-${idx}`}
+          className="text-gray-700 dark:text-gray-300 text-sm leading-relaxed"
+        >
+          {parseInline(item.text, citations, onCitationClick)}
+          {children.length > 0 && (
+            <ul className="ml-4 mt-0.5 space-y-0.5 list-disc">
+              {renderNestedList(
+                children,
+                children[0]!.depth,
+                citations,
+                onCitationClick,
+                `${keyPrefix}-${idx}`,
+              )}
+            </ul>
+          )}
+        </li>,
+      );
+      idx = next;
+    } else {
+      // Shouldn't happen at correct baseDepth, but advance to avoid infinite loop
+      idx++;
+    }
+  }
+
+  return <>{elements}</>;
+}
+
+/**
  * Lightweight markdown parser that converts a subset of markdown syntax
- * to React elements. Handles bold, italic, inline code, code blocks,
- * bullet lists, numbered lists, newlines, and citation references.
+ * to React elements. Handles headings, code blocks, horizontal rules,
+ * tables, blockquotes, nested bullet lists, numbered lists, bold, italic,
+ * inline code, links, and citation references.
  *
  * Does not use an external library to keep the bundle lean.
  */
@@ -53,37 +118,10 @@ function parseMarkdown(
   let i = 0;
 
   while (i < lines.length) {
-    const line = lines[i];
+    const line = lines[i]!;
 
-    // Heading: # through ####
-    const headingMatch = line?.match(/^(#{1,4})\s+(.+)$/);
-    if (headingMatch) {
-      const level = headingMatch[1]!.length;
-      const content = headingMatch[2] ?? "";
-      const Tag = `h${level + 1}` as keyof JSX.IntrinsicElements; // h2-h5
-      const sizeClass =
-        level === 1
-          ? "text-lg font-bold"
-          : level === 2
-            ? "text-base font-semibold"
-            : "text-sm font-semibold";
-      nodes.push(
-        <Tag
-          key={`h-${i}`}
-          className={cn(
-            sizeClass,
-            "mt-3 mb-1.5 text-gray-900 dark:text-gray-100",
-          )}
-        >
-          {parseInline(content!, citations, onCitationClick)}
-        </Tag>,
-      );
-      i++;
-      continue;
-    }
-
-    // Code block: ```...```
-    if (line!.trimStart().startsWith("```")) {
+    // 1. Code block: ```...``` (existing — checked first)
+    if (line.trimStart().startsWith("```")) {
       const codeLines: string[] = [];
       i++; // Skip opening ```
       while (i < lines.length && !lines[i]!.trimStart().startsWith("```")) {
@@ -107,30 +145,171 @@ function parseMarkdown(
       continue;
     }
 
-    // Bullet list item: - or *
-    if (/^\s*[-*]\s/.test(line!)) {
-      const listItems: string[] = [];
-      while (i < lines.length && /^\s*[-*]\s/.test(lines[i]!)) {
-        listItems.push(lines[i]!.replace(/^\s*[-*]\s/, ""));
+    // 2. Horizontal rule: ---, ***, ___ (possibly with spaces)
+    if (/^\s*([-*_])\s*\1\s*\1[\s\-*_]*$/.test(line)) {
+      nodes.push(
+        <hr
+          key={`hr-${i}`}
+          className="my-4 border-gray-200 dark:border-gray-700"
+        />,
+      );
+      i++;
+      continue;
+    }
+
+    // 3. Table: consecutive lines starting with |
+    if (/^\s*\|/.test(line)) {
+      const tableLines: string[] = [];
+      while (i < lines.length && /^\s*\|/.test(lines[i]!)) {
+        tableLines.push(lines[i]!);
         i++;
       }
+
+      // Parse table rows — split each line by | and trim cells
+      const parseRow = (rowLine: string): string[] =>
+        rowLine
+          .replace(/^\s*\|/, "")
+          .replace(/\|\s*$/, "")
+          .split("|")
+          .map((cell) => cell.trim());
+
+      // Check if second line is a separator (contains ---)
+      const hasSeparator =
+        tableLines.length >= 2 && /^\s*\|[\s:|-]+\|\s*$/.test(tableLines[1]!);
+
+      const headerRow = hasSeparator ? parseRow(tableLines[0]!) : null;
+      const bodyStartIndex = hasSeparator ? 2 : 0;
+      const bodyRows = tableLines.slice(bodyStartIndex).map(parseRow);
+
+      nodes.push(
+        <div key={`table-${i}`} className="my-2 overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            {headerRow && (
+              <thead>
+                <tr className="border-b border-gray-300 dark:border-gray-600">
+                  {headerRow.map((cell, cIdx) => (
+                    <th
+                      key={cIdx}
+                      className="px-3 py-1.5 text-left font-semibold text-gray-900 dark:text-gray-100"
+                    >
+                      {parseInline(cell, citations, onCitationClick)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+            )}
+            <tbody>
+              {bodyRows.map((row, rIdx) => (
+                <tr
+                  key={rIdx}
+                  className={cn(
+                    rIdx % 2 === 0
+                      ? "bg-gray-50 dark:bg-dark-surface"
+                      : "bg-white dark:bg-dark-surface-elevated",
+                  )}
+                >
+                  {row.map((cell, cIdx) => (
+                    <td
+                      key={cIdx}
+                      className="px-3 py-1.5 text-left text-sm text-gray-700 dark:text-gray-300"
+                    >
+                      {parseInline(cell, citations, onCitationClick)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>,
+      );
+      continue;
+    }
+
+    // 4. Blockquote: > text
+    if (/^>\s?/.test(line)) {
+      const quoteLines: string[] = [];
+      while (i < lines.length && /^>\s?/.test(lines[i]!)) {
+        quoteLines.push(lines[i]!.replace(/^>\s?/, ""));
+        i++;
+      }
+
+      nodes.push(
+        <blockquote
+          key={`bq-${i}`}
+          className={cn(
+            "my-2 pl-4 py-2",
+            "border-l-[3px] border-brand-blue dark:border-brand-blue/50",
+            "bg-gray-50 dark:bg-dark-surface",
+            "text-sm italic text-gray-700 dark:text-gray-300",
+          )}
+        >
+          {quoteLines.map((qLine, qIdx) => (
+            <p key={qIdx} className="leading-relaxed">
+              {parseInline(qLine, citations, onCitationClick)}
+            </p>
+          ))}
+        </blockquote>,
+      );
+      continue;
+    }
+
+    // 5. Heading: # through #### (existing)
+    const headingMatch = line.match(/^(#{1,4})\s+(.+)$/);
+    if (headingMatch) {
+      const level = headingMatch[1]!.length;
+      const content = headingMatch[2] ?? "";
+      const Tag = `h${level + 1}` as keyof JSX.IntrinsicElements; // h2-h5
+      const sizeClass =
+        level === 1
+          ? "text-lg font-bold"
+          : level === 2
+            ? "text-base font-semibold"
+            : "text-sm font-semibold";
+      nodes.push(
+        <Tag
+          key={`h-${i}`}
+          className={cn(
+            sizeClass,
+            "mt-3 mb-1.5 text-gray-900 dark:text-gray-100",
+          )}
+        >
+          {parseInline(content, citations, onCitationClick)}
+        </Tag>,
+      );
+      i++;
+      continue;
+    }
+
+    // 6. Bullet list item: - or * (with nesting support)
+    if (/^\s*[-*]\s/.test(line)) {
+      const listItems: NestedListItem[] = [];
+      while (i < lines.length && /^\s*[-*]\s/.test(lines[i]!)) {
+        const raw = lines[i]!;
+        const indentMatch = raw.match(/^(\s*)[-*]\s/)!;
+        const depth = Math.floor(indentMatch[1]!.length / 2);
+        const itemText = raw.replace(/^\s*[-*]\s/, "");
+        listItems.push({ depth, text: itemText });
+        i++;
+      }
+
+      const baseDepth = listItems[0]!.depth;
+
       nodes.push(
         <ul key={`ul-${i}`} className="my-1.5 ml-4 space-y-0.5 list-disc">
-          {listItems.map((item, idx) => (
-            <li
-              key={idx}
-              className="text-gray-700 dark:text-gray-300 text-sm leading-relaxed"
-            >
-              {parseInline(item, citations, onCitationClick)}
-            </li>
-          ))}
+          {renderNestedList(
+            listItems,
+            baseDepth,
+            citations,
+            onCitationClick,
+            `ul-${i}`,
+          )}
         </ul>,
       );
       continue;
     }
 
-    // Numbered list item: 1. or 1)
-    if (/^\s*\d+[.)]\s/.test(line!)) {
+    // 7. Numbered list item: 1. or 1) (existing)
+    if (/^\s*\d+[.)]\s/.test(line)) {
       const listItems: string[] = [];
       while (i < lines.length && /^\s*\d+[.)]\s/.test(lines[i]!)) {
         listItems.push(lines[i]!.replace(/^\s*\d+[.)]\s/, ""));
@@ -151,20 +330,20 @@ function parseMarkdown(
       continue;
     }
 
-    // Empty line -> line break
-    if (!line || line.trim() === "") {
+    // 8. Empty line -> line break
+    if (line.trim() === "") {
       nodes.push(<br key={`br-${i}`} />);
       i++;
       continue;
     }
 
-    // Regular paragraph
+    // 9. Regular paragraph
     nodes.push(
       <p
         key={`p-${i}`}
         className="text-sm leading-relaxed text-gray-700 dark:text-gray-300"
       >
-        {parseInline(line ?? "", citations, onCitationClick)}
+        {parseInline(line, citations, onCitationClick)}
       </p>,
     );
     i++;
@@ -175,7 +354,7 @@ function parseMarkdown(
 
 /**
  * Parses inline markdown formatting within a single line of text.
- * Handles bold, italic, inline code, and citation references [1].
+ * Handles links [text](url), bold, italic, inline code, and citation references [1].
  */
 function parseInline(
   rawText: string,
@@ -188,8 +367,9 @@ function parseInline(
   const text = rawText.replace(/\[\]/g, "");
 
   // Combined regex for all inline elements
-  // Match: **bold**, *italic*, `code`, or [number] citation
-  const regex = /(\*\*(.+?)\*\*)|(\*(.+?)\*)|(`(.+?)`)|(\[(\d+)\])/g;
+  // Match: [text](url) link, **bold**, *italic*, `code`, or [number] citation
+  const regex =
+    /(\[([^\]]+)\]\(([^)]+)\))|(\*\*(.+?)\*\*)|(\*(.+?)\*)|(`(.+?)`)|(\[(\d+)\])/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
@@ -200,20 +380,36 @@ function parseInline(
     }
 
     if (match[1]) {
+      // [text](url) link
+      const linkText = match[2]!;
+      const linkUrl = match[3]!;
+      nodes.push(
+        <a
+          key={`link-${match.index}`}
+          href={linkUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-brand-blue hover:underline inline-flex items-center gap-0.5"
+        >
+          {linkText}
+          <ExternalLink className="inline h-3 w-3 shrink-0" />
+        </a>,
+      );
+    } else if (match[4]) {
       // **bold**
       nodes.push(
         <strong key={`b-${match.index}`} className="font-semibold">
-          {match[2]}
+          {match[5]}
         </strong>,
       );
-    } else if (match[3]) {
+    } else if (match[6]) {
       // *italic*
       nodes.push(
         <em key={`i-${match.index}`} className="italic">
-          {match[4]}
+          {match[7]}
         </em>,
       );
-    } else if (match[5]) {
+    } else if (match[8]) {
       // `code`
       nodes.push(
         <code
@@ -224,12 +420,12 @@ function parseInline(
             "text-red-600 dark:text-red-400",
           )}
         >
-          {match[6]}
+          {match[9]}
         </code>,
       );
-    } else if (match[7]) {
+    } else if (match[10]) {
       // [number] citation reference
-      const citationIndex = parseInt(match[8]!, 10);
+      const citationIndex = parseInt(match[11]!, 10);
       const citation = citations.find((c) => c.index === citationIndex);
 
       if (citation) {
@@ -262,7 +458,7 @@ function parseInline(
         );
       } else {
         // No matching citation found, render as plain text
-        nodes.push(match[7]);
+        nodes.push(match[10]);
       }
     }
 

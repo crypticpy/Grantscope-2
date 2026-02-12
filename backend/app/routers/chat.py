@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 
 from app.deps import supabase, get_current_user, _safe_error
-from app.models.chat import ChatRequest
+from app.models.chat import ChatRequest, ConversationUpdateRequest
 from app.chat_service import (
     chat as chat_service_chat,
     generate_suggestions as chat_generate_suggestions,
@@ -164,6 +164,67 @@ async def get_chat_conversation(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("fetching conversation", e),
+        ) from e
+
+
+@router.patch("/chat/conversations/{conversation_id}")
+async def update_chat_conversation(
+    conversation_id: str,
+    body: ConversationUpdateRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Update a conversation's title.
+
+    Only the conversation owner can rename it.
+    """
+    user_id = current_user["id"]
+    try:
+        # Fetch conversation to verify it exists
+        conv_result = (
+            supabase.table("chat_conversations")
+            .select("id, user_id")
+            .eq("id", conversation_id)
+            .execute()
+        )
+
+        if not conv_result.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found",
+            )
+
+        # Verify ownership
+        if conv_result.data[0]["user_id"] != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to update this conversation",
+            )
+
+        # Update the title
+        update_result = (
+            supabase.table("chat_conversations")
+            .update({"title": body.title})
+            .eq("id", conversation_id)
+            .execute()
+        )
+
+        if not update_result.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update conversation",
+            )
+
+        return update_result.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            f"Failed to update conversation {conversation_id} for user {user_id}: {e}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("updating conversation", e),
         ) from e
 
 

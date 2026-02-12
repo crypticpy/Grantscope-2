@@ -401,6 +401,26 @@ export async function deleteConversation(
 }
 
 /**
+ * Renames a conversation by updating its title.
+ *
+ * @param conversationId - UUID of the conversation to rename
+ * @param title - The new title for the conversation
+ * @returns The updated conversation record
+ */
+export async function renameConversation(
+  conversationId: string,
+  title: string,
+): Promise<Conversation> {
+  return apiRequest<Conversation>(
+    `/api/v1/chat/conversations/${conversationId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ title }),
+    },
+  );
+}
+
+/**
  * Fetches suggested questions for a given scope.
  *
  * Returns contextually relevant questions based on the scope

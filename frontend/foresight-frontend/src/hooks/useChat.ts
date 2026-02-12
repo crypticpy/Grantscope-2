@@ -45,6 +45,10 @@ export interface UseChatReturn {
   streamingCitations: Citation[];
   /** The active conversation ID, or null for a new conversation */
   conversationId: string | null;
+  /** Title of the active conversation, if loaded */
+  conversationTitle: string | null;
+  /** ISO 8601 timestamp when the active conversation was last updated */
+  conversationUpdatedAt: string | null;
   /** Contextual question suggestions */
   suggestedQuestions: string[];
   /** Current error message, if any */
@@ -117,6 +121,12 @@ export function useChat(options: UseChatOptions): UseChatReturn {
   const [conversationId, setConversationId] = useState<string | null>(
     resolvedInitialId,
   );
+  const [conversationTitle, setConversationTitle] = useState<string | null>(
+    null,
+  );
+  const [conversationUpdatedAt, setConversationUpdatedAt] = useState<
+    string | null
+  >(null);
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -293,10 +303,12 @@ export function useChat(options: UseChatOptions): UseChatReturn {
         if (!isMountedRef.current) return;
 
         setConversationId(data.conversation.id);
+        setConversationTitle(data.conversation.title ?? null);
+        setConversationUpdatedAt(data.conversation.updated_at ?? null);
         setMessages(data.messages);
         setSuggestedQuestions([]);
         persistConversationId(scope, scopeId, data.conversation.id);
-      } catch (err) {
+      } catch {
         if (!isMountedRef.current) return;
         // If the stored conversation was deleted, clear it and start fresh
         persistConversationId(scope, scopeId, null);
@@ -318,6 +330,8 @@ export function useChat(options: UseChatOptions): UseChatReturn {
 
     setMessages([]);
     setConversationId(null);
+    setConversationTitle(null);
+    setConversationUpdatedAt(null);
     setStreamingContent("");
     setStreamingCitations([]);
     setIsStreaming(false);
@@ -398,6 +412,8 @@ export function useChat(options: UseChatOptions): UseChatReturn {
     streamingContent,
     streamingCitations,
     conversationId,
+    conversationTitle,
+    conversationUpdatedAt,
     suggestedQuestions,
     error,
     sendMessage,
