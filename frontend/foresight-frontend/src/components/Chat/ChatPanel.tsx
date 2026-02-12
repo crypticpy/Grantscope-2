@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useChat } from "../../hooks/useChat";
+import { useChatKeyboard } from "../../hooks/useChatKeyboard";
 import { ChatMessage as ChatMessageComponent } from "./ChatMessage";
 import { ChatSuggestionChips } from "./ChatSuggestionChips";
 import { ChatHistoryPopover } from "./ChatHistoryPopover";
@@ -272,6 +273,27 @@ export function ChatPanel({
     [sendMessage],
   );
 
+  // ============================================================================
+  // Keyboard Shortcuts
+  // ============================================================================
+
+  const handleCopyLastResponse = useCallback(() => {
+    const lastAssistant = [...messages]
+      .reverse()
+      .find((m) => m.role === "assistant");
+    if (lastAssistant) {
+      navigator.clipboard.writeText(lastAssistant.content).catch(() => {});
+    }
+  }, [messages]);
+
+  useChatKeyboard({
+    onFocusInput: () => textareaRef.current?.focus(),
+    onNewConversation: startNewConversation,
+    onCopyLastResponse: handleCopyLastResponse,
+    onStopGenerating: stopGenerating,
+    isStreaming,
+  });
+
   const showEmptyState = messages.length === 0 && !isStreaming;
   const showError = error && !errorDismissed;
 
@@ -420,6 +442,15 @@ export function ChatPanel({
                 />
               </div>
             )}
+
+            {/* Keyboard shortcut hint */}
+            <p className="mt-4 text-[10px] text-gray-300 dark:text-gray-600">
+              Press{" "}
+              <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-dark-surface text-gray-500 dark:text-gray-400 font-mono">
+                /
+              </kbd>{" "}
+              to focus
+            </p>
           </div>
         )}
 

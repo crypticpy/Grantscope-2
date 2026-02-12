@@ -525,6 +525,11 @@ export interface PinnedMessage {
   };
 }
 
+/** Fetch lightweight stats for the chat empty state. */
+export async function fetchChatStats(): Promise<{ facts: string[] }> {
+  return apiRequest<{ facts: string[] }>("/api/v1/chat/stats");
+}
+
 /** Fetch the current user's pinned messages. */
 export async function fetchPinnedMessages(params?: {
   limit?: number;

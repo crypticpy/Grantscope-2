@@ -484,6 +484,66 @@ function parseInline(
 }
 
 // ============================================================================
+// Tone Detection
+// ============================================================================
+
+/**
+ * Detects the dominant tone of a message via keyword analysis.
+ * Returns a Tailwind border color class.
+ */
+function detectToneBorder(content: string): string {
+  const lower = content.toLowerCase();
+
+  // Risk/warning keywords
+  const riskWords = [
+    "risk",
+    "warning",
+    "threat",
+    "concern",
+    "danger",
+    "decline",
+    "challenge",
+    "vulnerability",
+    "disruption",
+    "failure",
+    "obstacle",
+  ];
+  const riskScore = riskWords.reduce(
+    (count, word) => count + (lower.includes(word) ? 1 : 0),
+    0,
+  );
+
+  // Opportunity/positive keywords
+  const opportunityWords = [
+    "opportunity",
+    "growth",
+    "innovation",
+    "benefit",
+    "advantage",
+    "improvement",
+    "progress",
+    "success",
+    "promising",
+    "potential",
+    "recommend",
+  ];
+  const opportunityScore = opportunityWords.reduce(
+    (count, word) => count + (lower.includes(word) ? 1 : 0),
+    0,
+  );
+
+  // Need at least 2 keyword matches for a tone accent
+  if (riskScore >= 2 && riskScore > opportunityScore) {
+    return "border-l-[2px] border-l-amber-400 dark:border-l-amber-500/60";
+  }
+  if (opportunityScore >= 2 && opportunityScore > riskScore) {
+    return "border-l-[2px] border-l-teal-400 dark:border-l-teal-500/60";
+  }
+
+  return "";
+}
+
+// ============================================================================
 // Component
 // ============================================================================
 
@@ -526,6 +586,12 @@ export function ChatMessage({
     [message.content, message.citations, onCitationClick],
   );
 
+  // Detect response tone for subtle left-border accent
+  const toneBorder = useMemo(
+    () => (!isUser && !isStreaming ? detectToneBorder(message.content) : ""),
+    [message.content, isUser, isStreaming],
+  );
+
   return (
     <div
       className={cn("flex gap-2.5", isUser ? "flex-row-reverse" : "flex-row")}
@@ -558,7 +624,10 @@ export function ChatMessage({
             "px-4 py-2.5",
             isUser
               ? "bg-brand-blue text-white rounded-2xl rounded-br-md"
-              : "bg-gray-100 dark:bg-dark-surface-elevated rounded-2xl rounded-bl-md",
+              : cn(
+                  "bg-gray-100 dark:bg-dark-surface-elevated rounded-2xl rounded-bl-md",
+                  toneBorder,
+                ),
           )}
         >
           {/* Message content */}

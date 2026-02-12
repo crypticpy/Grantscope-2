@@ -15,6 +15,7 @@ import {
   fetchConversation,
   fetchConversations,
   fetchSuggestions,
+  fetchChatStats,
   type ChatMessage,
   type Citation,
 } from "../lib/chat-api";
@@ -69,6 +70,8 @@ export interface UseChatReturn {
   progressStep: { step: string; detail: string } | null;
   /** Metadata about the last response (source counts, etc.) */
   responseMetadata: Record<string, unknown> | null;
+  /** A rotating fun fact about the user's data */
+  funFact: string | null;
 }
 
 // ============================================================================
@@ -135,6 +138,9 @@ export function useChat(options: UseChatOptions): UseChatReturn {
   >(null);
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  // Fun fact for empty state
+  const [funFact, setFunFact] = useState<string | null>(null);
 
   // Progress & metadata state
   const [progressStep, setProgressStep] = useState<{
@@ -428,6 +434,15 @@ export function useChat(options: UseChatOptions): UseChatReturn {
       // User explicitly requested a fresh chat
       if (forceNew) {
         loadSuggestions();
+        fetchChatStats()
+          .then((data) => {
+            if (data.facts.length > 0) {
+              setFunFact(
+                data.facts[Math.floor(Math.random() * data.facts.length)],
+              );
+            }
+          })
+          .catch(() => {});
         return;
       }
 
@@ -451,11 +466,29 @@ export function useChat(options: UseChatOptions): UseChatReturn {
         } else {
           // No prior conversations — show suggestions
           loadSuggestions();
+          fetchChatStats()
+            .then((data) => {
+              if (data.facts.length > 0) {
+                setFunFact(
+                  data.facts[Math.floor(Math.random() * data.facts.length)],
+                );
+              }
+            })
+            .catch(() => {});
         }
       } catch {
         // Failed to fetch — fall back to empty state with suggestions
         if (!cancelled && isMountedRef.current) {
           loadSuggestions();
+          fetchChatStats()
+            .then((data) => {
+              if (data.facts.length > 0) {
+                setFunFact(
+                  data.facts[Math.floor(Math.random() * data.facts.length)],
+                );
+              }
+            })
+            .catch(() => {});
         }
       }
     }
@@ -485,5 +518,6 @@ export function useChat(options: UseChatOptions): UseChatReturn {
     retryLastMessage,
     progressStep,
     responseMetadata,
+    funFact,
   };
 }

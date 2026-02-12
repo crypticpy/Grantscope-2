@@ -17,6 +17,94 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["chat"])
 
 
+@router.get("/chat/stats")
+async def chat_stats(
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Get lightweight stats for the chat empty state.
+    Returns facts about the user's intelligence data.
+    """
+    user_id = current_user["id"]
+    try:
+        facts = []
+
+        # Count followed signals
+        try:
+            follows = (
+                supabase.table("user_follows")
+                .select("id", count="exact")
+                .eq("user_id", user_id)
+                .execute()
+            )
+            if follows.count and follows.count > 0:
+                facts.append(
+                    f"You're tracking {follows.count} signal{'s' if follows.count != 1 else ''}"
+                )
+        except Exception:
+            pass
+
+        # Count workstreams
+        try:
+            ws = (
+                supabase.table("workstreams")
+                .select("id", count="exact")
+                .eq("created_by", user_id)
+                .execute()
+            )
+            if ws.count and ws.count > 0:
+                facts.append(
+                    f"You have {ws.count} active workstream{'s' if ws.count != 1 else ''}"
+                )
+        except Exception:
+            pass
+
+        # Count total cards
+        try:
+            cards = supabase.table("cards").select("id", count="exact").execute()
+            if cards.count and cards.count > 0:
+                facts.append(
+                    f"Foresight is monitoring {cards.count} signals across all pillars"
+                )
+        except Exception:
+            pass
+
+        # Count conversations
+        try:
+            convs = (
+                supabase.table("chat_conversations")
+                .select("id", count="exact")
+                .eq("user_id", user_id)
+                .execute()
+            )
+            if convs.count and convs.count > 0:
+                facts.append(
+                    f"You've had {convs.count} conversation{'s' if convs.count != 1 else ''} with Foresight"
+                )
+        except Exception:
+            pass
+
+        # Count pinned messages
+        try:
+            pins = (
+                supabase.table("chat_pinned_messages")
+                .select("id", count="exact")
+                .eq("user_id", user_id)
+                .execute()
+            )
+            if pins.count and pins.count > 0:
+                facts.append(
+                    f"You've saved {pins.count} insight{'s' if pins.count != 1 else ''}"
+                )
+        except Exception:
+            pass
+
+        return {"facts": facts}
+    except Exception as e:
+        logger.error(f"Failed to get chat stats: {e}")
+        return {"facts": []}
+
+
 @router.post("/chat")
 async def chat_endpoint(
     request: ChatRequest,
