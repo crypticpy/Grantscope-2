@@ -755,17 +755,28 @@ class WorkstreamScanService:
 
         for source in sources:
             try:
-                # Check URL first
+                # Check URL — only skip if this exact URL is already linked
+                # to a card in THIS workstream (not globally across all cards).
                 url_check = (
                     self.supabase.table("sources")
-                    .select("id")
+                    .select("id, card_id")
                     .eq("url", source.raw.url)
                     .execute()
                 )
 
                 if url_check.data:
-                    duplicate_count += 1
-                    continue
+                    # Check if any of these source cards are already in the workstream
+                    existing_card_ids = {r["card_id"] for r in url_check.data}
+                    ws_cards = (
+                        self.supabase.table("workstream_cards")
+                        .select("card_id")
+                        .eq("workstream_id", config.workstream_id)
+                        .in_("card_id", list(existing_card_ids))
+                        .execute()
+                    )
+                    if ws_cards.data:
+                        duplicate_count += 1
+                        continue
 
                 # Vector similarity check
                 if source.embedding:
@@ -864,16 +875,26 @@ class WorkstreamScanService:
             if result.data:
                 card_id = result.data[0]["id"]
 
-                # Store embedding
+                # Store embedding on both cards.embedding (for find_similar_cards RPC)
+                # and card_embeddings table (for consistency with other services)
                 if source.embedding:
-                    self.supabase.table("card_embeddings").insert(
-                        {
-                            "card_id": card_id,
-                            "embedding": source.embedding,
-                            "model": "text-embedding-3-small",
-                            "created_at": now,
-                        }
-                    ).execute()
+                    try:
+                        self.supabase.table("cards").update(
+                            {"embedding": source.embedding}
+                        ).eq("id", card_id).execute()
+                    except Exception as emb_err:
+                        logger.warning(f"Failed to store embedding on card: {emb_err}")
+
+                    try:
+                        self.supabase.table("card_embeddings").upsert(
+                            {
+                                "card_id": card_id,
+                                "embedding": source.embedding,
+                                "created_at": now,
+                            }
+                        ).execute()
+                    except Exception as emb_err:
+                        logger.warning(f"Failed to store card_embedding: {emb_err}")
 
                 # Store source
                 await self._store_source_to_card(source, card_id)
@@ -904,9 +925,15 @@ class WorkstreamScanService:
             source_record = {
                 "card_id": card_id,
                 "url": source.raw.url,
-                "title": source.raw.title,
-                "source_name": source.raw.source_name,
-                "content_type": "article",
+                "title": (source.raw.title or "Untitled")[:500],
+                "publication": (
+                    (source.raw.source_name or "")[:200]
+                    if source.raw.source_name
+                    else None
+                ),
+                "full_text": (
+                    source.raw.content[:10000] if source.raw.content else None
+                ),
                 "ai_summary": (source.analysis.summary if source.analysis else None),
                 "relevance_to_card": (
                     source.triage.confidence if source.triage else 0.5
