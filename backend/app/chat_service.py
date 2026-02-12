@@ -74,7 +74,7 @@ async def _check_rate_limit(supabase: Client, user_id: str) -> bool:
 
         # Count messages sent by this user in the last minute
         # We join through conversations to filter by user_id
-        result = (
+        (
             supabase.table("chat_messages")
             .select("id", count="exact")
             .eq("role", "user")
