@@ -28,16 +28,13 @@ from typing import Any, Dict, Optional
 from dotenv import load_dotenv
 
 from app.brief_service import ExecutiveBriefService
-from app.main import (
-    DiscoveryConfigRequest,
-    ResearchTaskCreate,
-    execute_discovery_run_background,
-    execute_research_task_background,
-    execute_workstream_scan_background,
-    openai_client,
-    start_scheduler,
-    supabase,
-)
+from app.deps import openai_client, supabase
+from app.models.discovery_models import DiscoveryConfigRequest
+from app.models.research import ResearchTaskCreate
+from app.routers.discovery import execute_discovery_run_background
+from app.routers.research import execute_research_task_background
+from app.routers.workstream_scans import execute_workstream_scan_background
+from app.scheduler import start_scheduler
 from fastapi import FastAPI
 import uvicorn
 
