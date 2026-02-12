@@ -482,6 +482,77 @@ export async function fetchSuggestions(
   return apiRequest<string[]>(`/api/v1/chat/suggestions?${queryString}`);
 }
 
+/**
+ * A categorized smart suggestion returned by the smart suggestions endpoint.
+ */
+export interface SmartSuggestion {
+  /** The suggested question text */
+  text: string;
+  /** Category: "deeper" | "compare" | "action" | "explore" */
+  category: string;
+}
+
+/**
+ * Fetches context-aware categorized follow-up suggestions.
+ *
+ * When a conversationId is provided, the backend uses recent messages
+ * to generate more relevant suggestions grouped by category.
+ *
+ * @param scope - The chat scope ("signal", "workstream", or "global")
+ * @param scopeId - Optional ID of the scoped entity
+ * @param conversationId - Optional conversation ID for context-aware suggestions
+ * @returns Array of SmartSuggestion objects with text and category
+ */
+export async function fetchSmartSuggestions(
+  scope: string,
+  scopeId?: string,
+  conversationId?: string,
+): Promise<SmartSuggestion[]> {
+  const searchParams = new URLSearchParams();
+  searchParams.append("scope", scope);
+  if (scopeId) searchParams.append("scope_id", scopeId);
+  if (conversationId) searchParams.append("conversation_id", conversationId);
+
+  const queryString = searchParams.toString();
+  const result = await apiRequest<{ suggestions: SmartSuggestion[] }>(
+    `/api/v1/chat/suggestions/smart?${queryString}`,
+  );
+  return result.suggestions || [];
+}
+
+// ============================================================================
+// @Mention Search (Cross-Scope References)
+// ============================================================================
+
+/**
+ * A mention search result representing a signal or workstream.
+ */
+export interface MentionResult {
+  /** UUID of the entity */
+  id: string;
+  /** The entity type: "signal" or "workstream" */
+  type: "signal" | "workstream";
+  /** Display title of the entity */
+  title: string;
+  /** URL-friendly slug (signals only) */
+  slug?: string;
+}
+
+/**
+ * Searches signals and workstreams for @mention autocomplete.
+ *
+ * @param query - The search term to match against entity names
+ * @returns Array of matching mention results (max 8)
+ */
+export async function searchMentions(query: string): Promise<MentionResult[]> {
+  const searchParams = new URLSearchParams();
+  searchParams.append("q", query);
+  const result = await apiRequest<{ results: MentionResult[] }>(
+    `/api/v1/chat/mentions/search?${searchParams.toString()}`,
+  );
+  return result.results || [];
+}
+
 // ============================================================================
 // Pin / Save Messages
 // ============================================================================

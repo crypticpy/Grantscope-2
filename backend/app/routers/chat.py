@@ -1,7 +1,8 @@
 """Chat (Ask Foresight) router."""
 
+import json
 import logging
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
@@ -12,6 +13,7 @@ from app.chat_service import (
     chat as chat_service_chat,
     generate_suggestions as chat_generate_suggestions,
 )
+from app.openai_provider import azure_openai_async_client, get_chat_mini_deployment
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["chat"])
@@ -460,6 +462,328 @@ async def chat_suggestions(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("generating suggestions", e),
+        ) from e
+
+
+@router.get("/chat/suggestions/smart")
+async def smart_chat_suggestions(
+    scope: str = Query(..., description="Chat scope: signal, workstream, or global"),
+    scope_id: Optional[str] = Query(None, description="ID of the scoped entity"),
+    conversation_id: Optional[str] = Query(
+        None, description="Conversation ID for context-aware suggestions"
+    ),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Get AI-generated smart follow-up suggestions with categories.
+
+    When a conversation_id is provided, fetches the last 3 messages from
+    that conversation and uses the context to generate more relevant
+    categorized suggestions.
+
+    Categories: deeper, compare, action, explore
+    """
+    user_id = current_user["id"]
+
+    if scope not in ("signal", "workstream", "global"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid scope. Must be 'signal', 'workstream', or 'global'.",
+        )
+
+    try:
+        conversation_summary = ""
+
+        # If conversation_id provided, fetch recent messages for context
+        if conversation_id:
+            try:
+                # Verify conversation ownership
+                conv_result = (
+                    supabase.table("chat_conversations")
+                    .select("id, scope, scope_id, title")
+                    .eq("id", conversation_id)
+                    .eq("user_id", user_id)
+                    .execute()
+                )
+                if conv_result.data:
+                    # Fetch last 3 messages from the conversation
+                    msg_result = (
+                        supabase.table("chat_messages")
+                        .select("role, content")
+                        .eq("conversation_id", conversation_id)
+                        .order("created_at", desc=True)
+                        .limit(3)
+                        .execute()
+                    )
+                    if msg_result.data:
+                        # Build a brief summary of recent exchange
+                        recent_msgs = list(reversed(msg_result.data))
+                        parts = []
+                        for msg in recent_msgs:
+                            role_label = (
+                                "User" if msg["role"] == "user" else "Assistant"
+                            )
+                            # Truncate long messages
+                            content = (msg.get("content") or "")[:300]
+                            parts.append(f"{role_label}: {content}")
+                        conversation_summary = "\n".join(parts)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to fetch conversation context for smart suggestions: {e}"
+                )
+
+        # Build scope context
+        scope_context = ""
+        try:
+            if scope == "signal" and scope_id:
+                card_result = (
+                    supabase.table("cards")
+                    .select("name, summary")
+                    .eq("id", scope_id)
+                    .execute()
+                )
+                if card_result.data:
+                    card = card_result.data[0]
+                    scope_context = f"Signal: \"{card.get('name', 'Unknown')}\". Summary: {(card.get('summary') or '')[:200]}"
+            elif scope == "workstream" and scope_id:
+                ws_result = (
+                    supabase.table("workstreams")
+                    .select("name, description")
+                    .eq("id", scope_id)
+                    .execute()
+                )
+                if ws_result.data:
+                    ws = ws_result.data[0]
+                    scope_context = f"Workstream: \"{ws.get('name', 'Unknown')}\". Description: {(ws.get('description') or '')[:200]}"
+            else:
+                scope_context = "Global strategic intelligence for the City of Austin."
+        except Exception as e:
+            logger.warning(f"Failed to fetch scope context for smart suggestions: {e}")
+
+        # Generate categorized suggestions via LLM
+        suggestions = await _generate_smart_suggestions(
+            scope=scope,
+            scope_context=scope_context,
+            conversation_summary=conversation_summary,
+        )
+
+        return {"suggestions": suggestions}
+
+    except Exception as e:
+        logger.error(f"Failed to generate smart chat suggestions: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("generating smart suggestions", e),
+        ) from e
+
+
+async def _generate_smart_suggestions(
+    scope: str,
+    scope_context: str,
+    conversation_summary: str,
+) -> List[Dict[str, str]]:
+    """
+    Generate categorized follow-up suggestions using the mini model.
+
+    Returns a list of dicts with 'text' and 'category' keys.
+    Categories: deeper, compare, action, explore
+    """
+    context_block = ""
+    if conversation_summary:
+        context_block = f"""
+Recent conversation:
+{conversation_summary}
+"""
+
+    prompt = f"""Generate exactly 4 follow-up question suggestions for a city analyst using a strategic intelligence system.
+
+Scope: {scope}
+{scope_context}
+{context_block}
+Each suggestion must belong to one of these categories:
+- "deeper": Dig deeper into causes, drivers, or details
+- "compare": Compare with other cities, trends, or benchmarks
+- "action": Identify specific actions, next steps, or recommendations
+- "explore": Discover related signals, patterns, or connections
+
+Return a JSON object with a "suggestions" array of exactly 4 objects, one per category.
+Each object has "text" (the question, max 80 chars) and "category" (one of: deeper, compare, action, explore).
+
+Example:
+{{"suggestions": [
+  {{"text": "What are the underlying drivers of this trend?", "category": "deeper"}},
+  {{"text": "How does this compare to Denver and Portland?", "category": "compare"}},
+  {{"text": "What specific actions should Austin take next?", "category": "action"}},
+  {{"text": "What related signals should we watch?", "category": "explore"}}
+]}}"""
+
+    try:
+        response = await azure_openai_async_client.chat.completions.create(
+            model=get_chat_mini_deployment(),
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You generate categorized follow-up questions for a strategic "
+                        "intelligence chat system. Respond with valid JSON only."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+            response_format={"type": "json_object"},
+            max_tokens=400,
+            temperature=0.8,
+        )
+
+        content = response.choices[0].message.content.strip()
+        result = json.loads(content)
+
+        # Parse the result
+        suggestions_raw: list = []
+        if isinstance(result, dict):
+            suggestions_raw = result.get("suggestions") or result.get("questions") or []
+        elif isinstance(result, list):
+            suggestions_raw = result
+
+        valid_categories = {"deeper", "compare", "action", "explore"}
+        suggestions: List[Dict[str, str]] = []
+        for item in suggestions_raw[:4]:
+            if isinstance(item, dict) and "text" in item and "category" in item:
+                category = (
+                    item["category"]
+                    if item["category"] in valid_categories
+                    else "deeper"
+                )
+                suggestions.append(
+                    {
+                        "text": str(item["text"])[:100],
+                        "category": category,
+                    }
+                )
+
+        if suggestions:
+            return suggestions
+
+    except Exception as e:
+        logger.warning(f"Smart suggestion generation failed: {e}")
+
+    # Fallback categorized suggestions
+    fallbacks = {
+        "signal": [
+            {
+                "text": "What are the underlying drivers of this signal?",
+                "category": "deeper",
+            },
+            {"text": "How does this compare to other cities?", "category": "compare"},
+            {"text": "What should Austin do to prepare?", "category": "action"},
+            {"text": "What related signals should we track?", "category": "explore"},
+        ],
+        "workstream": [
+            {"text": "What are the cross-cutting themes here?", "category": "deeper"},
+            {
+                "text": "How do these signals compare to national trends?",
+                "category": "compare",
+            },
+            {
+                "text": "Which signals require the most urgent action?",
+                "category": "action",
+            },
+            {
+                "text": "What emerging patterns connect these signals?",
+                "category": "explore",
+            },
+        ],
+        "global": [
+            {
+                "text": "What are the fastest-moving trends right now?",
+                "category": "deeper",
+            },
+            {"text": "How does Austin compare to peer cities?", "category": "compare"},
+            {
+                "text": "What should Austin prioritize in the next 12 months?",
+                "category": "action",
+            },
+            {
+                "text": "Are there any new cross-cutting patterns emerging?",
+                "category": "explore",
+            },
+        ],
+    }
+    return fallbacks.get(scope, fallbacks["global"])
+
+
+# ---------------------------------------------------------------------------
+# @mention search (cross-scope references)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/chat/mentions/search")
+async def search_mentions(
+    q: str = Query(..., min_length=1, max_length=200, description="Search term"),
+    limit: int = Query(8, ge=1, le=20, description="Max results"),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Search signals (cards) and workstreams for @mention autocomplete.
+
+    Returns a combined list of matching entities, cards first, then workstreams,
+    limited to the requested number of results.
+    """
+    try:
+        results: List[Dict[str, Any]] = []
+        search_term = f"%{q}%"
+
+        # Search cards (signals) by name
+        try:
+            cards_result = (
+                supabase.table("cards")
+                .select("id, name, slug")
+                .ilike("name", search_term)
+                .order("name")
+                .limit(limit)
+                .execute()
+            )
+            for card in cards_result.data or []:
+                results.append(
+                    {
+                        "id": card["id"],
+                        "type": "signal",
+                        "title": card["name"],
+                        "slug": card.get("slug"),
+                    }
+                )
+        except Exception as exc:
+            logger.warning(f"Mention search: cards query failed: {exc}")
+
+        # Search workstreams by name
+        remaining = limit - len(results)
+        if remaining > 0:
+            try:
+                ws_result = (
+                    supabase.table("workstreams")
+                    .select("id, name")
+                    .ilike("name", search_term)
+                    .order("name")
+                    .limit(remaining)
+                    .execute()
+                )
+                for ws in ws_result.data or []:
+                    results.append(
+                        {
+                            "id": ws["id"],
+                            "type": "workstream",
+                            "title": ws["name"],
+                        }
+                    )
+            except Exception as exc:
+                logger.warning(f"Mention search: workstreams query failed: {exc}")
+
+        return {"results": results[:limit]}
+    except Exception as e:
+        logger.error(f"Failed to search mentions: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("searching mentions", e),
         ) from e
 
 

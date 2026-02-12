@@ -94,10 +94,26 @@ module.exports = {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: 0 },
         },
+        "slide-up-fade-in": {
+          from: { opacity: 0, transform: "translateY(8px)" },
+          to: { opacity: 1, transform: "translateY(0)" },
+        },
+        "smooth-pulse": {
+          "0%, 100%": { opacity: 1 },
+          "50%": { opacity: 0.4 },
+        },
+        "fade-in": {
+          from: { opacity: 0 },
+          to: { opacity: 1 },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "slide-up-fade-in":
+          "slide-up-fade-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both",
+        "smooth-pulse": "smooth-pulse 1.5s ease-in-out infinite",
+        "fade-in-chat": "fade-in 0.3s ease-out both",
       },
     },
   },

@@ -156,6 +156,49 @@
   .page-enter {
     @apply animate-in fade-in duration-200;
   }
+
+  /* Chat animation utilities */
+  .animate-slide-up-fade-in {
+    animation: slideUpFadeIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+
+  .animate-smooth-pulse {
+    animation: smoothPulse 1.5s ease-in-out infinite;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out both;
+  }
+}
+
+/* Chat smooth animations */
+@keyframes slideUpFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes smoothPulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* Global focus-visible styles for keyboard navigation */

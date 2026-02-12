@@ -530,7 +530,7 @@ export default function AskForesight() {
             "overflow-hidden",
             // Mobile: absolute overlay — always full width
             "fixed md:relative inset-y-0 left-0 z-30 md:z-auto",
-            "md:translate-x-0 transition-all duration-200 ease-in-out",
+            "md:translate-x-0 transition-all duration-300 ease-in-out",
             // Account for header height on mobile
             "top-16 md:top-0",
             // Mobile: always 280px; Desktop: collapsible

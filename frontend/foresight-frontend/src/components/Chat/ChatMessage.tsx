@@ -594,7 +594,10 @@ export function ChatMessage({
 
   return (
     <div
-      className={cn("flex gap-2.5", isUser ? "flex-row-reverse" : "flex-row")}
+      className={cn(
+        "flex gap-2.5 animate-slide-up-fade-in",
+        isUser ? "flex-row-reverse" : "flex-row",
+      )}
       onMouseEnter={() => setShowTimestamp(true)}
       onMouseLeave={() => setShowTimestamp(false)}
     >
@@ -642,7 +645,7 @@ export function ChatMessage({
           {/* Streaming cursor */}
           {isStreaming && (
             <span
-              className="inline-block w-2 h-4 ml-0.5 bg-brand-blue animate-pulse rounded-sm align-text-bottom"
+              className="inline-block w-2 h-4 ml-0.5 bg-brand-blue animate-smooth-pulse rounded-sm align-text-bottom"
               aria-label="Generating response"
             />
           )}
@@ -651,16 +654,18 @@ export function ChatMessage({
         {/* Citations section for assistant messages */}
         {!isUser && message.citations.length > 0 && !isStreaming && (
           <div className="mt-2 space-y-1">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 animate-fade-in">
               Sources
             </p>
             <div className="flex flex-wrap gap-1.5">
-              {message.citations.map((citation) => (
-                <ChatCitation
+              {message.citations.map((citation, index) => (
+                <div
                   key={`${citation.index}-${citation.card_id || citation.source_id || citation.title}`}
-                  citation={citation}
-                  onClick={onCitationClick}
-                />
+                  className="animate-fade-in"
+                  style={{ animationDelay: `${index * 100}ms` }}
+                >
+                  <ChatCitation citation={citation} onClick={onCitationClick} />
+                </div>
               ))}
             </div>
           </div>
