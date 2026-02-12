@@ -8,10 +8,11 @@
  * @module components/Chat/ChatCitation
  */
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "../../lib/utils";
 import type { Citation } from "../../lib/chat-api";
+import { ChatCitationCard } from "./ChatCitationCard";
 
 // ============================================================================
 // Types
@@ -31,8 +32,11 @@ export interface ChatCitationProps {
 export function ChatCitation({ citation, onClick }: ChatCitationProps) {
   const navigate = useNavigate();
   const [showTooltip, setShowTooltip] = useState(false);
+  const [showCard, setShowCard] = useState(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const cardEnterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cardLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Position tooltip to stay within viewport
   useEffect(() => {
@@ -49,6 +53,14 @@ export function ChatCitation({ citation, onClick }: ChatCitationProps) {
       }
     }
   }, [showTooltip]);
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      if (cardEnterTimerRef.current) clearTimeout(cardEnterTimerRef.current);
+      if (cardLeaveTimerRef.current) clearTimeout(cardLeaveTimerRef.current);
+    };
+  }, []);
 
   // Truncate excerpt to 150 characters
   const truncatedExcerpt = citation.excerpt
@@ -73,16 +85,50 @@ export function ChatCitation({ citation, onClick }: ChatCitationProps) {
     }
   };
 
+  const handleMouseEnter = () => {
+    setShowTooltip(true);
+    // Clear any pending leave timer
+    if (cardLeaveTimerRef.current) {
+      clearTimeout(cardLeaveTimerRef.current);
+      cardLeaveTimerRef.current = null;
+    }
+    // Show hover card after 300ms delay
+    cardEnterTimerRef.current = setTimeout(() => {
+      setShowCard(true);
+      setShowTooltip(false); // Hide simple tooltip when card shows
+    }, 300);
+  };
+
+  const handleMouseLeave = () => {
+    setShowTooltip(false);
+    // Clear pending enter timer
+    if (cardEnterTimerRef.current) {
+      clearTimeout(cardEnterTimerRef.current);
+      cardEnterTimerRef.current = null;
+    }
+    // Hide hover card after 150ms grace period
+    cardLeaveTimerRef.current = setTimeout(() => {
+      setShowCard(false);
+    }, 150);
+  };
+
+  const handleCardClose = useCallback(() => {
+    setShowCard(false);
+  }, []);
+
   return (
     <div className="relative inline-block">
       <button
         ref={triggerRef}
         type="button"
         onClick={handleClick}
-        onMouseEnter={() => setShowTooltip(true)}
-        onMouseLeave={() => setShowTooltip(false)}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
         onFocus={() => setShowTooltip(true)}
-        onBlur={() => setShowTooltip(false)}
+        onBlur={() => {
+          setShowTooltip(false);
+          setShowCard(false);
+        }}
         className={cn(
           "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full",
           "text-xs font-medium",
@@ -112,8 +158,8 @@ export function ChatCitation({ citation, onClick }: ChatCitationProps) {
         <span className="truncate">{citation.title}</span>
       </button>
 
-      {/* Tooltip */}
-      {showTooltip && (
+      {/* Simple tooltip (shown briefly before hover card appears) */}
+      {showTooltip && !showCard && (
         <div
           ref={tooltipRef}
           className={cn(
@@ -160,6 +206,15 @@ export function ChatCitation({ citation, onClick }: ChatCitationProps) {
             )}
           </div>
         </div>
+      )}
+
+      {/* Hover card (shown after 300ms delay) */}
+      {showCard && triggerRef.current && (
+        <ChatCitationCard
+          citation={citation}
+          anchor={triggerRef.current}
+          onClose={handleCardClose}
+        />
       )}
     </div>
   );

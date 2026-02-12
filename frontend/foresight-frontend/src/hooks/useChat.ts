@@ -63,6 +63,12 @@ export interface UseChatReturn {
   startNewConversation: () => void;
   /** Fetch fresh suggested questions for the current scope */
   loadSuggestions: () => Promise<void>;
+  /** Retry the last failed message */
+  retryLastMessage: () => void;
+  /** Current streaming progress step */
+  progressStep: { step: string; detail: string } | null;
+  /** Metadata about the last response (source counts, etc.) */
+  responseMetadata: Record<string, unknown> | null;
 }
 
 // ============================================================================
@@ -130,9 +136,20 @@ export function useChat(options: UseChatOptions): UseChatReturn {
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  // Progress & metadata state
+  const [progressStep, setProgressStep] = useState<{
+    step: string;
+    detail: string;
+  } | null>(null);
+  const [responseMetadata, setResponseMetadata] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
+
   // Refs for cleanup and abort
   const abortControllerRef = useRef<AbortController | null>(null);
   const isMountedRef = useRef(true);
+  const lastFailedMessageRef = useRef<string | null>(null);
 
   // Track mount/unmount for safe state updates
   useEffect(() => {
@@ -152,7 +169,10 @@ export function useChat(options: UseChatOptions): UseChatReturn {
     async (message: string) => {
       if (!message.trim() || isStreaming) return;
 
+      lastFailedMessageRef.current = message.trim();
       setError(null);
+      setProgressStep(null);
+      setResponseMetadata(null);
 
       // Add user message to the list immediately
       const userMessage: ChatMessage = {
@@ -206,8 +226,21 @@ export function useChat(options: UseChatOptions): UseChatReturn {
             setSuggestedQuestions(suggestions);
           },
 
+          onProgress: (data) => {
+            if (!isMountedRef.current) return;
+            setProgressStep(data);
+          },
+
+          onMetadata: (data) => {
+            if (!isMountedRef.current) return;
+            setResponseMetadata(data);
+          },
+
           onDone: (data) => {
             if (!isMountedRef.current) return;
+
+            lastFailedMessageRef.current = null;
+            setProgressStep(null);
 
             // Set the conversation ID from the server response and persist
             if (data.conversation_id) {
@@ -233,6 +266,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
           onError: (errorMsg) => {
             if (!isMountedRef.current) return;
             setError(errorMsg);
+            setProgressStep(null);
             setIsStreaming(false);
             setStreamingContent("");
             setStreamingCitations([]);
@@ -249,6 +283,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
         }
 
         setError(err instanceof Error ? err.message : "Failed to send message");
+        setProgressStep(null);
         setIsStreaming(false);
         setStreamingContent("");
         setStreamingCitations([]);
@@ -355,6 +390,32 @@ export function useChat(options: UseChatOptions): UseChatReturn {
   }, [scope, scopeId]);
 
   // ============================================================================
+  // Retry Last Message
+  // ============================================================================
+
+  const retryLastMessage = useCallback(() => {
+    if (!lastFailedMessageRef.current) return;
+    const msg = lastFailedMessageRef.current;
+    // Remove the failed user message from the list (last user message)
+    setMessages((prev) => {
+      let lastUserIdx = -1;
+      for (let j = prev.length - 1; j >= 0; j--) {
+        if (prev[j]?.role === "user") {
+          lastUserIdx = j;
+          break;
+        }
+      }
+      if (lastUserIdx >= 0) {
+        return prev.slice(0, lastUserIdx);
+      }
+      return prev;
+    });
+    setError(null);
+    // Re-send
+    sendMessage(msg);
+  }, [sendMessage]);
+
+  // ============================================================================
   // Effects
   // ============================================================================
 
@@ -421,5 +482,8 @@ export function useChat(options: UseChatOptions): UseChatReturn {
     loadConversation,
     startNewConversation,
     loadSuggestions,
+    retryLastMessage,
+    progressStep,
+    responseMetadata,
   };
 }

@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useCallback, useMemo } from "react";
-import { Copy, Check, Sparkles, ExternalLink } from "lucide-react";
+import { Copy, Check, Sparkles, ExternalLink, FileText } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { ChatCitation } from "./ChatCitation";
 import type { Citation } from "../../lib/chat-api";
@@ -25,6 +25,14 @@ export interface ChatMessageProps {
     content: string;
     citations: Citation[];
     created_at?: string;
+    metadata?: {
+      source_count?: number;
+      citation_count?: number;
+      signal_name?: string;
+      workstream_name?: string;
+      matched_cards?: number;
+      card_count?: number;
+    };
   };
   /** Whether this message is currently being streamed */
   isStreaming?: boolean;
@@ -584,6 +592,22 @@ export function ChatMessage({
                 />
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Confidence metadata indicator */}
+        {!isUser && message.metadata && !isStreaming && (
+          <div className="mt-2 flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-500">
+            <FileText className="h-3 w-3 shrink-0" aria-hidden="true" />
+            <span>
+              Based on {message.metadata.source_count ?? 0} sources
+              {message.metadata.matched_cards
+                ? ` across ${message.metadata.matched_cards} signals`
+                : ""}
+              {message.metadata.card_count
+                ? ` from ${message.metadata.card_count} signals`
+                : ""}
+            </span>
           </div>
         )}
 

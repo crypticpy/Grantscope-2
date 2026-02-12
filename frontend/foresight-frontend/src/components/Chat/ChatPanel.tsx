@@ -118,6 +118,8 @@ export function ChatPanel({
     stopGenerating,
     loadConversation,
     startNewConversation,
+    retryLastMessage,
+    progressStep,
   } = useChat({ scope, scopeId, initialConversationId, forceNew });
 
   // Notify parent when conversationId changes
@@ -438,6 +440,22 @@ export function ChatPanel({
           </div>
         ))}
 
+        {/* Interrupted response note */}
+        {messages.length > 0 &&
+          messages[messages.length - 1]?.id?.startsWith("temp-partial-") &&
+          !isStreaming && (
+            <div className="mt-2 ml-10 text-xs text-gray-400 dark:text-gray-500 italic">
+              Response was interrupted.{" "}
+              <button
+                type="button"
+                onClick={retryLastMessage}
+                className="text-brand-blue hover:underline focus:outline-none"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+
         {/* Streaming response */}
         {isStreaming && streamingContent && (
           <div className="mt-4 animate-in fade-in-0 duration-200">
@@ -453,29 +471,52 @@ export function ChatPanel({
           </div>
         )}
 
-        {/* Thinking indicator */}
+        {/* Progress / Thinking indicator */}
         {isStreaming && !streamingContent && (
-          <div className="mt-4 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-            <div className="flex items-center gap-1.5">
-              <div
-                className={cn(
-                  "flex items-center justify-center w-6 h-6 rounded-full",
-                  "bg-brand-blue/10 dark:bg-brand-blue/20",
-                )}
-              >
-                <Sparkles
-                  className="h-3.5 w-3.5 text-brand-blue"
-                  aria-hidden="true"
-                />
-              </div>
-              <Loader2
-                className="h-4 w-4 animate-spin text-brand-blue"
+          <div className="mt-4 flex items-start gap-2 text-sm text-gray-500 dark:text-gray-400">
+            <div
+              className={cn(
+                "flex items-center justify-center w-6 h-6 rounded-full shrink-0",
+                "bg-brand-blue/10 dark:bg-brand-blue/20",
+              )}
+            >
+              <Sparkles
+                className="h-3.5 w-3.5 text-brand-blue"
                 aria-hidden="true"
               />
-              <span>Foresight is thinking...</span>
+            </div>
+            <div className="flex flex-col gap-1">
+              {progressStep ? (
+                <div className="flex items-center gap-1.5">
+                  <Loader2
+                    className="h-3.5 w-3.5 animate-spin text-brand-blue"
+                    aria-hidden="true"
+                  />
+                  <span className="text-sm">{progressStep.detail}</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <Loader2
+                    className="h-3.5 w-3.5 animate-spin text-brand-blue"
+                    aria-hidden="true"
+                  />
+                  <span>Foresight is thinking...</span>
+                </div>
+              )}
             </div>
           </div>
         )}
+
+        {/* Progress during streaming (show step above content) */}
+        {isStreaming &&
+          streamingContent &&
+          progressStep &&
+          progressStep.step === "citing" && (
+            <div className="mt-2 mb-1 flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
+              <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+              <span>{progressStep.detail}</span>
+            </div>
+          )}
 
         {/* Post-response suggestions */}
         {!isStreaming &&
@@ -505,7 +546,23 @@ export function ChatPanel({
           role="alert"
         >
           <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
-          <span className="flex-1">{error}</span>
+          <div className="flex-1">
+            <span>{error}</span>
+            <button
+              type="button"
+              onClick={() => {
+                retryLastMessage();
+                setErrorDismissed(true);
+              }}
+              className={cn(
+                "ml-2 text-xs font-medium",
+                "text-brand-blue hover:text-brand-dark-blue dark:text-blue-400 dark:hover:text-blue-300",
+                "hover:underline focus:outline-none focus:underline",
+              )}
+            >
+              Retry
+            </button>
+          </div>
           <button
             type="button"
             onClick={() => setErrorDismissed(true)}

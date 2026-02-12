@@ -203,6 +203,16 @@ async def _retrieve_signal_context(
                 "card_slug": card.get("slug", ""),
                 "title": src.get("title", "Untitled"),
                 "url": src.get("url", ""),
+                "published_date": src.get("published_date", None),
+                "excerpt": (
+                    (src.get("key_excerpts") or [None])[0]
+                    if src.get("key_excerpts")
+                    else (
+                        (src.get("ai_summary", "") or "")[:200]
+                        if src.get("ai_summary")
+                        else None
+                    )
+                ),
             }
 
             parts.append(f"\n### [{i}] {src.get('title', 'Untitled')}")
@@ -380,7 +390,7 @@ async def _retrieve_workstream_context(
             try:
                 src_result = (
                     supabase.table("sources")
-                    .select("id, title, url, ai_summary, key_excerpts")
+                    .select("id, title, url, ai_summary, key_excerpts, published_date")
                     .eq("card_id", card_id)
                     .order("relevance_score", desc=True)
                     .limit(3)
@@ -394,6 +404,16 @@ async def _retrieve_workstream_context(
                         "card_slug": card.get("slug", ""),
                         "title": src.get("title", "Untitled"),
                         "url": src.get("url", ""),
+                        "published_date": src.get("published_date", None),
+                        "excerpt": (
+                            (src.get("key_excerpts") or [None])[0]
+                            if src.get("key_excerpts")
+                            else (
+                                (src.get("ai_summary", "") or "")[:200]
+                                if src.get("ai_summary")
+                                else None
+                            )
+                        ),
                     }
                     parts.append(f"  [{source_idx}] {src.get('title', 'Untitled')}")
                     if src.get("ai_summary"):
@@ -506,7 +526,7 @@ async def _retrieve_global_context(
             try:
                 src_result = (
                     supabase.table("sources")
-                    .select("id, title, url, ai_summary, key_excerpts")
+                    .select("id, title, url, ai_summary, key_excerpts, published_date")
                     .eq("card_id", card_id)
                     .order("relevance_score", desc=True)
                     .limit(2)
@@ -520,6 +540,16 @@ async def _retrieve_global_context(
                         "card_slug": card.get("slug", ""),
                         "title": src.get("title", "Untitled"),
                         "url": src.get("url", ""),
+                        "published_date": src.get("published_date", None),
+                        "excerpt": (
+                            (src.get("key_excerpts") or [None])[0]
+                            if src.get("key_excerpts")
+                            else (
+                                (src.get("ai_summary", "") or "")[:200]
+                                if src.get("ai_summary")
+                                else None
+                            )
+                        ),
                     }
                     parts.append(f"  [{source_idx}] {src.get('title', 'Untitled')}")
                     if src.get("ai_summary"):
@@ -679,6 +709,8 @@ def _parse_citations(
                     "source_id": source_info.get("source_id"),
                     "title": source_info.get("title", ""),
                     "url": source_info.get("url", ""),
+                    "published_date": source_info.get("published_date"),
+                    "excerpt": source_info.get("excerpt"),
                 }
             )
 
@@ -911,6 +943,14 @@ async def chat(
 
         source_map = scope_metadata.get("source_map", {})
 
+        yield _sse_event(
+            "progress",
+            {
+                "step": "searching",
+                "detail": f"Found {len(source_map)} sources across {scope_metadata.get('card_count', scope_metadata.get('matched_cards', 1))} signals",
+            },
+        )
+
         # 4. Build messages for the LLM
         system_prompt = _build_system_prompt(scope, context_text, scope_metadata)
 
@@ -927,6 +967,14 @@ async def chat(
             # Limit history to keep within token budget
             messages.extend(iter(prior[-10:]))
         messages.append({"role": "user", "content": message})
+
+        yield _sse_event(
+            "progress",
+            {
+                "step": "analyzing",
+                "detail": "Analyzing sources and synthesizing response...",
+            },
+        )
 
         # 5. Stream the LLM response
         full_response = ""
@@ -983,10 +1031,31 @@ async def chat(
                 await _update_conversation_timestamp(supabase_client, conv_id)
             return
 
+        yield _sse_event(
+            "progress", {"step": "citing", "detail": "Resolving citations..."}
+        )
+
         # 6. Post-processing: parse citations
         citations = _parse_citations(full_response, source_map)
         for citation in citations:
             yield f"data: {json.dumps({'type': 'citation', 'data': citation})}\n\n"
+
+        # Collect confidence metadata
+        meta = {
+            "source_count": len(source_map),
+            "citation_count": len(citations),
+        }
+        # Scope-specific metadata
+        if scope == "signal":
+            meta["signal_name"] = scope_metadata.get("card_name")
+            meta["source_count"] = scope_metadata.get("source_count", len(source_map))
+        elif scope == "workstream":
+            meta["workstream_name"] = scope_metadata.get("workstream_name")
+            meta["card_count"] = scope_metadata.get("card_count", 0)
+        elif scope == "global":
+            meta["matched_cards"] = scope_metadata.get("matched_cards", 0)
+
+        yield _sse_event("metadata", meta)
 
         # 7. Store assistant message
         message_id = await _store_message(

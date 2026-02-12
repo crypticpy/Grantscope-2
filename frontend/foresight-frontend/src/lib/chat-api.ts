@@ -51,6 +51,8 @@ export interface Citation {
   url?: string;
   /** Brief excerpt from the cited content */
   excerpt?: string;
+  /** ISO date string when the source was published */
+  published_date?: string;
 }
 
 /**
@@ -76,7 +78,14 @@ export interface Conversation {
  */
 export interface SSEEvent {
   /** The type of event */
-  type: "token" | "citation" | "suggestions" | "done" | "error";
+  type:
+    | "token"
+    | "citation"
+    | "suggestions"
+    | "done"
+    | "error"
+    | "progress"
+    | "metadata";
   /** Text content for token events */
   content?: string;
   /** Structured data for citation, suggestions, done, and error events */
@@ -178,6 +187,10 @@ export async function parseSSEStream(
     onSuggestions: (suggestions: string[]) => void;
     onDone: (data: { conversation_id: string; message_id: string }) => void;
     onError: (error: string) => void;
+    /** Called when the backend reports a processing progress step */
+    onProgress?: (data: { step: string; detail: string }) => void;
+    /** Called when the backend sends response metadata (source counts, etc.) */
+    onMetadata?: (data: Record<string, unknown>) => void;
   },
 ): Promise<void> {
   const reader = response.body?.getReader();
@@ -243,6 +256,8 @@ function processSSELine(
     onSuggestions: (suggestions: string[]) => void;
     onDone: (data: { conversation_id: string; message_id: string }) => void;
     onError: (error: string) => void;
+    onProgress?: (data: { step: string; detail: string }) => void;
+    onMetadata?: (data: Record<string, unknown>) => void;
   },
 ): void {
   // SSE lines have the format: "data: {json}"
@@ -287,6 +302,18 @@ function processSSELine(
         callbacks.onError(
           (event.data as string) || event.content || "Unknown streaming error",
         );
+        break;
+
+      case "progress":
+        if (callbacks.onProgress && event.data) {
+          callbacks.onProgress(event.data as { step: string; detail: string });
+        }
+        break;
+
+      case "metadata":
+        if (callbacks.onMetadata && event.data) {
+          callbacks.onMetadata(event.data as Record<string, unknown>);
+        }
         break;
 
       default:
