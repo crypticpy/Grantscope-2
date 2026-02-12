@@ -194,7 +194,7 @@ async def add_card_to_workstream(
         next_position = position_response.data[0]["position"] + 1
 
     # Create workstream card record
-    now = datetime.now().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     new_card = {
         "workstream_id": workstream_id,
         "card_id": card_data.card_id,
@@ -289,7 +289,7 @@ async def update_workstream_card(
     workstream_card_id = existing["id"]
 
     # Build update dict
-    update_dict = {"updated_at": datetime.now().isoformat()}
+    update_dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
 
     if update_data.status is not None:
         # If status changed, recalculate position

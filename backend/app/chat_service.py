@@ -10,6 +10,7 @@ Uses Azure OpenAI for streaming chat completions and embedding generation.
 Context is assembled from Supabase and injected into the system prompt.
 """
 
+import asyncio
 import json
 import re
 import logging
@@ -73,8 +74,8 @@ async def _check_rate_limit(supabase: Client, user_id: str) -> bool:
 
         # Count messages sent by this user in the last minute
         # We join through conversations to filter by user_id
-        (
-            supabase.table("chat_messages")
+        await asyncio.to_thread(
+            lambda: supabase.table("chat_messages")
             .select("id", count="exact")
             .eq("role", "user")
             .gte("created_at", one_minute_ago)
@@ -83,8 +84,8 @@ async def _check_rate_limit(supabase: Client, user_id: str) -> bool:
 
         # Since we can't easily filter by user_id through a join in postgrest,
         # we count via conversations
-        conv_result = (
-            supabase.table("chat_conversations")
+        conv_result = await asyncio.to_thread(
+            lambda: supabase.table("chat_conversations")
             .select("id")
             .eq("user_id", user_id)
             .execute()
@@ -99,8 +100,8 @@ async def _check_rate_limit(supabase: Client, user_id: str) -> bool:
         # Process in batches to avoid query length limits
         for i in range(0, len(conv_ids), 20):
             batch = conv_ids[i : i + 20]
-            msg_result = (
-                supabase.table("chat_messages")
+            msg_result = await asyncio.to_thread(
+                lambda batch=batch: supabase.table("chat_messages")
                 .select("id", count="exact")
                 .in_("conversation_id", batch)
                 .eq("role", "user")
@@ -251,8 +252,8 @@ async def _get_or_create_conversation(
     """
     if conversation_id:
         # Verify the conversation exists and belongs to the user
-        result = (
-            supabase.table("chat_conversations")
+        result = await asyncio.to_thread(
+            lambda: supabase.table("chat_conversations")
             .select("id")
             .eq("id", conversation_id)
             .eq("user_id", user_id)
@@ -299,7 +300,9 @@ async def _get_or_create_conversation(
         "updated_at": now,
     }
 
-    result = supabase.table("chat_conversations").insert(insert_data).execute()
+    result = await asyncio.to_thread(
+        lambda: supabase.table("chat_conversations").insert(insert_data).execute()
+    )
 
     if result.data:
         return result.data[0]["id"], True
@@ -316,8 +319,8 @@ async def _get_conversation_history(
 
     Returns messages in OpenAI format: [{"role": "...", "content": "..."}]
     """
-    result = (
-        supabase.table("chat_messages")
+    result = await asyncio.to_thread(
+        lambda: supabase.table("chat_messages")
         .select("role, content")
         .eq("conversation_id", conversation_id)
         .order("created_at")
@@ -351,7 +354,9 @@ async def _store_message(
         "created_at": now,
     }
 
-    result = supabase.table("chat_messages").insert(insert_data).execute()
+    result = await asyncio.to_thread(
+        lambda: supabase.table("chat_messages").insert(insert_data).execute()
+    )
 
     if result.data:
         return result.data[0]["id"]
@@ -365,9 +370,12 @@ async def _update_conversation_timestamp(
 ) -> None:
     """Update the conversation's updated_at timestamp."""
     try:
-        supabase.table("chat_conversations").update(
-            {"updated_at": datetime.now(timezone.utc).isoformat()}
-        ).eq("id", conversation_id).execute()
+        await asyncio.to_thread(
+            lambda: supabase.table("chat_conversations")
+            .update({"updated_at": datetime.now(timezone.utc).isoformat()})
+            .eq("id", conversation_id)
+            .execute()
+        )
     except Exception as e:
         logger.warning(f"Failed to update conversation timestamp: {e}")
 
@@ -681,8 +689,8 @@ async def generate_suggestions(
     try:
         if scope == "signal" and scope_id:
             # Fetch just the card name/summary for generating suggestions
-            card_result = (
-                supabase_client.table("cards")
+            card_result = await asyncio.to_thread(
+                lambda: supabase_client.table("cards")
                 .select("name, summary, pillar_id, horizon, stage_id")
                 .eq("id", scope_id)
                 .execute()
@@ -694,8 +702,8 @@ async def generate_suggestions(
                     "card_summary": card.get("summary", ""),
                 }
         elif scope == "workstream" and scope_id:
-            ws_result = (
-                supabase_client.table("workstreams")
+            ws_result = await asyncio.to_thread(
+                lambda: supabase_client.table("workstreams")
                 .select("name, description, keywords")
                 .eq("id", scope_id)
                 .execute()

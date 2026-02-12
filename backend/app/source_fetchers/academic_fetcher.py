@@ -24,7 +24,7 @@ import asyncio
 import logging
 import urllib.parse
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any
 import aiohttp
 import feedparser
@@ -254,7 +254,7 @@ async def fetch_academic_papers(
     Returns:
         AcademicFetchResult containing papers, metadata, and any errors
     """
-    start_time = datetime.now()
+    start_time = datetime.now(timezone.utc)
     errors = []
     papers = []
 
@@ -289,10 +289,10 @@ async def fetch_academic_papers(
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                                    url,
-                                    timeout=aiohttp.ClientTimeout(total=timeout),
-                                    headers={"User-Agent": "Foresight-App/1.0 (Research Pipeline)"},
-                                ) as response:
+                    url,
+                    timeout=aiohttp.ClientTimeout(total=timeout),
+                    headers={"User-Agent": "Foresight-App/1.0 (Research Pipeline)"},
+                ) as response:
                     if response.status == 200:
                         content = await response.text()
 
@@ -366,7 +366,7 @@ async def fetch_academic_papers(
             errors.append(error_msg)
             break
 
-    fetch_time = (datetime.now() - start_time).total_seconds()
+    fetch_time = (datetime.now(timezone.utc) - start_time).total_seconds()
 
     return AcademicFetchResult(
         papers=papers,

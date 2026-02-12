@@ -25,7 +25,7 @@ import asyncio
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 from urllib.parse import urljoin, urlparse
 
@@ -195,9 +195,11 @@ MUNICIPAL_SEARCH_TERMS = [
 # Data Classes
 # ============================================================================
 
+
 @dataclass
 class GovernmentDocument:
     """Represents a document from a government source."""
+
     url: str
     title: str
     content: str
@@ -220,7 +222,9 @@ class GovernmentDocument:
             "source_name": self.source_name,
             "source_category": self.source_category,
             "subcategory": self.subcategory,
-            "published_at": self.published_at.isoformat() if self.published_at else None,
+            "published_at": (
+                self.published_at.isoformat() if self.published_at else None
+            ),
             "agency": self.agency,
             "document_type": self.document_type,
             "excerpt": self.excerpt,
@@ -232,6 +236,7 @@ class GovernmentDocument:
 @dataclass
 class GovernmentFetchResult:
     """Result of a government source fetch operation."""
+
     documents: List[GovernmentDocument]
     total_fetched: int
     sources_queried: int
@@ -242,6 +247,7 @@ class GovernmentFetchResult:
 # ============================================================================
 # Government Fetcher Class
 # ============================================================================
+
 
 class GovernmentFetcher:
     """
@@ -317,7 +323,7 @@ class GovernmentFetcher:
                         return await response.text()
                     elif response.status == 429:
                         # Rate limited - wait and retry
-                        wait_time = 2 ** attempt
+                        wait_time = 2**attempt
                         logger.warning(f"Rate limited on {url}, waiting {wait_time}s")
                         await asyncio.sleep(wait_time)
                     elif response.status in (403, 451):
@@ -332,7 +338,9 @@ class GovernmentFetcher:
                         else:
                             return None
             except asyncio.TimeoutError:
-                logger.warning(f"Timeout fetching {url} (attempt {attempt + 1}/{self.max_retries})")
+                logger.warning(
+                    f"Timeout fetching {url} (attempt {attempt + 1}/{self.max_retries})"
+                )
                 await asyncio.sleep(1)
             except aiohttp.ClientError as e:
                 logger.warning(f"Client error fetching {url}: {e}")
@@ -345,9 +353,7 @@ class GovernmentFetcher:
         return None
 
     def _extract_document_content(
-        self,
-        soup: BeautifulSoup,
-        source_config: Dict[str, Any]
+        self, soup: BeautifulSoup, source_config: Dict[str, Any]
     ) -> tuple[str, str, Optional[str]]:
         """
         Extract title, content, and document type from parsed HTML.
@@ -361,9 +367,7 @@ class GovernmentFetcher:
         """
         # Extract title
         title = ""
-        if title_elem := soup.select_one(
-            source_config.get("title_selector", "h1")
-        ):
+        if title_elem := soup.select_one(source_config.get("title_selector", "h1")):
             title = title_elem.get_text(strip=True)
 
         # Fallback title extraction
@@ -371,7 +375,7 @@ class GovernmentFetcher:
             if title_elem := soup.find("title"):
                 title = title_elem.get_text(strip=True)
                 # Clean up common title suffixes
-                title = re.sub(r'\s*\|\s*[^|]+$', '', title)
+                title = re.sub(r"\s*\|\s*[^|]+$", "", title)
 
         # Extract content
         content = ""
@@ -383,10 +387,18 @@ class GovernmentFetcher:
         # Fallback content extraction
         if not content or len(content) < 100:
             # Try main content areas common in government sites
-            for selector in ["main", "article", "#content", ".content", ".main-content"]:
+            for selector in [
+                "main",
+                "article",
+                "#content",
+                ".content",
+                ".main-content",
+            ]:
                 if main_content := soup.select_one(selector):
                     # Remove navigation, headers, footers
-                    for elem in main_content(["nav", "header", "footer", "aside", "script", "style"]):
+                    for elem in main_content(
+                        ["nav", "header", "footer", "aside", "script", "style"]
+                    ):
                         elem.decompose()
                     content = main_content.get_text(separator="\n\n", strip=True)
                     if len(content) > 100:
@@ -433,7 +445,9 @@ class GovernmentFetcher:
             return "dataset"
         elif "public comment" in content_lower or "federal register" in content_lower:
             return "public_notice"
-        elif "grant" in content_lower and ("funding" in content_lower or "opportunity" in content_lower):
+        elif "grant" in content_lower and (
+            "funding" in content_lower or "opportunity" in content_lower
+        ):
             return "grant_announcement"
 
         return "general"
@@ -463,9 +477,14 @@ class GovernmentFetcher:
                 try:
                     date_str = meta["content"]
                     # Handle various date formats
-                    for fmt in ["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%B %d, %Y", "%m/%d/%Y"]:
+                    for fmt in [
+                        "%Y-%m-%d",
+                        "%Y-%m-%dT%H:%M:%S",
+                        "%B %d, %Y",
+                        "%m/%d/%Y",
+                    ]:
                         try:
-                            return datetime.strptime(date_str[:len(fmt) + 5], fmt)
+                            return datetime.strptime(date_str[: len(fmt) + 5], fmt)
                         except ValueError:
                             continue
                     # Try ISO format
@@ -495,9 +514,7 @@ class GovernmentFetcher:
         return None
 
     async def fetch_document(
-        self,
-        url: str,
-        source_config: Optional[Dict[str, Any]] = None
+        self, url: str, source_config: Optional[Dict[str, Any]] = None
     ) -> Optional[GovernmentDocument]:
         """
         Fetch and parse a single government document.
@@ -535,7 +552,9 @@ class GovernmentFetcher:
                 "subcategory": "general",
             }
 
-        title, content, document_type = self._extract_document_content(soup, source_config)
+        title, content, document_type = self._extract_document_content(
+            soup, source_config
+        )
         published_at = self._extract_published_date(soup)
 
         if not title or not content:
@@ -558,16 +577,13 @@ class GovernmentFetcher:
             excerpt=excerpt,
             relevance=0.75,
             metadata={
-                "fetched_at": datetime.now().isoformat(),
+                "fetched_at": datetime.now(timezone.utc).isoformat(),
                 "base_url": source_config.get("base_url", ""),
             },
         )
 
     async def search_source(
-        self,
-        source_config: Dict[str, Any],
-        query: str,
-        max_documents: int = 5
+        self, source_config: Dict[str, Any], query: str, max_documents: int = 5
     ) -> List[GovernmentDocument]:
         """
         Search a government source for documents matching a query.
@@ -581,7 +597,9 @@ class GovernmentFetcher:
             List of GovernmentDocument objects
         """
         source_name = source_config.get("name", "Unknown")
-        search_url = source_config.get("search_url", "").format(query=query.replace(" ", "+"))
+        search_url = source_config.get("search_url", "").format(
+            query=query.replace(" ", "+")
+        )
 
         if not search_url:
             logger.warning(f"No search URL configured for {source_name}")
@@ -622,10 +640,21 @@ class GovernmentFetcher:
             # Skip duplicates and non-document URLs
             if href in seen_urls:
                 continue
-            if any(skip in href for skip in [
-                "#", "javascript:", "mailto:", "/search", "/login",
-                "/signup", "/contact", ".pdf", ".zip", ".xlsx"
-            ]):
+            if any(
+                skip in href
+                for skip in [
+                    "#",
+                    "javascript:",
+                    "mailto:",
+                    "/search",
+                    "/login",
+                    "/signup",
+                    "/contact",
+                    ".pdf",
+                    ".zip",
+                    ".xlsx",
+                ]
+            ):
                 continue
 
             # Ensure it's a .gov domain
@@ -638,10 +667,15 @@ class GovernmentFetcher:
             if len(document_urls) >= max_documents * 2:  # Get extra in case some fail
                 break
 
-        logger.info(f"Found {len(document_urls)} potential documents from {source_name}")
+        logger.info(
+            f"Found {len(document_urls)} potential documents from {source_name}"
+        )
 
         # Fetch documents concurrently
-        tasks = [self.fetch_document(url, source_config) for url in document_urls[:max_documents * 2]]
+        tasks = [
+            self.fetch_document(url, source_config)
+            for url in document_urls[: max_documents * 2]
+        ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         documents = []
@@ -653,14 +687,16 @@ class GovernmentFetcher:
             elif isinstance(result, Exception):
                 logger.warning(f"Document fetch failed: {result}")
 
-        logger.info(f"Successfully fetched {len(documents)} documents from {source_name}")
+        logger.info(
+            f"Successfully fetched {len(documents)} documents from {source_name}"
+        )
         return documents
 
     async def fetch_from_all_sources(
         self,
         topics: List[str],
         max_documents_per_source: int = 3,
-        max_total_documents: int = 30
+        max_total_documents: int = 30,
     ) -> List[GovernmentDocument]:
         """
         Fetch documents from all configured government sources.
@@ -683,9 +719,7 @@ class GovernmentFetcher:
 
                 try:
                     documents = await self.search_source(
-                        source_config,
-                        topic,
-                        max_documents=max_documents_per_source
+                        source_config, topic, max_documents=max_documents_per_source
                     )
 
                     for doc in documents:
@@ -702,13 +736,16 @@ class GovernmentFetcher:
                     # Continue with other sources - graceful degradation
                     continue
 
-        logger.info(f"Total documents fetched from government sources: {len(all_documents)}")
+        logger.info(
+            f"Total documents fetched from government sources: {len(all_documents)}"
+        )
         return all_documents
 
 
 # ============================================================================
 # Convenience Functions
 # ============================================================================
+
 
 async def fetch_government_sources(
     topics: Optional[List[str]] = None,
@@ -750,8 +787,7 @@ async def fetch_government_sources(
         # Fetch by topics if provided
         if topics:
             topic_documents = await fetcher.fetch_from_all_sources(
-                topics=topics,
-                max_total_documents=max_results
+                topics=topics, max_total_documents=max_results
             )
             documents.extend(topic_documents)
 
@@ -795,8 +831,7 @@ async def fetch_documents_from_urls(urls: List[str]) -> List[GovernmentDocument]
 
 
 async def fetch_municipal_government_content(
-    max_results: int = 30,
-    additional_topics: Optional[List[str]] = None
+    max_results: int = 30, additional_topics: Optional[List[str]] = None
 ) -> List[GovernmentDocument]:
     """
     Fetch government content specifically relevant to municipal planning.
@@ -818,10 +853,7 @@ async def fetch_municipal_government_content(
     # Limit topics to avoid too many requests
     topics = topics[:5]
 
-    return await fetch_government_sources(
-        topics=topics,
-        max_results=max_results
-    )
+    return await fetch_government_sources(topics=topics, max_results=max_results)
 
 
 def convert_to_raw_source(document: GovernmentDocument) -> Dict[str, Any]:
@@ -859,15 +891,16 @@ Document Type: {document.document_type or 'General'}
             "agency": document.agency,
             "subcategory": document.subcategory,
             "document_type": document.document_type,
-            "published_at": document.published_at.isoformat() if document.published_at else None,
+            "published_at": (
+                document.published_at.isoformat() if document.published_at else None
+            ),
             **document.metadata,
-        }
+        },
     }
 
 
 async def fetch_and_convert_documents(
-    topics: Optional[List[str]] = None,
-    max_results: int = 20
+    topics: Optional[List[str]] = None, max_results: int = 20
 ) -> List[Dict[str, Any]]:
     """
     Convenience function to fetch government documents and convert to raw source format.
@@ -881,9 +914,6 @@ async def fetch_and_convert_documents(
     Returns:
         List of source dicts compatible with research pipeline
     """
-    documents = await fetch_government_sources(
-        topics=topics,
-        max_results=max_results
-    )
+    documents = await fetch_government_sources(topics=topics, max_results=max_results)
 
     return [convert_to_raw_source(doc) for doc in documents]

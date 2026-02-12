@@ -28,7 +28,7 @@ import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from typing import List, Optional, Dict, Any, Tuple
 from enum import Enum
 import uuid
@@ -155,7 +155,7 @@ class WorkstreamScanService:
         """
         # FIX-H5: Rate limiting - max 10 scans per workstream per 24 hours
         try:
-            cutoff = (datetime.now() - timedelta(hours=24)).isoformat()
+            cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
             recent_scans = (
                 self.supabase.table("workstream_scans")
                 .select("id")
@@ -176,12 +176,12 @@ class WorkstreamScanService:
                     errors=[
                         f"Rate limit exceeded: {scan_count} scans in last 24 hours (max 10)"
                     ],
-                    completed_at=datetime.now(),
+                    completed_at=datetime.now(timezone.utc),
                 )
         except Exception as e:
             logger.warning(f"Rate limit check failed, proceeding with scan: {e}")
 
-        start_time = datetime.now()
+        start_time = datetime.now(timezone.utc)
         result = ScanResult(
             scan_id=config.scan_id,
             workstream_id=config.workstream_id,
@@ -210,16 +210,14 @@ class WorkstreamScanService:
 
             if not raw_sources:
                 result.status = "completed"
-                result.completed_at = datetime.now()
+                result.completed_at = datetime.now(timezone.utc)
                 result.execution_time_seconds = (
                     result.completed_at - start_time
                 ).total_seconds()
                 await self._finalize_scan(config.scan_id, result)
                 return result
 
-            logger.info(
-                f"Enriching {len(raw_sources)} sources with full content..."
-            )
+            logger.info(f"Enriching {len(raw_sources)} sources with full content...")
             raw_sources = await enrich_sources(raw_sources, max_concurrent=5)
 
             # Step 2c: Preload domain reputation cache (Task 2.7)
@@ -256,7 +254,7 @@ class WorkstreamScanService:
                     "No sources passed triage - completing scan with 0 cards"
                 )
                 result.status = "completed"
-                result.completed_at = datetime.now()
+                result.completed_at = datetime.now(timezone.utc)
                 result.execution_time_seconds = (
                     result.completed_at - start_time
                 ).total_seconds()
@@ -347,7 +345,7 @@ class WorkstreamScanService:
             result.status = "failed"
             result.errors.append(str(e))
 
-        result.completed_at = datetime.now()
+        result.completed_at = datetime.now(timezone.utc)
         result.execution_time_seconds = (
             result.completed_at - start_time
         ).total_seconds()
@@ -998,7 +996,7 @@ Example: ["query 1", "query 2", ...]"""
                         title=source.title,
                         content=source.content or "",
                         source_name=source.source_name,
-                        published_at=datetime.now().isoformat(),
+                        published_at=datetime.now(timezone.utc).isoformat(),
                     )
 
                     # Generate embedding
@@ -1111,14 +1109,14 @@ Example: ["query 1", "query 2", ...]"""
         # Ensure unique slug
         existing = self.supabase.table("cards").select("id").eq("slug", slug).execute()
         if existing.data:
-            slug = f"{slug}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            slug = f"{slug}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
 
         # Map stage and goal
         stage_id = STAGE_NUMBER_TO_ID.get(analysis.suggested_stage, "4_proof")
         goal_id = convert_goal_id(analysis.goals[0]) if analysis.goals else None
 
         try:
-            now = datetime.now().isoformat()
+            now = datetime.now(timezone.utc).isoformat()
 
             result = (
                 self.supabase.table("cards")
@@ -1235,7 +1233,7 @@ Example: ["query 1", "query 2", ...]"""
                     )
                 ),
                 "api_source": "workstream_scan",
-                "ingested_at": datetime.now().isoformat(),
+                "ingested_at": datetime.now(timezone.utc).isoformat(),
             }
 
             # Add domain_reputation_id if available (Task 2.7)
@@ -1279,7 +1277,7 @@ Example: ["query 1", "query 2", ...]"""
                         "status": "inbox",
                         "position": 0,
                         "added_from": "workstream_scan",
-                        "created_at": datetime.now().isoformat(),
+                        "created_at": datetime.now(timezone.utc).isoformat(),
                     }
                 )
                 .execute()

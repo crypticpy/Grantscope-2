@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -228,7 +228,9 @@ async def compare_cards(
         raise HTTPException(status_code=500, detail="Failed to fetch comparison data")
 
     return CardComparisonResponse(
-        card1=card1_data, card2=card2_data, comparison_generated_at=datetime.now()
+        card1=card1_data,
+        card2=card2_data,
+        comparison_generated_at=datetime.now(timezone.utc),
     )
 
 
@@ -255,8 +257,8 @@ async def create_card(
         {
             "slug": slug,
             "created_by": current_user["id"],
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
         }
     )
 
@@ -584,7 +586,7 @@ async def preview_filter_count(
             .execute()
         )
         full_cards = full_response.data or []
-    
+
         filtered_cards = []
         for card in full_cards:
             card_text = " ".join(

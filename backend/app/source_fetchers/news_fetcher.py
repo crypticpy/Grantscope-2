@@ -18,7 +18,7 @@ import asyncio
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional
 from urllib.parse import urljoin, urlparse
 
@@ -102,9 +102,11 @@ NEWS_SOURCES: List[Dict[str, Any]] = [
 # Data Classes
 # ============================================================================
 
+
 @dataclass
 class NewsArticle:
     """Represents a fetched news article."""
+
     url: str
     title: str
     content: str
@@ -124,7 +126,9 @@ class NewsArticle:
             "content": self.content,
             "source_name": self.source_name,
             "source_category": self.source_category,
-            "published_at": self.published_at.isoformat() if self.published_at else None,
+            "published_at": (
+                self.published_at.isoformat() if self.published_at else None
+            ),
             "author": self.author,
             "excerpt": self.excerpt,
             "relevance": self.relevance,
@@ -135,6 +139,7 @@ class NewsArticle:
 # ============================================================================
 # News Fetcher Class
 # ============================================================================
+
 
 class NewsFetcher:
     """
@@ -209,14 +214,16 @@ class NewsFetcher:
                         return await response.text()
                     elif response.status == 429:
                         # Rate limited - wait and retry
-                        wait_time = 2 ** attempt
+                        wait_time = 2**attempt
                         logger.warning(f"Rate limited on {url}, waiting {wait_time}s")
                         await asyncio.sleep(wait_time)
                     else:
                         logger.warning(f"HTTP {response.status} for {url}")
                         return None
             except asyncio.TimeoutError:
-                logger.warning(f"Timeout fetching {url} (attempt {attempt + 1}/{self.max_retries})")
+                logger.warning(
+                    f"Timeout fetching {url} (attempt {attempt + 1}/{self.max_retries})"
+                )
                 await asyncio.sleep(1)
             except aiohttp.ClientError as e:
                 logger.warning(f"Client error fetching {url}: {e}")
@@ -229,9 +236,7 @@ class NewsFetcher:
         return None
 
     def _extract_article_content(
-        self,
-        soup: BeautifulSoup,
-        source_config: Dict[str, Any]
+        self, soup: BeautifulSoup, source_config: Dict[str, Any]
     ) -> tuple[str, str, Optional[str]]:
         """
         Extract title, content, and author from parsed HTML.
@@ -245,9 +250,7 @@ class NewsFetcher:
         """
         # Extract title
         title = ""
-        if title_elem := soup.select_one(
-            source_config.get("title_selector", "h1")
-        ):
+        if title_elem := soup.select_one(source_config.get("title_selector", "h1")):
             title = title_elem.get_text(strip=True)
 
         # Fallback title extraction
@@ -308,7 +311,9 @@ class NewsFetcher:
         for meta in date_metas:
             if meta and meta.get("content"):
                 try:
-                    return datetime.fromisoformat(meta["content"].replace("Z", "+00:00"))
+                    return datetime.fromisoformat(
+                        meta["content"].replace("Z", "+00:00")
+                    )
                 except (ValueError, TypeError):
                     continue
 
@@ -322,9 +327,7 @@ class NewsFetcher:
         return None
 
     async def fetch_article(
-        self,
-        url: str,
-        source_config: Optional[Dict[str, Any]] = None
+        self, url: str, source_config: Optional[Dict[str, Any]] = None
     ) -> Optional[NewsArticle]:
         """
         Fetch and parse a single article.
@@ -380,14 +383,11 @@ class NewsFetcher:
             author=author,
             excerpt=excerpt,
             relevance=0.7,
-            metadata={"fetched_at": datetime.now().isoformat()},
+            metadata={"fetched_at": datetime.now(timezone.utc).isoformat()},
         )
 
     async def search_source(
-        self,
-        source_config: Dict[str, Any],
-        query: str,
-        max_articles: int = 5
+        self, source_config: Dict[str, Any], query: str, max_articles: int = 5
     ) -> List[NewsArticle]:
         """
         Search a news source for articles matching a query.
@@ -401,7 +401,9 @@ class NewsFetcher:
             List of NewsArticle objects
         """
         source_name = source_config.get("name", "Unknown")
-        search_url = source_config.get("search_url", "").format(query=query.replace(" ", "+"))
+        search_url = source_config.get("search_url", "").format(
+            query=query.replace(" ", "+")
+        )
 
         if not search_url:
             logger.warning(f"No search URL configured for {source_name}")
@@ -442,7 +444,17 @@ class NewsFetcher:
             # Skip duplicates and non-article URLs
             if href in seen_urls:
                 continue
-            if any(skip in href for skip in ["#", "javascript:", "mailto:", "/tag/", "/category/", "/author/"]):
+            if any(
+                skip in href
+                for skip in [
+                    "#",
+                    "javascript:",
+                    "mailto:",
+                    "/tag/",
+                    "/category/",
+                    "/author/",
+                ]
+            ):
                 continue
 
             seen_urls.add(href)
@@ -454,7 +466,10 @@ class NewsFetcher:
         logger.info(f"Found {len(article_urls)} potential articles from {source_name}")
 
         # Fetch articles concurrently
-        tasks = [self.fetch_article(url, source_config) for url in article_urls[:max_articles * 2]]
+        tasks = [
+            self.fetch_article(url, source_config)
+            for url in article_urls[: max_articles * 2]
+        ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         articles = []
@@ -473,7 +488,7 @@ class NewsFetcher:
         self,
         topics: List[str],
         max_articles_per_source: int = 3,
-        max_total_articles: int = 20
+        max_total_articles: int = 20,
     ) -> List[NewsArticle]:
         """
         Fetch articles from all configured news sources.
@@ -496,9 +511,7 @@ class NewsFetcher:
 
                 try:
                     articles = await self.search_source(
-                        source_config,
-                        topic,
-                        max_articles=max_articles_per_source
+                        source_config, topic, max_articles=max_articles_per_source
                     )
 
                     for article in articles:
@@ -522,6 +535,7 @@ class NewsFetcher:
 # ============================================================================
 # Convenience Functions
 # ============================================================================
+
 
 async def fetch_news_articles(
     topics: Optional[List[str]] = None,
@@ -559,8 +573,7 @@ async def fetch_news_articles(
         # Fetch by topics if provided
         if topics:
             topic_articles = await fetcher.fetch_from_all_sources(
-                topics=topics,
-                max_total_articles=max_articles
+                topics=topics, max_total_articles=max_articles
             )
             articles.extend(topic_articles)
 

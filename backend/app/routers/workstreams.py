@@ -1,7 +1,7 @@
 """Workstream CRUD and feed router."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -55,8 +55,8 @@ async def create_workstream(
     ws_dict.update(
         {
             "user_id": current_user["id"],
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
         }
     )
 
@@ -82,7 +82,7 @@ async def create_workstream(
         cards = _filter_cards_for_workstream(workstream, cards)
 
         if candidates := cards[:20]:
-            now = datetime.now().isoformat()
+            now = datetime.now(timezone.utc).isoformat()
             new_records = [
                 {
                     "workstream_id": workstream_id,
@@ -191,7 +191,7 @@ async def update_workstream(
         return Workstream(**ws_check.data[0])
 
     # Add updated_at timestamp
-    update_dict["updated_at"] = datetime.now().isoformat()
+    update_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     # Perform update
     response = (
@@ -460,7 +460,7 @@ async def auto_populate_workstream(
         start_position = position_response.data[0]["position"] + 1
 
     # Add cards to workstream
-    now = datetime.now().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     new_records = []
     for idx, card in enumerate(candidates):
         new_records.append(
@@ -545,7 +545,7 @@ async def toggle_workstream_auto_scan(
             .update(
                 {
                     "auto_scan": enable,
-                    "updated_at": datetime.now().isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
                 }
             )
             .eq("id", workstream_id)

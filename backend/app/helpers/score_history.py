@@ -6,7 +6,7 @@ card_score_history and card_timeline tables respectively.
 
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from supabase import Client
@@ -63,7 +63,7 @@ def _record_score_history(
 
     try:
         # Prepare the history record with new scores
-        now = datetime.now().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         history_record = {
             "id": str(uuid.uuid4()),
             "card_id": card_id,
@@ -126,7 +126,7 @@ def _record_stage_history(
         return False
 
     try:
-        now = datetime.now().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         timeline_entry = {
             "card_id": card_id,
             "event_type": "stage_changed",

@@ -2,7 +2,7 @@
 
 import logging
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -154,15 +154,11 @@ async def get_card_stage_history(
             StageHistory(
                 id=record["id"],
                 card_id=record["card_id"],
-                changed_at=record[
-                    "created_at"
-                ],  # Map created_at to changed_at
+                changed_at=record["created_at"],  # Map created_at to changed_at
                 old_stage_id=record.get("old_stage_id"),
                 new_stage_id=record["new_stage_id"],
                 old_horizon=record.get("old_horizon"),
-                new_horizon=record.get(
-                    "new_horizon", "H3"
-                ),  # Default to H3 if not set
+                new_horizon=record.get("new_horizon", "H3"),  # Default to H3 if not set
                 trigger=record.get("trigger"),
                 reason=record.get("reason"),
             )
@@ -474,7 +470,7 @@ async def get_my_signals(
         prefs_map = {}
 
     # 7. Enrich cards with personal metadata
-    one_week_ago = (datetime.now() - timedelta(days=7)).isoformat()
+    one_week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
     enriched = []
     for card in cards:
         cid = card["id"]
@@ -509,19 +505,19 @@ async def get_my_signals(
     enriched.sort(key=lambda c: 0 if c.get("is_pinned") else 1)
 
     # 9. Stats
-    updates_this_week = sum(bool((c.get("updated_at") or "") >= one_week_ago)
-                        for c in enriched)
-    needs_research = sum(bool((c.get("signal_quality_score") or 0) < 30)
-                     for c in enriched)
+    updates_this_week = sum(
+        bool((c.get("updated_at") or "") >= one_week_ago) for c in enriched
+    )
+    needs_research = sum(
+        bool((c.get("signal_quality_score") or 0) < 30) for c in enriched
+    )
 
     return {
         "signals": enriched,
         "stats": {
             "total": len(enriched),
-            "followed_count": sum(bool(c.get("is_followed"))
-                              for c in enriched),
-            "created_count": sum(bool(c.get("is_created"))
-                             for c in enriched),
+            "followed_count": sum(bool(c.get("is_followed")) for c in enriched),
+            "created_count": sum(bool(c.get("is_created")) for c in enriched),
             "workstream_count": len(workstreams),
             "updates_this_week": updates_this_week,
             "needs_research": needs_research,
@@ -553,7 +549,7 @@ async def pin_signal(card_id: str, current_user: dict = Depends(get_current_user
         # Toggle pin
         new_val = not existing.data[0].get("is_pinned", False)
         supabase.table("user_signal_preferences").update(
-            {"is_pinned": new_val, "updated_at": datetime.now().isoformat()}
+            {"is_pinned": new_val, "updated_at": datetime.now(timezone.utc).isoformat()}
         ).eq("id", existing.data[0]["id"]).execute()
         return {"is_pinned": new_val}
     else:
@@ -597,7 +593,7 @@ async def create_note(
         {
             "user_id": current_user["id"],
             "card_id": card_id,
-            "created_at": datetime.now().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
     )
 

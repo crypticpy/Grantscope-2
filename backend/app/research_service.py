@@ -19,7 +19,7 @@ Research Types:
 import asyncio
 import logging
 import os
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List, Tuple
 from dataclasses import dataclass
 from gpt_researcher import GPTResearcher
@@ -431,7 +431,9 @@ class ResearchService:
 
         try:
             # Calculate date range (last 60 days for freshness)
-            start_date = (datetime.now() - timedelta(days=60)).strftime("%Y-%m-%d")
+            start_date = (datetime.now(timezone.utc) - timedelta(days=60)).strftime(
+                "%Y-%m-%d"
+            )
 
             # Exa search with content retrieval
             results = self.exa.search_and_contents(
@@ -731,7 +733,9 @@ class ResearchService:
                 title=source.title,
                 content=source.content,
                 source_name=source.source_name,
-                published_at=datetime.now().isoformat(),  # GPT Researcher doesn't always provide dates
+                published_at=datetime.now(
+                    timezone.utc
+                ).isoformat(),  # GPT Researcher doesn't always provide dates
             )
 
             # Generate embedding for vector matching
@@ -875,7 +879,7 @@ class ResearchService:
                     processed.analysis.relevance if processed.analysis else 0.5
                 ),
                 "api_source": "gpt_researcher",
-                "ingested_at": datetime.now().isoformat(),
+                "ingested_at": datetime.now(timezone.utc).isoformat(),
             }
 
             # Insert with full schema
@@ -954,7 +958,7 @@ class ResearchService:
                         "context": entity.context,
                         "source_id": source_id,
                         "card_id": card_id,
-                        "created_at": datetime.now().isoformat(),
+                        "created_at": datetime.now(timezone.utc).isoformat(),
                     }
                 ).execute()
         except Exception as e:
@@ -984,7 +988,7 @@ class ResearchService:
         # Ensure unique slug
         existing = self.supabase.table("cards").select("id").eq("slug", slug).execute()
         if existing.data:
-            slug = f"{slug}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            slug = f"{slug}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
 
         result = (
             self.supabase.table("cards")
@@ -1020,8 +1024,8 @@ class ResearchService:
                     ),  # 1-10 -> 0-100
                     "status": "active",
                     "created_by": created_by,
-                    "created_at": datetime.now().isoformat(),
-                    "updated_at": datetime.now().isoformat(),
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
                 }
             )
             .execute()
@@ -1058,7 +1062,7 @@ class ResearchService:
                 "description": description,
                 "triggered_by_source_id": source_id,
                 "metadata": metadata or {},
-                "created_at": datetime.now().isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
             }
         ).execute()
 
@@ -1068,7 +1072,7 @@ class ResearchService:
         """Update card metrics based on new analysis."""
         self.supabase.table("cards").update(
             {
-                "updated_at": datetime.now().isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
                 # Optionally update scores if novelty warrants it
                 # This could be more sophisticated - averaging, weighting, etc.
             }
@@ -1170,7 +1174,7 @@ class ResearchService:
                                 "enhanced_description",
                                 full_card.data.get("description"),
                             ),
-                            "updated_at": datetime.now().isoformat(),
+                            "updated_at": datetime.now(timezone.utc).isoformat(),
                         }
                     ).eq("id", card_id).execute()
 
@@ -1181,12 +1185,12 @@ class ResearchService:
                 logger.warning(f"Card enhancement failed (research still saved): {e}")
                 # Still update timestamp even if enhancement fails
                 self.supabase.table("cards").update(
-                    {"updated_at": datetime.now().isoformat()}
+                    {"updated_at": datetime.now(timezone.utc).isoformat()}
                 ).eq("id", card_id).execute()
         else:
             # Just update timestamp if no new sources
             self.supabase.table("cards").update(
-                {"updated_at": datetime.now().isoformat()}
+                {"updated_at": datetime.now(timezone.utc).isoformat()}
             ).eq("id", card_id).execute()
 
         # Create summary timeline event
@@ -1361,7 +1365,7 @@ class ResearchService:
                     # Generate a simpler report with just source summaries
                     fallback_report = f"""# Deep Research Report: {card["name"]}
 
-**Generated:** {datetime.now().strftime('%B %d, %Y at %I:%M %p')}
+**Generated:** {datetime.now(timezone.utc).strftime('%B %d, %Y at %I:%M %p')}
 **Sources Analyzed:** {len(source_analyses)}
 
 ---
@@ -1436,8 +1440,8 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
                     "description": enhancement.get(
                         "enhanced_description", card.get("description")
                     ),
-                    "updated_at": datetime.now().isoformat(),
-                    "deep_research_at": datetime.now().isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                    "deep_research_at": datetime.now(timezone.utc).isoformat(),
                 }
             ).eq("id", card_id).execute()
 
@@ -1449,8 +1453,8 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
             # Still update timestamps even if enhancement fails
             self.supabase.table("cards").update(
                 {
-                    "updated_at": datetime.now().isoformat(),
-                    "deep_research_at": datetime.now().isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                    "deep_research_at": datetime.now(timezone.utc).isoformat(),
                 }
             ).eq("id", card_id).execute()
 

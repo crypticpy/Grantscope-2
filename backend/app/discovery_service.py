@@ -37,7 +37,7 @@ import asyncio
 import logging
 import os
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any, Tuple
 from enum import Enum
 import uuid
@@ -155,16 +155,6 @@ class DiscoveryConfig:
     max_sources_per_query: int = None
     max_sources_total: int = None
 
-    def __post_init__(self):
-        """Apply environment defaults for any None values."""
-        defaults = get_discovery_defaults()
-        if self.max_queries_per_run is None:
-            self.max_queries_per_run = defaults["max_queries"]
-        if self.max_sources_per_query is None:
-            self.max_sources_per_query = defaults["max_sources_per_query"]
-        if self.max_sources_total is None:
-            self.max_sources_total = defaults["max_sources_total"]
-
     # Thresholds - TUNED TO PREFER ENRICHMENT OVER CREATION
     auto_approve_threshold: float = 0.95  # Auto-approve confidence threshold
     similarity_threshold: float = (
@@ -193,7 +183,17 @@ class DiscoveryConfig:
     search_topics: List[str] = field(default_factory=list)  # Topics for source searches
 
     def __post_init__(self):
-        """Initialize default source category configurations."""
+        """Apply environment defaults and initialize source category configurations."""
+        # Step 1: Apply environment defaults for any None values
+        defaults = get_discovery_defaults()
+        if self.max_queries_per_run is None:
+            self.max_queries_per_run = defaults["max_queries"]
+        if self.max_sources_per_query is None:
+            self.max_sources_per_query = defaults["max_sources_per_query"]
+        if self.max_sources_total is None:
+            self.max_sources_total = defaults["max_sources_total"]
+
+        # Step 2: Initialize default source category configurations
         if not self.source_categories:
             self.source_categories = {
                 SourceCategory.RSS.value: SourceCategoryConfig(
@@ -255,9 +255,7 @@ def apply_source_preferences(
     # Apply custom_rss_feeds: add to RSS category config
     custom_feeds = source_prefs.get("custom_rss_feeds")
     if custom_feeds and isinstance(custom_feeds, list):
-        if rss_config := config.source_categories.get(
-            SourceCategory.RSS.value
-        ):
+        if rss_config := config.source_categories.get(SourceCategory.RSS.value):
             rss_config.rss_feeds = list(set(rss_config.rss_feeds + custom_feeds))
             rss_config.enabled = True
 
@@ -618,8 +616,9 @@ class MultiSourceFetchResult:
         """Calculate diversity score (0-1) based on category distribution."""
         if self.total_sources == 0:
             return 0.0
-        active_categories = sum(bool(count > 0)
-                            for count in self.sources_by_category.values())
+        active_categories = sum(
+            bool(count > 0) for count in self.sources_by_category.values()
+        )
         return active_categories / 5.0  # 5 categories total
 
 
@@ -832,7 +831,7 @@ class DiscoveryService:
         Returns:
             DiscoveryResult with complete statistics
         """
-        start_time = datetime.now()
+        start_time = datetime.now(timezone.utc)
 
         # Use existing run_id if provided, otherwise create new record
         if existing_run_id:
@@ -860,10 +859,10 @@ class DiscoveryService:
                 "Generating search queries from pillars and priorities...",
                 [],
             )
-            step_start = datetime.now()
+            step_start = datetime.now(timezone.utc)
             queries = await self._generate_queries(config)
             processing_time.query_generation_seconds = (
-                datetime.now() - step_start
+                datetime.now(timezone.utc) - step_start
             ).total_seconds()
             logger.info(
                 f"Generated {len(queries)} queries in {processing_time.query_generation_seconds:.2f}s"
@@ -874,7 +873,7 @@ class DiscoveryService:
             search_cost = 0.0
 
             if config.enable_multi_source:
-                step_start = datetime.now()
+                step_start = datetime.now(timezone.utc)
                 logger.info("Fetching from all 5 source categories...")
                 multi_source_result = await self._fetch_from_all_source_categories(
                     config
@@ -884,7 +883,7 @@ class DiscoveryService:
                 categories_fetched = multi_source_result.categories_fetched
                 diversity_metrics = multi_source_result.diversity_metrics
                 processing_time.multi_source_fetch_seconds = (
-                    datetime.now() - step_start
+                    datetime.now(timezone.utc) - step_start
                 ).total_seconds()
 
                 # Add any multi-source errors to error list
@@ -902,13 +901,13 @@ class DiscoveryService:
 
             # Step 2b: Execute query-based searches (traditional GPT Researcher + Exa)
             if queries:
-                step_start = datetime.now()
+                step_start = datetime.now(timezone.utc)
                 query_sources, query_cost = await self._execute_searches(
                     queries[: config.max_queries_per_run], config
                 )
                 search_cost += query_cost
                 processing_time.query_search_seconds = (
-                    datetime.now() - step_start
+                    datetime.now(timezone.utc) - step_start
                 ).total_seconds()
 
                 # Deduplicate query sources against multi-source results
@@ -933,7 +932,7 @@ class DiscoveryService:
                     "No queries generated and no multi-source results - completing run"
                 )
                 processing_time.total_seconds = (
-                    datetime.now() - start_time
+                    datetime.now(timezone.utc) - start_time
                 ).total_seconds()
                 return await self._finalize_run(
                     run_id=run_id,
@@ -958,7 +957,7 @@ class DiscoveryService:
             if not raw_sources:
                 logger.warning("No sources discovered - completing run")
                 processing_time.total_seconds = (
-                    datetime.now() - start_time
+                    datetime.now(timezone.utc) - start_time
                 ).total_seconds()
                 return await self._finalize_run(
                     run_id=run_id,
@@ -1080,7 +1079,7 @@ class DiscoveryService:
                 ["queries", "search"],
                 {"queries_generated": len(queries), "sources_found": len(raw_sources)},
             )
-            step_start = datetime.now()
+            step_start = datetime.now(timezone.utc)
             self._current_run_id = (
                 run_id  # For domain reputation stats persistence (Task 2.7)
             )
@@ -1088,7 +1087,7 @@ class DiscoveryService:
                 validated_sources
             )
             processing_time.triage_seconds = (
-                datetime.now() - step_start
+                datetime.now(timezone.utc) - step_start
             ).total_seconds()
             api_token_usage.add_tokens("triage", triage_tokens)
             logger.info(
@@ -1113,7 +1112,7 @@ class DiscoveryService:
                     "sources_relevant": len(triaged_sources),
                 },
             )
-            step_start = datetime.now()
+            step_start = datetime.now(timezone.utc)
             if config.skip_blocked_topics:
                 filtered_sources, blocked_count = await self._check_blocked_topics(
                     triaged_sources
@@ -1123,7 +1122,7 @@ class DiscoveryService:
                 filtered_sources = triaged_sources
                 blocked_count = 0
             processing_time.blocked_topic_check_seconds = (
-                datetime.now() - step_start
+                datetime.now(timezone.utc) - step_start
             ).total_seconds()
 
             # Step 5: Deduplicate against existing cards
@@ -1138,12 +1137,12 @@ class DiscoveryService:
                     "sources_relevant": len(triaged_sources),
                 },
             )
-            step_start = datetime.now()
+            step_start = datetime.now(timezone.utc)
             dedup_result, dedup_tokens = await self._deduplicate_sources_with_metrics(
                 filtered_sources, config
             )
             processing_time.deduplication_seconds = (
-                datetime.now() - step_start
+                datetime.now(timezone.utc) - step_start
             ).total_seconds()
             api_token_usage.add_tokens("card_match", dedup_tokens)
             logger.info(
@@ -1167,7 +1166,7 @@ class DiscoveryService:
                     "new_concepts": len(dedup_result.new_concept_candidates),
                 },
             )
-            step_start = datetime.now()
+            step_start = datetime.now(timezone.utc)
             if config.dry_run:
                 logger.info("Dry run - skipping card creation/enrichment")
                 card_result = CardActionResult([], [], 0, 0, 0)
@@ -1181,7 +1180,7 @@ class DiscoveryService:
                     f"{card_result.auto_approved} auto-approved"
                 )
             processing_time.card_creation_seconds = (
-                datetime.now() - step_start
+                datetime.now(timezone.utc) - step_start
             ).total_seconds()
 
             # Persist story_cluster_count to quality_stats
@@ -1217,7 +1216,7 @@ class DiscoveryService:
 
             # Calculate total processing time
             processing_time.total_seconds = (
-                datetime.now() - start_time
+                datetime.now(timezone.utc) - start_time
             ).total_seconds()
 
             # Log comprehensive metrics summary
@@ -1250,7 +1249,7 @@ class DiscoveryService:
             logger.error(f"Discovery run failed: {e}", exc_info=True)
             errors.append(str(e))
             processing_time.total_seconds = (
-                datetime.now() - start_time
+                datetime.now(timezone.utc) - start_time
             ).total_seconds()
 
             return await self._finalize_run(
@@ -1301,7 +1300,7 @@ class DiscoveryService:
                 "current_stage": stage,
                 "message": message,
                 "stages": stages_status,
-                "updated_at": datetime.now().isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
             }
             if stats:
                 progress["stats"] = stats
@@ -1418,7 +1417,7 @@ class DiscoveryService:
                     "triage_confidence": triage.confidence,
                     "triage_primary_pillar": triage.primary_pillar,
                     "triage_reason": triage.reason,
-                    "triaged_at": datetime.now().isoformat(),
+                    "triaged_at": datetime.now(timezone.utc).isoformat(),
                     "processing_status": "triaged" if passed else "filtered_triage",
                 }
             ).eq("id", source_id).execute()
@@ -1457,7 +1456,7 @@ class DiscoveryService:
                     "analysis_is_new_concept": analysis.is_new_concept,
                     "analysis_reasoning": analysis.reasoning,
                     "analysis_entities": entities_json,
-                    "analyzed_at": datetime.now().isoformat(),
+                    "analyzed_at": datetime.now(timezone.utc).isoformat(),
                     "processing_status": "analyzed",
                 }
             ).eq("id", source_id).execute()
@@ -1484,7 +1483,7 @@ class DiscoveryService:
                     "dedup_status": status,
                     "dedup_matched_card_id": matched_card_id,
                     "dedup_similarity_score": similarity,
-                    "deduplicated_at": datetime.now().isoformat(),
+                    "deduplicated_at": datetime.now(timezone.utc).isoformat(),
                     "processing_status": processing_status,
                 }
             ).eq("id", source_id).execute()
@@ -1663,7 +1662,7 @@ class DiscoveryService:
                     "triggered_by": "manual",
                     "pillars_scanned": config.pillars_filter or [],
                     "priorities_scanned": config.horizons_filter or [],
-                    "started_at": datetime.now().isoformat(),
+                    "started_at": datetime.now(timezone.utc).isoformat(),
                     "summary_report": {
                         "config": {
                             "max_queries_per_run": config.max_queries_per_run,
@@ -1817,7 +1816,7 @@ class DiscoveryService:
         Returns:
             MultiSourceFetchResult with sources from all categories
         """
-        start_time = datetime.now()
+        start_time = datetime.now(timezone.utc)
         all_sources: List[RawSource] = []
         sources_by_category: Dict[str, int] = {cat.value: 0 for cat in SourceCategory}
         errors_by_category: Dict[str, List[str]] = {
@@ -1912,9 +1911,10 @@ class DiscoveryService:
                     sources_by_category[category] += 1
 
         # Calculate metrics
-        fetch_time = (datetime.now() - start_time).total_seconds()
-        categories_fetched = sum(bool(count > 0)
-                             for count in sources_by_category.values())
+        fetch_time = (datetime.now(timezone.utc) - start_time).total_seconds()
+        categories_fetched = sum(
+            bool(count > 0) for count in sources_by_category.values()
+        )
 
         logger.info(
             f"Multi-source fetch complete: {len(all_sources)} sources from "
@@ -2164,7 +2164,7 @@ class DiscoveryService:
                         title=source.title,
                         content=source.content or "",
                         source_name=source.source_name,
-                        published_at=datetime.now().isoformat(),
+                        published_at=datetime.now(timezone.utc).isoformat(),
                     )
 
                     # Update discovered_sources with analysis
@@ -2321,7 +2321,7 @@ class DiscoveryService:
                         title=source.title,
                         content=source.content or "",
                         source_name=source.source_name,
-                        published_at=datetime.now().isoformat(),
+                        published_at=datetime.now(timezone.utc).isoformat(),
                     )
                     # Estimate tokens for analysis
                     input_tokens = (
@@ -3159,14 +3159,14 @@ class DiscoveryService:
         # Ensure unique slug
         existing = self.supabase.table("cards").select("id").eq("slug", slug).execute()
         if existing.data:
-            slug = f"{slug}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            slug = f"{slug}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
 
         # Convert stage number to stage_id (foreign key)
         stage_id = STAGE_NUMBER_TO_ID.get(analysis.suggested_stage, "4_proof")
 
         goal_id = convert_goal_id(analysis.goals[0]) if analysis.goals else None
         try:
-            now = datetime.now().isoformat()
+            now = datetime.now(timezone.utc).isoformat()
             ai_confidence = None
             if confidence is not None:
                 try:
@@ -3302,7 +3302,7 @@ class DiscoveryService:
                     )
                 ),
                 "api_source": "discovery_scan",
-                "ingested_at": datetime.now().isoformat(),
+                "ingested_at": datetime.now(timezone.utc).isoformat(),
             }
 
             # Add domain_reputation_id if available (Task 2.7)
@@ -3331,8 +3331,8 @@ class DiscoveryService:
                 {
                     "status": "active",
                     "review_status": "active",
-                    "auto_approved_at": datetime.now().isoformat(),
-                    "updated_at": datetime.now().isoformat(),
+                    "auto_approved_at": datetime.now(timezone.utc).isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
                 }
             ).eq("id", card_id).execute()
 
@@ -3363,7 +3363,7 @@ class DiscoveryService:
                     "description": description,
                     "triggered_by_source_id": source_id,
                     "metadata": metadata or {},
-                    "created_at": datetime.now().isoformat(),
+                    "created_at": datetime.now(timezone.utc).isoformat(),
                 }
             ).execute()
         except Exception as e:
@@ -3488,7 +3488,7 @@ class DiscoveryService:
         Returns:
             Complete DiscoveryResult
         """
-        end_time = datetime.now()
+        end_time = datetime.now(timezone.utc)
         execution_time = (end_time - start_time).total_seconds()
 
         # Default sources_by_category if not provided

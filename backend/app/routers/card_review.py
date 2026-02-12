@@ -1,7 +1,7 @@
 """Card review router -- pending count, single review, bulk review, dismiss."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -82,7 +82,7 @@ async def review_card(
         raise HTTPException(status_code=404, detail="Card not found")
 
     card = card_check.data[0]
-    now = datetime.now().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
 
     if review_data.action == "approve":
         # Approve the card - set it to active
@@ -233,7 +233,7 @@ async def bulk_review_cards(
     Returns:
         Summary with processed count and any failures
     """
-    now = datetime.now().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     card_ids = bulk_data.card_ids
     failed = []
 
@@ -251,8 +251,7 @@ async def bulk_review_cards(
         # Identify cards that don't exist
         missing_ids = set(card_ids) - existing_ids
         failed.extend(
-            {"id": missing_id, "error": "Card not found"}
-            for missing_id in missing_ids
+            {"id": missing_id, "error": "Card not found"} for missing_id in missing_ids
         )
         # Get the list of valid card IDs to process
         valid_ids = list(existing_ids)
@@ -368,7 +367,7 @@ async def dismiss_card(
         raise HTTPException(status_code=404, detail="Card not found")
 
     card = card_check.data[0]
-    now = datetime.now().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
 
     # Check if user already dismissed this card
     existing = (

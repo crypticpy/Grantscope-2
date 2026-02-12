@@ -2,7 +2,7 @@
 
 import logging
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -44,7 +44,7 @@ async def submit_validation_label(
         HTTPException 404: Card not found
         HTTPException 400: Duplicate validation by same reviewer for same card
     """
-    now = datetime.now().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
 
     # Verify the card exists and get its predicted pillar
     card_check = (
@@ -139,8 +139,7 @@ async def get_validation_stats(current_user: dict = Depends(get_current_user)):
         }
 
     total = len(validations_response.data)
-    correct = sum(bool(v["is_correct"])
-              for v in validations_response.data)
+    correct = sum(bool(v["is_correct"]) for v in validations_response.data)
     incorrect = total - correct
     accuracy = (correct / total * 100) if total > 0 else 0
 
@@ -239,7 +238,7 @@ async def get_classification_accuracy(
 
     # Apply date filter if specified
     if days is not None and days > 0:
-        period_start = (datetime.now() - timedelta(days=days)).isoformat()
+        period_start = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
         query = query.gte("created_at", period_start)
 
     validations_response = query.execute()
@@ -256,8 +255,7 @@ async def get_classification_accuracy(
 
     # Compute accuracy metrics
     total_validations = len(validations_response.data)
-    correct_count = sum(bool(v.get("is_correct"))
-                    for v in validations_response.data)
+    correct_count = sum(bool(v.get("is_correct")) for v in validations_response.data)
     accuracy_percentage = (
         (correct_count / total_validations * 100) if total_validations > 0 else None
     )
@@ -307,7 +305,7 @@ async def get_accuracy_by_pillar(
 
     # Apply date filter if specified
     if days is not None and days > 0:
-        period_start = (datetime.now() - timedelta(days=days)).isoformat()
+        period_start = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
         query = query.gte("created_at", period_start)
 
     validations_response = query.execute()
@@ -327,8 +325,7 @@ async def get_accuracy_by_pillar(
 
     # Compute overall metrics
     total_validations = len(validations_response.data)
-    correct_count = sum(bool(v.get("is_correct"))
-                    for v in validations_response.data)
+    correct_count = sum(bool(v.get("is_correct")) for v in validations_response.data)
     accuracy_percentage = (
         (correct_count / total_validations * 100) if total_validations > 0 else None
     )

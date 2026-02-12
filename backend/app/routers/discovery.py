@@ -3,7 +3,7 @@
 import logging
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -104,7 +104,7 @@ async def _distribute_cards_to_auto_add_workstreams(new_card_ids: List[str]):
                 start_position = pos_response.data[0]["position"] + 1
 
             # Insert matching cards into workstream inbox
-            now = datetime.now().isoformat()
+            now = datetime.now(timezone.utc).isoformat()
             records = [
                 {
                     "workstream_id": ws["id"],
@@ -173,7 +173,7 @@ async def execute_discovery_run_background(
         supabase.table("discovery_runs").update(
             {
                 "status": result.status.value,
-                "completed_at": datetime.now().isoformat(),
+                "completed_at": datetime.now(timezone.utc).isoformat(),
                 "queries_generated": result.queries_generated,
                 "sources_found": result.sources_discovered,
                 "sources_relevant": result.sources_triaged,
@@ -203,7 +203,7 @@ async def execute_discovery_run_background(
         supabase.table("discovery_runs").update(
             {
                 "status": "failed",
-                "completed_at": datetime.now().isoformat(),
+                "completed_at": datetime.now(timezone.utc).isoformat(),
                 "error_message": str(e),
             }
         ).eq("id", run_id).execute()
@@ -245,7 +245,7 @@ async def run_weekly_discovery():
             "cards_enriched": 0,
             "cards_deduplicated": 0,
             "sources_found": 0,
-            "started_at": datetime.now().isoformat(),
+            "started_at": datetime.now(timezone.utc).isoformat(),
             "summary_report": {"stage": "queued", "config": config.dict()},
         }
 
@@ -317,7 +317,7 @@ async def trigger_discovery_run(
             "cards_enriched": 0,
             "cards_deduplicated": 0,
             "sources_found": 0,
-            "started_at": datetime.now().isoformat(),
+            "started_at": datetime.now(timezone.utc).isoformat(),
         }
 
         result = supabase.table("discovery_runs").insert(run_record).execute()
@@ -413,7 +413,7 @@ async def cancel_discovery_run(
         .update(
             {
                 "status": "cancelled",
-                "completed_at": datetime.now().isoformat(),
+                "completed_at": datetime.now(timezone.utc).isoformat(),
                 "error_message": f"Cancelled by user {current_user['id']}",
             }
         )

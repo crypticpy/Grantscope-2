@@ -18,7 +18,7 @@ import asyncio
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 from urllib.parse import urljoin, urlparse, quote_plus
 
@@ -158,9 +158,11 @@ GOV_TECH_BLOG_FEEDS = [
 # Data Classes
 # ============================================================================
 
+
 @dataclass
 class TechBlogArticle:
     """Represents a fetched tech blog article."""
+
     url: str
     title: str
     content: str
@@ -181,7 +183,9 @@ class TechBlogArticle:
             "content": self.content,
             "source_name": self.source_name,
             "source_category": self.source_category,
-            "published_at": self.published_at.isoformat() if self.published_at else None,
+            "published_at": (
+                self.published_at.isoformat() if self.published_at else None
+            ),
             "author": self.author,
             "excerpt": self.excerpt,
             "tags": self.tags,
@@ -193,6 +197,7 @@ class TechBlogArticle:
 @dataclass
 class TechBlogFetchResult:
     """Result of fetching tech blog articles."""
+
     articles: List[TechBlogArticle]
     source_name: str
     success: bool
@@ -203,6 +208,7 @@ class TechBlogFetchResult:
 # ============================================================================
 # Tech Blog Fetcher Class
 # ============================================================================
+
 
 class TechBlogFetcher:
     """
@@ -278,7 +284,7 @@ class TechBlogFetcher:
                         return await response.text()
                     elif response.status == 429:
                         # Rate limited - wait and retry
-                        wait_time = 2 ** attempt
+                        wait_time = 2**attempt
                         logger.warning(f"Rate limited on {url}, waiting {wait_time}s")
                         await asyncio.sleep(wait_time)
                     elif response.status == 403:
@@ -288,7 +294,9 @@ class TechBlogFetcher:
                         logger.warning(f"HTTP {response.status} for {url}")
                         return None
             except asyncio.TimeoutError:
-                logger.warning(f"Timeout fetching {url} (attempt {attempt + 1}/{self.max_retries})")
+                logger.warning(
+                    f"Timeout fetching {url} (attempt {attempt + 1}/{self.max_retries})"
+                )
                 await asyncio.sleep(1)
             except aiohttp.ClientError as e:
                 logger.warning(f"Client error fetching {url}: {e}")
@@ -301,9 +309,7 @@ class TechBlogFetcher:
         return None
 
     def _extract_article_content(
-        self,
-        soup: BeautifulSoup,
-        source_config: Dict[str, Any]
+        self, soup: BeautifulSoup, source_config: Dict[str, Any]
     ) -> tuple[str, str, Optional[str], List[str]]:
         """
         Extract title, content, author, and tags from parsed HTML.
@@ -328,7 +334,12 @@ class TechBlogFetcher:
             if title_elem := soup.find("title"):
                 title = title_elem.get_text(strip=True)
                 # Remove site name suffix
-                title = re.sub(r'\s*[|\-–]\s*(TechCrunch|Ars Technica|The Verge|Wired).*$', '', title, flags=re.I)
+                title = re.sub(
+                    r"\s*[|\-–]\s*(TechCrunch|Ars Technica|The Verge|Wired).*$",
+                    "",
+                    title,
+                    flags=re.I,
+                )
 
         # Extract content
         content = ""
@@ -369,7 +380,9 @@ class TechBlogFetcher:
 
         # Extract tags
         tags = []
-        tag_elems = soup.select('a[rel="tag"], .tags a, .tag-list a, meta[property="article:tag"]')
+        tag_elems = soup.select(
+            'a[rel="tag"], .tags a, .tag-list a, meta[property="article:tag"]'
+        )
         for tag_elem in tag_elems:
             if hasattr(tag_elem, "get_text"):
                 tag = tag_elem.get_text(strip=True)
@@ -419,6 +432,7 @@ class TechBlogFetcher:
         if script_ld := soup.find("script", type="application/ld+json"):
             try:
                 import json
+
                 ld_data = json.loads(script_ld.string)
                 if isinstance(ld_data, list):
                     ld_data = ld_data[0] if ld_data else {}
@@ -432,9 +446,7 @@ class TechBlogFetcher:
         return None
 
     async def fetch_article(
-        self,
-        url: str,
-        source_config: Optional[Dict[str, Any]] = None
+        self, url: str, source_config: Optional[Dict[str, Any]] = None
     ) -> Optional[TechBlogArticle]:
         """
         Fetch and parse a single article.
@@ -469,7 +481,9 @@ class TechBlogFetcher:
                 "category": "tech_blog",
             }
 
-        title, content, author, tags = self._extract_article_content(soup, source_config)
+        title, content, author, tags = self._extract_article_content(
+            soup, source_config
+        )
         published_at = self._extract_published_date(soup)
 
         if not title or not content:
@@ -490,13 +504,11 @@ class TechBlogFetcher:
             excerpt=excerpt,
             tags=tags,
             relevance=0.7,
-            metadata={"fetched_at": datetime.now().isoformat()},
+            metadata={"fetched_at": datetime.now(timezone.utc).isoformat()},
         )
 
     async def fetch_from_rss(
-        self,
-        source_config: Dict[str, Any],
-        max_articles: int = 10
+        self, source_config: Dict[str, Any], max_articles: int = 10
     ) -> List[TechBlogArticle]:
         """
         Fetch articles from RSS feed of a tech blog.
@@ -574,14 +586,12 @@ class TechBlogFetcher:
                     source_category=source_config.get("category", "tech_blog"),
                     published_at=published_at,
                     author=author,
-                    excerpt=(
-                        f"{content[:200]}..." if len(content) > 200 else content
-                    ),
+                    excerpt=(f"{content[:200]}..." if len(content) > 200 else content),
                     tags=tags[:10],
                     relevance=0.7,
                     metadata={
                         "feed_url": rss_url,
-                        "fetched_at": datetime.now().isoformat(),
+                        "fetched_at": datetime.now(timezone.utc).isoformat(),
                     },
                 )
                 articles.append(article)
@@ -594,10 +604,7 @@ class TechBlogFetcher:
         return articles
 
     async def search_source(
-        self,
-        source_config: Dict[str, Any],
-        query: str,
-        max_articles: int = 5
+        self, source_config: Dict[str, Any], query: str, max_articles: int = 5
     ) -> List[TechBlogArticle]:
         """
         Search a tech blog for articles matching a query.
@@ -655,8 +662,17 @@ class TechBlogFetcher:
             # Skip duplicates and non-article URLs
             if href in seen_urls:
                 continue
-            skip_patterns = ["#", "javascript:", "mailto:", "/tag/", "/category/",
-                            "/author/", "/page/", "/feed/", "/search/"]
+            skip_patterns = [
+                "#",
+                "javascript:",
+                "mailto:",
+                "/tag/",
+                "/category/",
+                "/author/",
+                "/page/",
+                "/feed/",
+                "/search/",
+            ]
             if any(skip in href for skip in skip_patterns):
                 continue
 
@@ -667,13 +683,18 @@ class TechBlogFetcher:
                 break
 
         if not article_urls:
-            logger.warning(f"No articles found in search for {source_name}, falling back to RSS")
+            logger.warning(
+                f"No articles found in search for {source_name}, falling back to RSS"
+            )
             return await self.fetch_from_rss(source_config, max_articles)
 
         logger.info(f"Found {len(article_urls)} potential articles from {source_name}")
 
         # Fetch articles concurrently
-        tasks = [self.fetch_article(url, source_config) for url in article_urls[:max_articles * 2]]
+        tasks = [
+            self.fetch_article(url, source_config)
+            for url in article_urls[: max_articles * 2]
+        ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         articles = []
@@ -692,7 +713,7 @@ class TechBlogFetcher:
         self,
         topics: List[str],
         max_articles_per_source: int = 3,
-        max_total_articles: int = 20
+        max_total_articles: int = 20,
     ) -> List[TechBlogArticle]:
         """
         Fetch articles from all configured tech blog sources.
@@ -718,9 +739,7 @@ class TechBlogFetcher:
 
                 try:
                     articles = await self.search_source(
-                        source_config,
-                        topic,
-                        max_articles=max_articles_per_source
+                        source_config, topic, max_articles=max_articles_per_source
                     )
 
                     for article in articles:
@@ -743,6 +762,7 @@ class TechBlogFetcher:
 # ============================================================================
 # Convenience Functions
 # ============================================================================
+
 
 async def fetch_tech_blog_articles(
     topics: Optional[List[str]] = None,
@@ -786,16 +806,14 @@ async def fetch_tech_blog_articles(
                 if len(articles) >= max_articles:
                     break
                 rss_articles = await fetcher.fetch_from_rss(
-                    source_config,
-                    max_articles=5
+                    source_config, max_articles=5
                 )
                 articles.extend(rss_articles)
 
         # Fetch by topics if provided
         elif topics:
             topic_articles = await fetcher.fetch_from_all_sources(
-                topics=topics,
-                max_total_articles=max_articles
+                topics=topics, max_total_articles=max_articles
             )
             articles.extend(topic_articles)
 
@@ -822,8 +840,7 @@ async def fetch_tech_blog_articles(
 
 
 async def fetch_tech_blog_rss_feeds(
-    feed_urls: Optional[List[str]] = None,
-    max_articles_per_feed: int = 10
+    feed_urls: Optional[List[str]] = None, max_articles_per_feed: int = 10
 ) -> List[TechBlogArticle]:
     """
     Fetch articles from tech blog RSS feeds.
@@ -848,11 +865,7 @@ async def fetch_tech_blog_rss_feeds(
                 continue
 
             source_config = next(
-                (
-                    src
-                    for src in TECH_BLOG_SOURCES
-                    if src.get("rss_url") == feed_url
-                ),
+                (src for src in TECH_BLOG_SOURCES if src.get("rss_url") == feed_url),
                 None,
             )
             if source_config is None:
@@ -862,7 +875,9 @@ async def fetch_tech_blog_rss_feeds(
                     "category": "tech_blog",
                 }
 
-            articles = await fetcher.fetch_from_rss(source_config, max_articles_per_feed)
+            articles = await fetcher.fetch_from_rss(
+                source_config, max_articles_per_feed
+            )
 
             for article in articles:
                 if article.url not in seen_urls:

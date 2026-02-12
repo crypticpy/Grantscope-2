@@ -1,8 +1,9 @@
 """Analytics and metrics router."""
 
+import asyncio
 import logging
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from datetime import date as date_type
 from typing import Dict, List, Optional
 
@@ -145,7 +146,7 @@ async def get_processing_metrics(
         ProcessingMetrics object with all aggregated metrics
     """
     # Calculate time range
-    period_end = datetime.now()
+    period_end = datetime.now(timezone.utc)
     period_start = period_end - timedelta(days=days)
     period_start_iso = period_start.isoformat()
 
@@ -268,8 +269,7 @@ async def get_processing_metrics(
 
     validations_data = validations_response.data or []
     total_validations = len(validations_data)
-    correct_count = sum(bool(v.get("is_correct"))
-                    for v in validations_data)
+    correct_count = sum(bool(v.get("is_correct")) for v in validations_data)
     accuracy = (
         (correct_count / total_validations * 100) if total_validations > 0 else None
     )
@@ -298,11 +298,15 @@ async def get_processing_metrics(
     cards_generated = len(cards_data)
 
     # Count cards with all 4 scoring dimensions
-    cards_with_all_scores = sum(bool(c.get("impact_score") is not None
-                                    and c.get("velocity_score") is not None
-                                    and c.get("novelty_score") is not None
-                                    and c.get("risk_score") is not None)
-                            for c in cards_data)
+    cards_with_all_scores = sum(
+        bool(
+            c.get("impact_score") is not None
+            and c.get("velocity_score") is not None
+            and c.get("novelty_score") is not None
+            and c.get("risk_score") is not None
+        )
+        for c in cards_data
+    )
 
     # -------------------------------------------------------------------------
     # Error Summary
@@ -486,7 +490,7 @@ async def get_analytics_insights(
         if not response.data:
             return InsightsResponse(
                 insights=[],
-                generated_at=datetime.now(),
+                generated_at=datetime.now(timezone.utc),
                 ai_available=True,
                 period_analyzed="No active cards found",
             )
@@ -506,7 +510,7 @@ async def get_analytics_insights(
 
         if not top_cards:
             return InsightsResponse(
-                insights=[], generated_at=datetime.now(), ai_available=True
+                insights=[], generated_at=datetime.now(timezone.utc), ai_available=True
             )
 
         # Compute hash for cache validation
@@ -524,7 +528,7 @@ async def get_analytics_insights(
                     .eq("pillar_filter", pillar_id)
                     .eq("insight_limit", limit)
                     .eq("cache_date", date_type.today().isoformat())
-                    .gt("expires_at", datetime.now().isoformat())
+                    .gt("expires_at", datetime.now(timezone.utc).isoformat())
                     .limit(1)
                     .execute()
                 )
@@ -561,7 +565,7 @@ async def get_analytics_insights(
         # -------------------------------------------------------------------------
         # Step 3: Generate new insights via AI
         # -------------------------------------------------------------------------
-        start_time = datetime.now()
+        start_time = datetime.now(timezone.utc)
 
         trends_data = "\n".join(
             [
@@ -628,8 +632,10 @@ async def get_analytics_insights(
                 for card in top_cards
             ]
 
-        generation_time_ms = int((datetime.now() - start_time).total_seconds() * 1000)
-        generated_at = datetime.now()
+        generation_time_ms = int(
+            (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
+        )
+        generated_at = datetime.now(timezone.utc)
         period_analyzed = f"Top {len(top_cards)} trending cards" + (
             f" in {pillar_id}" if pillar_id else ""
         )
@@ -713,7 +719,7 @@ async def get_trend_velocity(
     try:
         # Default to last 30 days if no date range specified
         if not end_date:
-            end_dt = datetime.now()
+            end_dt = datetime.now(timezone.utc)
             end_date = end_dt.strftime("%Y-%m-%d")
         else:
             end_dt = datetime.fromisoformat(end_date)
@@ -838,55 +844,142 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
     - Workstream and follow engagement metrics
     """
     try:
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         one_week_ago = now - timedelta(days=7)
         one_month_ago = now - timedelta(days=30)
+
+        # -------------------------------------------------------------------------
+        # Batch 1: All independent count & distribution queries in parallel
+        # -------------------------------------------------------------------------
+
+        (
+            total_cards_resp,
+            active_cards_resp,
+            cards_week_resp,
+            cards_month_resp,
+            pillar_resp,
+            stage_resp,
+            horizon_resp,
+            recent_pillar_resp,
+            hot_cards_resp,
+            sources_resp,
+            discovery_resp,
+            search_resp,
+            ws_resp,
+            ws_cards_resp,
+            follows_resp,
+        ) = await asyncio.gather(
+            # Core card counts
+            asyncio.to_thread(
+                lambda: supabase.table("cards").select("id", count="exact").execute()
+            ),
+            asyncio.to_thread(
+                lambda: supabase.table("cards")
+                .select("id", count="exact")
+                .eq("status", "active")
+                .execute()
+            ),
+            asyncio.to_thread(
+                lambda: supabase.table("cards")
+                .select("id", count="exact")
+                .gte("created_at", one_week_ago.isoformat())
+                .execute()
+            ),
+            asyncio.to_thread(
+                lambda: supabase.table("cards")
+                .select("id", count="exact")
+                .gte("created_at", one_month_ago.isoformat())
+                .execute()
+            ),
+            # Distribution queries
+            asyncio.to_thread(
+                lambda: supabase.table("cards")
+                .select("pillar_id, velocity_score")
+                .eq("status", "active")
+                .execute()
+            ),
+            asyncio.to_thread(
+                lambda: supabase.table("cards")
+                .select("stage_id")
+                .eq("status", "active")
+                .execute()
+            ),
+            asyncio.to_thread(
+                lambda: supabase.table("cards")
+                .select("horizon")
+                .eq("status", "active")
+                .execute()
+            ),
+            # Trending pillars
+            asyncio.to_thread(
+                lambda: supabase.table("cards")
+                .select("pillar_id, velocity_score")
+                .gte("created_at", one_week_ago.isoformat())
+                .eq("status", "active")
+                .execute()
+            ),
+            # Hot topics
+            asyncio.to_thread(
+                lambda: supabase.table("cards")
+                .select("name, velocity_score")
+                .eq("status", "active")
+                .gte("velocity_score", 70)
+                .order("velocity_score", desc=True)
+                .limit(5)
+                .execute()
+            ),
+            # Sources (bounded)
+            asyncio.to_thread(
+                lambda: supabase.table("sources")
+                .select("id, source_type, created_at", count="exact")
+                .limit(10000)
+                .execute()
+            ),
+            # Discovery runs (bounded)
+            asyncio.to_thread(
+                lambda: supabase.table("discovery_runs")
+                .select("id, cards_created, started_at, status")
+                .limit(1000)
+                .execute()
+            ),
+            # Search history (bounded)
+            asyncio.to_thread(
+                lambda: supabase.table("search_history")
+                .select("id, executed_at", count="exact")
+                .limit(1000)
+                .execute()
+            ),
+            # Workstreams
+            asyncio.to_thread(
+                lambda: supabase.table("workstreams")
+                .select("id, updated_at", count="exact")
+                .execute()
+            ),
+            # Workstream cards
+            asyncio.to_thread(
+                lambda: supabase.table("workstream_cards").select("card_id").execute()
+            ),
+            # Follows
+            asyncio.to_thread(
+                lambda: supabase.table("card_follows")
+                .select("card_id, user_id")
+                .execute()
+            ),
+        )
 
         # -------------------------------------------------------------------------
         # Core Card Stats
         # -------------------------------------------------------------------------
 
-        # Total cards
-        total_cards_resp = supabase.table("cards").select("id", count="exact").execute()
         total_cards = total_cards_resp.count or 0
-
-        # Active cards
-        active_cards_resp = (
-            supabase.table("cards")
-            .select("id", count="exact")
-            .eq("status", "active")
-            .execute()
-        )
         active_cards = active_cards_resp.count or 0
-
-        # Cards this week
-        cards_week_resp = (
-            supabase.table("cards")
-            .select("id", count="exact")
-            .gte("created_at", one_week_ago.isoformat())
-            .execute()
-        )
         cards_this_week = cards_week_resp.count or 0
-
-        # Cards this month
-        cards_month_resp = (
-            supabase.table("cards")
-            .select("id", count="exact")
-            .gte("created_at", one_month_ago.isoformat())
-            .execute()
-        )
         cards_this_month = cards_month_resp.count or 0
 
         # -------------------------------------------------------------------------
         # Cards by Pillar
         # -------------------------------------------------------------------------
 
-        pillar_resp = (
-            supabase.table("cards")
-            .select("pillar_id, velocity_score")
-            .eq("status", "active")
-            .execute()
-        )
         pillar_data = pillar_resp.data or []
 
         pillar_counts = Counter()
@@ -922,9 +1015,6 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
         # Cards by Stage
         # -------------------------------------------------------------------------
 
-        stage_resp = (
-            supabase.table("cards").select("stage_id").eq("status", "active").execute()
-        )
         stage_data = stage_resp.data or []
 
         stage_counts = Counter()
@@ -956,9 +1046,6 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
         # Cards by Horizon
         # -------------------------------------------------------------------------
 
-        horizon_resp = (
-            supabase.table("cards").select("horizon").eq("status", "active").execute()
-        )
         horizon_data = horizon_resp.data or []
 
         horizon_counts = Counter()
@@ -980,13 +1067,6 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
         # Trending Pillars (based on recent card creation)
         # -------------------------------------------------------------------------
 
-        recent_pillar_resp = (
-            supabase.table("cards")
-            .select("pillar_id, velocity_score")
-            .gte("created_at", one_week_ago.isoformat())
-            .eq("status", "active")
-            .execute()
-        )
         recent_pillar_data = recent_pillar_resp.data or []
 
         recent_pillar_counts = Counter()
@@ -1027,15 +1107,6 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
         # Hot Topics (high velocity cards recently updated)
         # -------------------------------------------------------------------------
 
-        hot_cards_resp = (
-            supabase.table("cards")
-            .select("name, velocity_score")
-            .eq("status", "active")
-            .gte("velocity_score", 70)
-            .order("velocity_score", desc=True)
-            .limit(5)
-            .execute()
-        )
         hot_cards_data = hot_cards_resp.data or []
 
         hot_topics = [
@@ -1047,27 +1118,26 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
             )
             for card in hot_cards_data
         ]
+
         # -------------------------------------------------------------------------
         # Source Statistics
         # -------------------------------------------------------------------------
 
-        # Total sources
         try:
-            sources_resp = (
-                supabase.table("sources")
-                .select("id, source_type, created_at", count="exact")
-                .execute()
-            )
             total_sources = sources_resp.count or 0
             sources_data = sources_resp.data or []
 
             # Sources this week
-            sources_week = sum(bool(s.get("created_at")
-                                           and datetime.fromisoformat(
-                                               s["created_at"].replace("Z", "+00:00")
-                                           ).replace(tzinfo=None)
-                                           > one_week_ago)
-                           for s in sources_data)
+            sources_week = sum(
+                bool(
+                    s.get("created_at")
+                    and datetime.fromisoformat(
+                        s["created_at"].replace("Z", "+00:00")
+                    ).replace(tzinfo=None)
+                    > one_week_ago
+                )
+                for s in sources_data
+            )
 
             # Sources by type
             source_types = Counter()
@@ -1089,45 +1159,41 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
         # -------------------------------------------------------------------------
 
         try:
-            # Discovery runs
-            discovery_resp = (
-                supabase.table("discovery_runs")
-                .select("id, cards_created, started_at, status")
-                .execute()
-            )
             discovery_data = discovery_resp.data or []
 
             total_runs = len(discovery_data)
             completed_runs = [
                 r for r in discovery_data if r.get("status") == "completed"
             ]
-            runs_week = sum(bool(r.get("started_at")
-                                        and datetime.fromisoformat(
-                                            r["started_at"].replace("Z", "+00:00")
-                                        ).replace(tzinfo=None)
-                                        > one_week_ago)
-                        for r in discovery_data)
+            runs_week = sum(
+                bool(
+                    r.get("started_at")
+                    and datetime.fromisoformat(
+                        r["started_at"].replace("Z", "+00:00")
+                    ).replace(tzinfo=None)
+                    > one_week_ago
+                )
+                for r in discovery_data
+            )
 
             total_discovered = sum(r.get("cards_created", 0) for r in completed_runs)
             avg_per_run = (
                 total_discovered / len(completed_runs) if completed_runs else 0
             )
 
-            # Search history count
             try:
-                search_resp = (
-                    supabase.table("search_history")
-                    .select("id, executed_at", count="exact")
-                    .execute()
-                )
                 total_searches = search_resp.count or 0
                 search_data = search_resp.data or []
-                searches_week = sum(bool(s.get("executed_at")
-                                                    and datetime.fromisoformat(
-                                                        s["executed_at"].replace("Z", "+00:00")
-                                                    ).replace(tzinfo=None)
-                                                    > one_week_ago)
-                                for s in search_data)
+                searches_week = sum(
+                    bool(
+                        s.get("executed_at")
+                        and datetime.fromisoformat(
+                            s["executed_at"].replace("Z", "+00:00")
+                        ).replace(tzinfo=None)
+                        > one_week_ago
+                    )
+                    for s in search_data
+                )
             except Exception:
                 total_searches = 0
                 searches_week = 0
@@ -1149,27 +1215,21 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
         # -------------------------------------------------------------------------
 
         try:
-            # Total workstreams
-            ws_resp = (
-                supabase.table("workstreams")
-                .select("id, updated_at", count="exact")
-                .execute()
-            )
             total_workstreams = ws_resp.count or 0
             ws_data = ws_resp.data or []
 
             # Active workstreams (updated in last 30 days)
-            active_workstreams = sum(bool(w.get("updated_at")
-                                                 and datetime.fromisoformat(
-                                                     w["updated_at"].replace("Z", "+00:00")
-                                                 ).replace(tzinfo=None)
-                                                 > one_month_ago)
-                                 for w in ws_data)
-
-            # Unique cards in workstreams
-            ws_cards_resp = (
-                supabase.table("workstream_cards").select("card_id").execute()
+            active_workstreams = sum(
+                bool(
+                    w.get("updated_at")
+                    and datetime.fromisoformat(
+                        w["updated_at"].replace("Z", "+00:00")
+                    ).replace(tzinfo=None)
+                    > one_month_ago
+                )
+                for w in ws_data
             )
+
             ws_cards_data = ws_cards_resp.data or []
             unique_cards_in_ws = len(
                 {c.get("card_id") for c in ws_cards_data if c.get("card_id")}
@@ -1194,10 +1254,6 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
         # -------------------------------------------------------------------------
 
         try:
-            # Total follows
-            follows_resp = (
-                supabase.table("card_follows").select("card_id, user_id").execute()
-            )
             follows_data = follows_resp.data or []
 
             total_follows = len(follows_data)
@@ -1218,8 +1274,8 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
             most_followed_cards = []
             if top_followed:
                 top_card_ids = [c[0] for c in top_followed]
-                cards_info = (
-                    supabase.table("cards")
+                cards_info = await asyncio.to_thread(
+                    lambda: supabase.table("cards")
                     .select("id, name, slug")
                     .in_("id", top_card_ids)
                     .execute()
@@ -1294,26 +1350,67 @@ async def get_personal_stats(current_user: dict = Depends(get_current_user)):
     """
     try:
         user_id = current_user["id"]
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         one_week_ago = now - timedelta(days=7)
+
+        # -------------------------------------------------------------------------
+        # Batch 1: All independent queries in parallel
+        # -------------------------------------------------------------------------
+
+        (
+            user_follows_resp,
+            all_follows_resp,
+            users_resp,
+            user_ws_resp,
+            all_ws_resp,
+            user_ws_cards_resp,
+        ) = await asyncio.gather(
+            # User's follows with card join
+            asyncio.to_thread(
+                lambda: supabase.table("card_follows")
+                .select(
+                    "card_id, priority, created_at, cards(id, name, slug, pillar_id, horizon, velocity_score)"
+                )
+                .eq("user_id", user_id)
+                .execute()
+            ),
+            # All follows (card_id, user_id, created_at) - single fetch for
+            # follower counts, engagement comparison, and recently popular
+            asyncio.to_thread(
+                lambda: supabase.table("card_follows")
+                .select("card_id, user_id, created_at")
+                .execute()
+            ),
+            # All users for engagement percentile
+            asyncio.to_thread(lambda: supabase.table("users").select("id").execute()),
+            # User's workstreams count
+            asyncio.to_thread(
+                lambda: supabase.table("workstreams")
+                .select("id", count="exact")
+                .eq("user_id", user_id)
+                .execute()
+            ),
+            # All workstreams per user
+            asyncio.to_thread(
+                lambda: supabase.table("workstreams").select("user_id").execute()
+            ),
+            # User workstream cards
+            asyncio.to_thread(
+                lambda: supabase.table("workstream_cards")
+                .select("card_id, workstreams!inner(user_id)")
+                .eq("workstreams.user_id", user_id)
+                .execute()
+            ),
+        )
 
         # -------------------------------------------------------------------------
         # User's Follows
         # -------------------------------------------------------------------------
 
-        user_follows_resp = (
-            supabase.table("card_follows")
-            .select(
-                "card_id, priority, created_at, cards(id, name, slug, pillar_id, horizon, velocity_score)"
-            )
-            .eq("user_id", user_id)
-            .execute()
-        )
         user_follows_data = user_follows_resp.data or []
-
-        # Get follower counts for each card
-        all_follows_resp = supabase.table("card_follows").select("card_id").execute()
         all_follows_data = all_follows_resp.data or []
+
+        # Build follower counts from the single all_follows query
         card_follower_counts = Counter(
             f.get("card_id") for f in all_follows_data if f.get("card_id")
         )
@@ -1358,8 +1455,6 @@ async def get_personal_stats(current_user: dict = Depends(get_current_user)):
         # Engagement Comparison
         # -------------------------------------------------------------------------
 
-        # Get all users' follow counts
-        users_resp = supabase.table("users").select("id").execute()
         all_users = users_resp.data or []
         total_users = len(all_users)
 
@@ -1372,17 +1467,8 @@ async def get_personal_stats(current_user: dict = Depends(get_current_user)):
             sum(all_follow_counts) / len(all_follow_counts) if all_follow_counts else 0
         )
 
-        # User workstreams
-        user_ws_resp = (
-            supabase.table("workstreams")
-            .select("id", count="exact")
-            .eq("user_id", user_id)
-            .execute()
-        )
         user_workstream_count = user_ws_resp.count or 0
 
-        # All workstreams per user
-        all_ws_resp = supabase.table("workstreams").select("user_id").execute()
         ws_per_user = Counter(
             w.get("user_id") for w in (all_ws_resp.data or []) if w.get("user_id")
         )
@@ -1393,14 +1479,12 @@ async def get_personal_stats(current_user: dict = Depends(get_current_user)):
 
         # Calculate percentiles
         user_follows_count = user_follow_counts.get(user_id, 0)
-        follows_below = sum(bool(c < user_follows_count)
-                        for c in all_follow_counts)
+        follows_below = sum(bool(c < user_follows_count) for c in all_follow_counts)
         user_percentile_follows = (
             (follows_below / len(all_follow_counts) * 100) if all_follow_counts else 0
         )
 
-        ws_below = sum(bool(c < user_workstream_count)
-                   for c in all_ws_counts)
+        ws_below = sum(bool(c < user_workstream_count) for c in all_ws_counts)
         user_percentile_workstreams = (
             (ws_below / len(all_ws_counts) * 100) if all_ws_counts else 0
         )
@@ -1426,11 +1510,12 @@ async def get_personal_stats(current_user: dict = Depends(get_current_user)):
 
         # Community pillar distribution from all follows
         community_pillar_counts = Counter()
-        if all_card_ids := list(
+        all_card_ids = list(
             {f.get("card_id") for f in all_follows_data if f.get("card_id")}
-        ):
-            cards_pillar_resp = (
-                supabase.table("cards")
+        )
+        if all_card_ids:
+            cards_pillar_resp = await asyncio.to_thread(
+                lambda: supabase.table("cards")
                 .select("id, pillar_id")
                 .in_("id", all_card_ids)
                 .execute()
@@ -1483,8 +1568,8 @@ async def get_personal_stats(current_user: dict = Depends(get_current_user)):
 
         popular_not_followed = []
         if popular_card_ids:
-            popular_cards_resp = (
-                supabase.table("cards")
+            popular_cards_resp = await asyncio.to_thread(
+                lambda: supabase.table("cards")
                 .select("id, name, slug, summary, pillar_id, horizon, velocity_score")
                 .in_("id", popular_card_ids)
                 .eq("status", "active")
@@ -1511,14 +1596,9 @@ async def get_personal_stats(current_user: dict = Depends(get_current_user)):
         # Recently Popular (new follows in last week)
         # -------------------------------------------------------------------------
 
-        # This would require timestamp on card_follows - using created_at if available
-        recent_follows_resp = (
-            supabase.table("card_follows").select("card_id, created_at").execute()
-        )
-        recent_follows_data = recent_follows_resp.data or []
-
+        # Reuse the all_follows_data already fetched (includes created_at)
         recent_card_counts = Counter()
-        for f in recent_follows_data:
+        for f in all_follows_data:
             if created_at := f.get("created_at"):
                 try:
                     dt = datetime.fromisoformat(
@@ -1537,8 +1617,8 @@ async def get_personal_stats(current_user: dict = Depends(get_current_user)):
 
         recently_popular = []
         if recently_popular_ids:
-            recent_cards_resp = (
-                supabase.table("cards")
+            recent_cards_resp = await asyncio.to_thread(
+                lambda: supabase.table("cards")
                 .select("id, name, slug, summary, pillar_id, horizon, velocity_score")
                 .in_("id", recently_popular_ids)
                 .eq("status", "active")
@@ -1565,12 +1645,6 @@ async def get_personal_stats(current_user: dict = Depends(get_current_user)):
         # User Workstream Stats
         # -------------------------------------------------------------------------
 
-        user_ws_cards_resp = (
-            supabase.table("workstream_cards")
-            .select("card_id, workstreams!inner(user_id)")
-            .eq("workstreams.user_id", user_id)
-            .execute()
-        )
         cards_in_workstreams = len(
             {
                 c.get("card_id")

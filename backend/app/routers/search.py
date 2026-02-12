@@ -1,7 +1,7 @@
 """Saved searches and search history router."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -84,7 +84,7 @@ async def create_saved_search(
     Raises:
         HTTPException 400: Failed to create saved search
     """
-    now = datetime.now().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     ss_dict = {
         "user_id": current_user["id"],
         "name": saved_search_data.name,
@@ -166,7 +166,7 @@ async def get_saved_search(
     try:
         update_response = (
             supabase.table("saved_searches")
-            .update({"last_used_at": datetime.now().isoformat()})
+            .update({"last_used_at": datetime.now(timezone.utc).isoformat()})
             .eq("id", saved_search_id)
             .execute()
         )
@@ -250,7 +250,7 @@ async def update_saved_search(
         return SavedSearch(**ss_check.data[0])
 
     # Add updated_at timestamp
-    update_dict["updated_at"] = datetime.now().isoformat()
+    update_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     # Perform update
     try:
@@ -431,7 +431,7 @@ async def record_search_history(
             "user_id": current_user["id"],
             "query_config": history_data.query_config,
             "result_count": history_data.result_count,
-            "executed_at": datetime.now().isoformat(),
+            "executed_at": datetime.now(timezone.utc).isoformat(),
         }
 
         response = supabase.table("search_history").insert(history_record).execute()

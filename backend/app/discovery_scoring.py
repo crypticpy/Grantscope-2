@@ -14,7 +14,7 @@ Scoring Factors:
 All individual scores are in the range [0.0, 1.0].
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 
 
@@ -32,7 +32,10 @@ CONTEXT_WEIGHT = 0.15
 # INDIVIDUAL SCORING FUNCTIONS
 # ============================================================================
 
-def calculate_novelty_score(card: Dict[str, Any], user_dismissed_card_ids: Optional[set] = None) -> float:
+
+def calculate_novelty_score(
+    card: Dict[str, Any], user_dismissed_card_ids: Optional[set] = None
+) -> float:
     """
     Calculate novelty score based on card age and user interaction history.
 
@@ -60,7 +63,11 @@ def calculate_novelty_score(card: Dict[str, Any], user_dismissed_card_ids: Optio
                 card_date = card_date_str
 
             # Calculate age in days
-            now = datetime.now(card_date.tzinfo) if card_date.tzinfo else datetime.now()
+            now = (
+                datetime.now(card_date.tzinfo)
+                if card_date.tzinfo
+                else datetime.now(timezone.utc)
+            )
             age_days = (now - card_date).days
 
             # Age-based scoring
@@ -85,7 +92,9 @@ def calculate_novelty_score(card: Dict[str, Any], user_dismissed_card_ids: Optio
     return score
 
 
-def calculate_workstream_relevance(card: Dict[str, Any], workstreams: List[Dict[str, Any]]) -> float:
+def calculate_workstream_relevance(
+    card: Dict[str, Any], workstreams: List[Dict[str, Any]]
+) -> float:
     """
     Calculate workstream relevance score based on filter criteria matching.
 
@@ -126,25 +135,27 @@ def calculate_workstream_relevance(card: Dict[str, Any], workstreams: List[Dict[
         # Pillar matching: +0.3 per match (max 1.0)
         ws_pillars = ws.get("pillar_ids") or []
         if ws_pillars and card_pillar:
-            pillar_matches = sum(bool(p == card_pillar)
-                             for p in ws_pillars)
+            pillar_matches = sum(bool(p == card_pillar) for p in ws_pillars)
             ws_score += min(1.0, pillar_matches * 0.3)
 
         # Goal matching: +0.4 per match (max 1.0)
         ws_goals = ws.get("goal_ids") or []
         if ws_goals and card_goal:
-            goal_matches = sum(bool(g == card_goal)
-                           for g in ws_goals)
+            goal_matches = sum(bool(g == card_goal) for g in ws_goals)
             ws_score += min(1.0, goal_matches * 0.4)
 
         if ws_keywords := ws.get("keywords") or []:
-            keyword_matches = sum(bool(kw.lower() in card_text)
-                              for kw in ws_keywords)
+            keyword_matches = sum(bool(kw.lower() in card_text) for kw in ws_keywords)
             ws_score += min(1.0, keyword_matches * 0.5)
 
         # Horizon matching: +0.3 if exact match
         ws_horizon = ws.get("horizon")
-        if ws_horizon and ws_horizon != "ALL" and card_horizon and ws_horizon == card_horizon:
+        if (
+            ws_horizon
+            and ws_horizon != "ALL"
+            and card_horizon
+            and ws_horizon == card_horizon
+        ):
             ws_score += 0.3
 
         # Cap individual workstream score at 1.0
@@ -156,7 +167,9 @@ def calculate_workstream_relevance(card: Dict[str, Any], workstreams: List[Dict[
     return 0.0
 
 
-def calculate_pillar_alignment(card: Dict[str, Any], workstreams: List[Dict[str, Any]]) -> float:
+def calculate_pillar_alignment(
+    card: Dict[str, Any], workstreams: List[Dict[str, Any]]
+) -> float:
     """
     Calculate pillar alignment score - binary match if card's pillar
     appears in any user workstream.
@@ -190,7 +203,9 @@ def calculate_pillar_alignment(card: Dict[str, Any], workstreams: List[Dict[str,
     return 0.0
 
 
-def calculate_followed_context(card: Dict[str, Any], followed_cards: List[Dict[str, Any]]) -> float:
+def calculate_followed_context(
+    card: Dict[str, Any], followed_cards: List[Dict[str, Any]]
+) -> float:
     """
     Calculate followed context score based on similarity to followed cards.
 
@@ -215,7 +230,9 @@ def calculate_followed_context(card: Dict[str, Any], followed_cards: List[Dict[s
     score = 0.0
 
     # Check for pillar match with followed cards
-    followed_pillars = {fc.get("pillar_id") for fc in followed_cards if fc.get("pillar_id")}
+    followed_pillars = {
+        fc.get("pillar_id") for fc in followed_cards if fc.get("pillar_id")
+    }
     if card_pillar and card_pillar in followed_pillars:
         score += 0.5
 
@@ -231,7 +248,7 @@ def calculate_discovery_score(
     card: Dict[str, Any],
     workstreams: List[Dict[str, Any]],
     followed_cards: List[Dict[str, Any]],
-    user_dismissed_card_ids: Optional[set] = None
+    user_dismissed_card_ids: Optional[set] = None,
 ) -> Dict[str, Any]:
     """
     Calculate the overall discovery score for a card using multi-factor scoring.
@@ -260,10 +277,10 @@ def calculate_discovery_score(
 
     # Calculate weighted score
     discovery_score = (
-        NOVELTY_WEIGHT * novelty +
-        RELEVANCE_WEIGHT * relevance +
-        ALIGNMENT_WEIGHT * alignment +
-        CONTEXT_WEIGHT * context
+        NOVELTY_WEIGHT * novelty
+        + RELEVANCE_WEIGHT * relevance
+        + ALIGNMENT_WEIGHT * alignment
+        + CONTEXT_WEIGHT * context
     )
 
     return {
@@ -277,7 +294,7 @@ def calculate_discovery_score(
                 "novelty": NOVELTY_WEIGHT,
                 "relevance": RELEVANCE_WEIGHT,
                 "alignment": ALIGNMENT_WEIGHT,
-                "context": CONTEXT_WEIGHT
-            }
-        }
+                "context": CONTEXT_WEIGHT,
+            },
+        },
     }

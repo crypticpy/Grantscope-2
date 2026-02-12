@@ -124,7 +124,7 @@ async def run_nightly_scan():
     logger.info("Starting nightly scan...")
 
     try:
-        cutoff = (datetime.now() - timedelta(hours=48)).isoformat()
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
 
         cards_result = (
             supabase.table("cards")
@@ -206,7 +206,7 @@ async def run_weekly_discovery():
             "cards_enriched": 0,
             "cards_deduplicated": 0,
             "sources_found": 0,
-            "started_at": datetime.now().isoformat(),
+            "started_at": datetime.now(timezone.utc).isoformat(),
             "summary_report": {"stage": "queued", "config": config.dict()},
         }
 

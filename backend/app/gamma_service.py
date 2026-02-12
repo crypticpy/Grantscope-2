@@ -23,7 +23,7 @@ import logging
 import os
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -605,9 +605,7 @@ class GammaService:
 
                 if response.status_code == 200:
                     return response.content
-                logger.error(
-                    f"Failed to download Gamma export: {response.status_code}"
-                )
+                logger.error(f"Failed to download Gamma export: {response.status_code}")
                 return None
 
         except Exception as e:
@@ -709,7 +707,7 @@ class GammaService:
                 # Format tags as a visual row with separators
                 title_section += "\n\n" + "  |  ".join(tag_lines)
         title_section += f"\n\nCity of Austin Strategic Intelligence Brief"
-        title_section += f"\n{datetime.now().strftime('%B %Y')}"
+        title_section += f"\n{datetime.now(timezone.utc).strftime('%B %Y')}"
         sections = [title_section]
         # Slide 2: Executive Summary
         if executive_summary:
@@ -1315,7 +1313,7 @@ class GammaPortfolioService:
 {' '.join(pillar_icons)} | {len(cards)} Strategic Trends | {', '.join(pillar_names_used)}
 
 City of Austin | FORESIGHT Platform
-{datetime.now().strftime('%B %Y')}"""
+{datetime.now(timezone.utc).strftime('%B %Y')}"""
         sections = [title_section]
         # ===== SLIDE 2: Portfolio at a Glance =====
         dashboard_section = f"""# Portfolio at a Glance
@@ -1333,7 +1331,8 @@ This portfolio synthesizes deep research across multiple emerging trends to prov
 
         # ===== SLIDE 3: Why This Matters Now =====
         urgency = (
-            synthesis.urgency_statement or f"These {len(cards)} trends represent critical opportunities and challenges that will shape Austin's future. Early action positions the city as a leader; delay risks falling behind peer cities."
+            synthesis.urgency_statement
+            or f"These {len(cards)} trends represent critical opportunities and challenges that will shape Austin's future. Early action positions the city as a leader; delay risks falling behind peer cities."
         )
 
         urgency_section = f"""# Why This Matters Now
@@ -1533,10 +1532,12 @@ What Austin should do in the next 90 days:
 
         # ===== SLIDE N+3: Risks & Opportunities =====
         risk_text = (
-            synthesis.risk_summary or "Delayed action on these trends could result in Austin falling behind peer cities, missing federal funding windows, and losing competitive advantage in talent and business attraction."
+            synthesis.risk_summary
+            or "Delayed action on these trends could result in Austin falling behind peer cities, missing federal funding windows, and losing competitive advantage in talent and business attraction."
         )
         opp_text = (
-            synthesis.opportunity_summary or "Early action positions Austin as a national leader, attracts innovation investment, and delivers improved services to residents ahead of demand curves."
+            synthesis.opportunity_summary
+            or "Early action positions Austin as a national leader, attracts innovation investment, and delivers improved services to residents ahead of demand curves."
         )
 
         risk_opp_section = f"""# Risks & Opportunities

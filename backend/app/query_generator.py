@@ -12,7 +12,7 @@ Usage:
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 from enum import Enum
 
@@ -23,9 +23,11 @@ logger = logging.getLogger(__name__)
 # Data Classes
 # ============================================================================
 
+
 @dataclass
 class QueryConfig:
     """Configuration for a single search query."""
+
     query_text: str
     pillar_code: str
     priority_id: Optional[str] = None
@@ -35,6 +37,7 @@ class QueryConfig:
 
 class HorizonTarget(Enum):
     """Horizon targeting for queries."""
+
     H1 = "H1"  # Mainstream - 0-3 years
     H2 = "H2"  # Transitional - 3-7 years
     H3 = "H3"  # Transformative - 7-15+ years
@@ -202,29 +205,73 @@ PILLAR_DEFINITIONS: Dict[str, Dict[str, Any]] = {
 
 TOP_25_PRIORITIES: List[Dict[str, str]] = [
     {"id": "top25-01", "title": "First ACME Strategic Plan", "pillar_code": "EW"},
-    {"id": "top25-02", "title": "Airline Use & Lease Agreement (Airport)", "pillar_code": "MC"},
+    {
+        "id": "top25-02",
+        "title": "Airline Use & Lease Agreement (Airport)",
+        "pillar_code": "MC",
+    },
     {"id": "top25-03", "title": "Shared Services Implementation", "pillar_code": "HG"},
     {"id": "top25-04", "title": "2026 Bond Program Development", "pillar_code": "HG"},
     {"id": "top25-05", "title": "Climate Revolving Fund", "pillar_code": "CH"},
-    {"id": "top25-06", "title": "Expedited Site Plan Review Pilot", "pillar_code": "HG"},
-    {"id": "top25-07", "title": "Development Code/Criteria Streamlining", "pillar_code": "HG"},
+    {
+        "id": "top25-06",
+        "title": "Expedited Site Plan Review Pilot",
+        "pillar_code": "HG",
+    },
+    {
+        "id": "top25-07",
+        "title": "Development Code/Criteria Streamlining",
+        "pillar_code": "HG",
+    },
     {"id": "top25-08", "title": "Economic Development Roadmap", "pillar_code": "EW"},
     {"id": "top25-09", "title": "AE Resiliency Plan", "pillar_code": "MC"},
     {"id": "top25-10", "title": "Human Rights Framework", "pillar_code": "HG"},
-    {"id": "top25-11", "title": "Facility Condition Assessment Contract", "pillar_code": "MC"},
+    {
+        "id": "top25-11",
+        "title": "Facility Condition Assessment Contract",
+        "pillar_code": "MC",
+    },
     {"id": "top25-12", "title": "New Fire Labor Agreement", "pillar_code": "PS"},
     {"id": "top25-13", "title": "Rapid Rehousing Program Model", "pillar_code": "HH"},
-    {"id": "top25-14", "title": "10-Year Housing Blueprint Update", "pillar_code": "HH"},
+    {
+        "id": "top25-14",
+        "title": "10-Year Housing Blueprint Update",
+        "pillar_code": "HH",
+    },
     {"id": "top25-15", "title": "AHFC 5-Year Strategic Plan", "pillar_code": "HH"},
-    {"id": "top25-16", "title": "Phase 2 Compensation Recalibration", "pillar_code": "HG"},
-    {"id": "top25-17", "title": "Alternative Parks Funding Strategies", "pillar_code": "CH"},
+    {
+        "id": "top25-16",
+        "title": "Phase 2 Compensation Recalibration",
+        "pillar_code": "HG",
+    },
+    {
+        "id": "top25-17",
+        "title": "Alternative Parks Funding Strategies",
+        "pillar_code": "CH",
+    },
     {"id": "top25-18", "title": "Imagine Austin Update", "pillar_code": "HG"},
-    {"id": "top25-19", "title": "Comprehensive Crime Reduction Plan", "pillar_code": "PS"},
+    {
+        "id": "top25-19",
+        "title": "Comprehensive Crime Reduction Plan",
+        "pillar_code": "PS",
+    },
     {"id": "top25-20", "title": "Police OCM Plan (BerryDunn)", "pillar_code": "PS"},
     {"id": "top25-21", "title": "Light Rail Interlocal Agreement", "pillar_code": "MC"},
-    {"id": "top25-22", "title": "Citywide Technology Strategic Plan", "pillar_code": "HG"},
-    {"id": "top25-23", "title": "IT Organizational Alignment (Phase 1)", "pillar_code": "HG"},
-    {"id": "top25-24", "title": "Austin FIRST EMS Mental Health Pilot", "pillar_code": "PS"},
+    {
+        "id": "top25-22",
+        "title": "Citywide Technology Strategic Plan",
+        "pillar_code": "HG",
+    },
+    {
+        "id": "top25-23",
+        "title": "IT Organizational Alignment (Phase 1)",
+        "pillar_code": "HG",
+    },
+    {
+        "id": "top25-24",
+        "title": "Austin FIRST EMS Mental Health Pilot",
+        "pillar_code": "PS",
+    },
 ]
 
 
@@ -352,99 +399,196 @@ MUNICIPAL_KEYWORDS: List[str] = [
 
 PRIORITY_SEARCH_TEMPLATES: Dict[str, Dict[str, Any]] = {
     "top25-01": {  # First ACME Strategic Plan
-        "topics": ["strategic planning technology", "municipal strategic plan software", "government strategic alignment"],
+        "topics": [
+            "strategic planning technology",
+            "municipal strategic plan software",
+            "government strategic alignment",
+        ],
         "horizon_focus": "H1",
     },
     "top25-02": {  # Airline Use & Lease Agreement
-        "topics": ["airport lease management", "airline agreement technology", "airport revenue management"],
+        "topics": [
+            "airport lease management",
+            "airline agreement technology",
+            "airport revenue management",
+        ],
         "horizon_focus": "H1",
     },
     "top25-03": {  # Shared Services Implementation
-        "topics": ["shared services government", "municipal shared services", "government consolidation technology"],
+        "topics": [
+            "shared services government",
+            "municipal shared services",
+            "government consolidation technology",
+        ],
         "horizon_focus": "H2",
     },
     "top25-04": {  # 2026 Bond Program Development
-        "topics": ["municipal bond management", "government bond issuance technology", "capital improvement planning"],
+        "topics": [
+            "municipal bond management",
+            "government bond issuance technology",
+            "capital improvement planning",
+        ],
         "horizon_focus": "H1",
     },
     "top25-05": {  # Climate Revolving Fund
-        "topics": ["climate finance municipal", "green revolving fund", "sustainability financing government"],
+        "topics": [
+            "climate finance municipal",
+            "green revolving fund",
+            "sustainability financing government",
+        ],
         "horizon_focus": "H2",
     },
     "top25-06": {  # Expedited Site Plan Review
-        "topics": ["automated plan review", "permit automation", "development review AI"],
+        "topics": [
+            "automated plan review",
+            "permit automation",
+            "development review AI",
+        ],
         "horizon_focus": "H2",
     },
     "top25-07": {  # Development Code Streamlining
-        "topics": ["zoning code modernization", "development code automation", "land use regulation technology"],
+        "topics": [
+            "zoning code modernization",
+            "development code automation",
+            "land use regulation technology",
+        ],
         "horizon_focus": "H2",
     },
     "top25-08": {  # Economic Development Roadmap
-        "topics": ["economic development strategy", "municipal economic planning", "business attraction technology"],
+        "topics": [
+            "economic development strategy",
+            "municipal economic planning",
+            "business attraction technology",
+        ],
         "horizon_focus": "H2",
     },
     "top25-09": {  # AE Resiliency Plan
-        "topics": ["utility resiliency", "grid resilience", "energy infrastructure security"],
+        "topics": [
+            "utility resiliency",
+            "grid resilience",
+            "energy infrastructure security",
+        ],
         "horizon_focus": "H2",
     },
     "top25-10": {  # Human Rights Framework
-        "topics": ["human rights technology", "equity measurement tools", "civil rights compliance"],
+        "topics": [
+            "human rights technology",
+            "equity measurement tools",
+            "civil rights compliance",
+        ],
         "horizon_focus": "H1",
     },
     "top25-11": {  # Facility Condition Assessment
-        "topics": ["facility assessment technology", "building condition monitoring", "asset management AI"],
+        "topics": [
+            "facility assessment technology",
+            "building condition monitoring",
+            "asset management AI",
+        ],
         "horizon_focus": "H2",
     },
     "top25-12": {  # Fire Labor Agreement
-        "topics": ["fire department technology", "first responder scheduling", "public safety workforce"],
+        "topics": [
+            "fire department technology",
+            "first responder scheduling",
+            "public safety workforce",
+        ],
         "horizon_focus": "H1",
     },
     "top25-13": {  # Rapid Rehousing Program
-        "topics": ["rapid rehousing technology", "housing placement systems", "homelessness management platform"],
+        "topics": [
+            "rapid rehousing technology",
+            "housing placement systems",
+            "homelessness management platform",
+        ],
         "horizon_focus": "H2",
     },
     "top25-14": {  # 10-Year Housing Blueprint
-        "topics": ["housing strategy technology", "affordable housing planning", "housing market analytics"],
+        "topics": [
+            "housing strategy technology",
+            "affordable housing planning",
+            "housing market analytics",
+        ],
         "horizon_focus": "H2",
     },
     "top25-15": {  # AHFC 5-Year Strategic Plan
-        "topics": ["housing authority technology", "public housing modernization", "housing finance innovation"],
+        "topics": [
+            "housing authority technology",
+            "public housing modernization",
+            "housing finance innovation",
+        ],
         "horizon_focus": "H2",
     },
     "top25-16": {  # Compensation Recalibration
-        "topics": ["public sector compensation", "government pay equity", "workforce compensation analytics"],
+        "topics": [
+            "public sector compensation",
+            "government pay equity",
+            "workforce compensation analytics",
+        ],
         "horizon_focus": "H1",
     },
     "top25-17": {  # Alternative Parks Funding
-        "topics": ["parks funding innovation", "recreation revenue technology", "public space financing"],
+        "topics": [
+            "parks funding innovation",
+            "recreation revenue technology",
+            "public space financing",
+        ],
         "horizon_focus": "H2",
     },
     "top25-18": {  # Imagine Austin Update
-        "topics": ["comprehensive plan technology", "urban planning software", "community visioning tools"],
+        "topics": [
+            "comprehensive plan technology",
+            "urban planning software",
+            "community visioning tools",
+        ],
         "horizon_focus": "H2",
     },
     "top25-19": {  # Comprehensive Crime Reduction
-        "topics": ["crime reduction technology", "public safety analytics", "violence intervention systems"],
+        "topics": [
+            "crime reduction technology",
+            "public safety analytics",
+            "violence intervention systems",
+        ],
         "horizon_focus": "H2",
     },
     "top25-20": {  # Police OCM Plan
-        "topics": ["police modernization", "law enforcement technology", "public safety reform"],
+        "topics": [
+            "police modernization",
+            "law enforcement technology",
+            "public safety reform",
+        ],
         "horizon_focus": "H2",
     },
     "top25-21": {  # Light Rail Interlocal Agreement
-        "topics": ["light rail technology", "transit expansion", "rail transit innovation"],
+        "topics": [
+            "light rail technology",
+            "transit expansion",
+            "rail transit innovation",
+        ],
         "horizon_focus": "H2",
     },
     "top25-22": {  # Citywide Technology Strategic Plan
-        "topics": ["government IT strategy", "municipal technology modernization", "digital government transformation"],
+        "topics": [
+            "government IT strategy",
+            "municipal technology modernization",
+            "digital government transformation",
+        ],
         "horizon_focus": "H2",
     },
     "top25-23": {  # IT Organizational Alignment
-        "topics": ["government IT organization", "public sector IT management", "technology governance municipal"],
+        "topics": [
+            "government IT organization",
+            "public sector IT management",
+            "technology governance municipal",
+        ],
         "horizon_focus": "H1",
     },
     "top25-24": {  # Austin FIRST EMS Mental Health
-        "topics": ["mental health crisis response", "EMS mental health", "co-responder programs", "crisis intervention technology"],
+        "topics": [
+            "mental health crisis response",
+            "EMS mental health",
+            "co-responder programs",
+            "crisis intervention technology",
+        ],
         "horizon_focus": "H2",
     },
 }
@@ -453,6 +597,7 @@ PRIORITY_SEARCH_TEMPLATES: Dict[str, Dict[str, Any]] = {
 # ============================================================================
 # Query Generator Class
 # ============================================================================
+
 
 class QueryGenerator:
     """
@@ -491,7 +636,7 @@ class QueryGenerator:
         pillars_filter: Optional[List[str]] = None,
         horizons: Optional[List[str]] = None,
         include_priorities: bool = True,
-        max_queries: int = 100
+        max_queries: int = 100,
     ) -> List[QueryConfig]:
         """
         Generate search queries based on filters.
@@ -522,8 +667,7 @@ class QueryGenerator:
         for pillar_code in target_pillars:
             if pillar_code in self.pillars:
                 pillar_queries = self._generate_pillar_queries(
-                    pillar_code,
-                    target_horizons
+                    pillar_code, target_horizons
                 )
                 queries.extend(pillar_queries)
 
@@ -562,9 +706,7 @@ class QueryGenerator:
         return unique_queries
 
     def _generate_pillar_queries(
-        self,
-        pillar_code: str,
-        horizons: List[str]
+        self, pillar_code: str, horizons: List[str]
     ) -> List[QueryConfig]:
         """
         Generate queries for a specific pillar across target horizons.
@@ -587,30 +729,31 @@ class QueryGenerator:
         for focus_area in pillar.get("focus_areas", []):
             for horizon in horizons:
                 modified_query = self._add_horizon_modifiers(focus_area, horizon)
-                queries.append(QueryConfig(
-                    query_text=modified_query,
-                    pillar_code=pillar_code,
-                    horizon_target=horizon,
-                    source_context="pillar"
-                ))
+                queries.append(
+                    QueryConfig(
+                        query_text=modified_query,
+                        pillar_code=pillar_code,
+                        horizon_target=horizon,
+                        source_context="pillar",
+                    )
+                )
 
         # Generate from search terms
         for search_term in pillar.get("search_terms", []):
             for horizon in horizons:
                 modified_query = self._add_horizon_modifiers(search_term, horizon)
-                queries.append(QueryConfig(
-                    query_text=modified_query,
-                    pillar_code=pillar_code,
-                    horizon_target=horizon,
-                    source_context="pillar"
-                ))
+                queries.append(
+                    QueryConfig(
+                        query_text=modified_query,
+                        pillar_code=pillar_code,
+                        horizon_target=horizon,
+                        source_context="pillar",
+                    )
+                )
 
         return queries
 
-    def _generate_priority_queries(
-        self,
-        priority: Dict[str, str]
-    ) -> List[QueryConfig]:
+    def _generate_priority_queries(self, priority: Dict[str, str]) -> List[QueryConfig]:
         """
         Generate queries for a specific Top 25 priority.
 
@@ -631,45 +774,47 @@ class QueryGenerator:
             for topic in topics:
                 # Generate with primary horizon focus
                 modified_query = self._add_horizon_modifiers(topic, horizon_focus)
-                queries.append(QueryConfig(
-                    query_text=modified_query,
-                    pillar_code=pillar_code,
-                    priority_id=priority_id,
-                    horizon_target=horizon_focus,
-                    source_context="priority"
-                ))
+                queries.append(
+                    QueryConfig(
+                        query_text=modified_query,
+                        pillar_code=pillar_code,
+                        priority_id=priority_id,
+                        horizon_target=horizon_focus,
+                        source_context="priority",
+                    )
+                )
 
                 # Also generate one query for adjacent horizon
                 adjacent_horizon = "H3" if horizon_focus == "H2" else "H2"
                 adjacent_query = self._add_horizon_modifiers(topic, adjacent_horizon)
-                queries.append(QueryConfig(
-                    query_text=adjacent_query,
-                    pillar_code=pillar_code,
-                    priority_id=priority_id,
-                    horizon_target=adjacent_horizon,
-                    source_context="priority"
-                ))
+                queries.append(
+                    QueryConfig(
+                        query_text=adjacent_query,
+                        pillar_code=pillar_code,
+                        priority_id=priority_id,
+                        horizon_target=adjacent_horizon,
+                        source_context="priority",
+                    )
+                )
         else:
             # Fallback: generate generic query from priority title
             title = priority["title"]
             for horizon in ["H2", "H3"]:  # Priorities usually focus on emerging
                 query_text = f"{title} municipal government technology innovation"
                 modified_query = self._add_horizon_modifiers(query_text, horizon)
-                queries.append(QueryConfig(
-                    query_text=modified_query,
-                    pillar_code=pillar_code,
-                    priority_id=priority_id,
-                    horizon_target=horizon,
-                    source_context="priority"
-                ))
+                queries.append(
+                    QueryConfig(
+                        query_text=modified_query,
+                        pillar_code=pillar_code,
+                        priority_id=priority_id,
+                        horizon_target=horizon,
+                        source_context="priority",
+                    )
+                )
 
         return queries
 
-    def _add_horizon_modifiers(
-        self,
-        base_query: str,
-        horizon: str
-    ) -> str:
+    def _add_horizon_modifiers(self, base_query: str, horizon: str) -> str:
         """
         Add horizon-specific modifiers to a base query.
 
@@ -680,7 +825,9 @@ class QueryGenerator:
         Returns:
             Modified query string with horizon context
         """
-        horizon_config = self.horizon_modifiers.get(horizon, self.horizon_modifiers["H2"])
+        horizon_config = self.horizon_modifiers.get(
+            horizon, self.horizon_modifiers["H2"]
+        )
 
         # Select a modifier based on query content
         modifiers = horizon_config.get("search_modifiers", [])
@@ -691,7 +838,7 @@ class QueryGenerator:
         time_qual = time_qualifiers[0] if time_qualifiers else ""
 
         # Construct modified query
-        current_year = datetime.now().year
+        current_year = datetime.now(timezone.utc).year
         if horizon == "H1":
             # H1: Focus on current implementations
             return f"{base_query} {modifier} city government {current_year} {current_year + 1}"
@@ -709,11 +856,7 @@ class QueryGenerator:
     def get_priority_info(self, priority_id: str) -> Optional[Dict[str, str]]:
         """Get information about a specific priority."""
         return next(
-            (
-                priority
-                for priority in self.priorities
-                if priority["id"] == priority_id
-            ),
+            (priority for priority in self.priorities if priority["id"] == priority_id),
             None,
         )
 
@@ -726,9 +869,9 @@ class QueryGenerator:
 # Convenience Functions
 # ============================================================================
 
+
 def generate_discovery_queries(
-    pillars: Optional[List[str]] = None,
-    max_queries: int = 100
+    pillars: Optional[List[str]] = None, max_queries: int = 100
 ) -> List[QueryConfig]:
     """
     Convenience function to generate discovery queries.
@@ -741,10 +884,7 @@ def generate_discovery_queries(
         List of QueryConfig objects
     """
     generator = QueryGenerator()
-    return generator.generate_queries(
-        pillars_filter=pillars,
-        max_queries=max_queries
-    )
+    return generator.generate_queries(pillars_filter=pillars, max_queries=max_queries)
 
 
 def get_all_pillar_codes() -> List[str]:

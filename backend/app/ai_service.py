@@ -258,8 +258,7 @@ def validate_summary_quality(summary: str) -> SummaryQualityResult:
 
     for element, keywords in SUMMARY_STRUCTURE_KEYWORDS.items():
         # Count how many keywords from each category are present
-        matches = sum(bool(kw in summary_lower)
-                  for kw in keywords)
+        matches = sum(bool(kw in summary_lower) for kw in keywords)
         # Normalize to 0-1 score (at least 2 matches for good score)
         score = min(matches / 2.0, 1.0)
         structure_scores[element] = score
@@ -1051,7 +1050,7 @@ Respond with JSON:
         # Add metadata header and append sources section
         report_with_header = f"""# Deep Research Report: {card_name}
 
-**Generated:** {__import__('datetime').datetime.now().strftime('%B %d, %Y at %I:%M %p')}
+**Generated:** {__import__('datetime').datetime.now(__import__('datetime').timezone.utc).strftime('%B %d, %Y at %I:%M %p')}
 **Classification:** Horizon {horizon} | Stage {stage} | {pillar}
 **Sources Analyzed:** {len(source_analyses)}
 

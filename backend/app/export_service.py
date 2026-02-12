@@ -23,7 +23,7 @@ import io
 import logging
 import os
 import tempfile
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
 
@@ -471,7 +471,7 @@ class ProfessionalPDFBuilder:
         # Page generation date on right - black
         canvas_obj.setFillColor(PDF_COLORS["dark"])
         canvas_obj.setFont("Helvetica", 9)
-        date_text = datetime.now().strftime("%B %d, %Y")
+        date_text = datetime.now(timezone.utc).strftime("%B %d, %Y")
         date_width = canvas_obj.stringWidth(date_text, "Helvetica", 9)
         canvas_obj.drawString(
             self.page_width - self.right_margin - date_width,
@@ -2951,7 +2951,7 @@ class ExportService:
         )
         date_frame = date_box.text_frame
         date_para = date_frame.paragraphs[0]
-        date_para.text = datetime.now().strftime("%B %d, %Y")
+        date_para.text = datetime.now(timezone.utc).strftime("%B %d, %Y")
         date_para.font.size = Pt(11)
         date_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
         date_para.alignment = PP_ALIGN.RIGHT
@@ -3970,7 +3970,7 @@ class ExportService:
             elements.append(Paragraph("Intelligence Response", styles["DocSubtitle"]))
 
             # Current date
-            date_str = datetime.now().strftime("%B %d, %Y")
+            date_str = datetime.now(timezone.utc).strftime("%B %d, %Y")
             elements.append(Paragraph(date_str, styles["MetadataText"]))
 
             # Scope context if scoped
@@ -5425,7 +5425,7 @@ The City of Austin is committed to transparent and responsible use of AI technol
         from pptx import Presentation
         from pptx.util import Inches, Pt
         from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
-        from datetime import datetime
+        from datetime import datetime, timezone
         import tempfile
 
         prs = Presentation()
@@ -5449,7 +5449,7 @@ The City of Austin is committed to transparent and responsible use of AI technol
                 pillar_counts[pillar_name] = pillar_counts.get(pillar_name, 0) + 1
 
             # ===== 1. TITLE SLIDE =====
-            title_subtitle = f"{' '.join(pillar_icons)} | {len(briefs)} Strategic Trends\n{datetime.now().strftime('%B %Y')}"
+            title_subtitle = f"{' '.join(pillar_icons)} | {len(briefs)} Strategic Trends\n{datetime.now(timezone.utc).strftime('%B %Y')}"
             self._add_title_slide(prs, workstream_name, title_subtitle)
 
             # ===== 2. PORTFOLIO DASHBOARD =====
@@ -5752,7 +5752,7 @@ The City of Austin is committed to transparent and responsible use of AI technol
             TableStyle,
         )
         from reportlab.lib.units import inch
-        from datetime import datetime
+        from datetime import datetime, timezone
         import tempfile
 
         # Create temp file
@@ -5823,7 +5823,7 @@ The City of Austin is committed to transparent and responsible use of AI technol
         elements.append(Paragraph("Strategic Intelligence Portfolio", subtitle_style))
         elements.append(
             Paragraph(
-                f"{len(briefs)} Strategic Trends | {datetime.now().strftime('%B %Y')}",
+                f"{len(briefs)} Strategic Trends | {datetime.now(timezone.utc).strftime('%B %Y')}",
                 subtitle_style,
             )
         )

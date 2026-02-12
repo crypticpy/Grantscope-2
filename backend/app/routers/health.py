@@ -1,7 +1,7 @@
 """Health-check and debug router."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from fastapi import APIRouter
@@ -21,7 +21,7 @@ async def health_check():
     """Detailed health check"""
     return {
         "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "services": {"database": "connected", "ai": "available"},
     }
 

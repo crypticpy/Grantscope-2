@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -66,7 +66,7 @@ async def trigger_manual_scan(
     """
     try:
         # Get cards that need updates (not updated in last 24 hours)
-        cutoff = (datetime.now() - timedelta(hours=24)).isoformat()
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
 
         cards_result = (
             supabase.table("cards")
@@ -251,7 +251,9 @@ async def delete_source_rating(source_id: str, user=Depends(get_current_user)):
 async def get_card_quality(card_id: str, user=Depends(get_current_user)):
     """Get full SQI breakdown for a card."""
     try:
-        breakdown = quality_service.get_breakdown(supabase, card_id) or quality_service.calculate_sqi(supabase, card_id)
+        breakdown = quality_service.get_breakdown(
+            supabase, card_id
+        ) or quality_service.calculate_sqi(supabase, card_id)
         return breakdown
     except Exception as e:
         logger.error(f"Failed to get quality for card {card_id}: {str(e)}")
