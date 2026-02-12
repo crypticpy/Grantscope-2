@@ -13,6 +13,7 @@ import {
   sendChatMessage,
   parseSSEStream,
   fetchConversation,
+  fetchConversations,
   fetchSuggestions,
   type ChatMessage,
   type Citation,
@@ -29,6 +30,8 @@ export interface UseChatOptions {
   scopeId?: string;
   /** Resume an existing conversation by ID */
   initialConversationId?: string;
+  /** Skip auto-restoring the most recent conversation (e.g., user clicked "New Chat") */
+  forceNew?: boolean;
 }
 
 export interface UseChatReturn {
@@ -96,11 +99,13 @@ function restoreConversationId(scope: string, scopeId?: string): string | null {
 // ============================================================================
 
 export function useChat(options: UseChatOptions): UseChatReturn {
-  const { scope, scopeId, initialConversationId } = options;
+  const { scope, scopeId, initialConversationId, forceNew } = options;
 
   // Resolve starting conversation: explicit prop > sessionStorage > null
-  const resolvedInitialId =
-    initialConversationId ?? restoreConversationId(scope, scopeId);
+  // When forceNew is true, skip restoration entirely
+  const resolvedInitialId = forceNew
+    ? null
+    : (initialConversationId ?? restoreConversationId(scope, scopeId));
 
   // Message state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -339,19 +344,51 @@ export function useChat(options: UseChatOptions): UseChatReturn {
   // Effects
   // ============================================================================
 
-  // Auto-load suggestions on mount if no messages exist
+  // On mount: restore conversation from prop → sessionStorage → Supabase (most recent)
+  // When forceNew is set, skip restoration and show blank chat with suggestions.
   useEffect(() => {
-    if (messages.length === 0 && !resolvedInitialId) {
-      loadSuggestions();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    let cancelled = false;
 
-  // Load conversation on mount (from prop or sessionStorage)
-  useEffect(() => {
-    if (resolvedInitialId) {
-      loadConversation(resolvedInitialId);
+    async function restore() {
+      // User explicitly requested a fresh chat
+      if (forceNew) {
+        loadSuggestions();
+        return;
+      }
+
+      if (resolvedInitialId) {
+        // Fast path: we already have a conversation ID (prop or sessionStorage)
+        await loadConversation(resolvedInitialId);
+        return;
+      }
+
+      // Slow path: query Supabase for the most recent conversation in this scope
+      try {
+        const conversations = await fetchConversations({
+          scope,
+          scope_id: scopeId,
+          limit: 1,
+        });
+        if (cancelled || !isMountedRef.current) return;
+
+        if (conversations.length > 0 && conversations[0]) {
+          await loadConversation(conversations[0].id);
+        } else {
+          // No prior conversations — show suggestions
+          loadSuggestions();
+        }
+      } catch {
+        // Failed to fetch — fall back to empty state with suggestions
+        if (!cancelled && isMountedRef.current) {
+          loadSuggestions();
+        }
+      }
     }
+
+    restore();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

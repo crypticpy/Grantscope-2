@@ -51,6 +51,8 @@ export interface ChatPanelProps {
   initialConversationId?: string;
   /** Called when the active conversation changes (created or loaded) */
   onConversationChange?: (conversationId: string | null) => void;
+  /** Skip auto-restoring the most recent conversation (user clicked "New Chat") */
+  forceNew?: boolean;
 }
 
 // ============================================================================
@@ -69,6 +71,7 @@ export function ChatPanel({
   onCitationClick,
   initialConversationId,
   onConversationChange,
+  forceNew,
 }: ChatPanelProps) {
   const {
     messages,
@@ -81,7 +84,7 @@ export function ChatPanel({
     sendMessage,
     stopGenerating,
     startNewConversation,
-  } = useChat({ scope, scopeId, initialConversationId });
+  } = useChat({ scope, scopeId, initialConversationId, forceNew });
 
   // Notify parent when conversationId changes
   useEffect(() => {

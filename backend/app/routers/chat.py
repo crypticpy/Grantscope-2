@@ -81,13 +81,14 @@ async def list_chat_conversations(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     scope: Optional[str] = Query(None, description="Filter by scope"),
+    scope_id: Optional[str] = Query(None, description="Filter by scope entity ID"),
     current_user: dict = Depends(get_current_user),
 ):
     """
     List the current user's chat conversations.
 
     Returns conversations ordered by most recently updated.
-    Supports pagination and optional scope filtering.
+    Supports pagination and optional scope/scope_id filtering.
     """
     user_id = current_user["id"]
     try:
@@ -99,6 +100,8 @@ async def list_chat_conversations(
 
         if scope:
             query = query.eq("scope", scope)
+        if scope_id:
+            query = query.eq("scope_id", scope_id)
 
         query = query.order("updated_at", desc=True).range(offset, offset + limit - 1)
 

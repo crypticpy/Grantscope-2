@@ -355,6 +355,7 @@ export async function fetchConversations(params?: {
   limit?: number;
   offset?: number;
   scope?: string;
+  scope_id?: string;
 }): Promise<Conversation[]> {
   const searchParams = new URLSearchParams();
   if (params?.limit !== undefined)
@@ -362,6 +363,7 @@ export async function fetchConversations(params?: {
   if (params?.offset !== undefined)
     searchParams.append("offset", String(params.offset));
   if (params?.scope) searchParams.append("scope", params.scope);
+  if (params?.scope_id) searchParams.append("scope_id", params.scope_id);
 
   const queryString = searchParams.toString();
   const endpoint = `/api/v1/chat/conversations${queryString ? `?${queryString}` : ""}`;
