@@ -18,12 +18,11 @@ from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
 from supabase import Client
 
+from app.rag_engine import RAGEngine
 from app.openai_provider import (
     azure_openai_async_client,
-    azure_openai_embedding_client,
     get_chat_deployment,
     get_chat_mini_deployment,
-    get_embedding_deployment,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 RATE_LIMIT_PER_MINUTE = 20
 MAX_CONVERSATION_MESSAGES = 50  # Max history messages to include
-MAX_CONTEXT_CHARS = 24000  # Cap RAG context size sent to the LLM
+MAX_CONTEXT_CHARS = 120_000  # Cap RAG context size sent to the LLM
 STREAM_TIMEOUT = 120  # seconds
 
 
@@ -118,767 +117,6 @@ async def _check_rate_limit(supabase: Client, user_id: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Context Retrieval — Signal Scope
-# ---------------------------------------------------------------------------
-
-
-async def _retrieve_signal_context(
-    supabase: Client, card_id: str
-) -> Tuple[str, Dict[str, Any]]:
-    """
-    Retrieve full context for a single signal (card).
-
-    Returns (context_text, metadata_dict) where context_text is the
-    assembled RAG context and metadata_dict contains card info for
-    the system prompt builder.
-    """
-    # Fetch card details
-    card_result = (
-        supabase.table("cards")
-        .select(
-            "id, slug, name, summary, description, pillar_id, goal_id, "
-            "horizon, stage_id, novelty_score, impact_score, "
-            "relevance_score, velocity_score, risk_score, "
-            "opportunity_score, signal_quality_score, status"
-        )
-        .eq("id", card_id)
-        .execute()
-    )
-
-    if not card_result.data:
-        return "", {"error": "Card not found"}
-
-    card = card_result.data[0]
-    parts = [f"## Signal: {card.get('name', 'Unknown')}"]
-
-    parts.append(f"Summary: {card.get('summary', 'No summary available')}")
-    if card.get("description"):
-        parts.append(f"Description: {card['description'][:2000]}")
-    parts.append(
-        f"Pillar: {card.get('pillar_id', 'N/A')} | "
-        f"Goal: {card.get('goal_id', 'N/A')} | "
-        f"Horizon: {card.get('horizon', 'N/A')} | "
-        f"Stage: {card.get('stage_id', 'N/A')}"
-    )
-
-    # Scores
-    scores = []
-    for score_name in [
-        "impact_score",
-        "relevance_score",
-        "novelty_score",
-        "velocity_score",
-        "risk_score",
-        "opportunity_score",
-        "signal_quality_score",
-    ]:
-        val = card.get(score_name)
-        if val is not None:
-            label = score_name.replace("_score", "").replace("_", " ").title()
-            scores.append(f"{label}: {val}")
-    if scores:
-        parts.append(f"Scores: {', '.join(scores)}")
-
-    # Fetch all sources for this card
-    sources_result = (
-        supabase.table("sources")
-        .select(
-            "id, title, url, ai_summary, key_excerpts, full_text, "
-            "source_type, publisher, published_date, relevance_score"
-        )
-        .eq("card_id", card_id)
-        .order("relevance_score", desc=True)
-        .execute()
-    )
-
-    sources = sources_result.data or []
-    source_map = {}  # For citation resolution later
-
-    if sources:
-        parts.append(f"\n## Sources ({len(sources)} total)")
-        for i, src in enumerate(sources, 1):
-            source_map[i] = {
-                "source_id": src["id"],
-                "card_id": card_id,
-                "card_slug": card.get("slug", ""),
-                "title": src.get("title", "Untitled"),
-                "url": src.get("url", ""),
-                "published_date": src.get("published_date", None),
-                "excerpt": (
-                    (src.get("key_excerpts") or [None])[0]
-                    if src.get("key_excerpts")
-                    else (
-                        (src.get("ai_summary", "") or "")[:200]
-                        if src.get("ai_summary")
-                        else None
-                    )
-                ),
-            }
-
-            parts.append(f"\n### [{i}] {src.get('title', 'Untitled')}")
-            if src.get("url"):
-                parts.append(f"URL: {src['url']}")
-            if src.get("publisher"):
-                parts.append(f"Publisher: {src['publisher']}")
-            if src.get("published_date"):
-                parts.append(f"Published: {src['published_date']}")
-            if src.get("ai_summary"):
-                parts.append(f"AI Summary: {src['ai_summary']}")
-            if src.get("key_excerpts"):
-                excerpts = src["key_excerpts"]
-                if isinstance(excerpts, list) and excerpts:
-                    parts.append("Key Excerpts:")
-                    parts.extend(f"  - {exc}" for exc in excerpts[:3])
-            if src.get("full_text"):
-                # Truncate full text to avoid exceeding context window
-                full = src["full_text"][:3000]
-                parts.append(f"Content: {full}")
-
-    # Fetch timeline events with deep research reports
-    try:
-        timeline_result = (
-            supabase.table("card_timeline")
-            .select("event_type, title, description, metadata, created_at")
-            .eq("card_id", card_id)
-            .order("created_at", desc=True)
-            .limit(20)
-            .execute()
-        )
-        if timeline_events := timeline_result.data or []:
-            parts.append(f"\n## Timeline ({len(timeline_events)} events)")
-            for evt in timeline_events[:10]:
-                parts.append(
-                    f"- [{evt.get('event_type')}] {evt.get('title')} "
-                    f"({evt.get('created_at', '')[:10]})"
-                )
-                if evt.get("description"):
-                    parts.append(f"  {evt['description'][:300]}")
-                # Check for deep research reports in metadata
-                meta = evt.get("metadata") or {}
-                if isinstance(meta, dict):
-                    if report := meta.get("report_preview") or meta.get(
-                        "deep_research_report"
-                    ):
-                        parts.append(f"  Research Report Excerpt: {str(report)[:1500]}")
-    except Exception as e:
-        logger.warning(f"Failed to fetch timeline for card {card_id}: {e}")
-
-    # Fetch deep research reports from research_tasks table
-    try:
-        research_result = (
-            supabase.table("research_tasks")
-            .select("task_type, result_summary, completed_at")
-            .eq("card_id", card_id)
-            .eq("status", "completed")
-            .order("completed_at", desc=True)
-            .limit(3)
-            .execute()
-        )
-        for task in research_result.data or []:
-            result_summary = task.get("result_summary") or {}
-            if isinstance(result_summary, dict):
-                if report := result_summary.get("report_preview") or result_summary.get(
-                    "report"
-                ):
-                    parts.append(
-                        f"\n## Deep Research Report ({task.get('completed_at', '')[:10]})"
-                    )
-                    parts.append(str(report)[:3000])
-    except Exception as e:
-        logger.warning(f"Failed to fetch research tasks for card {card_id}: {e}")
-
-    context_text = "\n".join(parts)
-    # Truncate to max context size
-    if len(context_text) > MAX_CONTEXT_CHARS:
-        context_text = context_text[:MAX_CONTEXT_CHARS] + "\n\n[Context truncated]"
-
-    metadata = {
-        "card_name": card.get("name"),
-        "card_id": card_id,
-        "source_count": len(sources),
-        "source_map": source_map,
-    }
-
-    return context_text, metadata
-
-
-# ---------------------------------------------------------------------------
-# Context Retrieval — Workstream Scope
-# ---------------------------------------------------------------------------
-
-
-async def _retrieve_workstream_context(
-    supabase: Client, workstream_id: str
-) -> Tuple[str, Dict[str, Any]]:
-    """
-    Retrieve context for a workstream and its cards.
-
-    Returns (context_text, metadata_dict).
-    """
-    # Fetch workstream details
-    ws_result = (
-        supabase.table("workstreams")
-        .select("id, name, description, keywords, pillar_ids, goal_ids, horizon")
-        .eq("id", workstream_id)
-        .execute()
-    )
-
-    if not ws_result.data:
-        return "", {"error": "Workstream not found"}
-
-    ws = ws_result.data[0]
-    parts = [f"## Workstream: {ws.get('name', 'Unknown')}"]
-
-    if ws.get("description"):
-        parts.append(f"Description: {ws['description']}")
-    if ws.get("keywords"):
-        keywords = ws["keywords"]
-        if isinstance(keywords, list):
-            parts.append(f"Keywords: {', '.join(keywords)}")
-    if ws.get("pillar_ids"):
-        parts.append(f"Pillars: {', '.join(ws['pillar_ids'])}")
-    if ws.get("horizon"):
-        parts.append(f"Horizon: {ws['horizon']}")
-
-    # Fetch cards in workstream via join table
-    wc_result = (
-        supabase.table("workstream_cards")
-        .select("card_id")
-        .eq("workstream_id", workstream_id)
-        .limit(20)
-        .execute()
-    )
-
-    card_ids = [wc["card_id"] for wc in (wc_result.data or [])]
-    source_map = {}
-    if card_ids:
-        # Fetch card details
-        cards_result = (
-            supabase.table("cards")
-            .select(
-                "id, slug, name, summary, pillar_id, goal_id, horizon, stage_id, "
-                "impact_score, relevance_score, velocity_score"
-            )
-            .in_("id", card_ids)
-            .execute()
-        )
-
-        cards = cards_result.data or []
-        parts.append(f"\n## Cards in Workstream ({len(cards)} signals)")
-
-        source_idx = 1
-
-        for card in cards:
-            card_id = card["id"]
-            parts.append(f"\n### {card.get('name', 'Unknown')}")
-            parts.append(f"Summary: {card.get('summary', 'N/A')}")
-            parts.append(
-                f"Pillar: {card.get('pillar_id', 'N/A')} | "
-                f"Horizon: {card.get('horizon', 'N/A')} | "
-                f"Stage: {card.get('stage_id', 'N/A')}"
-            )
-
-            score_parts = []
-            for sn in ["impact_score", "relevance_score", "velocity_score"]:
-                v = card.get(sn)
-                if v is not None:
-                    score_parts.append(f"{sn.replace('_score', '').title()}: {v}")
-            if score_parts:
-                parts.append(f"Scores: {', '.join(score_parts)}")
-
-            # Fetch top 3 sources per card
-            try:
-                src_result = (
-                    supabase.table("sources")
-                    .select("id, title, url, ai_summary, key_excerpts, published_date")
-                    .eq("card_id", card_id)
-                    .order("relevance_score", desc=True)
-                    .limit(3)
-                    .execute()
-                )
-
-                for src in src_result.data or []:
-                    source_map[source_idx] = {
-                        "source_id": src["id"],
-                        "card_id": card_id,
-                        "card_slug": card.get("slug", ""),
-                        "title": src.get("title", "Untitled"),
-                        "url": src.get("url", ""),
-                        "published_date": src.get("published_date", None),
-                        "excerpt": (
-                            (src.get("key_excerpts") or [None])[0]
-                            if src.get("key_excerpts")
-                            else (
-                                (src.get("ai_summary", "") or "")[:200]
-                                if src.get("ai_summary")
-                                else None
-                            )
-                        ),
-                    }
-                    parts.append(f"  [{source_idx}] {src.get('title', 'Untitled')}")
-                    if src.get("ai_summary"):
-                        parts.append(f"      Summary: {src['ai_summary'][:400]}")
-                    if src.get("key_excerpts"):
-                        excerpts = src["key_excerpts"]
-                        if isinstance(excerpts, list) and excerpts:
-                            parts.append(f"      Key insight: {excerpts[0][:200]}")
-                    source_idx += 1
-            except Exception as e:
-                logger.warning(f"Failed to fetch sources for card {card_id}: {e}")
-
-    context_text = "\n".join(parts)
-    if len(context_text) > MAX_CONTEXT_CHARS:
-        context_text = context_text[:MAX_CONTEXT_CHARS] + "\n\n[Context truncated]"
-
-    metadata = {
-        "workstream_name": ws.get("name"),
-        "workstream_id": workstream_id,
-        "card_count": len(card_ids),
-        "source_map": source_map,
-    }
-
-    return context_text, metadata
-
-
-# ---------------------------------------------------------------------------
-# Context Retrieval — Global Scope
-# ---------------------------------------------------------------------------
-
-
-async def _retrieve_global_context(
-    supabase: Client, query: str
-) -> Tuple[str, Dict[str, Any]]:
-    """
-    Retrieve context for a global (unscoped) question using semantic search.
-
-    Uses embeddings to find the most relevant cards, then fetches their
-    top sources. Also includes active pattern insights for cross-signal context.
-
-    Returns (context_text, metadata_dict).
-    """
-    # Generate embedding for the user's query
-    try:
-        embedding_response = azure_openai_embedding_client.embeddings.create(
-            model=get_embedding_deployment(),
-            input=query[:8000],
-        )
-        query_embedding = embedding_response.data[0].embedding
-    except Exception as e:
-        logger.error(f"Failed to generate query embedding: {e}")
-        return "", {"error": "Failed to process query for search"}
-
-    # Vector similarity search
-    try:
-        search_result = supabase.rpc(
-            "match_cards_by_embedding",
-            {
-                "query_embedding": query_embedding,
-                "match_threshold": 0.70,
-                "match_count": 15,
-            },
-        ).execute()
-
-        matched_cards = search_result.data or []
-    except Exception as e:
-        logger.error(f"Vector search failed: {e}")
-        matched_cards = []
-
-    parts = []
-    source_map = {}
-    if matched_cards:
-        parts.append(f"## Relevant Signals ({len(matched_cards)} found)")
-
-        # Fetch full card details for matched cards
-        matched_ids = [c["id"] for c in matched_cards]
-        similarity_map = {c["id"]: c.get("similarity", 0) for c in matched_cards}
-
-        cards_result = (
-            supabase.table("cards")
-            .select(
-                "id, slug, name, summary, description, pillar_id, goal_id, "
-                "horizon, stage_id, impact_score, relevance_score, "
-                "velocity_score, risk_score"
-            )
-            .in_("id", matched_ids)
-            .execute()
-        )
-
-        source_idx = 1
-
-        for card in cards_result.data or []:
-            card_id = card["id"]
-            sim = similarity_map.get(card_id, 0)
-            parts.extend(
-                (
-                    f"\n### {card.get('name', 'Unknown')} (relevance: {sim:.2f})",
-                    f"Summary: {card.get('summary', 'N/A')}",
-                )
-            )
-            if card.get("description"):
-                parts.append(f"Description: {card['description'][:500]}")
-            parts.append(
-                f"Pillar: {card.get('pillar_id', 'N/A')} | "
-                f"Horizon: {card.get('horizon', 'N/A')} | "
-                f"Stage: {card.get('stage_id', 'N/A')}"
-            )
-
-            # Fetch top 2 sources per card
-            try:
-                src_result = (
-                    supabase.table("sources")
-                    .select("id, title, url, ai_summary, key_excerpts, published_date")
-                    .eq("card_id", card_id)
-                    .order("relevance_score", desc=True)
-                    .limit(2)
-                    .execute()
-                )
-
-                for src in src_result.data or []:
-                    source_map[source_idx] = {
-                        "source_id": src["id"],
-                        "card_id": card_id,
-                        "card_slug": card.get("slug", ""),
-                        "title": src.get("title", "Untitled"),
-                        "url": src.get("url", ""),
-                        "published_date": src.get("published_date", None),
-                        "excerpt": (
-                            (src.get("key_excerpts") or [None])[0]
-                            if src.get("key_excerpts")
-                            else (
-                                (src.get("ai_summary", "") or "")[:200]
-                                if src.get("ai_summary")
-                                else None
-                            )
-                        ),
-                    }
-                    parts.append(f"  [{source_idx}] {src.get('title', 'Untitled')}")
-                    if src.get("ai_summary"):
-                        parts.append(f"      {src['ai_summary'][:300]}")
-                    source_idx += 1
-            except Exception as e:
-                logger.warning(f"Failed to fetch sources for card {card_id}: {e}")
-
-    # Fetch active pattern insights for cross-signal context
-    try:
-        patterns_result = (
-            supabase.table("pattern_insights")
-            .select(
-                "pattern_title, pattern_summary, opportunity, "
-                "affected_pillars, urgency, confidence"
-            )
-            .eq("status", "active")
-            .order("created_at", desc=True)
-            .limit(5)
-            .execute()
-        )
-
-        if patterns := patterns_result.data or []:
-            parts.append(f"\n## Active Cross-Signal Patterns ({len(patterns)})")
-            for pat in patterns:
-                pillars = pat.get("affected_pillars", [])
-                if isinstance(pillars, list):
-                    pillars = ", ".join(pillars)
-                parts.extend(
-                    (
-                        f"\n**{pat.get('pattern_title', 'Unknown')}** (Urgency: {pat.get('urgency', 'N/A')}, Confidence: {pat.get('confidence', 'N/A')})",
-                        f"Pillars: {pillars}",
-                    )
-                )
-                if pat.get("pattern_summary"):
-                    parts.append(f"Summary: {pat['pattern_summary']}")
-                if pat.get("opportunity"):
-                    parts.append(f"Opportunity: {pat['opportunity']}")
-    except Exception as e:
-        logger.warning(f"Failed to fetch pattern insights: {e}")
-
-    context_text = "\n".join(parts)
-    if len(context_text) > MAX_CONTEXT_CHARS:
-        context_text = context_text[:MAX_CONTEXT_CHARS] + "\n\n[Context truncated]"
-
-    metadata = {
-        "matched_cards": len(matched_cards),
-        "source_map": source_map,
-    }
-
-    return context_text, metadata
-
-
-# ---------------------------------------------------------------------------
-# Context Retrieval — @Mention Resolution
-# ---------------------------------------------------------------------------
-
-MAX_MENTION_CONTEXT_CHARS = 8000  # Cap for mention context to stay within budget
-
-
-async def _resolve_mention_context(
-    supabase_client: Client,
-    message: str,
-    mentions: Optional[List[Dict[str, Any]]] = None,
-) -> str:
-    """
-    Resolve @mention references and return formatted context for the LLM.
-
-    Supports two resolution paths:
-    1. Structured mentions from the frontend (preferred) — list of dicts with
-       id, type, and title.
-    2. Regex fallback — parses @[Title] patterns from the message text and
-       searches cards/workstreams by name.
-
-    Returns a formatted context string capped at MAX_MENTION_CONTEXT_CHARS,
-    or an empty string if no mentions are found or resolved.
-    """
-    # Collect mention descriptors: list of {"id": ..., "type": ..., "title": ...}
-    mention_refs: List[Dict[str, Any]] = []
-
-    if mentions:
-        # Path 1: structured mentions from the frontend
-        for m in mentions:
-            mention_refs.append(
-                {
-                    "id": m.get("id"),
-                    "type": m.get("type", "signal"),
-                    "title": m.get("title", ""),
-                }
-            )
-    else:
-        # Path 2: regex fallback — parse @[Title] from message text
-        pattern = r"@\[([^\]]+)\]"
-        matches = re.findall(pattern, message)
-        for title in matches:
-            mention_refs.append({"id": None, "type": None, "title": title})
-
-    if not mention_refs:
-        return ""
-
-    parts: List[str] = ["## Referenced Entities"]
-
-    for ref in mention_refs:
-        try:
-            resolved = False
-
-            # --- Attempt signal resolution ---
-            if ref["type"] in ("signal", None):
-                card = await _resolve_signal_mention(
-                    supabase_client, ref.get("id"), ref["title"]
-                )
-                if card:
-                    parts.append(_format_signal_mention(card))
-                    resolved = True
-
-            # --- Attempt workstream resolution ---
-            if ref["type"] in ("workstream", None) and not resolved:
-                ws = await _resolve_workstream_mention(
-                    supabase_client, ref.get("id"), ref["title"]
-                )
-                if ws:
-                    parts.append(_format_workstream_mention(ws))
-
-        except Exception as e:
-            logger.warning(f"Failed to resolve mention '{ref.get('title')}': {e}")
-            continue
-
-    # If only the header was added, nothing was resolved
-    if len(parts) <= 1:
-        return ""
-
-    context = "\n\n".join(parts)
-    if len(context) > MAX_MENTION_CONTEXT_CHARS:
-        context = (
-            context[:MAX_MENTION_CONTEXT_CHARS] + "\n\n[Mention context truncated]"
-        )
-
-    return context
-
-
-async def _resolve_signal_mention(
-    supabase_client: Client,
-    card_id: Optional[str],
-    title: str,
-) -> Optional[Dict[str, Any]]:
-    """
-    Resolve a signal mention by ID or by title (ILIKE).
-
-    Returns a dict with card details and top 5 sources, or None if not found.
-    """
-    card_data = None
-
-    if card_id:
-        result = (
-            supabase_client.table("cards")
-            .select(
-                "id, slug, name, summary, description, pillar_id, "
-                "horizon, stage_id, impact_score, relevance_score"
-            )
-            .eq("id", card_id)
-            .execute()
-        )
-        if result.data:
-            card_data = result.data[0]
-
-    if not card_data and title:
-        result = (
-            supabase_client.table("cards")
-            .select(
-                "id, slug, name, summary, description, pillar_id, "
-                "horizon, stage_id, impact_score, relevance_score"
-            )
-            .ilike("name", f"%{title}%")
-            .limit(1)
-            .execute()
-        )
-        if result.data:
-            card_data = result.data[0]
-
-    if not card_data:
-        return None
-
-    # Fetch top 5 sources for the card
-    try:
-        src_result = (
-            supabase_client.table("sources")
-            .select("title, url, ai_summary, key_excerpts")
-            .eq("card_id", card_data["id"])
-            .order("relevance_score", desc=True)
-            .limit(5)
-            .execute()
-        )
-        card_data["_sources"] = src_result.data or []
-    except Exception as e:
-        logger.warning(
-            f"Failed to fetch sources for mentioned card {card_data['id']}: {e}"
-        )
-        card_data["_sources"] = []
-
-    return card_data
-
-
-async def _resolve_workstream_mention(
-    supabase_client: Client,
-    workstream_id: Optional[str],
-    title: str,
-) -> Optional[Dict[str, Any]]:
-    """
-    Resolve a workstream mention by ID or by title (ILIKE).
-
-    Returns a dict with workstream details and its card names, or None if not found.
-    """
-    ws_data = None
-
-    if workstream_id:
-        result = (
-            supabase_client.table("workstreams")
-            .select("id, name, description")
-            .eq("id", workstream_id)
-            .execute()
-        )
-        if result.data:
-            ws_data = result.data[0]
-
-    if not ws_data and title:
-        result = (
-            supabase_client.table("workstreams")
-            .select("id, name, description")
-            .ilike("name", f"%{title}%")
-            .limit(1)
-            .execute()
-        )
-        if result.data:
-            ws_data = result.data[0]
-
-    if not ws_data:
-        return None
-
-    # Fetch card names belonging to this workstream
-    try:
-        wc_result = (
-            supabase_client.table("workstream_cards")
-            .select("card_id")
-            .eq("workstream_id", ws_data["id"])
-            .limit(20)
-            .execute()
-        )
-        card_ids = [wc["card_id"] for wc in (wc_result.data or [])]
-
-        if card_ids:
-            cards_result = (
-                supabase_client.table("cards")
-                .select("name")
-                .in_("id", card_ids)
-                .execute()
-            )
-            ws_data["_card_names"] = [
-                c["name"] for c in (cards_result.data or []) if c.get("name")
-            ]
-        else:
-            ws_data["_card_names"] = []
-    except Exception as e:
-        logger.warning(
-            f"Failed to fetch cards for mentioned workstream {ws_data['id']}: {e}"
-        )
-        ws_data["_card_names"] = []
-
-    return ws_data
-
-
-def _format_signal_mention(card: Dict[str, Any]) -> str:
-    """Format a resolved signal mention into a context block."""
-    lines = [f"### Signal: {card.get('name', 'Unknown')}"]
-
-    if card.get("summary"):
-        lines.append(f"Summary: {card['summary']}")
-    if card.get("description"):
-        lines.append(f"Description: {card['description'][:800]}")
-    if card.get("pillar_id") or card.get("horizon"):
-        lines.append(
-            f"Pillar: {card.get('pillar_id', 'N/A')} | "
-            f"Horizon: {card.get('horizon', 'N/A')} | "
-            f"Stage: {card.get('stage_id', 'N/A')}"
-        )
-
-    scores = []
-    for key in ("impact_score", "relevance_score"):
-        val = card.get(key)
-        if val is not None:
-            label = key.replace("_score", "").replace("_", " ").title()
-            scores.append(f"{label}: {val}")
-    if scores:
-        lines.append(f"Scores: {', '.join(scores)}")
-
-    sources = card.get("_sources", [])
-    if sources:
-        lines.append("Key Sources:")
-        for src in sources:
-            src_title = src.get("title", "Untitled")
-            excerpt = ""
-            if src.get("ai_summary"):
-                excerpt = (src["ai_summary"] or "")[:200]
-            elif src.get("key_excerpts"):
-                excerpts = src["key_excerpts"]
-                if isinstance(excerpts, list) and excerpts:
-                    excerpt = str(excerpts[0])[:200]
-            if excerpt:
-                lines.append(f"- {src_title}: {excerpt}")
-            else:
-                lines.append(f"- {src_title}")
-
-    return "\n".join(lines)
-
-
-def _format_workstream_mention(ws: Dict[str, Any]) -> str:
-    """Format a resolved workstream mention into a context block."""
-    lines = [f"### Workstream: {ws.get('name', 'Unknown')}"]
-
-    if ws.get("description"):
-        lines.append(f"Description: {ws['description'][:600]}")
-
-    card_names = ws.get("_card_names", [])
-    if card_names:
-        lines.append(f"Cards ({len(card_names)}): {', '.join(card_names)}")
-
-    return "\n".join(lines)
-
-
-# ---------------------------------------------------------------------------
 # System Prompt Builder
 # ---------------------------------------------------------------------------
 
@@ -901,23 +139,23 @@ def _build_system_prompt(
         "signal": (
             f"You are answering questions about a specific signal (intelligence card): "
             f"\"{scope_metadata.get('card_name', 'Unknown Signal')}\". "
-            f"This card has {scope_metadata.get('source_count', 0)} sources. "
-            f"Use the detailed card information and source content below to provide "
-            f"thorough, evidence-based answers about this signal."
+            f"You have comprehensive context about the signal '{scope_metadata.get('card_name', 'Unknown Signal')}' "
+            f"including {scope_metadata.get('source_count', 0)} sources, timeline events, "
+            f"and deep research reports, plus {scope_metadata.get('matched_cards', 0)} related "
+            f"signals found via semantic search."
         ),
         "workstream": (
             f"You are answering questions about a research workstream: "
             f"\"{scope_metadata.get('workstream_name', 'Unknown Workstream')}\". "
-            f"This workstream tracks {scope_metadata.get('card_count', 0)} signals. "
-            f"Use the workstream overview and card summaries below to provide "
-            f"analytical insights about trends, priorities, and strategic implications "
-            f"across all signals in this workstream."
+            f"You have context about the workstream '{scope_metadata.get('workstream_name', 'Unknown Workstream')}' "
+            f"with {scope_metadata.get('card_count', scope_metadata.get('matched_cards', 0))} tracked signals "
+            f"and {scope_metadata.get('matched_sources', 0)} relevant sources found via hybrid search."
         ),
         "global": (
             f"You are answering a broad strategic intelligence question. "
-            f"The system found {scope_metadata.get('matched_cards', 0)} relevant signals "
-            f"using semantic search. Use the search results and pattern insights below "
-            f"to provide comprehensive, cross-cutting strategic analysis."
+            f"Hybrid search found {scope_metadata.get('matched_cards', 0)} relevant signals "
+            f"and {scope_metadata.get('matched_sources', 0)} sources matching your query "
+            f"across the entire intelligence database."
         ),
     }
 
@@ -931,13 +169,14 @@ You help city leaders, analysts, and decision-makers understand emerging trends,
 {scope_desc}
 
 ## Instructions
-- Answer questions using ONLY the provided context below. If the context doesn't contain enough information, say so clearly.
+- Prioritize the provided context — it contains the most relevant signals, sources, and analysis. You may supplement with general knowledge when the context is insufficient, but always prefer cited evidence.
+- You have extensive context available. Provide thorough, detailed responses with specific evidence and citations.
 - Cite your sources using [N] notation (e.g., [1], [2]) that corresponds to the numbered sources in the context.
 - Be analytical, strategic, and forward-looking in your responses.
 - When discussing implications, consider impact on city services, budgets, equity, and residents.
 - Provide actionable insights when possible — what should the city consider, prepare for, or investigate?
 - Use clear, professional language suitable for government officials and analysts.
-- If asked about topics outside the provided context, acknowledge the limitation and suggest what might be relevant.
+- If asked about topics outside the provided context, acknowledge the limitation and supplement with general knowledge where appropriate.
 
 ## Strategic Framework Reference
 - Pillars: CH (Community Health), MC (Mobility), HS (Housing), EC (Economic), ES (Environmental), CE (Cultural)
@@ -1190,24 +429,22 @@ async def chat(
         # Store the user message
         await _store_message(supabase_client, conv_id, "user", message)
 
-        # 3. Retrieve context based on scope
-        context_text = ""
-        scope_metadata: Dict[str, Any] = {}
+        # 3. Context retrieval via hybrid RAG engine
+        yield _sse_event(
+            "progress",
+            {"step": "searching", "detail": "Searching signals and sources..."},
+        )
 
         try:
-            if scope == "signal" and scope_id:
-                context_text, scope_metadata = await _retrieve_signal_context(
-                    supabase_client, scope_id
-                )
-            elif scope == "workstream" and scope_id:
-                context_text, scope_metadata = await _retrieve_workstream_context(
-                    supabase_client, scope_id
-                )
-            else:
-                # Global scope — use semantic search
-                context_text, scope_metadata = await _retrieve_global_context(
-                    supabase_client, message
-                )
+            engine = RAGEngine(supabase_client)
+            context_text, scope_metadata = await engine.retrieve(
+                query=message,
+                scope=scope,
+                scope_id=scope_id,
+                mentions=mentions,
+                max_context_chars=MAX_CONTEXT_CHARS,
+            )
+            source_map = scope_metadata.get("source_map", {})
         except Exception as e:
             logger.error(f"Context retrieval failed for scope={scope}: {e}")
             yield _sse_error("Failed to retrieve context. Please try again.")
@@ -1217,58 +454,11 @@ async def chat(
             yield _sse_error(f"Context error: {scope_metadata['error']}")
             return
 
-        source_map = scope_metadata.get("source_map", {})
-
-        # 3b. Resolve @mention context (if any)
-        mention_context = ""
-        if mentions or re.search(r"@\[[^\]]+\]", message):
-            try:
-                # Convert MentionRef models to dicts if needed
-                mention_dicts = None
-                if mentions:
-                    mention_dicts = [
-                        (
-                            m
-                            if isinstance(m, dict)
-                            else (
-                                m.dict()
-                                if hasattr(m, "dict")
-                                else {"id": m.id, "type": m.type, "title": m.title}
-                            )
-                        )
-                        for m in mentions
-                    ]
-
-                yield _sse_event(
-                    "progress",
-                    {
-                        "step": "mentions",
-                        "detail": (
-                            f"Loading context for {len(mention_dicts or [])} mentioned entities..."
-                            if mention_dicts
-                            else "Resolving @mentions from message..."
-                        ),
-                    },
-                )
-
-                mention_context = await _resolve_mention_context(
-                    supabase_client, message, mention_dicts
-                )
-                if mention_context:
-                    context_text = context_text + "\n\n" + mention_context
-                    # Re-enforce the overall context cap
-                    if len(context_text) > MAX_CONTEXT_CHARS:
-                        context_text = (
-                            context_text[:MAX_CONTEXT_CHARS] + "\n\n[Context truncated]"
-                        )
-            except Exception as e:
-                logger.warning(f"Mention context resolution failed: {e}")
-
         yield _sse_event(
             "progress",
             {
-                "step": "searching",
-                "detail": f"Found {len(source_map)} sources across {scope_metadata.get('card_count', scope_metadata.get('matched_cards', 1))} signals",
+                "step": "analyzing",
+                "detail": f"Found {scope_metadata.get('matched_cards', 0)} signals and {scope_metadata.get('matched_sources', 0)} sources",
             },
         )
 
@@ -1286,13 +476,13 @@ async def chat(
             # Only include prior messages, not the one we just stored
             prior = history[:-1] if history else []
             # Limit history to keep within token budget
-            messages.extend(iter(prior[-10:]))
+            messages.extend(iter(prior[-20:]))
         messages.append({"role": "user", "content": message})
 
         yield _sse_event(
             "progress",
             {
-                "step": "analyzing",
+                "step": "synthesizing",
                 "detail": "Analyzing sources and synthesizing response...",
             },
         )
@@ -1308,7 +498,7 @@ async def chat(
                 messages=messages,
                 stream=True,
                 temperature=0.7,
-                max_tokens=4096,
+                max_tokens=8192,
             )
 
             async for chunk in stream:
