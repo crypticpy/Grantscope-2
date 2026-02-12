@@ -442,9 +442,22 @@ Signals already tracked (DO NOT search for these — find NEW, DIFFERENT topics)
 {'... and ' + str(len(existing_names) - 15) + ' more' if len(existing_names) > 15 else ''}
 """
 
-        # Determine scan mode based on history
+        # Determine scan mode: seed (no cards yet) vs follow-up (has cards)
+        # Using card count rather than scan history handles edge cases:
+        # - Scan ran but found 0 cards → still seed mode (need broad search)
+        # - Cards manually added, no scan ever ran → follow-up mode (have context)
+        is_seed = len(existing_names) == 0
         scan_mode_hint = ""
-        if last_scan_date:
+        if is_seed:
+            scan_mode_hint = (
+                "\nThis is a SEED scan — the workstream has no signals yet. "
+                "Cast a WIDE net: find foundational articles, landmark reports, "
+                "key case studies, seminal research, AND recent news. "
+                "Include queries that find historical/archival content, not just recent. "
+                "Do NOT add date terms like '2026' or 'latest' to every query — "
+                "mix timeless queries with current-events queries."
+            )
+        elif last_scan_date:
             scan_mode_hint = (
                 f"\nThis is a FOLLOW-UP scan (last scan: {last_scan_date}). "
                 f"Focus on finding content published AFTER that date. "
@@ -453,9 +466,9 @@ Signals already tracked (DO NOT search for these — find NEW, DIFFERENT topics)
             )
         else:
             scan_mode_hint = (
-                "\nThis is the FIRST scan for this workstream. "
-                "Cast a wide net — find foundational articles, key reports, "
-                "landmark case studies, and recent news across the topic area."
+                "\nThis workstream has signals but no prior scan history. "
+                "Focus on finding recent content (past few weeks) that "
+                "complements what's already tracked."
             )
 
         prompt = f"""You are a strategic intelligence research assistant for the City of Austin, Texas.
@@ -618,40 +631,73 @@ Example: ["query 1", "query 2", ...]"""
             # PRIMARY PATH: Serper.dev Google Search + News
             # ----------------------------------------------------------
 
-            # Determine date filter based on scan history
-            date_filter = "qdr:m"  # Default: past month (seed scan)
+            # Determine date filter based on workstream state:
+            #
+            # SEED scan (no cards yet):
+            #   No date filter — find everything available on this topic,
+            #   including historical articles, landmark reports, foundational
+            #   research. Some topics have years of relevant history.
+            #
+            # FOLLOW-UP scan (has cards, progressively narrow):
+            #   < 2 days since last scan  → past day   (qdr:d)
+            #   2-7 days since last scan  → past week  (qdr:w)
+            #   8-30 days since last scan → past month  (qdr:m)
+            #   31-365 days since last    → past year   (qdr:y)
+            #   > 1 year or no prior scan → past year   (qdr:y)
+            #
+            date_filter: Optional[str] = None  # None = no date restriction
+            has_cards = False
             try:
                 if workstream_id:
-                    last_scan = (
-                        self.supabase.table("workstream_scans")
-                        .select("completed_at")
+                    # Check if the workstream has any cards (determines seed vs follow-up)
+                    card_count = (
+                        self.supabase.table("workstream_cards")
+                        .select("id", count="exact")
                         .eq("workstream_id", workstream_id)
-                        .eq("status", "completed")
-                        .order("completed_at", desc=True)
-                        .limit(1)
                         .execute()
                     )
-                    if last_scan.data and last_scan.data[0].get("completed_at"):
-                        last_completed = last_scan.data[0]["completed_at"]
-                        # Parse ISO date and determine how recent the last scan was
-                        try:
-                            last_dt = datetime.fromisoformat(
-                                last_completed.replace("Z", "+00:00")
-                            )
-                            days_since = (datetime.now(last_dt.tzinfo) - last_dt).days
-                            if days_since <= 1:
-                                date_filter = "qdr:d"  # Last scan was today/yesterday
-                            elif days_since <= 7:
-                                date_filter = "qdr:w"  # Last scan within a week
-                            else:
-                                date_filter = "qdr:m"  # Last scan was over a week ago
-                            logger.info(
-                                f"Smart date filter: last scan {days_since}d ago → {date_filter}"
-                            )
-                        except (ValueError, TypeError):
-                            pass  # Use default
+                    has_cards = bool(card_count.count and card_count.count > 0)
+
+                    if has_cards:
+                        # Follow-up mode: narrow based on last successful scan
+                        last_scan = (
+                            self.supabase.table("workstream_scans")
+                            .select("completed_at")
+                            .eq("workstream_id", workstream_id)
+                            .eq("status", "completed")
+                            .order("completed_at", desc=True)
+                            .limit(1)
+                            .execute()
+                        )
+                        if last_scan.data and last_scan.data[0].get("completed_at"):
+                            last_completed = last_scan.data[0]["completed_at"]
+                            try:
+                                last_dt = datetime.fromisoformat(
+                                    last_completed.replace("Z", "+00:00")
+                                )
+                                days_since = (
+                                    datetime.now(last_dt.tzinfo) - last_dt
+                                ).days
+                                if days_since <= 1:
+                                    date_filter = "qdr:d"
+                                elif days_since <= 7:
+                                    date_filter = "qdr:w"
+                                elif days_since <= 30:
+                                    date_filter = "qdr:m"
+                                else:
+                                    date_filter = "qdr:y"
+                            except (ValueError, TypeError):
+                                date_filter = "qdr:y"
+                        else:
+                            # Has cards but no completed scan (cards added manually)
+                            date_filter = "qdr:m"
+                    # else: seed scan — date_filter stays None (no restriction)
+
             except Exception as e:
-                logger.warning(f"Date filter lookup failed, using default: {e}")
+                logger.warning(f"Date filter lookup failed, using no filter: {e}")
+
+            filter_label = date_filter or "none (seed scan)"
+            logger.info(f"Smart date filter: has_cards={has_cards} → {filter_label}")
 
             try:
                 serper_results: List[SerperResult] = await serper_search_all(
