@@ -340,7 +340,7 @@ async def trigger_discovery_run(
         logger.error(f"Failed to trigger discovery run: {str(e)}")
         raise HTTPException(
             status_code=500, detail=_safe_error("discovery run trigger", e)
-        )
+        ) from e
 
 
 @router.get("/discovery/runs/{run_id}", response_model=DiscoveryRun)

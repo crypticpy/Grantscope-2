@@ -71,7 +71,7 @@ async def get_notification_preferences(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("notification preferences retrieval", e),
-        )
+        ) from e
 
 
 @router.put(
@@ -138,7 +138,7 @@ async def update_notification_preferences(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("notification preferences update", e),
-        )
+        ) from e
 
 
 @router.post("/me/digest/preview", response_model=DigestPreviewResponse)
@@ -175,4 +175,4 @@ async def preview_digest(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("digest preview generation", e),
-        )
+        ) from e

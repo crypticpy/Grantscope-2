@@ -361,14 +361,14 @@ class GovernmentFetcher:
         """
         # Extract title
         title = ""
-        title_elem = soup.select_one(source_config.get("title_selector", "h1"))
-        if title_elem:
+        if title_elem := soup.select_one(
+            source_config.get("title_selector", "h1")
+        ):
             title = title_elem.get_text(strip=True)
 
         # Fallback title extraction
         if not title:
-            title_elem = soup.find("title")
-            if title_elem:
+            if title_elem := soup.find("title"):
                 title = title_elem.get_text(strip=True)
                 # Clean up common title suffixes
                 title = re.sub(r'\s*\|\s*[^|]+$', '', title)
@@ -376,9 +376,7 @@ class GovernmentFetcher:
         # Extract content
         content = ""
         content_selector = source_config.get("content_selector", "article p")
-        content_elems = soup.select(content_selector)
-
-        if content_elems:
+        if content_elems := soup.select(content_selector):
             paragraphs = [elem.get_text(strip=True) for elem in content_elems]
             content = "\n\n".join(p for p in paragraphs if p and len(p) > 20)
 
@@ -386,8 +384,7 @@ class GovernmentFetcher:
         if not content or len(content) < 100:
             # Try main content areas common in government sites
             for selector in ["main", "article", "#content", ".content", ".main-content"]:
-                main_content = soup.select_one(selector)
-                if main_content:
+                if main_content := soup.select_one(selector):
                     # Remove navigation, headers, footers
                     for elem in main_content(["nav", "header", "footer", "aside", "script", "style"]):
                         elem.decompose()
@@ -397,7 +394,7 @@ class GovernmentFetcher:
 
         # Truncate content if too long
         if len(content) > MAX_CONTENT_LENGTH:
-            content = content[:MAX_CONTENT_LENGTH] + "..."
+            content = f"{content[:MAX_CONTENT_LENGTH]}..."
 
         # Detect document type
         document_type = self._detect_document_type(soup, content)
@@ -476,11 +473,8 @@ class GovernmentFetcher:
                 except (ValueError, TypeError):
                     continue
 
-        # Try time element
-        time_elem = soup.find("time")
-        if time_elem:
-            datetime_attr = time_elem.get("datetime")
-            if datetime_attr:
+        if time_elem := soup.find("time"):
+            if datetime_attr := time_elem.get("datetime"):
                 try:
                     return datetime.fromisoformat(datetime_attr.replace("Z", "+00:00"))
                 except (ValueError, TypeError):
@@ -489,8 +483,7 @@ class GovernmentFetcher:
         # Try common date class patterns in government sites
         date_patterns = [".date", ".publish-date", ".post-date", ".release-date"]
         for pattern in date_patterns:
-            date_elem = soup.select_one(pattern)
-            if date_elem:
+            if date_elem := soup.select_one(pattern):
                 date_text = date_elem.get_text(strip=True)
                 # Try to parse common formats
                 for fmt in ["%B %d, %Y", "%b %d, %Y", "%m/%d/%Y", "%Y-%m-%d"]:
@@ -550,7 +543,7 @@ class GovernmentFetcher:
             return None
 
         # Create excerpt from first 200 chars of content
-        excerpt = content[:200] + "..." if len(content) > 200 else content
+        excerpt = f"{content[:200]}..." if len(content) > 200 else content
 
         return GovernmentDocument(
             url=url,
@@ -798,12 +791,7 @@ async def fetch_documents_from_urls(urls: List[str]) -> List[GovernmentDocument]
         tasks = [fetcher.fetch_document(url) for url in urls]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        documents = []
-        for result in results:
-            if isinstance(result, GovernmentDocument):
-                documents.append(result)
-
-        return documents
+        return [result for result in results if isinstance(result, GovernmentDocument)]
 
 
 async def fetch_municipal_government_content(

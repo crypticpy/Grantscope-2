@@ -155,8 +155,7 @@ def _parse_arxiv_entry(entry: Dict[str, Any]) -> Optional[AcademicPaper]:
         authors = []
         author_list = entry.get("authors", [])
         for author in author_list:
-            name = author.get("name", "")
-            if name:
+            if name := author.get("name", ""):
                 authors.append(name)
 
         # Extract categories
@@ -164,8 +163,7 @@ def _parse_arxiv_entry(entry: Dict[str, Any]) -> Optional[AcademicPaper]:
         primary_category = ""
         tags = entry.get("tags", [])
         for tag in tags:
-            term = tag.get("term", "")
-            if term:
+            if term := tag.get("term", ""):
                 categories.append(term)
                 # First tag is usually primary category
                 if not primary_category:
@@ -291,10 +289,10 @@ async def fetch_academic_papers(
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                    url,
-                    timeout=aiohttp.ClientTimeout(total=timeout),
-                    headers={"User-Agent": "Foresight-App/1.0 (Research Pipeline)"},
-                ) as response:
+                                    url,
+                                    timeout=aiohttp.ClientTimeout(total=timeout),
+                                    headers={"User-Agent": "Foresight-App/1.0 (Research Pipeline)"},
+                                ) as response:
                     if response.status == 200:
                         content = await response.text()
 
@@ -322,8 +320,7 @@ async def fetch_academic_papers(
 
                         # Parse entries
                         for entry in feed.entries:
-                            paper = _parse_arxiv_entry(entry)
-                            if paper:
+                            if paper := _parse_arxiv_entry(entry):
                                 papers.append(paper)
 
                         logger.info(

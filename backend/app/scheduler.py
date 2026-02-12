@@ -89,10 +89,9 @@ async def run_scheduled_workstream_scans():
                     continue
 
                 config = _build_workstream_scan_config(ws, "auto_scan_scheduler")
-                queued = _auto_queue_workstream_scan(
+                if queued := _auto_queue_workstream_scan(
                     supabase, ws["id"], ws["user_id"], config
-                )
-                if queued:
+                ):
                     scans_queued += 1
                     logger.info(
                         f"Queued auto-scan for workstream '{ws['name']}' ({ws['id']})"
@@ -230,8 +229,7 @@ async def run_nightly_reputation_aggregation():
     try:
         result = domain_reputation_service.recalculate_all(supabase)
         domains_updated = result.get("domains_updated", 0)
-        errors = result.get("errors", [])
-        if errors:
+        if errors := result.get("errors", []):
             logger.warning(
                 "Nightly reputation aggregation completed with %d errors: %s",
                 len(errors),
@@ -258,8 +256,7 @@ async def run_nightly_sqi_recalculation():
         result = quality_service.recalculate_all_cards(supabase)
         cards_succeeded = result.get("cards_succeeded", 0)
         cards_failed = result.get("cards_failed", 0)
-        errors = result.get("errors", [])
-        if errors:
+        if errors := result.get("errors", []):
             logger.warning(
                 "Nightly SQI recalculation completed with %d card errors: %s",
                 cards_failed,

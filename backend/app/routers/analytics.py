@@ -268,7 +268,8 @@ async def get_processing_metrics(
 
     validations_data = validations_response.data or []
     total_validations = len(validations_data)
-    correct_count = sum(1 for v in validations_data if v.get("is_correct"))
+    correct_count = sum(bool(v.get("is_correct"))
+                    for v in validations_data)
     accuracy = (
         (correct_count / total_validations * 100) if total_validations > 0 else None
     )
@@ -297,14 +298,11 @@ async def get_processing_metrics(
     cards_generated = len(cards_data)
 
     # Count cards with all 4 scoring dimensions
-    cards_with_all_scores = sum(
-        1
-        for c in cards_data
-        if c.get("impact_score") is not None
-        and c.get("velocity_score") is not None
-        and c.get("novelty_score") is not None
-        and c.get("risk_score") is not None
-    )
+    cards_with_all_scores = sum(bool(c.get("impact_score") is not None
+                                    and c.get("velocity_score") is not None
+                                    and c.get("novelty_score") is not None
+                                    and c.get("risk_score") is not None)
+                            for c in cards_data)
 
     # -------------------------------------------------------------------------
     # Error Summary
@@ -439,7 +437,7 @@ async def get_pillar_coverage(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("pillar coverage retrieval", e),
-        )
+        ) from e
 
 
 @router.get("/analytics/insights", response_model=InsightsResponse)
@@ -684,7 +682,7 @@ async def get_analytics_insights(
         logger.error(f"Analytics insights endpoint failed: {str(e)}")
         raise HTTPException(
             status_code=500, detail=_safe_error("analytics insights", e)
-        )
+        ) from e
 
 
 @router.get("/analytics/velocity", response_model=VelocityResponse)
@@ -765,9 +763,7 @@ async def get_trend_velocity(
         daily_data = defaultdict(lambda: {"velocity_sum": 0, "count": 0, "scores": []})
 
         for card in cards:
-            # Extract date from created_at
-            created_at = card.get("created_at", "")
-            if created_at:
+            if created_at := card.get("created_at", ""):
                 date_str = created_at[:10]  # YYYY-MM-DD
                 velocity = card.get("velocity_score")
                 if velocity is not None:
@@ -827,7 +823,7 @@ async def get_trend_velocity(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("velocity analytics retrieval", e),
-        )
+        ) from e
 
 
 @router.get("/analytics/system-stats", response_model=SystemWideStats)
@@ -896,8 +892,7 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
         pillar_counts = Counter()
         pillar_velocity = {}
         for card in pillar_data:
-            p = card.get("pillar_id")
-            if p:
+            if p := card.get("pillar_id"):
                 pillar_counts[p] += 1
                 if p not in pillar_velocity:
                     pillar_velocity[p] = []
@@ -934,8 +929,7 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
 
         stage_counts = Counter()
         for card in stage_data:
-            s = card.get("stage_id")
-            if s:
+            if s := card.get("stage_id"):
                 # Normalize stage_id - extract number from formats like "4_proof", "5_implementing"
                 stage_str = str(s)
                 stage_num = (
@@ -969,8 +963,7 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
 
         horizon_counts = Counter()
         for card in horizon_data:
-            h = card.get("horizon")
-            if h:
+            if h := card.get("horizon"):
                 horizon_counts[h] += 1
 
         cards_by_horizon = []
@@ -999,8 +992,7 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
         recent_pillar_counts = Counter()
         recent_pillar_velocity = {}
         for card in recent_pillar_data:
-            p = card.get("pillar_id")
-            if p:
+            if p := card.get("pillar_id"):
                 recent_pillar_counts[p] += 1
                 if p not in recent_pillar_velocity:
                     recent_pillar_velocity[p] = []
@@ -1046,17 +1038,15 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
         )
         hot_cards_data = hot_cards_resp.data or []
 
-        hot_topics = []
-        for card in hot_cards_data:
-            hot_topics.append(
-                TrendingTopic(
-                    name=card.get("name", "Unknown"),
-                    count=1,
-                    trend="up",
-                    velocity_avg=card.get("velocity_score"),
-                )
+        hot_topics = [
+            TrendingTopic(
+                name=card.get("name", "Unknown"),
+                count=1,
+                trend="up",
+                velocity_avg=card.get("velocity_score"),
             )
-
+            for card in hot_cards_data
+        ]
         # -------------------------------------------------------------------------
         # Source Statistics
         # -------------------------------------------------------------------------
@@ -1072,15 +1062,12 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
             sources_data = sources_resp.data or []
 
             # Sources this week
-            sources_week = sum(
-                1
-                for s in sources_data
-                if s.get("created_at")
-                and datetime.fromisoformat(
-                    s["created_at"].replace("Z", "+00:00")
-                ).replace(tzinfo=None)
-                > one_week_ago
-            )
+            sources_week = sum(bool(s.get("created_at")
+                                           and datetime.fromisoformat(
+                                               s["created_at"].replace("Z", "+00:00")
+                                           ).replace(tzinfo=None)
+                                           > one_week_ago)
+                           for s in sources_data)
 
             # Sources by type
             source_types = Counter()
@@ -1114,15 +1101,12 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
             completed_runs = [
                 r for r in discovery_data if r.get("status") == "completed"
             ]
-            runs_week = sum(
-                1
-                for r in discovery_data
-                if r.get("started_at")
-                and datetime.fromisoformat(
-                    r["started_at"].replace("Z", "+00:00")
-                ).replace(tzinfo=None)
-                > one_week_ago
-            )
+            runs_week = sum(bool(r.get("started_at")
+                                        and datetime.fromisoformat(
+                                            r["started_at"].replace("Z", "+00:00")
+                                        ).replace(tzinfo=None)
+                                        > one_week_ago)
+                        for r in discovery_data)
 
             total_discovered = sum(r.get("cards_created", 0) for r in completed_runs)
             avg_per_run = (
@@ -1138,15 +1122,12 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
                 )
                 total_searches = search_resp.count or 0
                 search_data = search_resp.data or []
-                searches_week = sum(
-                    1
-                    for s in search_data
-                    if s.get("executed_at")
-                    and datetime.fromisoformat(
-                        s["executed_at"].replace("Z", "+00:00")
-                    ).replace(tzinfo=None)
-                    > one_week_ago
-                )
+                searches_week = sum(bool(s.get("executed_at")
+                                                    and datetime.fromisoformat(
+                                                        s["executed_at"].replace("Z", "+00:00")
+                                                    ).replace(tzinfo=None)
+                                                    > one_week_ago)
+                                for s in search_data)
             except Exception:
                 total_searches = 0
                 searches_week = 0
@@ -1178,15 +1159,12 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
             ws_data = ws_resp.data or []
 
             # Active workstreams (updated in last 30 days)
-            active_workstreams = sum(
-                1
-                for w in ws_data
-                if w.get("updated_at")
-                and datetime.fromisoformat(
-                    w["updated_at"].replace("Z", "+00:00")
-                ).replace(tzinfo=None)
-                > one_month_ago
-            )
+            active_workstreams = sum(bool(w.get("updated_at")
+                                                 and datetime.fromisoformat(
+                                                     w["updated_at"].replace("Z", "+00:00")
+                                                 ).replace(tzinfo=None)
+                                                 > one_month_ago)
+                                 for w in ws_data)
 
             # Unique cards in workstreams
             ws_cards_resp = (
@@ -1194,7 +1172,7 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
             )
             ws_cards_data = ws_cards_resp.data or []
             unique_cards_in_ws = len(
-                set(c.get("card_id") for c in ws_cards_data if c.get("card_id"))
+                {c.get("card_id") for c in ws_cards_data if c.get("card_id")}
             )
 
             avg_cards_per_ws = (
@@ -1224,10 +1202,10 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
 
             total_follows = len(follows_data)
             unique_cards_followed = len(
-                set(f.get("card_id") for f in follows_data if f.get("card_id"))
+                {f.get("card_id") for f in follows_data if f.get("card_id")}
             )
             unique_users_following = len(
-                set(f.get("user_id") for f in follows_data if f.get("user_id"))
+                {f.get("user_id") for f in follows_data if f.get("user_id")}
             )
 
             # Most followed cards
@@ -1300,7 +1278,7 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("system-wide stats retrieval", e),
-        )
+        ) from e
 
 
 @router.get("/analytics/personal-stats", response_model=PersonalStats)
@@ -1415,12 +1393,14 @@ async def get_personal_stats(current_user: dict = Depends(get_current_user)):
 
         # Calculate percentiles
         user_follows_count = user_follow_counts.get(user_id, 0)
-        follows_below = sum(1 for c in all_follow_counts if c < user_follows_count)
+        follows_below = sum(bool(c < user_follows_count)
+                        for c in all_follow_counts)
         user_percentile_follows = (
             (follows_below / len(all_follow_counts) * 100) if all_follow_counts else 0
         )
 
-        ws_below = sum(1 for c in all_ws_counts if c < user_workstream_count)
+        ws_below = sum(bool(c < user_workstream_count)
+                   for c in all_ws_counts)
         user_percentile_workstreams = (
             (ws_below / len(all_ws_counts) * 100) if all_ws_counts else 0
         )
@@ -1446,11 +1426,9 @@ async def get_personal_stats(current_user: dict = Depends(get_current_user)):
 
         # Community pillar distribution from all follows
         community_pillar_counts = Counter()
-        # Get pillar for all followed cards
-        all_card_ids = list(
-            set(f.get("card_id") for f in all_follows_data if f.get("card_id"))
-        )
-        if all_card_ids:
+        if all_card_ids := list(
+            {f.get("card_id") for f in all_follows_data if f.get("card_id")}
+        ):
             cards_pillar_resp = (
                 supabase.table("cards")
                 .select("id, pillar_id")
@@ -1462,8 +1440,7 @@ async def get_personal_stats(current_user: dict = Depends(get_current_user)):
             }
             for f in all_follows_data:
                 card_id = f.get("card_id")
-                pillar = card_pillars.get(card_id)
-                if pillar:
+                if pillar := card_pillars.get(card_id):
                     community_pillar_counts[pillar] += 1
 
         total_community_follows = sum(community_pillar_counts.values()) or 1
@@ -1542,8 +1519,7 @@ async def get_personal_stats(current_user: dict = Depends(get_current_user)):
 
         recent_card_counts = Counter()
         for f in recent_follows_data:
-            created_at = f.get("created_at")
-            if created_at:
+            if created_at := f.get("created_at"):
                 try:
                     dt = datetime.fromisoformat(
                         created_at.replace("Z", "+00:00")
@@ -1596,11 +1572,11 @@ async def get_personal_stats(current_user: dict = Depends(get_current_user)):
             .execute()
         )
         cards_in_workstreams = len(
-            set(
+            {
                 c.get("card_id")
                 for c in (user_ws_cards_resp.data or [])
                 if c.get("card_id")
-            )
+            }
         )
 
         # -------------------------------------------------------------------------
@@ -1624,7 +1600,7 @@ async def get_personal_stats(current_user: dict = Depends(get_current_user)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("personal stats retrieval", e),
-        )
+        ) from e
 
 
 @router.get("/analytics/top-domains")
@@ -1650,4 +1626,4 @@ async def get_top_domains(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("top domains retrieval", e),
-        )
+        ) from e

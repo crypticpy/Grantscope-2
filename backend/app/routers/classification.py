@@ -139,7 +139,8 @@ async def get_validation_stats(current_user: dict = Depends(get_current_user)):
         }
 
     total = len(validations_response.data)
-    correct = sum(1 for v in validations_response.data if v["is_correct"])
+    correct = sum(bool(v["is_correct"])
+              for v in validations_response.data)
     incorrect = total - correct
     accuracy = (correct / total * 100) if total > 0 else 0
 
@@ -199,10 +200,7 @@ async def get_cards_pending_validation(
         else set()
     )
 
-    # Filter to only cards without validations
-    pending_cards = [c for c in cards_response.data if c["id"] not in validated_ids]
-
-    return pending_cards
+    return [c for c in cards_response.data if c["id"] not in validated_ids]
 
 
 @router.get("/validation/accuracy", response_model=ClassificationMetrics)
@@ -258,16 +256,16 @@ async def get_classification_accuracy(
 
     # Compute accuracy metrics
     total_validations = len(validations_response.data)
-    correct_count = sum(1 for v in validations_response.data if v.get("is_correct"))
+    correct_count = sum(bool(v.get("is_correct"))
+                    for v in validations_response.data)
     accuracy_percentage = (
         (correct_count / total_validations * 100) if total_validations > 0 else None
     )
 
     logger.info(
-        f"Classification accuracy computed: {correct_count}/{total_validations} "
-        f"({accuracy_percentage:.2f}% accuracy)"
+        f"Classification accuracy computed: {correct_count}/{total_validations} ({accuracy_percentage:.2f}% accuracy)"
         if accuracy_percentage
-        else f"Classification accuracy: No validations available"
+        else "Classification accuracy: No validations available"
     )
 
     return ClassificationMetrics(
@@ -329,7 +327,8 @@ async def get_accuracy_by_pillar(
 
     # Compute overall metrics
     total_validations = len(validations_response.data)
-    correct_count = sum(1 for v in validations_response.data if v.get("is_correct"))
+    correct_count = sum(bool(v.get("is_correct"))
+                    for v in validations_response.data)
     accuracy_percentage = (
         (correct_count / total_validations * 100) if total_validations > 0 else None
     )

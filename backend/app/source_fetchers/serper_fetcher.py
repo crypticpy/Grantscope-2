@@ -69,17 +69,15 @@ async def search_web(
             response.raise_for_status()
             data = response.json()
 
-        results = []
-        for item in data.get("organic", []):
-            results.append(
-                SerperResult(
-                    title=item.get("title", ""),
-                    url=item.get("link", ""),
-                    snippet=item.get("snippet", ""),
-                    date=item.get("date"),
-                )
+        results = [
+            SerperResult(
+                title=item.get("title", ""),
+                url=item.get("link", ""),
+                snippet=item.get("snippet", ""),
+                date=item.get("date"),
             )
-
+            for item in data.get("organic", [])
+        ]
         logger.info(f"Serper web search: '{query[:50]}' → {len(results)} results")
         return results
 
@@ -117,18 +115,16 @@ async def search_news(
             response.raise_for_status()
             data = response.json()
 
-        results = []
-        for item in data.get("news", []):
-            results.append(
-                SerperResult(
-                    title=item.get("title", ""),
-                    url=item.get("link", ""),
-                    snippet=item.get("snippet", ""),
-                    source_name=item.get("source", ""),
-                    date=item.get("date"),
-                )
+        results = [
+            SerperResult(
+                title=item.get("title", ""),
+                url=item.get("link", ""),
+                snippet=item.get("snippet", ""),
+                source_name=item.get("source", ""),
+                date=item.get("date"),
             )
-
+            for item in data.get("news", [])
+        ]
         logger.info(f"Serper news search: '{query[:50]}' → {len(results)} results")
         return results
 

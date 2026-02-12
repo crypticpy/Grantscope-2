@@ -50,7 +50,9 @@ async def list_saved_searches(current_user: dict = Depends(get_current_user)):
             logger.warning("saved_searches table missing; returning empty list")
             return SavedSearchList(saved_searches=[], total_count=0)
         logger.error(f"Failed to list saved searches: {e}")
-        raise HTTPException(status_code=500, detail="Failed to list saved searches")
+        raise HTTPException(
+            status_code=500, detail="Failed to list saved searches"
+        ) from e
 
     saved_searches = [SavedSearch(**ss) for ss in (response.data or [])]
     return SavedSearchList(
@@ -99,9 +101,11 @@ async def create_saved_search(
             raise HTTPException(
                 status_code=503,
                 detail="Saved searches are not configured (missing saved_searches table)",
-            )
+            ) from e
         logger.error(f"Failed to create saved search: {e}")
-        raise HTTPException(status_code=500, detail="Failed to create saved search")
+        raise HTTPException(
+            status_code=500, detail="Failed to create saved search"
+        ) from e
     if response.data:
         return SavedSearch(**response.data[0])
     else:
@@ -141,9 +145,11 @@ async def get_saved_search(
             raise HTTPException(
                 status_code=503,
                 detail="Saved searches are not configured (missing saved_searches table)",
-            )
+            ) from e
         logger.error(f"Failed to fetch saved search {saved_search_id}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch saved search")
+        raise HTTPException(
+            status_code=500, detail="Failed to fetch saved search"
+        ) from e
 
     if not response.data:
         raise HTTPException(status_code=404, detail="Saved search not found")
@@ -169,11 +175,13 @@ async def get_saved_search(
             raise HTTPException(
                 status_code=503,
                 detail="Saved searches are not configured (missing saved_searches table)",
-            )
+            ) from e
         logger.error(
             f"Failed to update saved search last_used_at {saved_search_id}: {e}"
         )
-        raise HTTPException(status_code=500, detail="Failed to update saved search")
+        raise HTTPException(
+            status_code=500, detail="Failed to update saved search"
+        ) from e
 
     if update_response.data:
         return SavedSearch(**update_response.data[0])
@@ -219,9 +227,11 @@ async def update_saved_search(
             raise HTTPException(
                 status_code=503,
                 detail="Saved searches are not configured (missing saved_searches table)",
-            )
+            ) from e
         logger.error(f"Failed to fetch saved search for update {saved_search_id}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch saved search")
+        raise HTTPException(
+            status_code=500, detail="Failed to fetch saved search"
+        ) from e
 
     if not ss_check.data:
         raise HTTPException(status_code=404, detail="Saved search not found")
@@ -255,9 +265,11 @@ async def update_saved_search(
             raise HTTPException(
                 status_code=503,
                 detail="Saved searches are not configured (missing saved_searches table)",
-            )
+            ) from e
         logger.error(f"Failed to update saved search {saved_search_id}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to update saved search")
+        raise HTTPException(
+            status_code=500, detail="Failed to update saved search"
+        ) from e
 
     if response.data:
         return SavedSearch(**response.data[0])
@@ -299,9 +311,11 @@ async def delete_saved_search(
             raise HTTPException(
                 status_code=503,
                 detail="Saved searches are not configured (missing saved_searches table)",
-            )
+            ) from e
         logger.error(f"Failed to fetch saved search for delete {saved_search_id}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch saved search")
+        raise HTTPException(
+            status_code=500, detail="Failed to fetch saved search"
+        ) from e
 
     if not ss_check.data:
         raise HTTPException(status_code=404, detail="Saved search not found")
@@ -320,9 +334,11 @@ async def delete_saved_search(
             raise HTTPException(
                 status_code=503,
                 detail="Saved searches are not configured (missing saved_searches table)",
-            )
+            ) from e
         logger.error(f"Failed to delete saved search {saved_search_id}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to delete saved search")
+        raise HTTPException(
+            status_code=500, detail="Failed to delete saved search"
+        ) from e
 
     return {"status": "deleted", "message": "Saved search successfully deleted"}
 
@@ -384,7 +400,7 @@ async def list_search_history(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("search history retrieval", e),
-        )
+        ) from e
 
 
 @router.post(
@@ -442,12 +458,12 @@ async def record_search_history(
             raise HTTPException(
                 status_code=503,
                 detail="Search history is not configured (missing search_history table)",
-            )
+            ) from e
         logger.error(f"Failed to record search history: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("search history recording", e),
-        )
+        ) from e
 
 
 @router.delete("/search-history/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -492,12 +508,12 @@ async def delete_search_history_entry(
             raise HTTPException(
                 status_code=503,
                 detail="Search history is not configured (missing search_history table)",
-            )
+            ) from e
         logger.error(f"Failed to delete search history entry: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("search history deletion", e),
-        )
+        ) from e
 
 
 @router.delete("/search-history", status_code=status.HTTP_204_NO_CONTENT)
@@ -519,9 +535,9 @@ async def clear_search_history(current_user: dict = Depends(get_current_user)):
             raise HTTPException(
                 status_code=503,
                 detail="Search history is not configured (missing search_history table)",
-            )
+            ) from e
         logger.error(f"Failed to clear search history: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("search history clearing", e),
-        )
+        ) from e

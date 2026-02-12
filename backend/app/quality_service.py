@@ -230,9 +230,7 @@ def _calculate_source_diversity(sources: list[dict]) -> int:
         return 70
     if count == 2:
         return 50
-    if count == 1:
-        return 20
-    return 0
+    return 20 if count == 1 else 0
 
 
 def _calculate_corroboration(
@@ -389,9 +387,7 @@ def _calculate_recency(sources: list[dict]) -> int:
         return 100
     if avg_age <= 90:
         return 70
-    if avg_age <= 180:
-        return 40
-    return 20
+    return 40 if avg_age <= 180 else 20
 
 
 def _calculate_municipal_specificity(sources: list[dict]) -> int:
@@ -443,9 +439,7 @@ def _calculate_municipal_specificity(sources: list[dict]) -> int:
             except (ValueError, TypeError):
                 pass
 
-        # Check for .gov domain
-        url = source.get("url", "")
-        if url:
+        if url := source.get("url", ""):
             try:
                 hostname = urlparse(url).hostname or ""
                 if hostname.lower().endswith(".gov"):
@@ -764,7 +758,4 @@ def get_breakdown(supabase_client: Client, card_id: str) -> Optional[dict]:
         return None
 
     breakdown = rows[0].get("quality_breakdown")
-    if not breakdown or breakdown == {}:
-        return None
-
-    return breakdown
+    return None if not breakdown or breakdown == {} else breakdown

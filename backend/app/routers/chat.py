@@ -109,7 +109,7 @@ async def list_chat_conversations(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("listing conversations", e),
-        )
+        ) from e
 
 
 @router.get("/chat/conversations/{conversation_id}")
@@ -161,7 +161,7 @@ async def get_chat_conversation(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("fetching conversation", e),
-        )
+        ) from e
 
 
 @router.delete("/chat/conversations/{conversation_id}")
@@ -206,7 +206,7 @@ async def delete_chat_conversation(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("deleting conversation", e),
-        )
+        ) from e
 
 
 @router.get("/chat/suggestions")
@@ -230,16 +230,15 @@ async def chat_suggestions(
         )
 
     try:
-        suggestions = await chat_generate_suggestions(
+        return await chat_generate_suggestions(
             scope=scope,
             scope_id=scope_id,
             supabase_client=supabase,
             user_id=user_id,
         )
-        return suggestions
     except Exception as e:
         logger.error(f"Failed to generate chat suggestions: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("generating suggestions", e),
-        )
+        ) from e

@@ -55,8 +55,10 @@ async def start_workstream_scan(
     # Validate UUID format
     try:
         uuid.UUID(workstream_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid workstream ID format")
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400, detail="Invalid workstream ID format"
+        ) from e
 
     # Verify workstream belongs to user
     ws_response = (
@@ -154,7 +156,9 @@ async def start_workstream_scan(
         raise  # Re-raise HTTP exceptions as-is
     except Exception as e:
         logger.error(f"Failed to create workstream scan: {e}")
-        raise HTTPException(status_code=500, detail=_safe_error("scan initiation", e))
+        raise HTTPException(
+            status_code=500, detail=_safe_error("scan initiation", e)
+        ) from e
 
 
 @router.get(
@@ -213,7 +217,7 @@ async def get_workstream_scan_status(
         logger.error(f"Error querying workstream_scans: {e}")
         raise HTTPException(
             status_code=500, detail=_safe_error("database operation", e)
-        )
+        ) from e
 
     if not result.data:
         raise HTTPException(
@@ -246,7 +250,7 @@ async def get_workstream_scan_status(
         logger.error(f"Error building scan status response: {e}, scan data: {scan}")
         raise HTTPException(
             status_code=500, detail=_safe_error("response processing", e)
-        )
+        ) from e
 
 
 @router.get(
@@ -293,11 +297,8 @@ async def get_workstream_scan_history(
     today_start = datetime.now(timezone.utc).replace(
         hour=0, minute=0, second=0, microsecond=0
     )
-    scans_today = sum(
-        1
-        for s in scans
-        if s.get("created_at") and s["created_at"] >= today_start.isoformat()
-    )
+    scans_today = sum(bool(s.get("created_at") and s["created_at"] >= today_start.isoformat())
+                  for s in scans)
 
     def parse_json_field(val):
         if isinstance(val, str):

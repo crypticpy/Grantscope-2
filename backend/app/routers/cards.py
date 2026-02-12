@@ -308,8 +308,7 @@ async def search_cards(request: AdvancedSearchRequest):
                     },
                 ).execute()
 
-                matched = search_response.data or []
-                if matched:
+                if matched := search_response.data or []:
                     similarity_map = {
                         item["id"]: item.get("similarity", 0.0) for item in matched
                     }
@@ -424,7 +423,7 @@ async def search_cards(request: AdvancedSearchRequest):
 
     except Exception as e:
         logger.error(f"Search error: {e}")
-        raise HTTPException(status_code=500, detail=_safe_error("search", e))
+        raise HTTPException(status_code=500, detail=_safe_error("search", e)) from e
 
 
 # ============================================================================
@@ -475,8 +474,7 @@ async def get_similar_cards(card_id: str, limit: int = 5):
             },
         ).execute()
 
-        # Filter out the source card itself
-        similar_cards = [
+        return [
             SimilarCard(
                 id=c["id"],
                 name=c["name"],
@@ -487,9 +485,6 @@ async def get_similar_cards(card_id: str, limit: int = 5):
             for c in response.data
             if c["id"] != card_id
         ][:limit]
-
-        return similar_cards
-
     except Exception as e:
         logger.error(f"Similar cards search failed: {str(e)}")
         # Fallback to simple text-based similarity
@@ -580,30 +575,28 @@ async def preview_filter_count(
         cards = filtered_by_stage
 
     # Apply keyword filtering (need to fetch full text for this)
-    if filters.keywords:
-        # Fetch full card data for keyword matching
-        if cards:
-            card_ids = [c["id"] for c in cards]
-            full_response = (
-                supabase.table("cards")
-                .select("id, name, summary, description, pillar_id, horizon, stage_id")
-                .in_("id", card_ids)
-                .execute()
+    if filters.keywords and cards:
+        card_ids = [c["id"] for c in cards]
+        full_response = (
+            supabase.table("cards")
+            .select("id, name, summary, description, pillar_id, horizon, stage_id")
+            .in_("id", card_ids)
+            .execute()
+        )
+        full_cards = full_response.data or []
+    
+        filtered_cards = []
+        for card in full_cards:
+            card_text = " ".join(
+                [
+                    (card.get("name") or "").lower(),
+                    (card.get("summary") or "").lower(),
+                    (card.get("description") or "").lower(),
+                ]
             )
-            full_cards = full_response.data or []
-
-            filtered_cards = []
-            for card in full_cards:
-                card_text = " ".join(
-                    [
-                        (card.get("name") or "").lower(),
-                        (card.get("summary") or "").lower(),
-                        (card.get("description") or "").lower(),
-                    ]
-                )
-                if any(keyword.lower() in card_text for keyword in filters.keywords):
-                    filtered_cards.append(card)
-            cards = filtered_cards
+            if any(keyword.lower() in card_text for keyword in filters.keywords):
+                filtered_cards.append(card)
+        cards = filtered_cards
 
     # Build response
     sample_cards = [

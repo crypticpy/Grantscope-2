@@ -213,9 +213,7 @@ class DigestService:
                 .eq("user_id", user_id)
                 .execute()
             )
-            if response.data:
-                return response.data[0]
-            return None
+            return response.data[0] if response.data else None
         except Exception as e:
             logger.error(f"Failed to get notification preferences for {user_id}: {e}")
             return None
@@ -238,9 +236,7 @@ class DigestService:
                 .execute()
             )
             workstreams = ws_resp.data or []
-            ws_map = {ws["id"]: ws["name"] for ws in workstreams}
-
-            if ws_map:
+            if ws_map := {ws["id"]: ws["name"] for ws in workstreams}:
                 # Get cards added to workstreams since last digest
                 wc_resp = (
                     self.supabase.table("workstream_cards")
@@ -283,7 +279,7 @@ class DigestService:
             for follow in follows_resp.data or []:
                 card = follow.get("cards", {})
                 # Avoid duplicates with workstream cards
-                if not any(r["name"] == card.get("name") for r in results):
+                if all(r["name"] != card.get("name") for r in results):
                     results.append(
                         {
                             "name": card.get("name", "Unknown Signal"),
@@ -405,16 +401,16 @@ class DigestService:
                     .limit(MAX_PATTERN_INSIGHTS)
                     .execute()
                 )
-                for pi in pi_resp.data or []:
-                    results.append(
-                        {
-                            "title": pi.get("title", ""),
-                            "summary": pi.get("description", pi.get("summary", "")),
-                            "pattern_type": pi.get("pattern_type", ""),
-                            "affected_pillars": pi.get("affected_pillars", []),
-                            "confidence": pi.get("confidence_score", 0),
-                        }
-                    )
+                results.extend(
+                    {
+                        "title": pi.get("title", ""),
+                        "summary": pi.get("description", pi.get("summary", "")),
+                        "pattern_type": pi.get("pattern_type", ""),
+                        "affected_pillars": pi.get("affected_pillars", []),
+                        "confidence": pi.get("confidence_score", 0),
+                    }
+                    for pi in pi_resp.data or []
+                )
             except Exception:
                 # pattern_insights table may not exist yet
                 pass
@@ -437,20 +433,20 @@ class DigestService:
                             if isinstance(insights_json, list)
                             else insights_json.get("insights", [])
                         )
-                        for insight in insights_list[:MAX_PATTERN_INSIGHTS]:
-                            results.append(
-                                {
-                                    "title": insight.get("title", ""),
-                                    "summary": insight.get(
-                                        "summary", insight.get("description", "")
-                                    ),
-                                    "pattern_type": "ai_insight",
-                                    "affected_pillars": insight.get(
-                                        "affected_pillars",
-                                        insight.get("pillars", []),
-                                    ),
-                                }
-                            )
+                        results.extend(
+                            {
+                                "title": insight.get("title", ""),
+                                "summary": insight.get(
+                                    "summary", insight.get("description", "")
+                                ),
+                                "pattern_type": "ai_insight",
+                                "affected_pillars": insight.get(
+                                    "affected_pillars",
+                                    insight.get("pillars", []),
+                                ),
+                            }
+                            for insight in insights_list[:MAX_PATTERN_INSIGHTS]
+                        )
                 except Exception:
                     pass
 
@@ -545,8 +541,7 @@ class DigestService:
                 .eq("user_id", user_id)
                 .execute()
             )
-            ws_ids = [ws["id"] for ws in (ws_resp.data or [])]
-            if ws_ids:
+            if ws_ids := [ws["id"] for ws in (ws_resp.data or [])]:
                 wc_resp = (
                     self.supabase.table("workstream_cards")
                     .select("card_id")
@@ -563,8 +558,7 @@ class DigestService:
 
     def _get_lookback_since(self, prefs: Dict[str, Any]) -> datetime:
         """Determine the start of the digest period based on preferences."""
-        last_sent = prefs.get("last_digest_sent_at")
-        if last_sent:
+        if last_sent := prefs.get("last_digest_sent_at"):
             if isinstance(last_sent, str):
                 try:
                     return datetime.fromisoformat(last_sent.replace("Z", "+00:00"))
@@ -643,9 +637,7 @@ class DigestService:
     ) -> str:
         """Generate a simple fallback HTML email without the LLM."""
         sections = summary_json.get("sections", {})
-        parts = []
-
-        parts.append(
+        parts = [
             f"""<html>
 <head><meta charset="utf-8"></head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -656,11 +648,9 @@ class DigestService:
 </div>
 <div style="border: 1px solid #E5E7EB; border-top: none; padding: 24px;
   border-radius: 0 0 8px 8px;">"""
-        )
+        ]
 
-        # New Signals
-        new_signals = sections.get("new_signals", [])
-        if new_signals:
+        if new_signals := sections.get("new_signals", []):
             parts.append(
                 '<h2 style="color: #2563EB; border-bottom: 2px solid #E5E7EB; '
                 f'padding-bottom: 8px;">New Signals ({len(new_signals)})</h2><ul>'
@@ -682,9 +672,7 @@ class DigestService:
                 )
             parts.append("</ul>")
 
-        # Velocity Changes
-        velocity = sections.get("velocity_changes", [])
-        if velocity:
+        if velocity := sections.get("velocity_changes", []):
             parts.append(
                 '<h2 style="color: #2563EB; border-bottom: 2px solid #E5E7EB; '
                 f'padding-bottom: 8px;">Velocity Changes ({len(velocity)})</h2><ul>'
@@ -703,9 +691,7 @@ class DigestService:
                 )
             parts.append("</ul>")
 
-        # Pattern Insights
-        patterns = sections.get("pattern_insights", [])
-        if patterns:
+        if patterns := sections.get("pattern_insights", []):
             parts.append(
                 '<h2 style="color: #2563EB; border-bottom: 2px solid #E5E7EB; '
                 f'padding-bottom: 8px;">AI Insights ({len(patterns)})</h2><ul>'
@@ -725,9 +711,7 @@ class DigestService:
                 )
             parts.append("</ul>")
 
-        # Workstream Updates
-        ws_updates = sections.get("workstream_updates", [])
-        if ws_updates:
+        if ws_updates := sections.get("workstream_updates", []):
             parts.append(
                 '<h2 style="color: #2563EB; border-bottom: 2px solid #E5E7EB; '
                 'padding-bottom: 8px;">Your Workstreams</h2><ul>'
@@ -984,19 +968,13 @@ class DigestService:
 
         if freq == "daily":
             # Due if never sent or last sent > 20 hours ago
-            if not last_sent_dt:
-                return True
-            return (now - last_sent_dt) > timedelta(hours=20)
-
+            return (now - last_sent_dt) > timedelta(hours=20) if last_sent_dt else True
         elif freq == "weekly":
             # Due if today matches the configured day and not already sent this week
             digest_day = prefs.get("digest_day", "monday")
             if today_weekday != digest_day:
                 return False
-            if not last_sent_dt:
-                return True
-            return (now - last_sent_dt) > timedelta(days=5)
-
+            return (now - last_sent_dt) > timedelta(days=5) if last_sent_dt else True
         return False
 
     async def _get_notification_email(
@@ -1008,9 +986,7 @@ class DigestService:
         Uses notification_email from preferences if set, otherwise falls
         back to the user's auth email.
         """
-        # Check notification_email override first
-        notification_email = prefs.get("notification_email")
-        if notification_email:
+        if notification_email := prefs.get("notification_email"):
             return notification_email
 
         # Fall back to auth email via users table

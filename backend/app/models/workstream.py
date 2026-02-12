@@ -59,7 +59,7 @@ class WorkstreamCreate(BaseModel):
     def keywords_must_be_valid(cls, v):
         if v:
             # Clean and deduplicate keywords
-            cleaned = list(set(kw.strip().lower() for kw in v if kw and kw.strip()))
+            cleaned = list({kw.strip().lower() for kw in v if kw and kw.strip()})
             return cleaned[:20]  # Max 20 keywords
         return []
 

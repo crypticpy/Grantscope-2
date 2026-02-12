@@ -109,7 +109,7 @@ async def trigger_manual_scan(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("manual scan", e),
-        )
+        ) from e
 
 
 # ============================================================================
@@ -153,8 +153,7 @@ async def rate_source(
                 .execute()
             )
             for link in card_links.data or []:
-                card_id = link.get("card_id")
-                if card_id:
+                if card_id := link.get("card_id"):
                     try:
                         quality_service.calculate_sqi(supabase, card_id)
                     except Exception as sqi_err:
@@ -174,7 +173,7 @@ async def rate_source(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("rating save", e),
-        )
+        ) from e
 
 
 @router.get("/sources/{source_id}/ratings", response_model=SourceRatingAggregate)
@@ -224,7 +223,7 @@ async def get_source_ratings(source_id: str, user=Depends(get_current_user)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("source ratings retrieval", e),
-        )
+        ) from e
 
 
 @router.delete("/sources/{source_id}/rate")
@@ -240,7 +239,7 @@ async def delete_source_rating(source_id: str, user=Depends(get_current_user)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("rating deletion", e),
-        )
+        ) from e
 
 
 # ============================================================================
@@ -252,17 +251,14 @@ async def delete_source_rating(source_id: str, user=Depends(get_current_user)):
 async def get_card_quality(card_id: str, user=Depends(get_current_user)):
     """Get full SQI breakdown for a card."""
     try:
-        breakdown = quality_service.get_breakdown(supabase, card_id)
-        if not breakdown:
-            # Calculate on-demand if never calculated
-            breakdown = quality_service.calculate_sqi(supabase, card_id)
+        breakdown = quality_service.get_breakdown(supabase, card_id) or quality_service.calculate_sqi(supabase, card_id)
         return breakdown
     except Exception as e:
         logger.error(f"Failed to get quality for card {card_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("card quality retrieval", e),
-        )
+        ) from e
 
 
 @router.post("/cards/{card_id}/quality/recalculate")
@@ -272,28 +268,26 @@ async def recalculate_card_quality(
 ):
     """Force SQI recalculation for a card."""
     try:
-        result = quality_service.calculate_sqi(supabase, card_id)
-        return result
+        return quality_service.calculate_sqi(supabase, card_id)
     except Exception as e:
         logger.error(f"Failed to recalculate quality for card {card_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("card quality recalculation", e),
-        )
+        ) from e
 
 
 @router.post("/admin/quality/recalculate-all")
 async def recalculate_all_quality(user=Depends(get_current_user)):
     """Batch recalculate SQI for all cards. Admin only."""
     try:
-        result = quality_service.recalculate_all_cards(supabase)
-        return result
+        return quality_service.recalculate_all_cards(supabase)
     except Exception as e:
         logger.error(f"Failed to batch recalculate quality: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("batch quality recalculation", e),
-        )
+        ) from e
 
 
 @router.get("/cards/{card_id}/quality-score")
@@ -347,7 +341,7 @@ async def list_domain_reputations(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("domain reputations listing", e),
-        )
+        ) from e
 
 
 @router.get("/domain-reputation/{domain_id}")
@@ -367,7 +361,7 @@ async def get_domain_reputation(domain_id: str, user=Depends(get_current_user)):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_safe_error("domain reputation lookup", e),
-        )
+        ) from e
 
 
 @router.post("/admin/domain-reputation")
@@ -397,7 +391,7 @@ async def create_domain_reputation(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("domain reputation creation", e),
-        )
+        ) from e
 
 
 @router.patch("/admin/domain-reputation/{domain_id}")
@@ -433,7 +427,7 @@ async def update_domain_reputation(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("domain reputation update", e),
-        )
+        ) from e
 
 
 @router.delete("/admin/domain-reputation/{domain_id}")
@@ -447,21 +441,20 @@ async def delete_domain_reputation(domain_id: str, user=Depends(get_current_user
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("domain reputation deletion", e),
-        )
+        ) from e
 
 
 @router.post("/admin/domain-reputation/recalculate")
 async def recalculate_domain_reputations(user=Depends(get_current_user)):
     """Recalculate all composite scores from user ratings + pipeline stats."""
     try:
-        result = domain_reputation_service.recalculate_all(supabase)
-        return result
+        return domain_reputation_service.recalculate_all(supabase)
     except Exception as e:
         logger.error(f"Failed to recalculate domain reputations: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("domain reputations recalculation", e),
-        )
+        ) from e
 
 
 # NOTE: top-domains endpoint lives in analytics.py to avoid route duplication.

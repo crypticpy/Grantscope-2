@@ -81,10 +81,7 @@ async def create_workstream(
         # Apply workstream filters via shared helper
         cards = _filter_cards_for_workstream(workstream, cards)
 
-        # Limit to 20 cards
-        candidates = cards[:20]
-
-        if candidates:
+        if candidates := cards[:20]:
             now = datetime.now().isoformat()
             new_records = [
                 {
@@ -314,9 +311,7 @@ async def get_workstream_feed(
     )
     cards = response.data or []
 
-    # Apply stage filtering (extract number prefix from stage_id like "5_implementing")
-    stage_ids = workstream.get("stage_ids", [])
-    if stage_ids:
+    if stage_ids := workstream.get("stage_ids", []):
         filtered_by_stage = []
         for card in cards:
             card_stage_id = card.get("stage_id") or ""
@@ -327,9 +322,7 @@ async def get_workstream_feed(
                 filtered_by_stage.append(card)
         cards = filtered_by_stage
 
-    # Apply keyword filtering in Python (PostgREST doesn't support OR across multiple text columns easily)
-    keywords = workstream.get("keywords", [])
-    if keywords:
+    if keywords := workstream.get("keywords", []):
         filtered_cards = []
         for card in cards:
             card_text = " ".join(
@@ -419,9 +412,7 @@ async def auto_populate_workstream(
     response = query.order("created_at", desc=True).limit(fetch_limit).execute()
     cards = response.data or []
 
-    # Apply stage filtering (extract number prefix from stage_id like "5_implementing")
-    stage_ids = workstream.get("stage_ids", [])
-    if stage_ids:
+    if stage_ids := workstream.get("stage_ids", []):
         filtered_by_stage = []
         for card in cards:
             card_stage_id = card.get("stage_id") or ""
@@ -433,9 +424,7 @@ async def auto_populate_workstream(
                 filtered_by_stage.append(card)
         cards = filtered_by_stage
 
-    # Apply keyword filtering
-    keywords = workstream.get("keywords", [])
-    if keywords:
+    if keywords := workstream.get("keywords", []):
         filtered_cards = []
         for card in cards:
             card_text = " ".join(
@@ -495,27 +484,24 @@ async def auto_populate_workstream(
             status_code=500, detail="Failed to auto-populate workstream"
         )
 
-    # Build response with card details
-    added_cards = []
     card_map = {c["id"]: c for c in candidates}
-    for item in result.data:
-        added_cards.append(
-            WorkstreamCardWithDetails(
-                id=item["id"],
-                workstream_id=item["workstream_id"],
-                card_id=item["card_id"],
-                added_by=item["added_by"],
-                added_at=item["added_at"],
-                status=item.get("status", "inbox"),
-                position=item.get("position", 0),
-                notes=item.get("notes"),
-                reminder_at=item.get("reminder_at"),
-                added_from=item.get("added_from", "auto"),
-                updated_at=item.get("updated_at"),
-                card=card_map.get(item["card_id"]),
-            )
+    added_cards = [
+        WorkstreamCardWithDetails(
+            id=item["id"],
+            workstream_id=item["workstream_id"],
+            card_id=item["card_id"],
+            added_by=item["added_by"],
+            added_at=item["added_at"],
+            status=item.get("status", "inbox"),
+            position=item.get("position", 0),
+            notes=item.get("notes"),
+            reminder_at=item.get("reminder_at"),
+            added_from=item.get("added_from", "auto"),
+            updated_at=item.get("updated_at"),
+            card=card_map.get(item["card_id"]),
         )
-
+        for item in result.data
+    ]
     logger.info(
         f"Auto-populated workstream {workstream_id} with {len(added_cards)} cards"
     )
@@ -584,4 +570,4 @@ async def toggle_workstream_auto_scan(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("auto_scan update", e),
-        )
+        ) from e

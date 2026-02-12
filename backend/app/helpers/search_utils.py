@@ -120,4 +120,4 @@ def _extract_highlights(item: Dict[str, Any], query: str) -> Optional[List[str]]
         )
         highlights.append(snippet)
 
-    return highlights if highlights else None
+    return highlights or None

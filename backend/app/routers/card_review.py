@@ -250,9 +250,10 @@ async def bulk_review_cards(
 
         # Identify cards that don't exist
         missing_ids = set(card_ids) - existing_ids
-        for missing_id in missing_ids:
-            failed.append({"id": missing_id, "error": "Card not found"})
-
+        failed.extend(
+            {"id": missing_id, "error": "Card not found"}
+            for missing_id in missing_ids
+        )
         # Get the list of valid card IDs to process
         valid_ids = list(existing_ids)
 

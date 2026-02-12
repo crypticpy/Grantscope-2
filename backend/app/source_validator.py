@@ -488,10 +488,11 @@ class SourceValidator:
         # --- Medium confidence: content contains pre-print terminology ---
         if content:
             content_lower = content.lower()
-            for phrase in PREPRINT_CONTENT_PHRASES:
-                if phrase in content_lower:
-                    indicators.append(f"Content contains pre-print phrase: '{phrase}'")
-
+            indicators.extend(
+                f"Content contains pre-print phrase: '{phrase}'"
+                for phrase in PREPRINT_CONTENT_PHRASES
+                if phrase in content_lower
+            )
             if indicators:
                 return PrePrintResult(
                     is_preprint=True,
@@ -550,11 +551,7 @@ class SourceValidator:
         content_result = self.validate_content(content)
         freshness_result = self.validate_freshness(published_date, category)
 
-        # Only run pre-print detection if we have a URL to analyze
-        preprint_result: Optional[PrePrintResult] = None
-        if url:
-            preprint_result = self.detect_preprint(url, content)
-
+        preprint_result = self.detect_preprint(url, content) if url else None
         # Overall validity requires both content and freshness to pass.
         # Pre-print status is informational and does not block sources.
         is_valid = content_result.is_valid and freshness_result.is_valid
@@ -595,7 +592,7 @@ def _stale_reason_code(category: str) -> str:
     Returns:
         Reason code string like 'stale_news', 'stale_academic', etc.
     """
-    if category in ("news", "tech_blog", "rss"):
+    if category in {"news", "tech_blog", "rss"}:
         return "stale_news"
     elif category == "academic":
         return "stale_academic"

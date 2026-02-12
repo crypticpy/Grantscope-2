@@ -89,13 +89,10 @@ def get_client_ip(request: Request) -> str:
     # First, get the direct connection IP as fallback
     direct_ip = request.client.host if request.client else None
 
-    # Check X-Forwarded-For header (set by reverse proxies)
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        # Parse the chain of IPs
-        ips = [ip.strip() for ip in forwarded_for.split(",") if ip.strip()]
-
-        if ips:
+    if forwarded_for := request.headers.get("X-Forwarded-For"):
+        if ips := [
+            ip.strip() for ip in forwarded_for.split(",") if ip.strip()
+        ]:
             # Use rightmost non-trusted IP approach:
             # - The rightmost IPs are added by our trusted proxies
             # - The IP just before our proxies is the real client
@@ -119,9 +116,7 @@ def get_client_ip(request: Request) -> str:
                 )
                 # Fall through to use direct IP
 
-    # Check X-Real-IP header (alternative proxy header, set by nginx)
-    real_ip = request.headers.get("X-Real-IP")
-    if real_ip:
+    if real_ip := request.headers.get("X-Real-IP"):
         real_ip = real_ip.strip()
         if _is_valid_ip(real_ip):
             return real_ip
@@ -132,10 +127,7 @@ def get_client_ip(request: Request) -> str:
             )
 
     # Fallback to direct client connection IP
-    if direct_ip and _is_valid_ip(direct_ip):
-        return direct_ip
-
-    return "unknown"
+    return direct_ip if direct_ip and _is_valid_ip(direct_ip) else "unknown"
 
 
 # Initialize the rate limiter with custom IP extraction
@@ -233,9 +225,7 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
-        # Check Content-Length header if present
-        content_length = request.headers.get("content-length")
-        if content_length:
+        if content_length := request.headers.get("content-length"):
             try:
                 size = int(content_length)
                 if size > MAX_REQUEST_SIZE_BYTES:
@@ -513,6 +503,6 @@ def log_security_event(
     }
 
     if details:
-        log_data.update(details)
+        log_data |= details
 
     logger.warning(f"SECURITY_EVENT: {log_data}")

@@ -489,19 +489,18 @@ Respond as JSON:
         if urgency not in ("high", "medium", "low"):
             urgency = "medium"
 
-        title = str(result.get("pattern_title", ""))[:100]
-        if not title:
+        if title := str(result.get("pattern_title", ""))[:100]:
+            return PatternInsight(
+                pattern_title=title,
+                pattern_summary=str(result.get("pattern_summary", "")),
+                opportunity=str(result.get("opportunity", "")),
+                confidence=confidence,
+                affected_pillars=result.get("affected_pillars", pillar_list),
+                urgency=urgency,
+                related_card_ids=card_ids,
+            )
+        else:
             return None
-
-        return PatternInsight(
-            pattern_title=title,
-            pattern_summary=str(result.get("pattern_summary", "")),
-            opportunity=str(result.get("opportunity", "")),
-            confidence=confidence,
-            affected_pillars=result.get("affected_pillars", pillar_list),
-            urgency=urgency,
-            related_card_ids=card_ids,
-        )
 
     def _format_signal_summaries(self, cluster: SignalCluster) -> str:
         """Format cluster cards as a numbered list for the LLM prompt."""

@@ -495,10 +495,7 @@ class GammaService:
 
                 logger.info(f"Gamma generation started: {generation_id}")
 
-            # Poll for completion
-            result = await self._poll_generation_status(generation_id)
-            return result
-
+            return await self._poll_generation_status(generation_id)
         except httpx.TimeoutException:
             logger.error("Gamma API request timed out")
             return GammaGenerationResult(
@@ -608,11 +605,10 @@ class GammaService:
 
                 if response.status_code == 200:
                     return response.content
-                else:
-                    logger.error(
-                        f"Failed to download Gamma export: {response.status_code}"
-                    )
-                    return None
+                logger.error(
+                    f"Failed to download Gamma export: {response.status_code}"
+                )
+                return None
 
         except Exception as e:
             logger.error(f"Error downloading Gamma export: {e}")
@@ -673,8 +669,6 @@ class GammaService:
         Returns:
             Transformed content string for Gamma API
         """
-        sections = []
-
         # Track which tags are used for backup slides
         used_pillar = None
         used_horizon = None
@@ -700,9 +694,8 @@ class GammaService:
                 used_horizon = horizon
             if classification.get("stage"):
                 stage_raw = classification["stage"]
-                stage_match = re.search(r"(\d+)", str(stage_raw))
-                if stage_match:
-                    stage_num = int(stage_match.group(1))
+                if stage_match := re.search(r"(\d+)", str(stage_raw)):
+                    stage_num = int(stage_match[1])
                     stage_def = STAGE_DEFINITIONS.get(stage_num, {})
                     stage_name = stage_def.get(
                         "name", STAGE_NAMES.get(stage_num, f"Stage {stage_num}")
@@ -717,14 +710,13 @@ class GammaService:
                 title_section += "\n\n" + "  |  ".join(tag_lines)
         title_section += f"\n\nCity of Austin Strategic Intelligence Brief"
         title_section += f"\n{datetime.now().strftime('%B %Y')}"
-        sections.append(title_section)
-
+        sections = [title_section]
         # Slide 2: Executive Summary
         if executive_summary:
             summary_clean = self._clean_markdown(executive_summary)
             # Truncate if too long for a single slide
             if len(summary_clean) > 800:
-                summary_clean = summary_clean[:797] + "..."
+                summary_clean = f"{summary_clean[:797]}..."
             sections.append(f"# Executive Summary\n\n{summary_clean}")
 
         # Parse main content into logical sections
@@ -736,7 +728,7 @@ class GammaService:
             clean_content = self._clean_markdown(section_content)
             # Truncate long sections
             if len(clean_content) > 1000:
-                clean_content = clean_content[:997] + "..."
+                clean_content = f"{clean_content[:997]}..."
             sections.append(f"# {section_title}\n\n{clean_content}")
 
         # AI Disclosure slide
@@ -778,7 +770,7 @@ across City departments and leadership."""
             for area in pillar_def.get("focus_areas", []):
                 pillar_slide += f"- {area}\n"
 
-            pillar_slide += f"""
+            pillar_slide += """
 This pillar is one of six strategic focus areas guiding City of Austin 
 planning and investment decisions."""
             sections.append(pillar_slide)
@@ -797,7 +789,7 @@ planning and investment decisions."""
             for char in horizon_def.get("characteristics", []):
                 horizon_slide += f"- {char}\n"
 
-            horizon_slide += f"""
+            horizon_slide += """
 The planning horizon indicates when this trend is expected to require 
 significant City attention or action."""
             sections.append(horizon_slide)
@@ -814,7 +806,7 @@ significant City attention or action."""
             for indicator in stage_def.get("indicators", []):
                 stage_slide += f"- {indicator}\n"
 
-            stage_slide += f"""
+            stage_slide += """
 The maturity stage reflects the current development status of this trend 
 and helps inform appropriate City response strategies."""
             sections.append(stage_slide)
@@ -839,16 +831,14 @@ and helps inform appropriate City response strategies."""
         lines = content_markdown.split("\n")
 
         for line in lines:
-            # Check for headers
-            header_match = re.match(r"^(#{1,3})\s+(.+)$", line)
-            if header_match:
+            if header_match := re.match(r"^(#{1,3})\s+(.+)$", line):
                 # Save previous section
                 if current_content:
                     content_text = "\n".join(current_content).strip()
                     if content_text and len(content_text) > 50:  # Skip tiny sections
                         sections.append((current_title, content_text))
 
-                current_title = header_match.group(2).strip()
+                current_title = header_match[2].strip()
                 current_content = []
             else:
                 current_content.append(line)
@@ -1140,10 +1130,8 @@ def calculate_slides_per_card(card_count: int) -> int:
         return 4  # Detailed treatment
     elif card_count <= 7:
         return 3  # Standard portfolio
-    elif card_count <= 15:
-        return 2  # Condensed
     else:
-        return 2  # Cap at 2, warn user if >15 cards
+        return 2  # Condensed
 
 
 class GammaPortfolioService:
@@ -1268,9 +1256,7 @@ class GammaPortfolioService:
 
             # Poll for completion (reuse existing polling logic)
             gamma_service = GammaService(self.api_key)
-            result = await gamma_service._poll_generation_status(generation_id)
-            return result
-
+            return await gamma_service._poll_generation_status(generation_id)
         except Exception as e:
             logger.error(f"Portfolio generation error: {e}")
             return GammaGenerationResult(
@@ -1299,8 +1285,6 @@ class GammaPortfolioService:
         N+3. Risks & Opportunities
         N+4. AI Disclosure
         """
-        sections = []
-
         # Collect pillar info
         pillar_icons = []
         pillar_names_used = []
@@ -1321,7 +1305,7 @@ class GammaPortfolioService:
         avg_relevance = sum(
             c.relevance_score for c in cards if c.relevance_score
         ) // max(len(cards), 1)
-        horizons_covered = sorted(set(c.horizon for c in cards if c.horizon))
+        horizons_covered = sorted({c.horizon for c in cards if c.horizon})
 
         # ===== SLIDE 1: Title =====
         title_section = f"""# {workstream_name}
@@ -1332,8 +1316,7 @@ class GammaPortfolioService:
 
 City of Austin | FORESIGHT Platform
 {datetime.now().strftime('%B %Y')}"""
-        sections.append(title_section)
-
+        sections = [title_section]
         # ===== SLIDE 2: Portfolio at a Glance =====
         dashboard_section = f"""# Portfolio at a Glance
 
@@ -1350,9 +1333,7 @@ This portfolio synthesizes deep research across multiple emerging trends to prov
 
         # ===== SLIDE 3: Why This Matters Now =====
         urgency = (
-            synthesis.urgency_statement
-            if synthesis.urgency_statement
-            else f"These {len(cards)} trends represent critical opportunities and challenges that will shape Austin's future. Early action positions the city as a leader; delay risks falling behind peer cities."
+            synthesis.urgency_statement or f"These {len(cards)} trends represent critical opportunities and challenges that will shape Austin's future. Early action positions the city as a leader; delay risks falling behind peer cities."
         )
 
         urgency_section = f"""# Why This Matters Now
@@ -1516,10 +1497,8 @@ What should Austin DO with each trend?
 *These themes suggest opportunities for coordinated initiatives across multiple trends.*"""
         sections.append(themes_section)
 
-        # ===== SLIDE N+2: 90-Day Action Plan =====
-        ninety_day = synthesis.ninety_day_actions or []
-        if ninety_day:
-            actions_list = []
+        actions_list = []
+        if ninety_day := synthesis.ninety_day_actions or []:
             for action in ninety_day[:5]:
                 action_text = action.get("action", "")
                 owner = action.get("owner", "TBD")
@@ -1530,8 +1509,6 @@ What should Austin DO with each trend?
                 )
             ninety_day_content = chr(10).join(actions_list)
         else:
-            # Fall back to recommended_actions
-            actions_list = []
             for action in synthesis.recommended_actions[:5]:
                 action_text = action.get("action", "")
                 owner = action.get("owner", "TBD")
@@ -1556,14 +1533,10 @@ What Austin should do in the next 90 days:
 
         # ===== SLIDE N+3: Risks & Opportunities =====
         risk_text = (
-            synthesis.risk_summary
-            if synthesis.risk_summary
-            else "Delayed action on these trends could result in Austin falling behind peer cities, missing federal funding windows, and losing competitive advantage in talent and business attraction."
+            synthesis.risk_summary or "Delayed action on these trends could result in Austin falling behind peer cities, missing federal funding windows, and losing competitive advantage in talent and business attraction."
         )
         opp_text = (
-            synthesis.opportunity_summary
-            if synthesis.opportunity_summary
-            else "Early action positions Austin as a national leader, attracts innovation investment, and delivers improved services to residents ahead of demand curves."
+            synthesis.opportunity_summary or "Early action positions Austin as a national leader, attracts innovation investment, and delivers improved services to residents ahead of demand curves."
         )
 
         risk_opp_section = f"""# Risks & Opportunities

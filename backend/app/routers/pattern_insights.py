@@ -32,7 +32,7 @@ async def get_pattern_insights(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("fetching pattern insights", e),
-        )
+        ) from e
 
 
 @router.get("/pattern-insights/{insight_id}")
@@ -55,9 +55,7 @@ async def get_pattern_insight_by_id(
             )
         insight = result.data[0]
 
-        # Fetch related cards for richer context
-        related_ids = insight.get("related_card_ids", [])
-        if related_ids:
+        if related_ids := insight.get("related_card_ids", []):
             cards_result = (
                 supabase.table("cards")
                 .select("id, name, summary, pillar_id, stage_id, horizon")
@@ -75,7 +73,7 @@ async def get_pattern_insight_by_id(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("fetching pattern insight", e),
-        )
+        ) from e
 
 
 @router.patch("/pattern-insights/{insight_id}")
@@ -111,7 +109,7 @@ async def update_pattern_insight_status(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("updating pattern insight", e),
-        )
+        ) from e
 
 
 @router.post("/pattern-insights/generate")

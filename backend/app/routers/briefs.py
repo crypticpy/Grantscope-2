@@ -140,7 +140,9 @@ async def generate_executive_brief(
 
     except Exception as e:
         logger.error(f"Failed to initiate brief generation: {str(e)}")
-        raise HTTPException(status_code=500, detail=_safe_error("brief generation", e))
+        raise HTTPException(
+            status_code=500, detail=_safe_error("brief generation", e)
+        ) from e
 
 
 @router.get(
@@ -537,7 +539,7 @@ async def export_brief(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("export generation", e),
-        )
+        ) from e
 
 
 # =============================================================================
@@ -900,4 +902,4 @@ async def bulk_brief_export(
         logger.error(f"Portfolio export failed: {str(e)}")
         raise HTTPException(
             status_code=500, detail=_safe_error("portfolio generation", e)
-        )
+        ) from e

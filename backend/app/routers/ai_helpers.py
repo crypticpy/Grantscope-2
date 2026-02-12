@@ -89,7 +89,7 @@ async def create_card_from_topic(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("card creation", e),
-        )
+        ) from e
 
 
 @router.post("/cards/create-manual")
@@ -189,7 +189,7 @@ async def create_manual_card(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("card creation", e),
-        )
+        ) from e
 
 
 @router.post("/ai/suggest-keywords")
@@ -233,7 +233,7 @@ async def suggest_keywords(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("keyword suggestion", e),
-        )
+        ) from e
 
 
 @router.post("/ai/suggest-description", response_model=SuggestDescriptionResponse)
@@ -294,9 +294,7 @@ async def suggest_description(
             max_tokens=150,
         )
 
-        description = (response.choices[0].message.content or "").strip()
-        if not description:
-            description = f"Tracks emerging signals related to {body.name}."
+        description = (response.choices[0].message.content or "").strip() or f"Tracks emerging signals related to {body.name}."
 
         return SuggestDescriptionResponse(description=description)
     except Exception as e:
@@ -304,4 +302,4 @@ async def suggest_description(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("description suggestion", e),
-        )
+        ) from e

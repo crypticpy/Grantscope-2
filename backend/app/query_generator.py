@@ -624,10 +624,7 @@ class QueryGenerator:
         priority_id = priority["id"]
         pillar_code = priority["pillar_code"]
 
-        # Get priority-specific template if available
-        template = self.priority_templates.get(priority_id)
-
-        if template:
+        if template := self.priority_templates.get(priority_id):
             topics = template.get("topics", [])
             horizon_focus = template.get("horizon_focus", "H2")
 
@@ -711,10 +708,14 @@ class QueryGenerator:
 
     def get_priority_info(self, priority_id: str) -> Optional[Dict[str, str]]:
         """Get information about a specific priority."""
-        for priority in self.priorities:
-            if priority["id"] == priority_id:
-                return priority
-        return None
+        return next(
+            (
+                priority
+                for priority in self.priorities
+                if priority["id"] == priority_id
+            ),
+            None,
+        )
 
     def get_priorities_for_pillar(self, pillar_code: str) -> List[Dict[str, str]]:
         """Get all priorities for a specific pillar."""

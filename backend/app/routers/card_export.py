@@ -54,11 +54,11 @@ async def export_card(
     format_lower = format.lower()
     try:
         export_format = ExportFormat(format_lower)
-    except ValueError:
+    except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid export format: {format}. Supported formats: pdf, pptx, csv",
-        )
+        ) from e
 
     # Fetch card from database with joined reference data
     response = (
@@ -103,14 +103,14 @@ async def export_card(
         )
 
         if research_response.data:
-            for task in research_response.data:
-                if task.get("result_summary", {}).get("report_preview"):
-                    research_reports.append(
-                        {
-                            "completed_at": task.get("completed_at"),
-                            "report": task["result_summary"]["report_preview"],
-                        }
-                    )
+            research_reports.extend(
+                {
+                    "completed_at": task.get("completed_at"),
+                    "report": task["result_summary"]["report_preview"],
+                }
+                for task in research_response.data
+                if task.get("result_summary", {}).get("report_preview")
+            )
             # Use the most recent report as the main one
             if research_reports:
                 research_report = research_reports[0]["report"]
@@ -150,7 +150,7 @@ async def export_card(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to prepare card data for export",
-        )
+        ) from e
 
     # Initialize export service
     export_service = ExportService(supabase)
@@ -211,7 +211,7 @@ async def export_card(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("export generation", e),
-        )
+        ) from e
 
 
 # ============================================================================
@@ -363,4 +363,4 @@ async def export_workstream_report(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("export generation", e),
-        )
+        ) from e

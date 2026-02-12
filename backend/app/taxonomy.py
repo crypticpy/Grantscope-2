@@ -49,9 +49,7 @@ def convert_pillar_id(ai_pillar: str) -> Optional[str]:
     Returns:
         Database-compatible pillar ID, or None if input is empty
     """
-    if not ai_pillar:
-        return None
-    return PILLAR_CODE_MAP.get(ai_pillar, ai_pillar)
+    return PILLAR_CODE_MAP.get(ai_pillar, ai_pillar) if ai_pillar else None
 
 
 # ============================================================================

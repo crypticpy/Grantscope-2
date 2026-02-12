@@ -161,7 +161,7 @@ PDF_CHART_HEIGHT = 4 * inch
 def hex_to_rl_color(hex_color: str) -> rl_colors.Color:
     """Convert hex color string to ReportLab Color object."""
     hex_color = hex_color.lstrip('#')
-    r = int(hex_color[0:2], 16) / 255.0
+    r = int(hex_color[:2], 16) / 255.0
     g = int(hex_color[2:4], 16) / 255.0
     b = int(hex_color[4:6], 16) / 255.0
     return rl_colors.Color(r, g, b)
@@ -309,16 +309,16 @@ class ProfessionalPDFBuilder:
     def _draw_header(self, canvas_obj: canvas.Canvas, doc):
         """Draw the professional header on each page."""
         canvas_obj.saveState()
-        
+
         # Header background - clean white
         canvas_obj.setFillColor(rl_colors.white)
         canvas_obj.rect(0, self.page_height - 1.1 * inch, self.page_width, 1.1 * inch, fill=True, stroke=False)
-        
+
         # Add accent line below header - primary blue for brand consistency
         canvas_obj.setStrokeColor(PDF_COLORS["primary"])
         canvas_obj.setLineWidth(2)
         canvas_obj.line(0, self.page_height - 1.1 * inch, self.page_width, self.page_height - 1.1 * inch)
-        
+
         # City of Austin logo (if available and enabled)
         logo_width = 0
         if self.include_logo and COA_LOGO_PATH and Path(COA_LOGO_PATH).exists():
@@ -339,7 +339,7 @@ class ProfessionalPDFBuilder:
             except Exception as e:
                 logger.warning(f"Failed to add logo to PDF header: {e}")
                 logo_width = 0
-        
+
         # Vertical separator line after logo
         if logo_width > 0:
             canvas_obj.setStrokeColor(hex_to_rl_color("#E0E0E0"))
@@ -347,31 +347,31 @@ class ProfessionalPDFBuilder:
             sep_x = self.left_margin + logo_width + 0.1 * inch
             canvas_obj.line(sep_x, self.page_height - 0.25 * inch, sep_x, self.page_height - 0.95 * inch)
             logo_width += 0.25 * inch  # Extra spacing after separator
-        
+
         # Foresight branding text
         text_x = self.left_margin + logo_width
-        
+
         # "FORESIGHT" title - primary blue to match website
         canvas_obj.setFillColor(PDF_COLORS["primary"])
         canvas_obj.setFont("Helvetica-Bold", 16)
         canvas_obj.drawString(text_x, self.page_height - 0.45 * inch, "FORESIGHT")
-        
+
         # "Strategic Intelligence Platform" subtitle - gray
         canvas_obj.setFillColor(rl_colors.gray)
         canvas_obj.setFont("Helvetica", 9)
         canvas_obj.drawString(text_x, self.page_height - 0.62 * inch, "Strategic Intelligence Platform")
-        
+
         # Document title on right side - black
         canvas_obj.setFillColor(PDF_COLORS["dark"])
         canvas_obj.setFont("Helvetica-Bold", 11)
-        title_text = self.title[:45] + "..." if len(self.title) > 45 else self.title
+        title_text = f"{self.title[:45]}..." if len(self.title) > 45 else self.title
         title_width = canvas_obj.stringWidth(title_text, "Helvetica-Bold", 11)
         canvas_obj.drawString(
             self.page_width - self.right_margin - title_width,
             self.page_height - 0.45 * inch,
             title_text
         )
-        
+
         # Page generation date on right - black
         canvas_obj.setFillColor(PDF_COLORS["dark"])
         canvas_obj.setFont("Helvetica", 9)
@@ -382,7 +382,7 @@ class ProfessionalPDFBuilder:
             self.page_height - 0.62 * inch,
             date_text
         )
-        
+
         canvas_obj.restoreState()
     
     def _draw_footer(self, canvas_obj: canvas.Canvas, doc):
@@ -691,8 +691,7 @@ class MarkdownToPDFParser:
             return ""
         text = text.replace('&', '&amp;')
         text = text.replace('<', '&lt;')
-        text = text.replace('>', '&gt;')
-        return text
+        return text.replace('>', '&gt;')
     
     def convert_inline_formatting(self, text: str) -> str:
         """
@@ -738,20 +737,18 @@ class MarkdownToPDFParser:
         - HEADING WITH COLON:
         """
         line = line.strip()
-        
-        # Markdown headers with #
-        match = self.re.match(r'^(#{1,3})\s+(.+)$', line)
-        if match:
+
+        if match := self.re.match(r'^(#{1,3})\s+(.+)$', line):
             level = len(match.group(1))
             text = match.group(2).strip()
             # Remove trailing # if present
             text = self.re.sub(r'\s*#+\s*$', '', text)
             return (level, text)
-        
+
         # All caps section headers (common AI pattern)
         if self.re.match(r'^[A-Z][A-Z\s&\-]{5,}$', line) and not line.startswith('•'):
             return (2, line.title())
-        
+
         return None
     
     def is_bullet_point(self, line: str) -> Optional[str]:
@@ -761,18 +758,15 @@ class MarkdownToPDFParser:
         Handles: -, *, •, >, and numbered lists (1., 2., etc.)
         """
         line = line.strip()
-        
-        # Standard bullet markers: - * •
-        match = self.re.match(r'^[\-\*•]\s+(.+)$', line)
-        if match:
+
+        if match := self.re.match(r'^[\-\*•]\s+(.+)$', line):
             return match.group(1)
-        
-        # Quote-style bullets: >
-        match = self.re.match(r'^>\s+(.+)$', line)
-        if match:
-            return match.group(1)
-        
-        return None
+
+        return (
+            match.group(1)
+            if (match := self.re.match(r'^>\s+(.+)$', line))
+            else None
+        )
     
     def is_numbered_item(self, line: str) -> Optional[Tuple[str, str]]:
         """
@@ -780,12 +774,10 @@ class MarkdownToPDFParser:
         Returns (number, text) or None.
         """
         line = line.strip()
-        
-        # Numbered lists: 1. 2. etc or 1) 2) etc
-        match = self.re.match(r'^(\d+)[.\)]\s+(.+)$', line)
-        if match:
+
+        if match := self.re.match(r'^(\d+)[.\)]\s+(.+)$', line):
             return (match.group(1), match.group(2))
-        
+
         return None
     
     def is_horizontal_rule(self, line: str) -> bool:
@@ -932,36 +924,33 @@ def create_classification_badges(
     """
     if not classification:
         return []
-    
+
     elements = []
     badge_parts = []
-    
-    # Pillar badge
-    pillar_code = classification.get('pillar', '').upper()
-    if pillar_code and pillar_code in PILLAR_COLORS:
-        pillar_info = PILLAR_COLORS[pillar_code]
-        badge_parts.append(f'<font color="{pillar_info["color"]}"><b>{pillar_code}</b></font> {pillar_info["name"]}')
-    elif pillar_code:
-        badge_parts.append(f'<b>Pillar:</b> {pillar_code}')
-    
-    # Horizon badge
-    horizon_code = classification.get('horizon', '').upper()
-    if horizon_code and horizon_code in HORIZON_COLORS:
-        horizon_info = HORIZON_COLORS[horizon_code]
-        badge_parts.append(f'<font color="{horizon_info["color"]}"><b>{horizon_code}</b></font> {horizon_info["name"]} ({horizon_info["timeframe"]})')
-    elif horizon_code:
-        badge_parts.append(f'<b>Horizon:</b> {horizon_code}')
-    
+
+    if pillar_code := classification.get('pillar', '').upper():
+        if pillar_code in PILLAR_COLORS:
+            pillar_info = PILLAR_COLORS[pillar_code]
+            badge_parts.append(f'<font color="{pillar_info["color"]}"><b>{pillar_code}</b></font> {pillar_info["name"]}')
+        else:
+            badge_parts.append(f'<b>Pillar:</b> {pillar_code}')
+
+    if horizon_code := classification.get('horizon', '').upper():
+        if horizon_code in HORIZON_COLORS:
+            horizon_info = HORIZON_COLORS[horizon_code]
+            badge_parts.append(f'<font color="{horizon_info["color"]}"><b>{horizon_code}</b></font> {horizon_info["name"]} ({horizon_info["timeframe"]})')
+        else:
+            badge_parts.append(f'<b>Horizon:</b> {horizon_code}')
+
     # Stage badge
     stage_raw = classification.get('stage', '')
     stage_num = None
-    
+
     # Parse stage - can be "4", "stage 4", "4_proof", etc.
     import re
-    stage_match = re.search(r'(\d+)', str(stage_raw))
-    if stage_match:
+    if stage_match := re.search(r'(\d+)', str(stage_raw)):
         stage_num = int(stage_match.group(1))
-    
+
     if stage_num and stage_num in STAGE_INFO:
         stage_info = STAGE_INFO[stage_num]
         horizon_for_stage = stage_info["horizon"]
@@ -969,16 +958,21 @@ def create_classification_badges(
         badge_parts.append(f'<font color="{stage_color}"><b>Stage {stage_num}</b></font> {stage_info["name"]}')
     elif stage_raw:
         badge_parts.append(f'<b>Stage:</b> {stage_raw}')
-    
+
     if badge_parts:
         # Create a styled classification line with link hint
         badge_text = "   |   ".join(badge_parts)
-        elements.append(Paragraph(badge_text, styles.get('MetadataText', styles['SmallText'])))
-        elements.append(Paragraph(
-            '<i><font size="8" color="gray">See Appendix A for classification definitions</font></i>',
-            styles.get('SmallText', styles['BodyText'])
-        ))
-    
+        elements.extend(
+            (
+                Paragraph(
+                    badge_text, styles.get('MetadataText', styles['SmallText'])
+                ),
+                Paragraph(
+                    '<i><font size="8" color="gray">See Appendix A for classification definitions</font></i>',
+                    styles.get('SmallText', styles['BodyText']),
+                ),
+            )
+        )
     return elements
 
 
@@ -988,64 +982,63 @@ def create_classification_appendix(styles: Dict[str, ParagraphStyle]) -> List[An
     
     Returns a list of ReportLab flowable elements.
     """
-    elements = []
-    
-    # Page break before appendix
-    elements.append(PageBreak())
-    
+    elements = [PageBreak()]
+
     # Appendix title
     elements.append(Paragraph("Appendix A: Classification Framework", styles.get('AppendixTitle', styles['SectionHeading'])))
-    
+
     elements.append(Paragraph(
         "This report uses the City of Austin's Foresight strategic classification framework to categorize emerging trends and technologies.",
         styles.get('AppendixBody', styles['BodyText'])
     ))
     elements.append(Spacer(1, 12))
-    
+
     # Pillars section
     elements.append(Paragraph("Strategic Pillars", styles.get('AppendixHeading', styles['SubsectionHeading'])))
     elements.append(Paragraph(
         "Pillars represent the six core areas of Austin's Comprehensive Strategic Plan (CSP):",
         styles.get('AppendixBody', styles['BodyText'])
     ))
-    
-    for code, info in PILLAR_COLORS.items():
-        elements.append(Paragraph(
+
+    elements.extend(
+        Paragraph(
             f'<font color="{info["color"]}"><b>{code}</b></font> - <b>{info["name"]}</b>',
-            styles.get('AppendixBody', styles['BodyText'])
-        ))
-    
+            styles.get('AppendixBody', styles['BodyText']),
+        )
+        for code, info in PILLAR_COLORS.items()
+    )
     elements.append(Spacer(1, 12))
-    
+
     # Horizons section
     elements.append(Paragraph("Planning Horizons", styles.get('AppendixHeading', styles['SubsectionHeading'])))
     elements.append(Paragraph(
         "Horizons indicate the expected timeline for impact:",
         styles.get('AppendixBody', styles['BodyText'])
     ))
-    
-    for code, info in HORIZON_COLORS.items():
-        elements.append(Paragraph(
+
+    elements.extend(
+        Paragraph(
             f'<font color="{info["color"]}"><b>{code}: {info["name"]}</b></font> ({info["timeframe"]}) - {info["description"]}',
-            styles.get('AppendixBody', styles['BodyText'])
-        ))
-    
+            styles.get('AppendixBody', styles['BodyText']),
+        )
+        for code, info in HORIZON_COLORS.items()
+    )
     elements.append(Spacer(1, 12))
-    
+
     # Stages section
     elements.append(Paragraph("Maturity Stages", styles.get('AppendixHeading', styles['SubsectionHeading'])))
     elements.append(Paragraph(
         "Stages indicate how mature a trend or technology is in its development lifecycle:",
         styles.get('AppendixBody', styles['BodyText'])
     ))
-    
+
     for stage_num, info in STAGE_INFO.items():
         horizon_color = HORIZON_COLORS.get(info["horizon"], {}).get("color", "#6366f1")
         elements.append(Paragraph(
             f'<font color="{horizon_color}"><b>Stage {stage_num}: {info["name"]}</b></font> ({info["horizon"]}) - {info["description"]}',
             styles.get('AppendixBody', styles['BodyText'])
         ))
-    
+
     return elements
 
 
@@ -1420,7 +1413,7 @@ class ExportService:
         """
         styles = getSampleStyleSheet()
 
-        custom_styles = {
+        return {
             'Title': ParagraphStyle(
                 'CustomTitle',
                 parent=styles['Heading1'],
@@ -1474,8 +1467,6 @@ class ExportService:
             ),
         }
 
-        return custom_styles
-
     def _create_pdf_header(
         self,
         card_data: CardExportData,
@@ -1495,9 +1486,7 @@ class ExportService:
 
         # Title
         title = Paragraph(card_data.name, styles['Title'])
-        elements.append(title)
-        elements.append(Spacer(1, 6))
-
+        elements.extend((title, Spacer(1, 6)))
         # Horizontal rule
         elements.append(HRFlowable(
             width="100%",
@@ -1554,10 +1543,7 @@ class ExportService:
         Returns:
             List of flowable elements for the summary
         """
-        elements = []
-
-        # Classification Overview - Always show this prominently
-        elements.append(Paragraph("Classification Overview", styles['Heading1']))
+        elements = [Paragraph("Classification Overview", styles['Heading1'])]
 
         classification_items = []
         if card_data.pillar_name or card_data.pillar_id:
@@ -1613,26 +1599,26 @@ class ExportService:
         if not card_data.deep_research_report:
             return elements
 
-        elements.append(PageBreak())
-        elements.append(Paragraph("Strategic Intelligence Report", styles['Title']))
-        elements.append(Spacer(1, 6))
-
-        # Add a note about the report
-        elements.append(Paragraph(
-            "<i>The following strategic intelligence report was generated through deep research analysis, "
-            "synthesizing multiple sources to provide actionable insights for decision-makers.</i>",
-            styles['Small']
-        ))
-        elements.append(Spacer(1, 12))
-
-        elements.append(HRFlowable(
-            width="100%",
-            thickness=1,
-            color=PDF_COLORS["secondary"],
-            spaceBefore=6,
-            spaceAfter=12
-        ))
-
+        elements.extend(
+            (
+                PageBreak(),
+                Paragraph("Strategic Intelligence Report", styles['Title']),
+                Spacer(1, 6),
+                Paragraph(
+                    "<i>The following strategic intelligence report was generated through deep research analysis, "
+                    "synthesizing multiple sources to provide actionable insights for decision-makers.</i>",
+                    styles['Small'],
+                ),
+                Spacer(1, 12),
+                HRFlowable(
+                    width="100%",
+                    thickness=1,
+                    color=PDF_COLORS["secondary"],
+                    spaceBefore=6,
+                    spaceAfter=12,
+                ),
+            )
+        )
         # Parse and render the markdown report
         # Simple markdown-to-PDF conversion for common elements
         report = card_data.deep_research_report
@@ -1688,9 +1674,7 @@ class ExportService:
         Returns:
             List of flowable elements for the scores section
         """
-        elements = []
-
-        elements.append(Paragraph("Scores", styles['Heading1']))
+        elements = [Paragraph("Scores", styles['Heading1'])]
 
         # Build scores table
         scores = card_data.get_all_scores()
@@ -1762,17 +1746,13 @@ class ExportService:
         elements = []
         temp_files = []
 
-        # Generate bar chart
-        chart_path = self.generate_score_chart(card_data, chart_type="bar")
-
-        if chart_path:
+        if chart_path := self.generate_score_chart(card_data, chart_type="bar"):
             temp_files.append(chart_path)
             elements.append(Paragraph("Score Visualization", styles['Heading1']))
 
             try:
                 img = RLImage(chart_path, width=PDF_CHART_WIDTH, height=PDF_CHART_HEIGHT)
-                elements.append(img)
-                elements.append(Spacer(1, 12))
+                elements.extend((img, Spacer(1, 12)))
             except Exception as e:
                 logger.warning(f"Failed to add chart image to PDF: {e}")
 
@@ -1793,9 +1773,8 @@ class ExportService:
         Returns:
             List of flowable elements for the footer
         """
-        elements = []
+        elements = [Spacer(1, 24)]
 
-        elements.append(Spacer(1, 24))
         elements.append(HRFlowable(
             width="100%",
             thickness=1,
@@ -1862,11 +1841,8 @@ class ExportService:
             styles = get_professional_pdf_styles()
 
             # Build document elements
-            elements = []
+            elements = [Paragraph(card_data.name, styles['DocTitle'])]
 
-            # Document Title
-            elements.append(Paragraph(card_data.name, styles['DocTitle']))
-            
             # Classification subtitle
             subtitle_parts = []
             if card_data.pillar_name or card_data.pillar_id:
@@ -1877,7 +1853,7 @@ class ExportService:
                 subtitle_parts.append(f"Stage: {card_data.stage_name or card_data.stage_id}")
             if subtitle_parts:
                 elements.append(Paragraph(" | ".join(subtitle_parts), styles['DocSubtitle']))
-            
+
             elements.append(Spacer(1, 6))
             elements.append(HRFlowable(
                 width="100%",
@@ -1908,7 +1884,7 @@ class ExportService:
             valid_scores = {k: v for k, v in scores.items() if v is not None}
             if valid_scores:
                 elements.append(Paragraph("Score Analysis", styles['SectionHeading']))
-                
+
                 # Build scores table
                 table_data = [['Metric', 'Score', 'Rating']]
                 for name, score in valid_scores.items():
@@ -1943,8 +1919,9 @@ class ExportService:
 
             # Charts (if enabled)
             if include_charts and valid_scores:
-                chart_path = self.generate_score_chart(card_data, chart_type="bar")
-                if chart_path:
+                if chart_path := self.generate_score_chart(
+                    card_data, chart_type="bar"
+                ):
                     temp_files.append(chart_path)
                     try:
                         img = RLImage(chart_path, width=5 * inch, height=3.5 * inch)
@@ -1958,18 +1935,18 @@ class ExportService:
                 elements.append(PageBreak())
                 elements.append(Paragraph("Strategic Intelligence Report", styles['SectionHeading']))
                 elements.append(Spacer(1, 8))
-                
+
                 # Parse and render the markdown report
                 report = card_data.deep_research_report
                 if len(report) > 20000:
                     report = report[:20000] + "\n\n... [Report truncated for PDF export]"
-                
+
                 lines = report.split('\n')
                 current_paragraph = []
-                
+
                 for line in lines:
                     line_stripped = line.strip()
-                    
+
                     if not line_stripped:
                         if current_paragraph:
                             para_text = ' '.join(current_paragraph)
@@ -1978,7 +1955,7 @@ class ExportService:
                             elements.append(Paragraph(para_text, styles['BodyText']))
                             current_paragraph = []
                         continue
-                    
+
                     if line_stripped.startswith('# '):
                         if current_paragraph:
                             elements.append(Paragraph(' '.join(current_paragraph), styles['BodyText']))
@@ -2015,7 +1992,7 @@ class ExportService:
                         elements.append(Spacer(1, 6))
                     else:
                         current_paragraph.append(line_stripped)
-                
+
                 if current_paragraph:
                     para_text = ' '.join(current_paragraph)
                     para_text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', para_text)
@@ -2025,7 +2002,7 @@ class ExportService:
             elements.append(Spacer(1, 20))
             elements.append(HRFlowable(width="100%", thickness=1, color=PDF_COLORS["light"]))
             elements.append(Spacer(1, 6))
-            
+
             meta_items = []
             if card_data.created_at:
                 meta_items.append(f"Created: {card_data.created_at.strftime('%B %d, %Y')}")
@@ -2100,9 +2077,9 @@ class ExportService:
 
             # Title page
             workstream_name = workstream.get('name', 'Workstream Report')
-            elements.append(Paragraph(workstream_name, styles['DocTitle']))
-            elements.append(Spacer(1, 12))
-
+            elements.extend(
+                (Paragraph(workstream_name, styles['DocTitle']), Spacer(1, 12))
+            )
             elements.append(HRFlowable(
                 width="100%",
                 thickness=2,
@@ -2144,9 +2121,9 @@ class ExportService:
                         if card.horizon:
                             horizon_counts[card.horizon] = horizon_counts.get(card.horizon, 0) + 1
 
-                    # Pillar chart
-                    pillar_chart_path = self.generate_pillar_distribution_chart(pillar_counts)
-                    if pillar_chart_path:
+                    if pillar_chart_path := self.generate_pillar_distribution_chart(
+                        pillar_counts
+                    ):
                         temp_files.append(pillar_chart_path)
                         try:
                             img = RLImage(pillar_chart_path, width=PDF_CHART_WIDTH, height=PDF_CHART_HEIGHT)
@@ -2155,9 +2132,9 @@ class ExportService:
                         except Exception as e:
                             logger.warning(f"Failed to add pillar chart to PDF: {e}")
 
-                    # Horizon chart
-                    horizon_chart_path = self.generate_horizon_distribution_chart(horizon_counts)
-                    if horizon_chart_path:
+                    if horizon_chart_path := self.generate_horizon_distribution_chart(
+                        horizon_counts
+                    ):
                         temp_files.append(horizon_chart_path)
                         try:
                             img = RLImage(horizon_chart_path, width=4.5 * inch, height=3 * inch)
@@ -2312,11 +2289,7 @@ class ExportService:
         try:
             response = self.supabase.table("cards").select("*").eq("id", card_id).single().execute()
 
-            if not response.data:
-                return None
-
-            return CardExportData(**response.data)
-
+            return CardExportData(**response.data) if response.data else None
         except Exception as e:
             logger.error(f"Error fetching card {card_id}: {e}")
             return None
@@ -2352,10 +2325,11 @@ class ExportService:
 
             cards = []
             if cards_response.data:
-                for item in cards_response.data:
-                    if item.get("cards"):
-                        cards.append(CardExportData(**item["cards"]))
-
+                cards.extend(
+                    CardExportData(**item["cards"])
+                    for item in cards_response.data
+                    if item.get("cards")
+                )
             return workstream, cards
 
         except Exception as e:
@@ -2476,7 +2450,7 @@ class ExportService:
 
         except Exception as e:
             logger.error(f"Error generating CSV for card {card_data.id}: {e}")
-            raise ValueError(f"Failed to generate CSV export: {e}")
+            raise ValueError(f"Failed to generate CSV export: {e}") from e
 
     async def generate_csv_multi(
         self,
@@ -2557,7 +2531,7 @@ class ExportService:
 
         except Exception as e:
             logger.error(f"Error generating multi-card CSV: {e}")
-            raise ValueError(f"Failed to generate CSV export: {e}")
+            raise ValueError(f"Failed to generate CSV export: {e}") from e
 
     def _generate_empty_csv(self) -> str:
         """
@@ -2604,7 +2578,7 @@ class ExportService:
             RGBColor object for use with python-pptx
         """
         hex_color = hex_color.lstrip('#')
-        r = int(hex_color[0:2], 16)
+        r = int(hex_color[:2], 16)
         g = int(hex_color[2:4], 16)
         b = int(hex_color[4:6], 16)
         return RGBColor(r, g, b)
@@ -2849,11 +2823,7 @@ class ExportService:
         content_frame.word_wrap = True
 
         for i, (label, value) in enumerate(content_items):
-            if i == 0:
-                para = content_frame.paragraphs[0]
-            else:
-                para = content_frame.add_paragraph()
-
+            para = content_frame.paragraphs[0] if i == 0 else content_frame.add_paragraph()
             para.space_before = Pt(8)
             para.space_after = Pt(4)
 
@@ -2937,11 +2907,7 @@ class ExportService:
         scores_frame.word_wrap = True
 
         for i, (score_name, score_value) in enumerate(scores.items()):
-            if i == 0:
-                para = scores_frame.paragraphs[0]
-            else:
-                para = scores_frame.add_paragraph()
-
+            para = scores_frame.paragraphs[0] if i == 0 else scores_frame.add_paragraph()
             para.space_before = Pt(12)
             para.space_after = Pt(4)
 
@@ -3226,32 +3192,56 @@ class ExportService:
                     title_para.font.bold = True
                     title_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
 
-                    # Add pillar chart on left - adjusted for header/footer
-                    if pillar_chart_path and Path(pillar_chart_path).exists():
-                        try:
-                            slide.shapes.add_picture(
-                                pillar_chart_path,
-                                Inches(0.3), Inches(2.0),
-                                width=Inches(5.5), height=Inches(4.0)
-                            )
-                        except Exception as e:
-                            logger.warning(f"Failed to add pillar chart: {e}")
+                # Add pillar chart on left - adjusted for header/footer
+                if pillar_chart_path and Path(pillar_chart_path).exists():
+                    try:
+                        slide.shapes.add_picture(
+                            pillar_chart_path,
+                            Inches(0.3), Inches(2.0),
+                            width=Inches(5.5), height=Inches(4.0)
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to add pillar chart: {e}")
 
-                    # Add horizon chart on right - adjusted for header/footer
-                    if horizon_chart_path and Path(horizon_chart_path).exists():
-                        try:
-                            slide.shapes.add_picture(
-                                horizon_chart_path,
-                                Inches(6.5), Inches(2.0),
-                                width=Inches(5.5), height=Inches(4.0)
-                            )
-                        except Exception as e:
-                            logger.warning(f"Failed to add horizon chart: {e}")
+                # Add horizon chart on right - adjusted for header/footer
+                if horizon_chart_path and Path(horizon_chart_path).exists():
+                    try:
+                        slide.shapes.add_picture(
+                            horizon_chart_path,
+                            Inches(6.5), Inches(2.0),
+                            width=Inches(5.5), height=Inches(4.0)
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to add horizon chart: {e}")
 
-            # 4. Individual card slides
             if include_card_details:
-                # Handle empty workstream case
-                if not cards:
+                if cards:
+                    # Add a slide for each card (up to 50)
+                    for card in cards[:50]:
+                        card_items = [
+                            ("Summary", card.summary),
+                            ("Pillar", card.pillar_name or card.pillar_id),
+                            ("Horizon", card.horizon),
+                            ("Stage", card.stage_name or card.stage_id),
+                        ]
+                        # Add scores
+                        scores = card.get_all_scores()
+                        if valid_scores := {
+                            k: v for k, v in scores.items() if v is not None
+                        }:
+                            scores_text = ", ".join(f"{k}: {v}" for k, v in valid_scores.items())
+                            card_items.append(("Scores", scores_text))
+
+                        # Filter out empty items
+                        card_items = [(k, v) for k, v in card_items if v]
+
+                        self._add_content_slide(
+                            prs,
+                            title=card.name[:50],
+                            content_items=card_items
+                        )
+
+                else:
                     slide_layout = prs.slide_layouts[6]
                     slide = prs.slides.add_slide(slide_layout)
 
@@ -3269,31 +3259,6 @@ class ExportService:
                     msg_para.font.size = PPTX_SUBTITLE_FONT_SIZE
                     msg_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
                     msg_para.alignment = PP_ALIGN.CENTER
-                else:
-                    # Add a slide for each card (up to 50)
-                    for card in cards[:50]:
-                        card_items = [
-                            ("Summary", card.summary),
-                            ("Pillar", card.pillar_name or card.pillar_id),
-                            ("Horizon", card.horizon),
-                            ("Stage", card.stage_name or card.stage_id),
-                        ]
-                        # Add scores
-                        scores = card.get_all_scores()
-                        valid_scores = {k: v for k, v in scores.items() if v is not None}
-                        if valid_scores:
-                            scores_text = ", ".join(f"{k}: {v}" for k, v in valid_scores.items())
-                            card_items.append(("Scores", scores_text))
-
-                        # Filter out empty items
-                        card_items = [(k, v) for k, v in card_items if v]
-
-                        self._add_content_slide(
-                            prs,
-                            title=card.name[:50],
-                            content_items=card_items
-                        )
-
             # Save presentation to temp file
             temp_file = tempfile.NamedTemporaryFile(
                 suffix='.pptx',
@@ -3373,36 +3338,39 @@ class ExportService:
             title_text = f"Executive Brief: {brief_title}"
             if version and version > 1:
                 title_text += f" (v{version})"
-            elements.append(Paragraph(title_text, styles['Title']))
-            elements.append(Spacer(1, 6))
-
-            # Horizontal rule
-            elements.append(HRFlowable(
-                width="100%",
-                thickness=2,
-                color=PDF_COLORS["primary"],
-                spaceBefore=6,
-                spaceAfter=12
-            ))
-
+            elements.extend(
+                (
+                    Paragraph(title_text, styles['Title']),
+                    Spacer(1, 6),
+                    HRFlowable(
+                        width="100%",
+                        thickness=2,
+                        color=PDF_COLORS["primary"],
+                        spaceBefore=6,
+                        spaceAfter=12,
+                    ),
+                )
+            )
             # Metadata
             meta_parts = [f"Card: {card_name}"]
             if generated_at:
                 meta_parts.append(f"Generated: {generated_at.strftime('%Y-%m-%d %H:%M UTC')}")
             if version:
                 meta_parts.append(f"Version: {version}")
-            elements.append(Paragraph(" | ".join(meta_parts), styles['Small']))
-            elements.append(Spacer(1, 12))
-
-            # Executive Summary section
-            elements.append(Paragraph("Executive Summary", styles['Heading1']))
-            elements.append(Paragraph(executive_summary or "No summary available.", styles['Body']))
-            elements.append(Spacer(1, 18))
-
-            # Full Brief Content
-            elements.append(Paragraph("Full Brief", styles['Heading1']))
-            elements.append(Spacer(1, 6))
-
+            elements.extend(
+                (
+                    Paragraph(" | ".join(meta_parts), styles['Small']),
+                    Spacer(1, 12),
+                    Paragraph("Executive Summary", styles['Heading1']),
+                    Paragraph(
+                        executive_summary or "No summary available.",
+                        styles['Body'],
+                    ),
+                    Spacer(1, 18),
+                    Paragraph("Full Brief", styles['Heading1']),
+                    Spacer(1, 6),
+                )
+            )
             # Parse markdown content into paragraphs
             # Simple markdown parsing - split by double newlines for paragraphs
             if content_markdown:
@@ -3461,23 +3429,28 @@ class ExportService:
             else:
                 elements.append(Paragraph("No content available.", styles['Body']))
 
-            # Footer
-            elements.append(Spacer(1, 24))
-            elements.append(HRFlowable(
-                width="100%",
-                thickness=1,
-                color=PDF_COLORS["light"],
-                spaceBefore=6,
-                spaceAfter=6
-            ))
-
+            elements.extend(
+                (
+                    Spacer(1, 24),
+                    HRFlowable(
+                        width="100%",
+                        thickness=1,
+                        color=PDF_COLORS["light"],
+                        spaceBefore=6,
+                        spaceAfter=6,
+                    ),
+                )
+            )
             footer_text = f"Export Date: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}"
-            elements.append(Paragraph(footer_text, styles['Small']))
-            elements.append(Paragraph(
-                "Generated by Foresight Intelligence Platform",
-                styles['Small']
-            ))
-
+            elements.extend(
+                (
+                    Paragraph(footer_text, styles['Small']),
+                    Paragraph(
+                        "Generated by Foresight Intelligence Platform",
+                        styles['Small'],
+                    ),
+                )
+            )
             # Build PDF
             doc.build(elements)
 
@@ -3538,23 +3511,20 @@ class ExportService:
 
             # Get professional styles
             styles = get_professional_pdf_styles()
-            
+
             # Initialize markdown parser
             md_parser = MarkdownToPDFParser(styles)
 
             # Build document elements
-            elements = []
+            elements = [Paragraph(brief_title, styles['DocTitle'])]
 
-            # Document Title
-            elements.append(Paragraph(brief_title, styles['DocTitle']))
-            
             # Classification badges (colored, with appendix reference)
             if classification:
                 badge_elements = create_classification_badges(classification, styles)
                 elements.extend(badge_elements)
-            
+
             elements.append(Spacer(1, 8))
-            
+
             # Decorative line
             elements.append(HRFlowable(
                 width="100%",
@@ -3566,7 +3536,7 @@ class ExportService:
 
             # Executive Summary Section
             elements.append(Paragraph("Executive Summary", styles['SectionHeading']))
-            
+
             if executive_summary:
                 # Parse executive summary through the robust parser too
                 summary_clean = md_parser.clean_text(executive_summary)
@@ -3576,7 +3546,7 @@ class ExportService:
                 elements.append(Paragraph(summary_formatted, styles['ExecutiveSummary']))
             else:
                 elements.append(Paragraph("No summary available.", styles['BodyText']))
-            
+
             elements.append(Spacer(1, 16))
 
             # Main Content Section
@@ -3599,7 +3569,7 @@ class ExportService:
                 spaceBefore=8,
                 spaceAfter=8
             ))
-            
+
             # Document metadata
             meta_items = []
             if generated_at:
@@ -3607,10 +3577,8 @@ class ExportService:
             if version:
                 meta_items.append(f"Version: {version}")
             meta_items.append(f"Card: {card_name}")
-            
-            for item in meta_items:
-                elements.append(Paragraph(item, styles['SmallText']))
 
+            elements.extend(Paragraph(item, styles['SmallText']) for item in meta_items)
             # Add classification appendix if we have classification data
             if classification:
                 appendix_elements = create_classification_appendix(styles)
@@ -3747,7 +3715,7 @@ class ExportService:
         - Backup/appendix slides explaining each classification tag
         """
         import re
-        
+
         try:
             logger.info(f"Generating local brief PowerPoint: {brief_title}")
 
@@ -3762,7 +3730,7 @@ class ExportService:
             used_stage = None
 
             # 1. Title slide with classification tags (with icons)
-            subtitle = f"Strategic Intelligence Brief"
+            subtitle = "Strategic Intelligence Brief"
             if classification:
                 tag_parts = []
                 if classification.get("pillar"):
@@ -3781,8 +3749,7 @@ class ExportService:
                     used_horizon = horizon
                 if classification.get("stage"):
                     stage_raw = classification["stage"]
-                    stage_match = re.search(r'(\d+)', str(stage_raw))
-                    if stage_match:
+                    if stage_match := re.search(r'(\d+)', str(stage_raw)):
                         stage_num = int(stage_match.group(1))
                         stage_def = STAGE_DEFINITIONS.get(stage_num, {})
                         stage_name = stage_def.get("name", STAGE_NAMES.get(stage_num, f"Stage {stage_num}"))
@@ -3791,7 +3758,7 @@ class ExportService:
                         used_stage = stage_num
                 if tag_parts:
                     subtitle = "  |  ".join(tag_parts)
-            
+
             if generated_at:
                 subtitle += f"\n{generated_at.strftime('%B %d, %Y')}"
 
@@ -3814,7 +3781,7 @@ class ExportService:
             # 3. Content slides - parse with improved markdown handling
             if content_markdown:
                 sections = self._parse_markdown_sections_improved(content_markdown)
-                
+
                 for section_title, section_content in sections[:8]:  # Max 8 content slides
                     clean_content = self._clean_markdown_for_pptx(section_content)
                     self._add_smart_content_slide(
@@ -3850,7 +3817,7 @@ Focus Areas:
                     pillar_content += f"- {area}\n"
                 pillar_content += """
 This pillar is one of six strategic focus areas guiding City of Austin planning and investment decisions."""
-                
+
                 self._add_smart_content_slide(
                     prs,
                     title=f"{pillar_def.get('icon', '')} Strategic Pillar: {pillar_def['name']}",
@@ -3871,7 +3838,7 @@ Characteristics:
                     horizon_content += f"- {char}\n"
                 horizon_content += """
 The planning horizon indicates when this trend is expected to require significant City attention or action."""
-                
+
                 self._add_smart_content_slide(
                     prs,
                     title=f"{horizon_def.get('icon', '')} Planning Horizon: {horizon_def['name']}",
@@ -3890,7 +3857,7 @@ Key Indicators:
                     stage_content += f"- {indicator}\n"
                 stage_content += """
 The maturity stage reflects the current development status of this trend and helps inform appropriate City response strategies."""
-                
+
                 self._add_smart_content_slide(
                     prs,
                     title=f"{stage_def.get('icon', '')} Maturity Stage {used_stage}: {stage_def['name']}",
@@ -3967,19 +3934,17 @@ The maturity stage reflects the current development status of this trend and hel
         - Reasonable content length per section
         """
         import re
-        
+
         sections = []
         current_title = "Overview"
         current_content = []
-        
+
         lines = content_markdown.split('\n')
-        
+
         for line in lines:
             line_stripped = line.strip()
-            
-            # Check for markdown headers
-            header_match = re.match(r'^(#{1,3})\s+(.+)$', line_stripped)
-            if header_match:
+
+            if header_match := re.match(r'^(#{1,3})\s+(.+)$', line_stripped):
                 if current_content:
                     content_text = '\n'.join(current_content).strip()
                     if content_text and len(content_text) > 30:
@@ -3990,7 +3955,7 @@ The maturity stage reflects the current development status of this trend and hel
                 current_title = re.sub(r'^\*\*|\*\*$', '', current_title)
                 current_content = []
                 continue
-            
+
             # Check for ALL CAPS headers (common AI pattern)
             if re.match(r'^[A-Z][A-Z\s&\-]{5,}$', line_stripped) and not line_stripped.startswith('•'):
                 if current_content:
@@ -4000,10 +3965,8 @@ The maturity stage reflects the current development status of this trend and hel
                 current_title = line_stripped.title()
                 current_content = []
                 continue
-            
-            # Check for bold headers (**Header**)
-            bold_match = re.match(r'^\*\*([^*]+)\*\*:?\s*$', line_stripped)
-            if bold_match:
+
+            if bold_match := re.match(r'^\*\*([^*]+)\*\*:?\s*$', line_stripped):
                 if current_content:
                     content_text = '\n'.join(current_content).strip()
                     if content_text and len(content_text) > 30:
@@ -4011,19 +3974,19 @@ The maturity stage reflects the current development status of this trend and hel
                 current_title = bold_match.group(1).strip()
                 current_content = []
                 continue
-            
+
             current_content.append(line)
-        
+
         # Don't forget the last section
         if current_content:
             content_text = '\n'.join(current_content).strip()
             if content_text and len(content_text) > 30:
                 sections.append((current_title, content_text))
-        
+
         # If no sections found, create one from all content
         if not sections and content_markdown.strip():
             sections = [("Key Findings", content_markdown.strip())]
-        
+
         return sections[:max_sections]
     
     def _add_smart_content_slide(
@@ -4040,11 +4003,11 @@ The maturity stage reflects the current development status of this trend and hel
         """
         slide_layout = prs.slide_layouts[6]  # Blank layout
         slide = prs.slides.add_slide(slide_layout)
-        
+
         # Add professional header and footer
         self._add_pptx_header(slide)
         self._add_pptx_footer(slide)
-        
+
         # Slide title
         title_box = slide.shapes.add_textbox(
             PPTX_MARGIN, Inches(1.25),
@@ -4056,11 +4019,11 @@ The maturity stage reflects the current development status of this trend and hel
         title_para.font.size = Pt(28)
         title_para.font.bold = True
         title_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
-        
+
         # Truncate content if needed
         if len(content) > max_chars:
-            content = content[:max_chars - 3] + "..."
-        
+            content = f"{content[:max_chars - 3]}..."
+
         # Content area
         content_box = slide.shapes.add_textbox(
             PPTX_MARGIN, Inches(1.95),
@@ -4068,32 +4031,34 @@ The maturity stage reflects the current development status of this trend and hel
         )
         content_frame = content_box.text_frame
         content_frame.word_wrap = True
-        
+
         # Parse content into paragraphs/bullets
         lines = content.split('\n')
         first_para = True
-        
+
         for line in lines:
             line = line.strip()
             if not line:
                 continue
-            
+
             if first_para:
                 para = content_frame.paragraphs[0]
                 first_para = False
             else:
                 para = content_frame.add_paragraph()
-            
-            # Check if it's a bullet point
-            is_bullet = line.startswith('•') or line.startswith('-') or line.startswith('*')
-            if is_bullet:
+
+            if (
+                is_bullet := line.startswith('•')
+                or line.startswith('-')
+                or line.startswith('*')
+            ):
                 # Clean bullet marker and add proper bullet
                 line = line.lstrip('•-* ')
                 para.text = f"• {line}"
                 para.level = 0
             else:
                 para.text = line
-            
+
             para.font.size = Pt(16)
             para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
             para.space_before = Pt(6)
@@ -4171,32 +4136,31 @@ The City of Austin is committed to transparent and responsible use of AI technol
         """
         import re
         takeaways = []
-        
+
         # Try to find key sections
         key_section_patterns = [
             r'(?:##?\s*)?(?:Key\s+)?(?:Takeaways?|Findings?|Implications?|Insights?)[\s:]*\n((?:[-•*]\s*.+\n?)+)',
             r'(?:##?\s*)?What\s+This\s+Means[^:]*:?\s*\n((?:[-•*]\s*.+\n?)+)',
             r'(?:##?\s*)?Strategic\s+(?:Implications?|Considerations?)[\s:]*\n((?:[-•*]\s*.+\n?)+)',
         ]
-        
+
         for pattern in key_section_patterns:
             matches = re.findall(pattern, brief_markdown, re.IGNORECASE | re.MULTILINE)
             for match in matches:
                 bullets = re.findall(r'[-•*]\s*(.+?)(?:\n|$)', match)
                 takeaways.extend([b.strip() for b in bullets if len(b.strip()) > 20])
-        
+
         # If no structured takeaways found, extract from summary section
         if not takeaways:
-            summary_match = re.search(
+            if summary_match := re.search(
                 r'(?:##?\s*)?(?:Executive\s+)?Summary[\s:]*\n(.+?)(?:\n##|\n\n\n|$)',
                 brief_markdown,
-                re.IGNORECASE | re.DOTALL
-            )
-            if summary_match:
+                re.IGNORECASE | re.DOTALL,
+            ):
                 summary = summary_match.group(1)
                 sentences = re.split(r'(?<=[.!?])\s+', summary)
                 takeaways = [s.strip() for s in sentences[:3] if len(s.strip()) > 30]
-        
+
         return takeaways[:5]  # Limit to 5 takeaways
     
     def _extract_city_examples(self, brief_markdown: str) -> List[Dict[str, str]]:
@@ -4265,26 +4229,29 @@ The City of Austin is committed to transparent and responsible use of AI technol
                 b for b in briefs 
                 if b.impact_score is not None or b.relevance_score is not None
             ]
-            
+
             if not valid_briefs:
                 return None
-            
+
             fig, ax = plt.subplots(figsize=(10, 6))
-            
+
             # Prepare data
-            names = [b.card_name[:25] + '...' if len(b.card_name) > 25 else b.card_name for b in valid_briefs]
+            names = [
+                f'{b.card_name[:25]}...' if len(b.card_name) > 25 else b.card_name
+                for b in valid_briefs
+            ]
             impacts = [b.impact_score or 0 for b in valid_briefs]
             relevances = [b.relevance_score or 0 for b in valid_briefs]
             velocities = [b.velocity_score or 0 for b in valid_briefs]
-            
+
             x = np.arange(len(names))
             width = 0.25
-            
+
             # Create bars
             bars1 = ax.bar(x - width, impacts, width, label='Impact', color=COA_BRAND_COLORS["logo_blue"])
             bars2 = ax.bar(x, relevances, width, label='Relevance', color=COA_BRAND_COLORS["logo_green"])
             bars3 = ax.bar(x + width, velocities, width, label='Velocity', color=COA_BRAND_COLORS["dark_blue"])
-            
+
             # Customize chart
             ax.set_ylabel('Score (0-100)', fontsize=11)
             ax.set_title('Portfolio Score Comparison', fontsize=14, fontweight='bold', color=COA_BRAND_COLORS["dark_blue"])
@@ -4292,14 +4259,14 @@ The City of Austin is committed to transparent and responsible use of AI technol
             ax.set_xticklabels(names, rotation=45, ha='right', fontsize=9)
             ax.legend(loc='upper right')
             ax.set_ylim(0, 110)
-            
+
             # Style
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
             ax.yaxis.grid(True, linestyle='--', alpha=0.3)
-            
+
             plt.tight_layout()
-            
+
             # Save
             temp_file = tempfile.NamedTemporaryFile(
                 suffix='.png',
@@ -4307,9 +4274,9 @@ The City of Austin is committed to transparent and responsible use of AI technol
                 prefix='foresight_portfolio_comparison_'
             )
             plt.savefig(temp_file.name, dpi=dpi, bbox_inches='tight', facecolor='white')
-            
+
             return temp_file.name
-            
+
         except Exception as e:
             logger.error(f"Error generating portfolio comparison chart: {e}")
             return None
@@ -4328,25 +4295,25 @@ The City of Austin is committed to transparent and responsible use of AI technol
         Places cards in quadrants based on synthesis priority_matrix data.
         """
         try:
-            matrix = synthesis.priority_matrix if synthesis.priority_matrix else {}
+            matrix = synthesis.priority_matrix or {}
             urgent = set(matrix.get("high_impact_urgent", []))
             strategic = set(matrix.get("high_impact_strategic", []))
             monitor = set(matrix.get("monitor", []))
-            
+
             fig, ax = plt.subplots(figsize=(10, 8))
-            
+
             # Draw quadrant backgrounds
             ax.fill([0, 50, 50, 0], [50, 50, 100, 100], color='#FEE2E2', alpha=0.5)  # Urgent - top left
             ax.fill([50, 100, 100, 50], [50, 50, 100, 100], color='#FEF3C7', alpha=0.5)  # Strategic - top right
             ax.fill([0, 50, 50, 0], [0, 0, 50, 50], color='#DBEAFE', alpha=0.5)  # Monitor - bottom left
             ax.fill([50, 100, 100, 50], [0, 0, 50, 50], color='#D1FAE5', alpha=0.5)  # Low priority - bottom right
-            
+
             # Quadrant labels
             ax.text(25, 95, '🔴 URGENT ACTION', ha='center', va='top', fontsize=12, fontweight='bold', color='#DC2626')
             ax.text(75, 95, '🟡 STRATEGIC PLANNING', ha='center', va='top', fontsize=12, fontweight='bold', color='#D97706')
             ax.text(25, 5, '🔵 MONITOR', ha='center', va='bottom', fontsize=12, fontweight='bold', color='#2563EB')
             ax.text(75, 5, '🟢 EVALUATE', ha='center', va='bottom', fontsize=12, fontweight='bold', color='#059669')
-            
+
             # Place cards
             for i, brief in enumerate(briefs):
                 name = brief.card_name
@@ -4363,47 +4330,47 @@ The City of Austin is committed to transparent and responsible use of AI technol
                 else:
                     x = 60 + (i % 3) * 12
                     y = 25 + (i // 3) * 8
-                
+
                 # Get pillar color
                 pillar_def = PILLAR_DEFINITIONS.get(brief.pillar_id.upper() if brief.pillar_id else "", {})
                 pillar_color = pillar_def.get("color", COA_BRAND_COLORS["logo_blue"])
-                
+
                 # Draw card marker
                 ax.scatter(x, y, s=200, c=pillar_color, edgecolors='white', linewidth=2, zorder=5)
-                
+
                 # Truncate name
-                short_name = name[:18] + '..' if len(name) > 18 else name
+                short_name = f'{name[:18]}..' if len(name) > 18 else name
                 ax.annotate(short_name, (x, y), xytext=(0, -15), textcoords='offset points',
                            ha='center', fontsize=8, color=COA_BRAND_COLORS["dark_blue"])
-            
+
             # Draw quadrant lines
             ax.axhline(y=50, color='gray', linewidth=2, linestyle='-', alpha=0.5)
             ax.axvline(x=50, color='gray', linewidth=2, linestyle='-', alpha=0.5)
-            
+
             # Axis labels
             ax.set_xlabel('← Lower Urgency          Higher Urgency →', fontsize=11, color='gray')
             ax.set_ylabel('← Lower Impact          Higher Impact →', fontsize=11, color='gray')
             ax.set_title('Strategic Priority Matrix', fontsize=14, fontweight='bold', color=COA_BRAND_COLORS["dark_blue"], pad=20)
-            
+
             ax.set_xlim(0, 100)
             ax.set_ylim(0, 100)
             ax.set_xticks([])
             ax.set_yticks([])
-            
+
             for spine in ax.spines.values():
                 spine.set_visible(False)
-            
+
             plt.tight_layout()
-            
+
             temp_file = tempfile.NamedTemporaryFile(
                 suffix='.png',
                 delete=False,
                 prefix='foresight_priority_matrix_'
             )
             plt.savefig(temp_file.name, dpi=dpi, bbox_inches='tight', facecolor='white')
-            
+
             return temp_file.name
-            
+
         except Exception as e:
             logger.error(f"Error generating priority matrix chart: {e}")
             return None
@@ -4420,10 +4387,10 @@ The City of Austin is committed to transparent and responsible use of AI technol
         """Add a visual dashboard slide with charts and key metrics."""
         slide_layout = prs.slide_layouts[6]
         slide = prs.slides.add_slide(slide_layout)
-        
+
         self._add_pptx_header(slide)
         self._add_pptx_footer(slide)
-        
+
         # Title
         title_box = slide.shapes.add_textbox(
             PPTX_MARGIN, Inches(1.25),
@@ -4435,18 +4402,18 @@ The City of Austin is committed to transparent and responsible use of AI technol
         title_para.font.size = Pt(28)
         title_para.font.bold = True
         title_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
-        
+
         # Key metrics row
         metrics_y = Inches(1.85)
         metric_width = Inches(2.2)
         metric_height = Inches(0.9)
-        
+
         # Calculate metrics
         total_cards = len(briefs)
         avg_impact = sum(b.impact_score or 0 for b in briefs) // max(total_cards, 1)
-        pillars_covered = len(set(b.pillar_id for b in briefs if b.pillar_id))
-        horizons = set(b.horizon for b in briefs if b.horizon)
-        
+        pillars_covered = len({b.pillar_id for b in briefs if b.pillar_id})
+        horizons = {b.horizon for b in briefs if b.horizon}
+
         metrics = [
             (str(total_cards), "Strategic Trends"),
             (f"{avg_impact}/100", "Avg Impact Score") if avg_impact > 0 else None,
@@ -4454,10 +4421,10 @@ The City of Austin is committed to transparent and responsible use of AI technol
             (", ".join(sorted(horizons)) if horizons else "Mixed", "Time Horizons"),
         ]
         metrics = [m for m in metrics if m]  # Remove None
-        
+
         for i, (value, label) in enumerate(metrics):
             x = PPTX_MARGIN + (i * (metric_width + Inches(0.15)))
-            
+
             # Metric box
             metric_box = slide.shapes.add_shape(
                 MSO_SHAPE.ROUNDED_RECTANGLE, x, metrics_y, metric_width, metric_height
@@ -4465,7 +4432,7 @@ The City of Austin is committed to transparent and responsible use of AI technol
             metric_box.fill.solid()
             metric_box.fill.fore_color.rgb = self._hex_to_rgb(COA_BRAND_COLORS["light_blue"])
             metric_box.line.fill.background()
-            
+
             # Value
             value_box = slide.shapes.add_textbox(x, metrics_y + Inches(0.1), metric_width, Inches(0.45))
             value_frame = value_box.text_frame
@@ -4475,7 +4442,7 @@ The City of Austin is committed to transparent and responsible use of AI technol
             value_para.font.bold = True
             value_para.font.color.rgb = self._hex_to_rgb(COA_BRAND_COLORS["logo_blue"])
             value_para.alignment = PP_ALIGN.CENTER
-            
+
             # Label
             label_box = slide.shapes.add_textbox(x, metrics_y + Inches(0.5), metric_width, Inches(0.35))
             label_frame = label_box.text_frame
@@ -4484,11 +4451,11 @@ The City of Austin is committed to transparent and responsible use of AI technol
             label_para.font.size = Pt(11)
             label_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
             label_para.alignment = PP_ALIGN.CENTER
-        
+
         # Charts row
         chart_y = Inches(3.0)
         chart_height = Inches(3.3)
-        
+
         if comparison_chart_path:
             try:
                 slide.shapes.add_picture(
@@ -4498,7 +4465,7 @@ The City of Austin is committed to transparent and responsible use of AI technol
                 )
             except Exception as e:
                 logger.warning(f"Failed to add comparison chart: {e}")
-        
+
         if pillar_chart_path:
             try:
                 slide.shapes.add_picture(
@@ -4526,20 +4493,20 @@ The City of Austin is committed to transparent and responsible use of AI technol
         pillar_name = pillar_def.get("name", brief.pillar_id or "Unknown")
         pillar_icon = pillar_def.get("icon", "🏛️")
         pillar_color = pillar_def.get("color", COA_BRAND_COLORS["logo_blue"])
-        
+
         horizon_def = HORIZON_DEFINITIONS.get(brief.horizon.upper() if brief.horizon else "", {})
         horizon_name = horizon_def.get("name", brief.horizon or "Unknown")
-        
+
         stage_def = STAGE_DEFINITIONS.get(brief.stage_id.upper() if brief.stage_id else "", {})
         stage_name = stage_def.get("name", brief.stage_id or "Unknown")
-        
+
         # ===== SLIDE 1: Overview =====
         slide_layout = prs.slide_layouts[6]
         slide1 = prs.slides.add_slide(slide_layout)
-        
+
         self._add_pptx_header(slide1)
         self._add_pptx_footer(slide1)
-        
+
         # Title with index
         title_box = slide1.shapes.add_textbox(
             PPTX_MARGIN, Inches(1.25),
@@ -4552,11 +4519,11 @@ The City of Austin is committed to transparent and responsible use of AI technol
         title_para.font.size = Pt(26)
         title_para.font.bold = True
         title_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
-        
+
         # Classification badges row
         badges_y = Inches(1.9)
         badge_height = Inches(0.4)
-        
+
         # Pillar badge
         pillar_badge = slide1.shapes.add_shape(
             MSO_SHAPE.ROUNDED_RECTANGLE, PPTX_MARGIN, badges_y, Inches(2.5), badge_height
@@ -4564,7 +4531,7 @@ The City of Austin is committed to transparent and responsible use of AI technol
         pillar_badge.fill.solid()
         pillar_badge.fill.fore_color.rgb = self._hex_to_rgb(pillar_color)
         pillar_badge.line.fill.background()
-        
+
         pillar_text = slide1.shapes.add_textbox(PPTX_MARGIN, badges_y, Inches(2.5), badge_height)
         pf = pillar_text.text_frame
         pp = pf.paragraphs[0]
@@ -4574,7 +4541,7 @@ The City of Austin is committed to transparent and responsible use of AI technol
         pp.font.color.rgb = RGBColor(255, 255, 255)
         pp.alignment = PP_ALIGN.CENTER
         pf.paragraphs[0].space_before = Pt(8)
-        
+
         # Horizon badge
         horizon_badge = slide1.shapes.add_shape(
             MSO_SHAPE.ROUNDED_RECTANGLE, Inches(3.0), badges_y, Inches(2.0), badge_height
@@ -4582,7 +4549,7 @@ The City of Austin is committed to transparent and responsible use of AI technol
         horizon_badge.fill.solid()
         horizon_badge.fill.fore_color.rgb = self._hex_to_rgb(COA_BRAND_COLORS["dark_blue"])
         horizon_badge.line.fill.background()
-        
+
         horizon_text = slide1.shapes.add_textbox(Inches(3.0), badges_y, Inches(2.0), badge_height)
         hf = horizon_text.text_frame
         hp = hf.paragraphs[0]
@@ -4592,7 +4559,7 @@ The City of Austin is committed to transparent and responsible use of AI technol
         hp.font.color.rgb = RGBColor(255, 255, 255)
         hp.alignment = PP_ALIGN.CENTER
         hf.paragraphs[0].space_before = Pt(8)
-        
+
         # Stage badge
         stage_badge = slide1.shapes.add_shape(
             MSO_SHAPE.ROUNDED_RECTANGLE, Inches(5.3), badges_y, Inches(2.2), badge_height
@@ -4600,7 +4567,7 @@ The City of Austin is committed to transparent and responsible use of AI technol
         stage_badge.fill.solid()
         stage_badge.fill.fore_color.rgb = self._hex_to_rgb(COA_BRAND_COLORS["logo_green"])
         stage_badge.line.fill.background()
-        
+
         stage_text = slide1.shapes.add_textbox(Inches(5.3), badges_y, Inches(2.2), badge_height)
         sf = stage_text.text_frame
         sp = sf.paragraphs[0]
@@ -4610,18 +4577,18 @@ The City of Austin is committed to transparent and responsible use of AI technol
         sp.font.color.rgb = RGBColor(255, 255, 255)
         sp.alignment = PP_ALIGN.CENTER
         sf.paragraphs[0].space_before = Pt(8)
-        
+
         # Summary content
         summary_y = Inches(2.5)
         summary_height = Inches(2.2)
-        
+
         # If we have a chart, put it on the right
         if chart_path:
             summary_width = Inches(4.8)
             summary_box = slide1.shapes.add_textbox(
                 PPTX_MARGIN, summary_y, summary_width, summary_height
             )
-            
+
             # Add chart
             try:
                 slide1.shapes.add_picture(
@@ -4636,10 +4603,10 @@ The City of Austin is committed to transparent and responsible use of AI technol
             summary_box = slide1.shapes.add_textbox(
                 PPTX_MARGIN, summary_y, summary_width, summary_height
             )
-        
+
         summary_frame = summary_box.text_frame
         summary_frame.word_wrap = True
-        
+
         # Add scores if available
         scores_line = []
         if brief.impact_score and brief.impact_score > 0:
@@ -4648,7 +4615,7 @@ The City of Austin is committed to transparent and responsible use of AI technol
             scores_line.append(f"Relevance: {brief.relevance_score}/100")
         if brief.velocity_score and brief.velocity_score > 0:
             scores_line.append(f"Velocity: {brief.velocity_score}/100")
-        
+
         if scores_line:
             scores_para = summary_frame.paragraphs[0]
             scores_para.text = " | ".join(scores_line)
@@ -4656,28 +4623,28 @@ The City of Austin is committed to transparent and responsible use of AI technol
             scores_para.font.bold = True
             scores_para.font.color.rgb = self._hex_to_rgb(COA_BRAND_COLORS["logo_blue"])
             scores_para.space_after = Pt(12)
-            
+
             summary_para = summary_frame.add_paragraph()
         else:
             summary_para = summary_frame.paragraphs[0]
-        
+
         summary_text = brief.brief_summary or "Executive summary not available."
         summary_para.text = summary_text[:600] if len(summary_text) > 600 else summary_text
         summary_para.font.size = Pt(14)
         summary_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
         summary_para.space_before = Pt(6)
-        
+
         # ===== SLIDE 2: Key Takeaways & Examples =====
         takeaways = self._extract_key_takeaways(brief.brief_content_markdown)
         city_examples = self._extract_city_examples(brief.brief_content_markdown)
-        
+
         # Only add this slide if we have content
         if takeaways or city_examples:
             slide2 = prs.slides.add_slide(slide_layout)
-            
+
             self._add_pptx_header(slide2)
             self._add_pptx_footer(slide2)
-            
+
             # Title
             title_box2 = slide2.shapes.add_textbox(
                 PPTX_MARGIN, Inches(1.25),
@@ -4689,63 +4656,63 @@ The City of Austin is committed to transparent and responsible use of AI technol
             title_para2.font.size = Pt(24)
             title_para2.font.bold = True
             title_para2.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
-            
+
             content_y = Inches(1.85)
-            
-            # Key Takeaways section
-            if takeaways:
-                takeaways_box = slide2.shapes.add_textbox(
-                    PPTX_MARGIN, content_y,
-                    Inches(4.5), Inches(4.0)
-                )
-                tf = takeaways_box.text_frame
-                tf.word_wrap = True
-                
-                # Section header
-                header_para = tf.paragraphs[0]
-                header_para.text = "📌 Key Takeaways"
-                header_para.font.size = Pt(16)
-                header_para.font.bold = True
-                header_para.font.color.rgb = self._hex_to_rgb(COA_BRAND_COLORS["logo_blue"])
-                header_para.space_after = Pt(8)
-                
-                for takeaway in takeaways:
-                    bullet_para = tf.add_paragraph()
-                    bullet_text = takeaway[:200] if len(takeaway) > 200 else takeaway
-                    bullet_para.text = f"• {bullet_text}"
-                    bullet_para.font.size = Pt(12)
-                    bullet_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
-                    bullet_para.space_before = Pt(6)
-            
-            # City Examples section
-            if city_examples:
-                examples_x = Inches(5.0) if takeaways else PPTX_MARGIN
-                examples_width = Inches(4.2) if takeaways else PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN)
-                
-                examples_box = slide2.shapes.add_textbox(
-                    examples_x, content_y,
-                    examples_width, Inches(4.0)
-                )
-                ef = examples_box.text_frame
-                ef.word_wrap = True
-                
-                # Section header
-                ex_header = ef.paragraphs[0]
-                ex_header.text = "🌆 Examples from Other Cities"
-                ex_header.font.size = Pt(16)
-                ex_header.font.bold = True
-                ex_header.font.color.rgb = self._hex_to_rgb(COA_BRAND_COLORS["logo_green"])
-                ex_header.space_after = Pt(8)
-                
-                for example in city_examples:
-                    city_para = ef.add_paragraph()
-                    city_text = f"• {example['city']}"
-                    if example.get('detail'):
-                        city_text += f": {example['detail']}"
-                    city_para.text = city_text[:180] if len(city_text) > 180 else city_text
-                    city_para.font.size = Pt(12)
-                    city_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
-                    city_para.space_before = Pt(6)
+
+        # Key Takeaways section
+        if takeaways:
+            takeaways_box = slide2.shapes.add_textbox(
+                PPTX_MARGIN, content_y,
+                Inches(4.5), Inches(4.0)
+            )
+            tf = takeaways_box.text_frame
+            tf.word_wrap = True
+
+            # Section header
+            header_para = tf.paragraphs[0]
+            header_para.text = "📌 Key Takeaways"
+            header_para.font.size = Pt(16)
+            header_para.font.bold = True
+            header_para.font.color.rgb = self._hex_to_rgb(COA_BRAND_COLORS["logo_blue"])
+            header_para.space_after = Pt(8)
+
+            for takeaway in takeaways:
+                bullet_para = tf.add_paragraph()
+                bullet_text = takeaway[:200] if len(takeaway) > 200 else takeaway
+                bullet_para.text = f"• {bullet_text}"
+                bullet_para.font.size = Pt(12)
+                bullet_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
+                bullet_para.space_before = Pt(6)
+
+        # City Examples section
+        if city_examples:
+            examples_x = Inches(5.0) if takeaways else PPTX_MARGIN
+            examples_width = Inches(4.2) if takeaways else PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN)
+
+            examples_box = slide2.shapes.add_textbox(
+                examples_x, content_y,
+                examples_width, Inches(4.0)
+            )
+            ef = examples_box.text_frame
+            ef.word_wrap = True
+
+            # Section header
+            ex_header = ef.paragraphs[0]
+            ex_header.text = "🌆 Examples from Other Cities"
+            ex_header.font.size = Pt(16)
+            ex_header.font.bold = True
+            ex_header.font.color.rgb = self._hex_to_rgb(COA_BRAND_COLORS["logo_green"])
+            ex_header.space_after = Pt(8)
+
+            for example in city_examples:
+                city_para = ef.add_paragraph()
+                city_text = f"• {example['city']}"
+                if example.get('detail'):
+                    city_text += f": {example['detail']}"
+                city_para.text = city_text[:180] if len(city_text) > 180 else city_text
+                city_para.font.size = Pt(12)
+                city_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
+                city_para.space_before = Pt(6)
 
     async def generate_portfolio_pptx_local(
         self,
@@ -4782,13 +4749,13 @@ The City of Austin is committed to transparent and responsible use of AI technol
         from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
         from datetime import datetime
         import tempfile
-        
+
         prs = Presentation()
         prs.slide_width = PPTX_SLIDE_WIDTH
         prs.slide_height = PPTX_SLIDE_HEIGHT
-        
+
         temp_files_to_cleanup = []
-        
+
         try:
             # Get pillar icons for title
             pillar_icons = []
@@ -4800,25 +4767,25 @@ The City of Austin is committed to transparent and responsible use of AI technol
                 if icon not in pillar_icons:
                     pillar_icons.append(icon)
                 pillar_counts[pillar_name] = pillar_counts.get(pillar_name, 0) + 1
-            
+
             # ===== 1. TITLE SLIDE =====
             title_subtitle = f"{' '.join(pillar_icons)} | {len(briefs)} Strategic Trends\n{datetime.now().strftime('%B %Y')}"
             self._add_title_slide(prs, workstream_name, title_subtitle)
-            
+
             # ===== 2. PORTFOLIO DASHBOARD =====
             # Generate charts
             comparison_chart_path = self._generate_portfolio_comparison_chart(briefs)
             if comparison_chart_path:
                 temp_files_to_cleanup.append(comparison_chart_path)
-            
+
             pillar_chart_path = None
             if pillar_counts:
                 pillar_chart_path = self.generate_pillar_distribution_chart(pillar_counts, "Distribution by Pillar")
                 if pillar_chart_path:
                     temp_files_to_cleanup.append(pillar_chart_path)
-            
+
             self._add_portfolio_dashboard_slide(prs, briefs, comparison_chart_path, pillar_chart_path)
-            
+
             # ===== 3. WHY THIS MATTERS NOW =====
             urgency = getattr(synthesis, 'urgency_statement', '') or f"These {len(briefs)} trends represent critical opportunities and challenges. Early action positions Austin as a leader; delay risks falling behind peer cities."
             urgency_content = f"{urgency}\n\n**The Window of Opportunity**\n\nCities that move first on emerging trends gain competitive advantage in talent attraction, federal funding, and citizen satisfaction."
@@ -4828,27 +4795,27 @@ The City of Austin is committed to transparent and responsible use of AI technol
                 content=urgency_content,
                 max_chars=1200
             )
-            
+
             # ===== 4. EXECUTIVE OVERVIEW =====
-            overview_content = synthesis.executive_overview if synthesis.executive_overview else "Portfolio synthesis in progress..."
+            overview_content = synthesis.executive_overview or "Portfolio synthesis in progress..."
             self._add_smart_content_slide(
                 prs,
                 title="Executive Overview",
                 content=overview_content,
                 max_chars=1400
             )
-            
-            # ===== 5. VISUAL PRIORITY MATRIX =====
-            matrix_chart_path = self._generate_priority_matrix_chart(briefs, synthesis)
-            if matrix_chart_path:
+
+            if matrix_chart_path := self._generate_priority_matrix_chart(
+                briefs, synthesis
+            ):
                 temp_files_to_cleanup.append(matrix_chart_path)
-                
+
                 # Add matrix slide
                 slide_layout = prs.slide_layouts[6]
                 matrix_slide = prs.slides.add_slide(slide_layout)
                 self._add_pptx_header(matrix_slide)
                 self._add_pptx_footer(matrix_slide)
-                
+
                 title_box = matrix_slide.shapes.add_textbox(
                     PPTX_MARGIN, Inches(1.25),
                     PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.5)
@@ -4859,7 +4826,7 @@ The City of Austin is committed to transparent and responsible use of AI technol
                 title_para.font.size = Pt(28)
                 title_para.font.bold = True
                 title_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
-                
+
                 try:
                     matrix_slide.shapes.add_picture(
                         matrix_chart_path,
@@ -4870,25 +4837,28 @@ The City of Austin is committed to transparent and responsible use of AI technol
                     logger.warning(f"Failed to add priority matrix chart: {e}")
             else:
                 # Fallback to text-based priority slide
-                matrix = synthesis.priority_matrix if synthesis.priority_matrix else {}
+                matrix = synthesis.priority_matrix or {}
                 urgent = matrix.get("high_impact_urgent", [])
                 strategic = matrix.get("high_impact_strategic", [])
                 monitor = matrix.get("monitor", [])
-                
-                priority_content = "🔴 **High Impact - Urgent Action**\n"
-                priority_content += "\n".join(f"• {item}" for item in urgent) if urgent else "• None identified"
+
+                priority_content = "🔴 **High Impact - Urgent Action**\n" + (
+                    "\n".join(f"• {item}" for item in urgent)
+                    if urgent
+                    else "• None identified"
+                )
                 priority_content += "\n\n🟡 **High Impact - Strategic Planning**\n"
                 priority_content += "\n".join(f"• {item}" for item in strategic) if strategic else "• None identified"
                 priority_content += "\n\n🟢 **Monitor & Evaluate**\n"
                 priority_content += "\n".join(f"• {item}" for item in monitor) if monitor else "• None identified"
-                
+
                 self._add_smart_content_slide(
                     prs,
                     title="Strategic Priorities",
                     content=priority_content,
                     max_chars=1500
                 )
-            
+
             # ===== 6. IMPLEMENTATION GUIDANCE =====
             impl = getattr(synthesis, 'implementation_guidance', {}) or {}
             impl_lines = []
@@ -4904,7 +4874,7 @@ The City of Austin is committed to transparent and responsible use of AI technol
                 impl_lines.append(f"👥 **Staff Training Focus**: {', '.join(impl['staff_training'])}")
             if impl.get("budget_planning"):
                 impl_lines.append(f"💰 **Budget Planning**: {', '.join(impl['budget_planning'])}")
-            
+
             if impl_lines:
                 impl_content = "What should Austin DO with each trend?\n\n" + "\n".join(impl_lines)
                 self._add_smart_content_slide(
@@ -4913,27 +4883,23 @@ The City of Austin is committed to transparent and responsible use of AI technol
                     content=impl_content,
                     max_chars=1400
                 )
-            
+
             # ===== 7. PER-CARD DEEP DIVES =====
             for i, brief in enumerate(briefs, 1):
                 # Generate score chart for this card if scores exist
                 card_chart_path = None
-                has_scores = (
-                    (brief.impact_score and brief.impact_score > 0) or
-                    (brief.relevance_score and brief.relevance_score > 0) or
-                    (brief.velocity_score and brief.velocity_score > 0)
-                )
-                
-                if has_scores:
+                if has_scores := (
+                    (brief.impact_score and brief.impact_score > 0)
+                    or (brief.relevance_score and brief.relevance_score > 0)
+                    or (brief.velocity_score and brief.velocity_score > 0)
+                ):
                     # Create a simple CardExportData-like object for chart generation
                     scores = {
                         'Impact': brief.impact_score or 0,
                         'Relevance': brief.relevance_score or 0,
                         'Velocity': brief.velocity_score or 0,
                     }
-                    # Filter out zeros
-                    valid_scores = {k: v for k, v in scores.items() if v > 0}
-                    if valid_scores:
+                    if valid_scores := {k: v for k, v in scores.items() if v > 0}:
                         card_chart_path = self._generate_radar_chart(
                             valid_scores,
                             brief.card_name,
@@ -4941,25 +4907,23 @@ The City of Austin is committed to transparent and responsible use of AI technol
                         )
                         if card_chart_path:
                             temp_files_to_cleanup.append(card_chart_path)
-                
+
                 self._add_card_deep_dive_slides(prs, brief, i, card_chart_path)
-            
+
             # ===== 8. CROSS-CUTTING THEMES =====
             themes_content = "**Common Patterns Across Trends**\n"
             themes_content += "\n".join(f"• {theme}" for theme in (synthesis.key_themes or [])) or "• Analysis in progress"
             themes_content += "\n\n**Strategic Connections**\n"
             themes_content += "\n".join(f"• {insight}" for insight in (synthesis.cross_cutting_insights or [])) or "• Analysis in progress"
-            
+
             self._add_smart_content_slide(
                 prs,
                 title="Cross-Cutting Themes",
                 content=themes_content,
                 max_chars=1400
             )
-            
-            # ===== 9. 90-DAY ACTION PLAN =====
-            ninety_day = getattr(synthesis, 'ninety_day_actions', []) or []
-            if ninety_day:
+
+            if ninety_day := getattr(synthesis, 'ninety_day_actions', []) or []:
                 actions_content = "What Austin should do in the next 90 days:\n\n"
                 for action in ninety_day[:5]:
                     action_text = action.get("action", "")
@@ -4979,27 +4943,27 @@ The City of Austin is committed to transparent and responsible use of AI technol
                     owner = action.get("owner", "TBD")
                     timeline = action.get("timeline", "TBD")
                     related_cards = action.get("cards", [])
-                    
+
                     actions_content += f"✓ **{action_text}**\n"
                     actions_content += f"   Owner: {owner} | Timeline: {timeline}"
                     if related_cards:
                         actions_content += f" | Related: {', '.join(related_cards[:2])}"
                     actions_content += "\n\n"
-                
+
                 if not actions_content:
                     actions_content = "Action plan to be developed based on leadership priorities."
-            
+
             self._add_smart_content_slide(
                 prs,
                 title="90-Day Action Plan",
                 content=actions_content,
                 max_chars=1400
             )
-            
+
             # ===== 10. RISKS & OPPORTUNITIES =====
             risk_text = getattr(synthesis, 'risk_summary', '') or "Delayed action on these trends could result in Austin falling behind peer cities, missing federal funding windows, and losing competitive advantage."
             opp_text = getattr(synthesis, 'opportunity_summary', '') or "Early action positions Austin as a national leader, attracts innovation investment, and delivers improved services to residents."
-            
+
             risk_opp_content = f"⚠️ **If Austin Doesn't Act**\n{risk_text}\n\n✨ **If Austin Leads**\n{opp_text}"
             self._add_smart_content_slide(
                 prs,
@@ -5007,10 +4971,10 @@ The City of Austin is committed to transparent and responsible use of AI technol
                 content=risk_opp_content,
                 max_chars=1400
             )
-            
+
             # ===== 11. AI DISCLOSURE =====
             self._add_ai_disclosure_slide(prs)
-            
+
             # Save to temp file
             temp_file = tempfile.NamedTemporaryFile(
                 suffix='.pptx',
@@ -5019,10 +4983,10 @@ The City of Austin is committed to transparent and responsible use of AI technol
             )
             prs.save(temp_file.name)
             temp_file.close()
-            
+
             logger.info(f"Generated enhanced local portfolio PPTX: {len(briefs)} cards, {len(prs.slides)} slides")
             return temp_file.name
-            
+
         finally:
             # Clean up temp chart files
             self.cleanup_temp_files(temp_files_to_cleanup)
@@ -5054,14 +5018,14 @@ The City of Austin is committed to transparent and responsible use of AI technol
         from reportlab.lib.units import inch
         from datetime import datetime
         import tempfile
-        
+
         # Create temp file
         temp_file = tempfile.NamedTemporaryFile(
             suffix='.pdf',
             delete=False,
             prefix='foresight_portfolio_'
         )
-        
+
         doc = SimpleDocTemplate(
             temp_file.name,
             pagesize=letter,
@@ -5070,9 +5034,9 @@ The City of Austin is committed to transparent and responsible use of AI technol
             topMargin=72,
             bottomMargin=72
         )
-        
+
         styles = getSampleStyleSheet()
-        
+
         # Custom styles
         title_style = ParagraphStyle(
             'PortfolioTitle',
@@ -5082,7 +5046,7 @@ The City of Austin is committed to transparent and responsible use of AI technol
             spaceAfter=12,
             alignment=1  # Center
         )
-        
+
         subtitle_style = ParagraphStyle(
             'PortfolioSubtitle',
             parent=styles['Normal'],
@@ -5091,7 +5055,7 @@ The City of Austin is committed to transparent and responsible use of AI technol
             spaceAfter=24,
             alignment=1
         )
-        
+
         section_style = ParagraphStyle(
             'SectionTitle',
             parent=styles['Heading2'],
@@ -5100,7 +5064,7 @@ The City of Austin is committed to transparent and responsible use of AI technol
             spaceBefore=18,
             spaceAfter=12
         )
-        
+
         card_title_style = ParagraphStyle(
             'CardTitle',
             parent=styles['Heading3'],
@@ -5109,7 +5073,7 @@ The City of Austin is committed to transparent and responsible use of AI technol
             spaceBefore=12,
             spaceAfter=6
         )
-        
+
         body_style = ParagraphStyle(
             'BodyText',
             parent=styles['Normal'],
@@ -5118,75 +5082,72 @@ The City of Austin is committed to transparent and responsible use of AI technol
             spaceAfter=8,
             leading=14
         )
-        
-        elements = []
-        
-        # Title page
-        elements.append(Spacer(1, inch * 2))
+
+        elements = [Spacer(1, inch * 2)]
+
         elements.append(Paragraph(workstream_name, title_style))
         elements.append(Paragraph("Strategic Intelligence Portfolio", subtitle_style))
         elements.append(Paragraph(f"{len(briefs)} Strategic Trends | {datetime.now().strftime('%B %Y')}", subtitle_style))
         elements.append(Paragraph("City of Austin | FORESIGHT Platform", subtitle_style))
         elements.append(PageBreak())
-        
+
         # Executive Overview
         elements.append(Paragraph("Executive Overview", section_style))
-        overview_text = synthesis.executive_overview if synthesis.executive_overview else "Portfolio analysis in progress."
+        overview_text = synthesis.executive_overview or "Portfolio analysis in progress."
         # Split into paragraphs for better formatting
         for para in overview_text.split('\n\n'):
             if para.strip():
                 elements.append(Paragraph(para.strip(), body_style))
         elements.append(Spacer(1, 12))
-        
+
         # Key Themes
         elements.append(Paragraph("Key Themes", section_style))
-        for theme in (synthesis.key_themes or []):
-            elements.append(Paragraph(f"• {theme}", body_style))
+        elements.extend(
+            Paragraph(f"• {theme}", body_style)
+            for theme in (synthesis.key_themes or [])
+        )
         elements.append(Spacer(1, 12))
-        
+
         # Strategic Priorities
         elements.append(Paragraph("Strategic Priorities", section_style))
-        matrix = synthesis.priority_matrix if synthesis.priority_matrix else {}
-        
-        urgent = matrix.get("high_impact_urgent", [])
-        if urgent:
+        matrix = synthesis.priority_matrix or {}
+
+        if urgent := matrix.get("high_impact_urgent", []):
             elements.append(Paragraph("<b>High Impact - Urgent Action:</b>", body_style))
             for item in urgent:
                 elements.append(Paragraph(f"  • {item}", body_style))
-        
-        strategic = matrix.get("high_impact_strategic", [])
-        if strategic:
+
+        if strategic := matrix.get("high_impact_strategic", []):
             elements.append(Paragraph("<b>High Impact - Strategic Planning:</b>", body_style))
             for item in strategic:
                 elements.append(Paragraph(f"  • {item}", body_style))
-        
-        monitor = matrix.get("monitor", [])
-        if monitor:
+
+        if monitor := matrix.get("monitor", []):
             elements.append(Paragraph("<b>Monitor & Evaluate:</b>", body_style))
             for item in monitor:
                 elements.append(Paragraph(f"  • {item}", body_style))
-        
+
         elements.append(PageBreak())
-        
+
         # Per-card detailed sections (PDF gets FULL content)
         elements.append(Paragraph("Trend Analysis", section_style))
-        
+
         for i, brief in enumerate(briefs, 1):
             pillar_def = PILLAR_DEFINITIONS.get(brief.pillar_id.upper() if brief.pillar_id else "", {})
             pillar_name = pillar_def.get("name", brief.pillar_id or "Unknown")
             horizon_name = brief.horizon or "H2"
-            
+
             elements.append(Paragraph(f"{i}. {brief.card_name}", card_title_style))
             elements.append(Paragraph(
                 f"<b>Pillar:</b> {pillar_name} | <b>Horizon:</b> {horizon_name} | "
                 f"<b>Impact:</b> {brief.impact_score}/100 | <b>Relevance:</b> {brief.relevance_score}/100",
                 body_style
             ))
-            
+
             # Summary
             if brief.brief_summary:
                 elements.append(Paragraph(f"<b>Summary:</b> {brief.brief_summary}", body_style))
-            
+
             # Full brief content (PDF gets expanded detail)
             if brief.brief_content_markdown:
                 # Clean up markdown for PDF
@@ -5196,25 +5157,25 @@ The City of Austin is committed to transparent and responsible use of AI technol
                 content = re.sub(r'^#+\s+', '', content, flags=re.MULTILINE)
                 content = re.sub(r'\*\*([^*]+)\*\*', r'<b>\1</b>', content)
                 content = re.sub(r'\*([^*]+)\*', r'<i>\1</i>', content)
-                
+
                 # Truncate if very long
                 if len(content) > 2000:
-                    content = content[:2000] + "..."
-                
+                    content = f"{content[:2000]}..."
+
                 for para in content.split('\n\n')[:5]:  # First 5 paragraphs
                     if para.strip():
                         elements.append(Paragraph(para.strip(), body_style))
-            
+
             elements.append(Spacer(1, 12))
-        
+
         elements.append(PageBreak())
-        
+
         # Cross-Cutting Insights
         elements.append(Paragraph("Cross-Cutting Insights", section_style))
         for insight in (synthesis.cross_cutting_insights or []):
             elements.append(Paragraph(f"• {insight}", body_style))
         elements.append(Spacer(1, 12))
-        
+
         # Recommended Actions
         elements.append(Paragraph("Recommended Actions", section_style))
         for action in (synthesis.recommended_actions or []):
@@ -5222,13 +5183,13 @@ The City of Austin is committed to transparent and responsible use of AI technol
             owner = action.get("owner", "TBD")
             timeline = action.get("timeline", "TBD")
             cards = ", ".join(action.get("cards", []))
-            
+
             elements.append(Paragraph(f"<b>{action_text}</b>", body_style))
             elements.append(Paragraph(f"  Owner: {owner} | Timeline: {timeline}", body_style))
             if cards:
                 elements.append(Paragraph(f"  Related Trends: {cards}", body_style))
             elements.append(Spacer(1, 6))
-        
+
         # AI Disclosure
         elements.append(PageBreak())
         elements.append(Paragraph("About This Portfolio", section_style))
@@ -5237,10 +5198,10 @@ The City of Austin is committed to transparent and responsible use of AI technol
         and Gamma.app. The City of Austin is committed to transparent and responsible use of AI 
         technology in public service. All AI-generated content is reviewed for accuracy and relevance."""
         elements.append(Paragraph(disclosure, body_style))
-        
+
         # Build PDF
         doc.build(elements)
         temp_file.close()
-        
+
         logger.info(f"Generated portfolio PDF: {len(briefs)} cards")
         return temp_file.name

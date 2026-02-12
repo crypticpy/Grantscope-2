@@ -284,7 +284,4 @@ def _build_summary_text(
 
     if trend == "accelerating":
         return f"{base} (+{abs(score):.0f}% velocity)"
-    if trend == "decelerating":
-        return f"{base} ({score:.0f}% velocity)"
-
-    return base
+    return f"{base} ({score:.0f}% velocity)" if trend == "decelerating" else base

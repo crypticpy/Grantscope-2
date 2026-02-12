@@ -150,27 +150,25 @@ async def get_card_stage_history(
     # Convert to StageHistory models, mapping created_at to changed_at
     history_records = []
     if response.data:
-        for record in response.data:
-            # Skip records that don't have stage change data
-            if record.get("new_stage_id") is None:
-                continue
-
-            history_records.append(
-                StageHistory(
-                    id=record["id"],
-                    card_id=record["card_id"],
-                    changed_at=record["created_at"],  # Map created_at to changed_at
-                    old_stage_id=record.get("old_stage_id"),
-                    new_stage_id=record["new_stage_id"],
-                    old_horizon=record.get("old_horizon"),
-                    new_horizon=record.get(
-                        "new_horizon", "H3"
-                    ),  # Default to H3 if not set
-                    trigger=record.get("trigger"),
-                    reason=record.get("reason"),
-                )
+        history_records.extend(
+            StageHistory(
+                id=record["id"],
+                card_id=record["card_id"],
+                changed_at=record[
+                    "created_at"
+                ],  # Map created_at to changed_at
+                old_stage_id=record.get("old_stage_id"),
+                new_stage_id=record["new_stage_id"],
+                old_horizon=record.get("old_horizon"),
+                new_horizon=record.get(
+                    "new_horizon", "H3"
+                ),  # Default to H3 if not set
+                trigger=record.get("trigger"),
+                reason=record.get("reason"),
             )
-
+            for record in response.data
+            if record.get("new_stage_id") is not None
+        )
     return StageHistoryList(
         history=history_records, total_count=len(history_records), card_id=card_id
     )
@@ -263,26 +261,21 @@ async def get_related_cards(
         else:
             related_id = rel["source_card_id"]
 
-        # Get the card details
-        card_data = cards_map.get(related_id)
-        if not card_data:
-            # Skip if card doesn't exist (orphaned relationship)
-            continue
-
-        related_cards.append(
-            RelatedCard(
-                id=card_data["id"],
-                name=card_data["name"],
-                slug=card_data["slug"],
-                summary=card_data.get("summary"),
-                pillar_id=card_data.get("pillar_id"),
-                stage_id=card_data.get("stage_id"),
-                horizon=card_data.get("horizon"),
-                relationship_type=rel["relationship_type"],
-                relationship_strength=rel.get("strength"),
-                relationship_id=rel["id"],
+        if card_data := cards_map.get(related_id):
+            related_cards.append(
+                RelatedCard(
+                    id=card_data["id"],
+                    name=card_data["name"],
+                    slug=card_data["slug"],
+                    summary=card_data.get("summary"),
+                    pillar_id=card_data.get("pillar_id"),
+                    stage_id=card_data.get("stage_id"),
+                    horizon=card_data.get("horizon"),
+                    relationship_type=rel["relationship_type"],
+                    relationship_strength=rel.get("strength"),
+                    relationship_id=rel["id"],
+                )
             )
-        )
 
     # Limit the results to the specified limit
     related_cards = related_cards[:limit]
@@ -516,19 +509,19 @@ async def get_my_signals(
     enriched.sort(key=lambda c: 0 if c.get("is_pinned") else 1)
 
     # 9. Stats
-    updates_this_week = sum(
-        1 for c in enriched if (c.get("updated_at") or "") >= one_week_ago
-    )
-    needs_research = sum(
-        1 for c in enriched if (c.get("signal_quality_score") or 0) < 30
-    )
+    updates_this_week = sum(bool((c.get("updated_at") or "") >= one_week_ago)
+                        for c in enriched)
+    needs_research = sum(bool((c.get("signal_quality_score") or 0) < 30)
+                     for c in enriched)
 
     return {
         "signals": enriched,
         "stats": {
             "total": len(enriched),
-            "followed_count": sum(1 for c in enriched if c.get("is_followed")),
-            "created_count": sum(1 for c in enriched if c.get("is_created")),
+            "followed_count": sum(bool(c.get("is_followed"))
+                              for c in enriched),
+            "created_count": sum(bool(c.get("is_created"))
+                             for c in enriched),
             "workstream_count": len(workstreams),
             "updates_this_week": updates_this_week,
             "needs_research": needs_research,
@@ -717,14 +710,12 @@ async def get_card_assets(card_id: str, current_user: dict = Depends(get_current
                 continue
 
             task_type = task.get("task_type", "research")
+            asset_type = "research"
             if task_type == "deep_research":
-                asset_type = "research"
                 title = "Strategic Intelligence Report"
             elif task_type == "update":
-                asset_type = "research"
                 title = "Quick Update Report"
             else:
-                asset_type = "research"
                 title = f"{task_type.replace('_', ' ').title()} Report"
 
             result = task.get("result_summary", {}) or {}
@@ -759,7 +750,7 @@ async def get_card_assets(card_id: str, current_user: dict = Depends(get_current
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("card assets retrieval", e),
-        )
+        ) from e
 
 
 # ============================================================================

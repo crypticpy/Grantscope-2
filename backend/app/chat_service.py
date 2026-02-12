@@ -149,10 +149,8 @@ async def _retrieve_signal_context(
         return "", {"error": "Card not found"}
 
     card = card_result.data[0]
-    parts = []
+    parts = [f"## Signal: {card.get('name', 'Unknown')}"]
 
-    # Card overview
-    parts.append(f"## Signal: {card.get('name', 'Unknown')}")
     parts.append(f"Summary: {card.get('summary', 'No summary available')}")
     if card.get("description"):
         parts.append(f"Description: {card['description'][:2000]}")
@@ -219,8 +217,7 @@ async def _retrieve_signal_context(
                 excerpts = src["key_excerpts"]
                 if isinstance(excerpts, list) and excerpts:
                     parts.append("Key Excerpts:")
-                    for exc in excerpts[:3]:
-                        parts.append(f"  - {exc}")
+                    parts.extend(f"  - {exc}" for exc in excerpts[:3])
             if src.get("full_text"):
                 # Truncate full text to avoid exceeding context window
                 full = src["full_text"][:3000]
@@ -236,8 +233,7 @@ async def _retrieve_signal_context(
             .limit(20)
             .execute()
         )
-        timeline_events = timeline_result.data or []
-        if timeline_events:
+        if timeline_events := timeline_result.data or []:
             parts.append(f"\n## Timeline ({len(timeline_events)} events)")
             for evt in timeline_events[:10]:
                 parts.append(
@@ -249,10 +245,9 @@ async def _retrieve_signal_context(
                 # Check for deep research reports in metadata
                 meta = evt.get("metadata") or {}
                 if isinstance(meta, dict):
-                    report = meta.get("report_preview") or meta.get(
+                    if report := meta.get("report_preview") or meta.get(
                         "deep_research_report"
-                    )
-                    if report:
+                    ):
                         parts.append(f"  Research Report Excerpt: {str(report)[:1500]}")
     except Exception as e:
         logger.warning(f"Failed to fetch timeline for card {card_id}: {e}")
@@ -271,10 +266,9 @@ async def _retrieve_signal_context(
         for task in research_result.data or []:
             result_summary = task.get("result_summary") or {}
             if isinstance(result_summary, dict):
-                report = result_summary.get("report_preview") or result_summary.get(
-                    "report"
-                )
-                if report:
+                if report := result_summary.get(
+                    "report_preview"
+                ) or result_summary.get("report"):
                     parts.append(
                         f"\n## Deep Research Report ({task.get('completed_at', '')[:10]})"
                     )
@@ -322,9 +316,8 @@ async def _retrieve_workstream_context(
         return "", {"error": "Workstream not found"}
 
     ws = ws_result.data[0]
-    parts = []
+    parts = [f"## Workstream: {ws.get('name', 'Unknown')}"]
 
-    parts.append(f"## Workstream: {ws.get('name', 'Unknown')}")
     if ws.get("description"):
         parts.append(f"Description: {ws['description']}")
     if ws.get("keywords"):
@@ -347,8 +340,6 @@ async def _retrieve_workstream_context(
 
     card_ids = [wc["card_id"] for wc in (wc_result.data or [])]
     source_map = {}
-    source_idx = 1
-
     if card_ids:
         # Fetch card details
         cards_result = (
@@ -363,6 +354,8 @@ async def _retrieve_workstream_context(
 
         cards = cards_result.data or []
         parts.append(f"\n## Cards in Workstream ({len(cards)} signals)")
+
+        source_idx = 1
 
         for card in cards:
             card_id = card["id"]
@@ -470,8 +463,6 @@ async def _retrieve_global_context(
 
     parts = []
     source_map = {}
-    source_idx = 1
-
     if matched_cards:
         parts.append(f"## Relevant Signals ({len(matched_cards)} found)")
 
@@ -490,11 +481,17 @@ async def _retrieve_global_context(
             .execute()
         )
 
+        source_idx = 1
+
         for card in cards_result.data or []:
             card_id = card["id"]
             sim = similarity_map.get(card_id, 0)
-            parts.append(f"\n### {card.get('name', 'Unknown')} (relevance: {sim:.2f})")
-            parts.append(f"Summary: {card.get('summary', 'N/A')}")
+            parts.extend(
+                (
+                    f"\n### {card.get('name', 'Unknown')} (relevance: {sim:.2f})",
+                    f"Summary: {card.get('summary', 'N/A')}",
+                )
+            )
             if card.get("description"):
                 parts.append(f"Description: {card['description'][:500]}")
             parts.append(
@@ -542,19 +539,18 @@ async def _retrieve_global_context(
             .execute()
         )
 
-        patterns = patterns_result.data or []
-        if patterns:
+        if patterns := patterns_result.data or []:
             parts.append(f"\n## Active Cross-Signal Patterns ({len(patterns)})")
             for pat in patterns:
                 pillars = pat.get("affected_pillars", [])
                 if isinstance(pillars, list):
                     pillars = ", ".join(pillars)
-                parts.append(
-                    f"\n**{pat.get('pattern_title', 'Unknown')}** "
-                    f"(Urgency: {pat.get('urgency', 'N/A')}, "
-                    f"Confidence: {pat.get('confidence', 'N/A')})"
+                parts.extend(
+                    (
+                        f"\n**{pat.get('pattern_title', 'Unknown')}** (Urgency: {pat.get('urgency', 'N/A')}, Confidence: {pat.get('confidence', 'N/A')})",
+                        f"Pillars: {pillars}",
+                    )
                 )
-                parts.append(f"Pillars: {pillars}")
                 if pat.get("pattern_summary"):
                     parts.append(f"Summary: {pat['pattern_summary']}")
                 if pat.get("opportunity"):
@@ -671,8 +667,7 @@ def _parse_citations(
             continue
         seen.add(ref_num)
 
-        source_info = source_map.get(ref_num)
-        if source_info:
+        if source_info := source_map.get(ref_num):
             citations.append(
                 {
                     "index": ref_num,
@@ -738,8 +733,9 @@ async def _get_or_create_conversation(
             max_tokens=30,
             temperature=0.5,
         )
-        generated_title = title_response.choices[0].message.content.strip()
-        if generated_title:
+        if generated_title := title_response.choices[
+            0
+        ].message.content.strip():
             title = generated_title[:100]
     except Exception as e:
         logger.warning(f"Failed to generate conversation title: {e}")
@@ -927,9 +923,7 @@ async def chat(
             # Only include prior messages, not the one we just stored
             prior = history[:-1] if history else []
             # Limit history to keep within token budget
-            for msg in prior[-10:]:
-                messages.append(msg)
-
+            messages.extend(iter(prior[-10:]))
         messages.append({"role": "user", "content": message})
 
         # 5. Stream the LLM response
@@ -1041,22 +1035,9 @@ async def _generate_suggestions_internal(
     Uses the mini model for speed and cost efficiency.
     """
     scope_hints = {
-        "signal": (
-            f"The user is exploring a signal called \"{scope_metadata.get('card_name', 'Unknown')}\". "
-            f"Suggest questions about its implications for Austin, implementation timeline, "
-            f"risks, comparison with similar trends, or what other cities are doing."
-        ),
-        "workstream": (
-            f"The user is exploring a workstream called \"{scope_metadata.get('workstream_name', 'Unknown')}\" "
-            f"with {scope_metadata.get('card_count', 0)} signals. "
-            f"Suggest questions about cross-cutting themes, priority signals, "
-            f"resource allocation, or strategic recommendations."
-        ),
-        "global": (
-            f"The user asked a broad strategic question. "
-            f"Suggest questions about specific pillars, emerging patterns, "
-            f"comparisons between trends, or actionable next steps for the city."
-        ),
+        "signal": f"""The user is exploring a signal called \"{scope_metadata.get('card_name', 'Unknown')}\". Suggest questions about its implications for Austin, implementation timeline, risks, comparison with similar trends, or what other cities are doing.""",
+        "workstream": f"""The user is exploring a workstream called \"{scope_metadata.get('workstream_name', 'Unknown')}\" with {scope_metadata.get('card_count', 0)} signals. Suggest questions about cross-cutting themes, priority signals, resource allocation, or strategic recommendations.""",
+        "global": 'The user asked a broad strategic question. Suggest questions about specific pillars, emerging patterns, comparisons between trends, or actionable next steps for the city.',
     }
 
     prompt = f"""Based on this Q&A exchange, suggest exactly 3 follow-up questions the user might ask.
