@@ -5,14 +5,9 @@
  * the CardDetail component and its sub-components.
  */
 
-import type { ScoreColorClasses, MetricDefinition } from './types';
+import type { ScoreColorClasses, MetricDefinition } from "./types";
 
-/**
- * API base URL for backend requests
- * Falls back to localhost:8000 for development
- */
-export const API_BASE_URL: string =
-  import.meta.env.VITE_API_URL || 'http://localhost:8000';
+export { API_BASE_URL } from "../../lib/config";
 
 /**
  * Metric definitions with descriptions for tooltips
@@ -20,34 +15,32 @@ export const API_BASE_URL: string =
  */
 export const metricDefinitions: Record<string, MetricDefinition> = {
   impact: {
-    label: 'Impact',
+    label: "Impact",
     description:
-      'Potential magnitude of effect on City operations, services, or residents',
+      "Potential magnitude of effect on City operations, services, or residents",
   },
   relevance: {
-    label: 'Relevance',
+    label: "Relevance",
     description:
-      'How closely this aligns with current City priorities and strategic goals',
+      "How closely this aligns with current City priorities and strategic goals",
   },
   velocity: {
-    label: 'Velocity',
-    description:
-      'Speed of development and adoption in the broader ecosystem',
+    label: "Velocity",
+    description: "Speed of development and adoption in the broader ecosystem",
   },
   novelty: {
-    label: 'Novelty',
+    label: "Novelty",
     description:
-      'How new or unprecedented this signal is compared to existing knowledge',
+      "How new or unprecedented this signal is compared to existing knowledge",
   },
   opportunity: {
-    label: 'Opportunity',
+    label: "Opportunity",
     description:
-      'Potential benefits and positive outcomes if adopted or leveraged',
+      "Potential benefits and positive outcomes if adopted or leveraged",
   },
   risk: {
-    label: 'Risk',
-    description:
-      'Potential negative consequences or challenges to consider',
+    label: "Risk",
+    description: "Potential negative consequences or challenges to consider",
   },
 };
 
@@ -96,29 +89,29 @@ export const parseStageNumber = (stageId: string): number | null => {
 export const getScoreColorClasses = (score: number): ScoreColorClasses => {
   if (score >= 80) {
     return {
-      bg: 'bg-green-100 dark:bg-green-900/40',
-      text: 'text-green-800 dark:text-green-200',
-      border: 'border-green-400 dark:border-green-600',
+      bg: "bg-green-100 dark:bg-green-900/40",
+      text: "text-green-800 dark:text-green-200",
+      border: "border-green-400 dark:border-green-600",
     };
   }
   if (score >= 60) {
     return {
-      bg: 'bg-amber-100 dark:bg-amber-900/40',
-      text: 'text-amber-800 dark:text-amber-200',
-      border: 'border-amber-400 dark:border-amber-600',
+      bg: "bg-amber-100 dark:bg-amber-900/40",
+      text: "text-amber-800 dark:text-amber-200",
+      border: "border-amber-400 dark:border-amber-600",
     };
   }
   if (score >= 40) {
     return {
-      bg: 'bg-orange-100 dark:bg-orange-900/40',
-      text: 'text-orange-800 dark:text-orange-200',
-      border: 'border-orange-400 dark:border-orange-600',
+      bg: "bg-orange-100 dark:bg-orange-900/40",
+      text: "text-orange-800 dark:text-orange-200",
+      border: "border-orange-400 dark:border-orange-600",
     };
   }
   return {
-    bg: 'bg-red-100 dark:bg-red-900/40',
-    text: 'text-red-800 dark:text-red-200',
-    border: 'border-red-400 dark:border-red-600',
+    bg: "bg-red-100 dark:bg-red-900/40",
+    text: "text-red-800 dark:text-red-200",
+    border: "border-red-400 dark:border-red-600",
   };
 };
 
@@ -141,7 +134,7 @@ export const getScoreColorClasses = (score: number): ScoreColorClasses => {
  * formatRelativeTime(undefined) // returns "Never"
  */
 export const formatRelativeTime = (dateStr: string | undefined): string => {
-  if (!dateStr) return 'Never';
+  if (!dateStr) return "Never";
 
   const date = new Date(dateStr);
   const now = new Date();
@@ -150,7 +143,7 @@ export const formatRelativeTime = (dateStr: string | undefined): string => {
   const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
   const diffMinutes = Math.floor(diffMs / (1000 * 60));
 
-  if (diffMinutes < 1) return 'Just now';
+  if (diffMinutes < 1) return "Just now";
   if (diffMinutes < 60) return `${diffMinutes}m ago`;
   if (diffHours < 24) return `${diffHours}h ago`;
   if (diffDays < 7) return `${diffDays}d ago`;

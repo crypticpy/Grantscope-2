@@ -7,7 +7,7 @@
  * @module lib/source-rating-api
  */
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+import { API_BASE_URL } from "./config";
 
 /**
  * A single user's rating of a source.
@@ -76,7 +76,7 @@ export async function rateSource(
   data: RateSourcePayload,
   token: string,
 ): Promise<SourceRating> {
-  const res = await fetch(`${API_URL}/api/v1/sources/${sourceId}/rate`, {
+  const res = await fetch(`${API_BASE_URL}/api/v1/sources/${sourceId}/rate`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -106,11 +106,14 @@ export async function getSourceRatings(
   sourceId: string,
   token: string,
 ): Promise<SourceRatingAggregate> {
-  const res = await fetch(`${API_URL}/api/v1/sources/${sourceId}/ratings`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/sources/${sourceId}/ratings`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
     },
-  });
+  );
   if (!res.ok) {
     const errorText = await res.text().catch(() => "Unknown error");
     throw new Error(`Failed to get ratings: ${res.status} ${errorText}`);
@@ -129,7 +132,7 @@ export async function deleteSourceRating(
   sourceId: string,
   token: string,
 ): Promise<void> {
-  const res = await fetch(`${API_URL}/api/v1/sources/${sourceId}/rate`, {
+  const res = await fetch(`${API_BASE_URL}/api/v1/sources/${sourceId}/rate`, {
     method: "DELETE",
     headers: {
       Authorization: `Bearer ${token}`,

@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../App";
 import { useAuthContext } from "../hooks/useAuthContext";
+import { API_BASE_URL } from "../lib/config";
 import { cn } from "../lib/utils";
 import { PillarBadge, PillarBadgeGroup } from "../components/PillarBadge";
 import { HorizonBadge } from "../components/HorizonBadge";
@@ -521,8 +522,7 @@ const WorkstreamFeed: React.FC = () => {
       }
 
       // Build the export URL
-      const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
-      const exportUrl = `${apiUrl}/api/v1/workstreams/${id}/export/${format}`;
+      const exportUrl = `${API_BASE_URL}/api/v1/workstreams/${id}/export/${format}`;
 
       // Fetch the export file
       const response = await fetch(exportUrl, {

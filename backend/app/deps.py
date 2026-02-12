@@ -120,13 +120,19 @@ _CACHE_TTL = 300  # 5 minutes
 def _get_cached_profile(user_id: str) -> dict | None:
     """Return cached user profile if still within TTL, else None."""
     entry = _user_profile_cache.get(user_id)
-    if entry and time.time() - entry[1] < _CACHE_TTL:
-        return entry[0]
+    if entry:
+        if time.time() - entry[1] < _CACHE_TTL:
+            return entry[0]
+        del _user_profile_cache[user_id]  # Evict stale entry
     return None
 
 
 def _set_cached_profile(user_id: str, profile: dict) -> None:
     """Store a user profile in the TTL cache."""
+    # Evict oldest entry if cache is too large
+    if len(_user_profile_cache) > 1000:
+        oldest_key = min(_user_profile_cache, key=lambda k: _user_profile_cache[k][1])
+        del _user_profile_cache[oldest_key]
     _user_profile_cache[user_id] = (profile, time.time())
 
 

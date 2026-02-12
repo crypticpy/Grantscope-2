@@ -1131,9 +1131,7 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
             sources_week = sum(
                 bool(
                     s.get("created_at")
-                    and datetime.fromisoformat(
-                        s["created_at"].replace("Z", "+00:00")
-                    ).replace(tzinfo=None)
+                    and datetime.fromisoformat(s["created_at"].replace("Z", "+00:00"))
                     > one_week_ago
                 )
                 for s in sources_data
@@ -1168,9 +1166,7 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
             runs_week = sum(
                 bool(
                     r.get("started_at")
-                    and datetime.fromisoformat(
-                        r["started_at"].replace("Z", "+00:00")
-                    ).replace(tzinfo=None)
+                    and datetime.fromisoformat(r["started_at"].replace("Z", "+00:00"))
                     > one_week_ago
                 )
                 for r in discovery_data
@@ -1189,7 +1185,7 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
                         s.get("executed_at")
                         and datetime.fromisoformat(
                             s["executed_at"].replace("Z", "+00:00")
-                        ).replace(tzinfo=None)
+                        )
                         > one_week_ago
                     )
                     for s in search_data
@@ -1222,9 +1218,7 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
             active_workstreams = sum(
                 bool(
                     w.get("updated_at")
-                    and datetime.fromisoformat(
-                        w["updated_at"].replace("Z", "+00:00")
-                    ).replace(tzinfo=None)
+                    and datetime.fromisoformat(w["updated_at"].replace("Z", "+00:00"))
                     > one_month_ago
                 )
                 for w in ws_data
@@ -1601,9 +1595,7 @@ async def get_personal_stats(current_user: dict = Depends(get_current_user)):
         for f in all_follows_data:
             if created_at := f.get("created_at"):
                 try:
-                    dt = datetime.fromisoformat(
-                        created_at.replace("Z", "+00:00")
-                    ).replace(tzinfo=None)
+                    dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
                     if dt > one_week_ago:
                         recent_card_counts[f.get("card_id")] += 1
                 except (ValueError, TypeError):
