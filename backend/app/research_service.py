@@ -3,8 +3,8 @@ Research service using GPT Researcher + AI analysis pipeline.
 
 This service implements a hybrid research approach:
 1. GPT Researcher for source discovery (with Firecrawl scraping)
-2. Exa AI for supplementary high-quality sources
-3. Firecrawl for content backfill when sources lack content
+2. Serper + trafilatura for supplementary high-quality sources
+3. Firecrawl / trafilatura for content backfill when sources lack content
 4. AI Triage for quick relevance filtering (gpt-4o-mini)
 5. AI Analysis for full classification and scoring (gpt-4o)
 6. Vector matching for card association
@@ -227,8 +227,8 @@ class ResearchService:
 
     Pipeline:
     1. Discovery: GPT Researcher with Firecrawl scraping
-    2. Enhancement: Exa AI for supplementary sources
-    3. Backfill: Firecrawl for missing content
+    2. Enhancement: Serper + trafilatura for supplementary sources
+    3. Backfill: Firecrawl / trafilatura for missing content
     4. Triage: Quick relevance check with gpt-4o-mini
     5. Analysis: Full classification with gpt-4o
     6. Matching: Vector similarity to existing cards
@@ -300,14 +300,14 @@ class ResearchService:
         ).execute()
 
     # ========================================================================
-    # Step 1: Discovery (GPT Researcher + Exa Enhancement)
+    # Step 1: Discovery (GPT Researcher + Serper Enhancement)
     # ========================================================================
 
     async def _discover_sources(
         self, query: str, report_type: str = "research_report"
     ) -> Tuple[List[RawSource], str, float]:
         """
-        Use GPT Researcher to discover sources, enhanced with Exa AI.
+        Use GPT Researcher to discover sources, enhanced with Serper + trafilatura.
 
         Args:
             query: Research query (customized for municipal focus)
@@ -396,19 +396,19 @@ class ResearchService:
 
         logger.info(f"GPT Researcher found {len(sources)} sources")
 
-        # Supplement with Exa search for additional high-quality sources
-        if self.exa:
-            try:
-                exa_sources = await self._search_with_exa(query, num_results=5)
-                for src in exa_sources:
-                    if src.url not in seen_urls:
-                        seen_urls.add(src.url)
-                        sources.append(src)
-                logger.info(f"Exa added {len(exa_sources)} additional sources")
-            except Exception as e:
-                logger.warning(
-                    f"Exa search failed (continuing with GPT Researcher sources): {e}"
-                )
+        # Supplement with Serper search for additional high-quality sources
+        try:
+            serper_sources = await self._search_with_serper(query, num_results=5)
+            for src in serper_sources:
+                if src.url not in seen_urls:
+                    seen_urls.add(src.url)
+                    sources.append(src)
+            if serper_sources:
+                logger.info(f"Serper added {len(serper_sources)} additional sources")
+        except Exception as e:
+            logger.warning(
+                f"Serper search failed (continuing with GPT Researcher sources): {e}"
+            )
 
         return sources, report, costs
 
@@ -417,6 +417,7 @@ class ResearchService:
     ) -> List[RawSource]:
         """
         Search with Exa AI for high-quality sources with content.
+        (Legacy — kept for backwards compatibility if EXA_API_KEY is still set.)
 
         Args:
             query: Search query
@@ -464,11 +465,77 @@ class ResearchService:
             logger.warning(f"Exa search error: {e}")
             return []
 
+    async def _search_with_serper(
+        self, query: str, num_results: int = 5
+    ) -> List[RawSource]:
+        """
+        Search with Serper + trafilatura (replaces Exa AI).
+
+        Uses Serper for web + news search and trafilatura for full-text extraction.
+
+        Args:
+            query: Search query
+            num_results: Max number of results to return
+
+        Returns:
+            List of RawSource with content included
+        """
+        from .source_fetchers.serper_fetcher import (
+            search_web,
+            search_news,
+            is_available as serper_available,
+        )
+        from .content_enricher import extract_content
+
+        if not serper_available():
+            logger.warning("Serper not available for supplementary search")
+            return []
+
+        sources = []
+        try:
+            # Search web and news
+            web_results = await search_web(query, num_results=num_results)
+            news_results = await search_news(query, num_results=num_results)
+
+            # Deduplicate by URL
+            seen_urls = set()
+            all_results = []
+            for r in web_results + news_results:
+                if r.url not in seen_urls:
+                    seen_urls.add(r.url)
+                    all_results.append(r)
+
+            # Extract content for top results
+            for result in all_results[:num_results]:
+                content = result.snippet
+                try:
+                    full_text, _ = await extract_content(result.url)
+                    if full_text and len(full_text) > len(content):
+                        content = full_text
+                except Exception as e:
+                    logger.warning(f"Content extraction failed for {result.url}: {e}")
+
+                sources.append(
+                    RawSource(
+                        url=result.url,
+                        title=result.title,
+                        content=content,
+                        source_name=result.source_name or "Web Search",
+                    )
+                )
+
+            logger.info(f"Serper search found {len(sources)} sources for: {query[:50]}")
+        except Exception as e:
+            logger.warning(f"Serper search failed: {e}")
+
+        return sources
+
     async def _backfill_content_with_firecrawl(
         self, sources: List[RawSource]
     ) -> List[RawSource]:
         """
         Use Firecrawl to fetch content for sources that have URLs but no content.
+        Falls back to trafilatura when Firecrawl is not available.
 
         Args:
             sources: List of sources, some may have empty content
@@ -476,13 +543,36 @@ class ResearchService:
         Returns:
             Same list with content backfilled where possible
         """
-        if not self.firecrawl:
-            logger.info("Firecrawl not available for content backfill")
-            return sources
-
         sources_needing_content = [s for s in sources if s.url and not s.content]
         if not sources_needing_content:
             logger.info("All sources already have content")
+            return sources
+
+        # Fallback: use trafilatura if Firecrawl not available
+        if not self.firecrawl:
+            from .content_enricher import extract_content
+
+            logger.info(
+                f"Firecrawl not available, using trafilatura to backfill {len(sources_needing_content)} sources"
+            )
+            backfilled_count = 0
+            for source in sources_needing_content:
+                try:
+                    text, title = await extract_content(source.url)
+                    if text:
+                        source.content = text[:10000]
+                        backfilled_count += 1
+                    if title and (
+                        not source.title
+                        or source.title == "Untitled"
+                        or len(source.title) < 5
+                    ):
+                        source.title = title[:500]
+                except Exception:
+                    pass
+            logger.info(
+                f"Trafilatura backfilled content for {backfilled_count}/{len(sources_needing_content)} sources"
+            )
             return sources
 
         logger.info(
@@ -994,8 +1084,8 @@ class ResearchService:
 
         Pipeline:
         1. Build municipal-focused query
-        2. Discover sources with GPT Researcher + Exa
-        3. Backfill missing content with Firecrawl
+        2. Discover sources with GPT Researcher + Serper
+        3. Backfill missing content with Firecrawl / trafilatura
         4. Triage for relevance
         5. Analyze relevant sources
         6. Store to existing card
@@ -1021,12 +1111,12 @@ class ResearchService:
             name=card["name"], summary=card.get("summary", "")
         )
 
-        # Step 2: Discover sources (GPT Researcher + Exa)
+        # Step 2: Discover sources (GPT Researcher + Serper)
         sources, report, cost = await self._discover_sources(
             query=query, report_type="research_report"
         )
 
-        # Step 3: Backfill missing content with Firecrawl
+        # Step 3: Backfill missing content with Firecrawl / trafilatura
         sources = await self._backfill_content_with_firecrawl(sources)
 
         # Step 4: Triage
@@ -1134,10 +1224,10 @@ class ResearchService:
         """
         Execute comprehensive deep research for a card.
 
-        Pipeline with Firecrawl/Exa enhancement:
+        Pipeline with Serper/trafilatura enhancement:
         1. Build comprehensive query
-        2. Discover sources (GPT Researcher + Exa)
-        3. Backfill missing content with Firecrawl
+        2. Discover sources (GPT Researcher + Serper)
+        3. Backfill missing content with Firecrawl / trafilatura
         4. Triage for relevance
         5. Analyze relevant sources
         6. Store to existing card
@@ -1193,12 +1283,12 @@ class ResearchService:
             if steer_parts:
                 query += "\n\n" + " ".join(steer_parts)
 
-        # Step 2: Discover sources (GPT Researcher + Exa - detailed report for more depth)
+        # Step 2: Discover sources (GPT Researcher + Serper - detailed report for more depth)
         sources, report, cost = await self._discover_sources(
             query=query, report_type="detailed_report"
         )
 
-        # Step 3: Backfill missing content with Firecrawl
+        # Step 3: Backfill missing content with Firecrawl / trafilatura
         sources = await self._backfill_content_with_firecrawl(sources)
 
         # Step 4: Triage
@@ -1414,10 +1504,10 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
         """
         Analyze a workstream and find/create relevant cards.
 
-        Pipeline with Firecrawl/Exa enhancement:
+        Pipeline with Serper/trafilatura enhancement:
         1. Build workstream query
-        2. Discover sources (GPT Researcher + Exa)
-        3. Backfill missing content with Firecrawl
+        2. Discover sources (GPT Researcher + Serper)
+        3. Backfill missing content with Firecrawl / trafilatura
         4. Triage for relevance
         5. Analyze relevant sources
         6. Match or create cards
@@ -1448,12 +1538,12 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
             description=ws.get("description", ""),
         )
 
-        # Step 2: Discover sources (GPT Researcher + Exa)
+        # Step 2: Discover sources (GPT Researcher + Serper)
         sources, report, cost = await self._discover_sources(
             query=query, report_type="research_report"
         )
 
-        # Step 3: Backfill missing content with Firecrawl
+        # Step 3: Backfill missing content with Firecrawl / trafilatura
         sources = await self._backfill_content_with_firecrawl(sources)
 
         # Step 4: Triage

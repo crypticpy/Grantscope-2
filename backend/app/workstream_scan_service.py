@@ -55,6 +55,7 @@ from .source_fetchers.serper_fetcher import (
     is_available as serper_available,
     SerperResult,
 )
+from .content_enricher import enrich_sources
 
 logger = logging.getLogger(__name__)
 
@@ -216,7 +217,14 @@ class WorkstreamScanService:
                 await self._finalize_scan(config.scan_id, result)
                 return result
 
-            # Step 2b: Preload domain reputation cache (Task 2.7)
+            # Step 2b: Enrich sources with full article text (replaces Firecrawl)
+            if raw_sources:
+                logger.info(
+                    f"Enriching {len(raw_sources)} sources with full content..."
+                )
+                raw_sources = await enrich_sources(raw_sources, max_concurrent=5)
+
+            # Step 2c: Preload domain reputation cache (Task 2.7)
             try:
                 source_urls = [s.url for s in raw_sources if s.url]
                 domain_reputation_service.get_reputation_batch(
