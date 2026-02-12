@@ -182,7 +182,7 @@ const CardNode = memo(({ data }: NodeProps<Node<CardNodeData>>) => {
       <div
         onClick={handleClick}
         className={cn(
-          "px-4 py-3 rounded-lg border-2 shadow-md cursor-pointer transition-all",
+          "px-4 py-3 rounded-lg border-2 shadow-md cursor-pointer transition-all duration-200",
           "hover:shadow-lg hover:scale-[1.02]",
           "min-w-[180px] max-w-[240px]",
           colors.bg,

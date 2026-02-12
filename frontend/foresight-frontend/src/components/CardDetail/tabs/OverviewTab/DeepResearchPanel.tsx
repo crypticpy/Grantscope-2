@@ -7,7 +7,7 @@
  * @module CardDetail/tabs/OverviewTab/DeepResearchPanel
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback } from "react";
 import {
   Search,
   FileText,
@@ -16,61 +16,64 @@ import {
   Clock,
   ExternalLink,
   Sparkles,
-} from 'lucide-react';
-import { cn } from '../../../../lib/utils';
-import { MarkdownReport } from '../../MarkdownReport';
-import type { ResearchTask } from '../../types';
+} from "lucide-react";
+import { cn } from "../../../../lib/utils";
+import { MarkdownReport } from "../../MarkdownReport";
+import type { ResearchTask } from "../../types";
 
 /**
  * Extract a clean text preview from markdown content.
  * Removes markdown syntax and returns plain text suitable for preview.
  */
-function extractMarkdownPreview(markdown: string, maxLength: number = 300): string {
-  if (!markdown) return '';
-  
+function extractMarkdownPreview(
+  markdown: string,
+  maxLength: number = 300,
+): string {
+  if (!markdown) return "";
+
   // Remove markdown headers (# ## ### etc)
-  let text = markdown.replace(/^#{1,6}\s+/gm, '');
-  
+  let text = markdown.replace(/^#{1,6}\s+/gm, "");
+
   // Remove bold/italic markers
-  text = text.replace(/\*\*(.+?)\*\*/g, '$1');
-  text = text.replace(/\*(.+?)\*/g, '$1');
-  text = text.replace(/__(.+?)__/g, '$1');
-  text = text.replace(/_(.+?)_/g, '$1');
-  
+  text = text.replace(/\*\*(.+?)\*\*/g, "$1");
+  text = text.replace(/\*(.+?)\*/g, "$1");
+  text = text.replace(/__(.+?)__/g, "$1");
+  text = text.replace(/_(.+?)_/g, "$1");
+
   // Remove links but keep text
-  text = text.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
-  
+  text = text.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+
   // Remove horizontal rules
-  text = text.replace(/^[-*_]{3,}$/gm, '');
-  
+  text = text.replace(/^[-*_]{3,}$/gm, "");
+
   // Remove bullet points and list markers
-  text = text.replace(/^[\s]*[-*+]\s+/gm, '');
-  text = text.replace(/^[\s]*\d+\.\s+/gm, '');
-  
+  text = text.replace(/^[\s]*[-*+]\s+/gm, "");
+  text = text.replace(/^[\s]*\d+\.\s+/gm, "");
+
   // Remove code blocks
-  text = text.replace(/```[\s\S]*?```/g, '');
-  text = text.replace(/`([^`]+)`/g, '$1');
-  
+  text = text.replace(/```[\s\S]*?```/g, "");
+  text = text.replace(/`([^`]+)`/g, "$1");
+
   // Remove blockquotes
-  text = text.replace(/^>\s+/gm, '');
-  
+  text = text.replace(/^>\s+/gm, "");
+
   // Collapse multiple newlines and spaces
-  text = text.replace(/\n{2,}/g, ' ');
-  text = text.replace(/\s{2,}/g, ' ');
-  
+  text = text.replace(/\n{2,}/g, " ");
+  text = text.replace(/\s{2,}/g, " ");
+
   // Trim and limit length
   text = text.trim();
-  
+
   if (text.length > maxLength) {
     // Cut at word boundary
     text = text.slice(0, maxLength);
-    const lastSpace = text.lastIndexOf(' ');
+    const lastSpace = text.lastIndexOf(" ");
     if (lastSpace > maxLength * 0.8) {
       text = text.slice(0, lastSpace);
     }
-    text += '...';
+    text += "...";
   }
-  
+
   return text;
 }
 
@@ -121,7 +124,7 @@ export interface DeepResearchPanelProps {
  */
 export const DeepResearchPanel: React.FC<DeepResearchPanelProps> = ({
   researchTasks,
-  className = '',
+  className = "",
   onRequestResearch,
   canRequestResearch = false,
 }) => {
@@ -131,9 +134,9 @@ export const DeepResearchPanel: React.FC<DeepResearchPanelProps> = ({
   // Filter to only deep research tasks with reports
   const deepResearchTasks = researchTasks.filter(
     (task) =>
-      task.task_type === 'deep_research' &&
-      task.status === 'completed' &&
-      task.result_summary?.report_preview
+      task.task_type === "deep_research" &&
+      task.status === "completed" &&
+      task.result_summary?.report_preview,
   );
 
   // Get the latest report
@@ -151,19 +154,21 @@ export const DeepResearchPanel: React.FC<DeepResearchPanelProps> = ({
    * Format date for display
    */
   const formatDate = useCallback((dateString: string | undefined): string => {
-    if (!dateString) return 'Unknown date';
+    if (!dateString) return "Unknown date";
     const date = new Date(dateString);
     const now = new Date();
-    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+    const diffDays = Math.floor(
+      (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24),
+    );
 
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
+    if (diffDays === 0) return "Today";
+    if (diffDays === 1) return "Yesterday";
     if (diffDays < 7) return `${diffDays} days ago`;
 
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
     });
   }, []);
 
@@ -172,8 +177,8 @@ export const DeepResearchPanel: React.FC<DeepResearchPanelProps> = ({
     return (
       <div
         className={cn(
-          'bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 p-6',
-          className
+          "bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 p-6",
+          className,
         )}
       >
         <div className="text-center">
@@ -203,8 +208,8 @@ export const DeepResearchPanel: React.FC<DeepResearchPanelProps> = ({
   return (
     <div
       className={cn(
-        'bg-white dark:bg-dark-surface rounded-xl shadow-lg overflow-hidden border border-brand-blue/20',
-        className
+        "bg-white dark:bg-dark-surface rounded-xl shadow-lg overflow-hidden border border-brand-blue/20",
+        className,
       )}
     >
       {/* Header with gradient - Austin brand colors */}
@@ -219,7 +224,8 @@ export const DeepResearchPanel: React.FC<DeepResearchPanelProps> = ({
                 Strategic Intelligence Report
               </h2>
               <p className="text-white/80 text-sm">
-                {deepResearchTasks.length} report{deepResearchTasks.length !== 1 ? 's' : ''} available
+                {deepResearchTasks.length} report
+                {deepResearchTasks.length !== 1 ? "s" : ""} available
               </p>
             </div>
           </div>
@@ -251,10 +257,10 @@ export const DeepResearchPanel: React.FC<DeepResearchPanelProps> = ({
           <button
             onClick={() => handleToggleExpand(latestReport.id)}
             className={cn(
-              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
+              "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200",
               expandedReportId === latestReport.id
-                ? 'bg-brand-blue text-white'
-                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                ? "bg-brand-blue text-white"
+                : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600",
             )}
             aria-expanded={expandedReportId === latestReport.id}
           >
@@ -276,20 +282,29 @@ export const DeepResearchPanel: React.FC<DeepResearchPanelProps> = ({
         {expandedReportId === latestReport.id ? (
           <div className="mt-4 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
             <div className="max-h-[70vh] overflow-y-auto p-4 sm:p-6 bg-gray-50 dark:bg-dark-surface">
-              <MarkdownReport content={latestReport.result_summary!.report_preview!} />
+              <MarkdownReport
+                content={latestReport.result_summary!.report_preview!}
+              />
             </div>
           </div>
         ) : (
           <div className="bg-gray-50 dark:bg-dark-surface rounded-lg p-4">
             <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
-              {extractMarkdownPreview(latestReport.result_summary?.report_preview || '', 350)}
+              {extractMarkdownPreview(
+                latestReport.result_summary?.report_preview || "",
+                350,
+              )}
             </p>
             <div className="mt-3 flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
               {latestReport.result_summary?.sources_found && (
-                <span>{latestReport.result_summary.sources_found} sources analyzed</span>
+                <span>
+                  {latestReport.result_summary.sources_found} sources analyzed
+                </span>
               )}
               {latestReport.result_summary?.sources_added && (
-                <span>{latestReport.result_summary.sources_added} sources added</span>
+                <span>
+                  {latestReport.result_summary.sources_added} sources added
+                </span>
               )}
             </div>
           </div>
@@ -307,7 +322,8 @@ export const DeepResearchPanel: React.FC<DeepResearchPanelProps> = ({
               ) : (
                 <ChevronDown className="h-4 w-4" />
               )}
-              {previousReports.length} Previous Report{previousReports.length !== 1 ? 's' : ''}
+              {previousReports.length} Previous Report
+              {previousReports.length !== 1 ? "s" : ""}
             </button>
 
             {showAllReports && (
@@ -332,7 +348,7 @@ export const DeepResearchPanel: React.FC<DeepResearchPanelProps> = ({
                       onClick={() => handleToggleExpand(task.id)}
                       className="inline-flex items-center gap-1 text-sm text-brand-blue hover:text-brand-dark-blue dark:text-brand-light-blue transition-colors"
                     >
-                      {expandedReportId === task.id ? 'Hide' : 'View'}
+                      {expandedReportId === task.id ? "Hide" : "View"}
                       <ExternalLink className="h-3.5 w-3.5" />
                     </button>
                   </div>
@@ -344,8 +360,8 @@ export const DeepResearchPanel: React.FC<DeepResearchPanelProps> = ({
                     <div className="max-h-[50vh] overflow-y-auto p-4 bg-gray-50 dark:bg-dark-surface">
                       <MarkdownReport
                         content={
-                          previousReports.find((t) => t.id === expandedReportId)?.result_summary
-                            ?.report_preview || ''
+                          previousReports.find((t) => t.id === expandedReportId)
+                            ?.result_summary?.report_preview || ""
                         }
                       />
                     </div>

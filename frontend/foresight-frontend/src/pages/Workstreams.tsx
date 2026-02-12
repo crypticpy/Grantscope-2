@@ -53,8 +53,8 @@ function DeleteConfirmModal({
   isDeleting,
 }: DeleteConfirmModalProps) {
   return (
-    <div className="fixed inset-0 bg-gray-600/50 dark:bg-black/60 flex items-center justify-center p-4 z-50">
-      <div className="bg-white dark:bg-dark-surface rounded-lg shadow-xl max-w-md w-full p-6">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div className="bg-white dark:bg-dark-surface rounded-xl shadow-2xl max-w-md w-full p-6">
         <div className="flex items-start gap-4">
           <div className="flex-shrink-0 w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
             <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
@@ -108,10 +108,10 @@ function FormModal({ workstream, onSuccess, onCancel }: FormModalProps) {
   const isCreateMode = !workstream;
 
   return (
-    <div className="fixed inset-0 bg-gray-600/50 dark:bg-black/60 flex items-center justify-center p-4 z-50 overflow-y-auto">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
       <div
         className={cn(
-          "bg-white dark:bg-dark-surface rounded-lg shadow-xl w-full my-8",
+          "bg-white dark:bg-dark-surface rounded-xl shadow-2xl w-full my-8",
           isCreateMode
             ? "max-w-3xl max-h-[90vh] flex flex-col"
             : "max-w-2xl max-h-[90vh] overflow-y-auto",

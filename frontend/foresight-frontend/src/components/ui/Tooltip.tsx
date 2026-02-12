@@ -8,11 +8,11 @@
  * - Configurable delay and positioning
  */
 
-import * as React from 'react';
-import * as TooltipPrimitive from '@radix-ui/react-tooltip';
-import * as PopoverPrimitive from '@radix-ui/react-popover';
-import { cn } from '../../lib/utils';
-import { useIsMobile } from '../../hooks/use-mobile';
+import * as React from "react";
+import * as TooltipPrimitive from "@radix-ui/react-tooltip";
+import * as PopoverPrimitive from "@radix-ui/react-popover";
+import { cn } from "../../lib/utils";
+import { useIsMobile } from "../../hooks/use-mobile";
 
 // Re-export provider for app-level setup
 export const TooltipProvider = TooltipPrimitive.Provider;
@@ -23,9 +23,9 @@ export interface TooltipProps {
   /** Tooltip content - can be string or React node */
   content: React.ReactNode;
   /** Side of the trigger to show tooltip */
-  side?: 'top' | 'right' | 'bottom' | 'left';
+  side?: "top" | "right" | "bottom" | "left";
   /** Alignment along the side */
-  align?: 'start' | 'center' | 'end';
+  align?: "start" | "center" | "end";
   /** Delay before showing (desktop only) */
   delayDuration?: number;
   /** Additional className for content wrapper */
@@ -47,8 +47,8 @@ export interface TooltipProps {
 export function Tooltip({
   children,
   content,
-  side = 'top',
-  align = 'center',
+  side = "top",
+  align = "center",
   delayDuration = 300,
   contentClassName,
   disabled = false,
@@ -73,11 +73,11 @@ export function Tooltip({
             align={align}
             sideOffset={sideOffset}
             className={cn(
-              'z-50 max-w-xs overflow-hidden rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-md',
-              'animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95',
-              'data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
-              'dark:border-gray-700 dark:bg-dark-surface dark:text-gray-100',
-              contentClassName
+              "z-50 max-w-xs overflow-hidden rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-md",
+              "animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
+              "data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+              "dark:border-gray-700 dark:bg-dark-surface dark:text-gray-100",
+              contentClassName,
             )}
           >
             {content}
@@ -101,15 +101,15 @@ export function Tooltip({
           align={align}
           sideOffset={sideOffset}
           className={cn(
-            'z-50 max-w-xs overflow-hidden rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-md',
-            'animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95',
-            'data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
-            'dark:border-gray-700 dark:bg-dark-surface dark:text-gray-100',
-            contentClassName
+            "z-50 max-w-xs overflow-hidden rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-md",
+            "animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
+            "data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+            "dark:border-gray-700 dark:bg-dark-surface dark:text-gray-100",
+            contentClassName,
           )}
         >
           {content}
-          <TooltipPrimitive.Arrow className="fill-white dark:fill-gray-800" />
+          <TooltipPrimitive.Arrow className="fill-white dark:fill-dark-surface" />
         </TooltipPrimitive.Content>
       </TooltipPrimitive.Portal>
     </TooltipPrimitive.Root>
@@ -122,14 +122,14 @@ export function Tooltip({
 export interface SimpleTooltipProps {
   children: React.ReactNode;
   text: string;
-  side?: 'top' | 'right' | 'bottom' | 'left';
+  side?: "top" | "right" | "bottom" | "left";
   delayDuration?: number;
 }
 
 export function SimpleTooltip({
   children,
   text,
-  side = 'top',
+  side = "top",
   delayDuration = 300,
 }: SimpleTooltipProps) {
   return (

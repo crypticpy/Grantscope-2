@@ -19,7 +19,7 @@ export function TemplateCard({ template, onSelect }: TemplateCardProps) {
       type="button"
       onClick={() => onSelect(template)}
       className={cn(
-        "flex flex-col items-start p-3 rounded-lg border text-left transition-all",
+        "flex flex-col items-start p-3 rounded-lg border text-left transition-all duration-200",
         colors.bg,
         colors.border,
         colors.hover,

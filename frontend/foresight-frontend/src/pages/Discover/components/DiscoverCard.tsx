@@ -83,7 +83,7 @@ export const DiscoverCard = React.memo(function DiscoverCard({
       {/* Compare Mode Selection Indicator */}
       {compareMode && (
         <div
-          className={`absolute top-3 right-3 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+          className={`absolute top-3 right-3 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${
             isSelectedForCompare
               ? "bg-extended-purple border-extended-purple text-white"
               : "border-gray-300 dark:border-gray-600 bg-white dark:bg-dark-surface"

@@ -87,7 +87,7 @@ const AccordionContent = React.forwardRef<
   <Accordion.Content
     ref={ref}
     className={cn(
-      "overflow-hidden transition-all",
+      "overflow-hidden transition-all duration-200",
       "data-[state=open]:animate-accordion-down data-[state=closed]:animate-accordion-up",
       className,
     )}
@@ -795,7 +795,7 @@ export default function GuideDiscover() {
                             expandedFilter === ft.name ? null : ft.name,
                           )
                         }
-                        className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-[#3d4176] transition-colors"
+                        className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-dark-surface-elevated transition-colors"
                       >
                         <span className="text-brand-blue dark:text-brand-light-blue">
                           {ft.icon}
@@ -1363,7 +1363,7 @@ export default function GuideDiscover() {
                       <div className="flex-1 h-3 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
                         <div
                           className={cn(
-                            "h-full rounded-full transition-all",
+                            "h-full rounded-full transition-all duration-200",
                             s.color,
                           )}
                           style={{ width: s.width }}
@@ -1659,7 +1659,7 @@ export default function GuideDiscover() {
               <div className="grid sm:grid-cols-3 gap-3">
                 <Link
                   to="/guide/signals"
-                  className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-dark-surface p-4 transition-all hover:shadow-md hover:-translate-y-0.5 hover:border-brand-blue/30"
+                  className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-dark-surface p-4 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 hover:border-brand-blue/30"
                 >
                   <Star className="h-5 w-5 text-amber-500 flex-shrink-0" />
                   <div>
@@ -1674,7 +1674,7 @@ export default function GuideDiscover() {
                 </Link>
                 <Link
                   to="/guide/workstreams"
-                  className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-dark-surface p-4 transition-all hover:shadow-md hover:-translate-y-0.5 hover:border-brand-blue/30"
+                  className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-dark-surface p-4 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 hover:border-brand-blue/30"
                 >
                   <Layers className="h-5 w-5 text-brand-green flex-shrink-0" />
                   <div>
@@ -1689,7 +1689,7 @@ export default function GuideDiscover() {
                 </Link>
                 <Link
                   to="/"
-                  className="flex items-center gap-3 rounded-lg border border-brand-blue/30 bg-brand-blue/5 dark:bg-brand-blue/10 p-4 transition-all hover:shadow-md hover:-translate-y-0.5"
+                  className="flex items-center gap-3 rounded-lg border border-brand-blue/30 bg-brand-blue/5 dark:bg-brand-blue/10 p-4 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5"
                 >
                   <BarChart3 className="h-5 w-5 text-brand-blue dark:text-brand-light-blue flex-shrink-0" />
                   <div>

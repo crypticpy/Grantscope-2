@@ -21,8 +21,8 @@
  * - Focus management and accessibility
  */
 
-import React, { useEffect, useRef, useCallback, memo, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
+import React, { useEffect, useRef, useCallback, memo, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import {
   X,
   FileText,
@@ -38,9 +38,9 @@ import {
   RefreshCw,
   History,
   Sparkles,
-} from 'lucide-react';
-import { cn } from '../../lib/utils';
-import type { BriefVersionListItem } from '../../lib/workstream-api';
+} from "lucide-react";
+import { cn } from "../../lib/utils";
+import type { BriefVersionListItem } from "../../lib/workstream-api";
 
 // =============================================================================
 // Types
@@ -116,16 +116,16 @@ export interface BriefPreviewModalProps {
  */
 function formatDate(dateString: string): string {
   try {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
+    return new Date(dateString).toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   } catch {
-    return 'Unknown date';
+    return "Unknown date";
   }
 }
 
@@ -147,8 +147,8 @@ const LoadingState = memo(function LoadingState() {
         Generating Executive Brief
       </h3>
       <p className="text-sm text-gray-600 dark:text-gray-400 text-center max-w-sm">
-        Analyzing research data and synthesizing key insights.
-        This may take a moment...
+        Analyzing research data and synthesizing key insights. This may take a
+        moment...
       </p>
     </div>
   );
@@ -162,7 +162,10 @@ interface ErrorStateProps {
   onRetry?: () => void;
 }
 
-const ErrorState = memo(function ErrorState({ error, onRetry }: ErrorStateProps) {
+const ErrorState = memo(function ErrorState({
+  error,
+  onRetry,
+}: ErrorStateProps) {
   return (
     <div className="flex flex-col items-center justify-center py-16 px-6">
       <div
@@ -225,11 +228,11 @@ const BriefContent = memo(function BriefContent({ brief }: BriefContentProps) {
             Executive Summary
           </h3>
           <button
-            onClick={() => handleCopy(brief.executive_summary, 'summary')}
+            onClick={() => handleCopy(brief.executive_summary, "summary")}
             className="flex-shrink-0 p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded transition-colors"
             aria-label="Copy executive summary"
           >
-            {copiedSection === 'summary' ? (
+            {copiedSection === "summary" ? (
               <Check className="h-4 w-4 text-green-500" />
             ) : (
               <Copy className="h-4 w-4" />
@@ -248,11 +251,11 @@ const BriefContent = memo(function BriefContent({ brief }: BriefContentProps) {
             Full Brief
           </h3>
           <button
-            onClick={() => handleCopy(brief.content_markdown, 'content')}
+            onClick={() => handleCopy(brief.content_markdown, "content")}
             className="inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
             aria-label="Copy full brief content"
           >
-            {copiedSection === 'content' ? (
+            {copiedSection === "content" ? (
               <>
                 <Check className="h-3 w-3 text-green-500" />
                 Copied!
@@ -453,35 +456,35 @@ const VersionHistoryPanel = memo(function VersionHistoryPanel({
             versions.map((version) => {
               const isCurrentVersion = version.id === currentBriefId;
               const versionDate = version.generated_at
-                ? new Date(version.generated_at).toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
+                ? new Date(version.generated_at).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
                   })
-                : 'Pending';
+                : "Pending";
 
               return (
                 <button
                   key={version.id}
                   onClick={() => !isCurrentVersion && onLoadVersion(version.id)}
-                  disabled={isCurrentVersion || version.status !== 'completed'}
+                  disabled={isCurrentVersion || version.status !== "completed"}
                   className={cn(
-                    'w-full flex items-center justify-between px-4 py-3 text-left transition-colors',
+                    "w-full flex items-center justify-between px-4 py-3 text-left transition-colors",
                     isCurrentVersion
-                      ? 'bg-brand-blue/5 dark:bg-brand-blue/10'
-                      : version.status === 'completed'
-                        ? 'hover:bg-gray-50 dark:hover:bg-gray-700/30'
-                        : 'opacity-50 cursor-not-allowed'
+                      ? "bg-brand-blue/5 dark:bg-brand-blue/10"
+                      : version.status === "completed"
+                        ? "hover:bg-gray-50 dark:hover:bg-gray-700/30"
+                        : "opacity-50 cursor-not-allowed",
                   )}
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <span
                       className={cn(
-                        'flex-shrink-0 px-2 py-0.5 text-xs font-medium rounded',
+                        "flex-shrink-0 px-2 py-0.5 text-xs font-medium rounded",
                         isCurrentVersion
-                          ? 'bg-brand-blue text-white'
-                          : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
+                          ? "bg-brand-blue text-white"
+                          : "bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300",
                       )}
                     >
                       v{version.version}
@@ -502,7 +505,7 @@ const VersionHistoryPanel = memo(function VersionHistoryPanel({
                       Current
                     </span>
                   )}
-                  {version.status !== 'completed' && (
+                  {version.status !== "completed" && (
                     <span className="flex-shrink-0 text-xs text-gray-500 capitalize">
                       {version.status}
                     </span>
@@ -562,20 +565,20 @@ export const BriefPreviewModal = memo(function BriefPreviewModal({
   // Handle escape key to close
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
+      if (e.key === "Escape" && isOpen) {
         onClose();
       }
     };
 
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
   }, [isOpen, onClose]);
 
   // Prevent body scroll when modal is open
   useEffect(() => {
     if (isOpen) {
       const originalOverflow = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
+      document.body.style.overflow = "hidden";
       return () => {
         document.body.style.overflow = originalOverflow;
       };
@@ -587,10 +590,10 @@ export const BriefPreviewModal = memo(function BriefPreviewModal({
     if (!isOpen) return;
 
     const handleTabKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Tab') return;
+      if (e.key !== "Tab") return;
 
       const focusableElements = modalRef.current?.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
       );
 
       if (!focusableElements || focusableElements.length === 0) return;
@@ -607,8 +610,8 @@ export const BriefPreviewModal = memo(function BriefPreviewModal({
       }
     };
 
-    document.addEventListener('keydown', handleTabKey);
-    return () => document.removeEventListener('keydown', handleTabKey);
+    document.addEventListener("keydown", handleTabKey);
+    return () => document.removeEventListener("keydown", handleTabKey);
   }, [isOpen]);
 
   // Handle backdrop click
@@ -618,7 +621,7 @@ export const BriefPreviewModal = memo(function BriefPreviewModal({
         onClose();
       }
     },
-    [onClose]
+    [onClose],
   );
 
   if (!isOpen) return null;
@@ -636,7 +639,7 @@ export const BriefPreviewModal = memo(function BriefPreviewModal({
     >
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
         aria-hidden="true"
       />
 
@@ -644,9 +647,9 @@ export const BriefPreviewModal = memo(function BriefPreviewModal({
       <div
         ref={modalRef}
         className={cn(
-          'relative bg-white dark:bg-dark-surface rounded-xl shadow-2xl',
-          'w-full max-w-3xl max-h-[90vh] flex flex-col',
-          'transform transition-all'
+          "relative bg-white dark:bg-dark-surface rounded-xl shadow-2xl",
+          "w-full max-w-3xl max-h-[90vh] flex flex-col",
+          "transform transition-all duration-200",
         )}
       >
         {/* Header */}
@@ -684,15 +687,17 @@ export const BriefPreviewModal = memo(function BriefPreviewModal({
                 onClick={onRegenerateBrief}
                 disabled={isGenerating}
                 className={cn(
-                  'inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors',
-                  'text-gray-700 dark:text-gray-200',
-                  'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600',
-                  'focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 dark:focus:ring-offset-dark-surface',
-                  isGenerating && 'opacity-50 cursor-not-allowed'
+                  "inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors",
+                  "text-gray-700 dark:text-gray-200",
+                  "bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600",
+                  "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 dark:focus:ring-offset-dark-surface",
+                  isGenerating && "opacity-50 cursor-not-allowed",
                 )}
                 aria-label="Regenerate brief with latest sources"
               >
-                <RefreshCw className={cn('h-4 w-4', isGenerating && 'animate-spin')} />
+                <RefreshCw
+                  className={cn("h-4 w-4", isGenerating && "animate-spin")}
+                />
                 <span className="hidden sm:inline">Regenerate</span>
                 {newSourcesCount > 0 && (
                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full">
@@ -707,10 +712,10 @@ export const BriefPreviewModal = memo(function BriefPreviewModal({
               type="button"
               onClick={onClose}
               className={cn(
-                'p-2 rounded-lg transition-colors',
-                'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300',
-                'hover:bg-gray-100 dark:hover:bg-gray-700',
-                'focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 dark:focus:ring-offset-dark-surface'
+                "p-2 rounded-lg transition-colors",
+                "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300",
+                "hover:bg-gray-100 dark:hover:bg-gray-700",
+                "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 dark:focus:ring-offset-dark-surface",
               )}
               aria-label="Close modal"
             >
@@ -720,10 +725,7 @@ export const BriefPreviewModal = memo(function BriefPreviewModal({
         </div>
 
         {/* Content Area - Scrollable */}
-        <div
-          ref={contentRef}
-          className="flex-1 overflow-y-auto px-6 py-4"
-        >
+        <div ref={contentRef} className="flex-1 overflow-y-auto px-6 py-4">
           {/* Loading State */}
           {isGenerating && <LoadingState />}
 
@@ -772,12 +774,12 @@ export const BriefPreviewModal = memo(function BriefPreviewModal({
             type="button"
             onClick={onClose}
             className={cn(
-              'px-4 py-2 text-sm font-medium rounded-lg transition-colors',
-              'text-gray-700 dark:text-gray-300',
-              'bg-white dark:bg-dark-surface-elevated',
-              'border border-gray-300 dark:border-gray-600',
-              'hover:bg-gray-50 dark:hover:bg-dark-surface-hover',
-              'focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 dark:focus:ring-offset-[#252850]'
+              "px-4 py-2 text-sm font-medium rounded-lg transition-colors",
+              "text-gray-700 dark:text-gray-300",
+              "bg-white dark:bg-dark-surface-elevated",
+              "border border-gray-300 dark:border-gray-600",
+              "hover:bg-gray-50 dark:hover:bg-dark-surface-hover",
+              "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 dark:focus:ring-offset-dark-surface-deep",
             )}
           >
             Close
@@ -787,11 +789,11 @@ export const BriefPreviewModal = memo(function BriefPreviewModal({
             onClick={onExportPptx}
             disabled={!canExport}
             className={cn(
-              'inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors',
-              'focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 dark:focus:ring-offset-[#252850]',
+              "inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors",
+              "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 dark:focus:ring-offset-dark-surface-deep",
               canExport
-                ? 'text-gray-700 dark:text-gray-200 bg-white dark:bg-dark-surface-elevated border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-dark-surface-hover'
-                : 'text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 cursor-not-allowed'
+                ? "text-gray-700 dark:text-gray-200 bg-white dark:bg-dark-surface-elevated border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-dark-surface-hover"
+                : "text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 cursor-not-allowed",
             )}
           >
             <Presentation className="h-4 w-4" aria-hidden="true" />
@@ -802,11 +804,11 @@ export const BriefPreviewModal = memo(function BriefPreviewModal({
             onClick={onExportPdf}
             disabled={!canExport}
             className={cn(
-              'inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors',
-              'focus:outline-none focus:ring-2 focus:ring-offset-2',
+              "inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors",
+              "focus:outline-none focus:ring-2 focus:ring-offset-2",
               canExport
-                ? 'text-white bg-brand-blue hover:bg-brand-dark-blue focus:ring-brand-blue dark:focus:ring-offset-[#252850]'
-                : 'text-gray-400 bg-brand-blue/40 cursor-not-allowed focus:ring-brand-blue/50 dark:focus:ring-offset-[#252850]'
+                ? "text-white bg-brand-blue hover:bg-brand-dark-blue focus:ring-brand-blue dark:focus:ring-offset-dark-surface-deep"
+                : "text-gray-400 bg-brand-blue/40 cursor-not-allowed focus:ring-brand-blue/50 dark:focus:ring-offset-dark-surface-deep",
             )}
           >
             <Download className="h-4 w-4" aria-hidden="true" />

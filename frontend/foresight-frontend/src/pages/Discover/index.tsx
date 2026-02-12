@@ -1253,7 +1253,7 @@ const Discover: React.FC = () => {
                       onClick={() =>
                         handleSelectSavedSearch(entry.query_config)
                       }
-                      className="group flex items-start justify-between gap-2 p-2 rounded-md border border-gray-200 dark:border-gray-600 hover:border-brand-blue hover:bg-brand-light-blue/50 dark:hover:bg-brand-blue/10 cursor-pointer transition-all"
+                      className="group flex items-start justify-between gap-2 p-2 rounded-md border border-gray-200 dark:border-gray-600 hover:border-brand-blue hover:bg-brand-light-blue/50 dark:hover:bg-brand-blue/10 cursor-pointer transition-all duration-200"
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) => {

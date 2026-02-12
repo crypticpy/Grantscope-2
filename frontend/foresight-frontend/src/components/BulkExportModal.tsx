@@ -210,7 +210,7 @@ export const BulkExportModal: React.FC<BulkExportModalProps> = ({
     >
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={handleClose}
         aria-hidden="true"
       />
@@ -623,7 +623,7 @@ function FormatOption({
     <button
       onClick={onSelect}
       className={cn(
-        "flex flex-col items-start p-4 rounded-lg border-2 transition-all text-left",
+        "flex flex-col items-start p-4 rounded-lg border-2 transition-all duration-200 text-left",
         isSelected
           ? "border-[#44499C] bg-[#44499C]/5"
           : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600",
@@ -640,7 +640,7 @@ function FormatOption({
           className={cn(
             "font-medium",
             isSelected
-              ? "text-[#44499C] dark:text-[#7c7fd4]"
+              ? "text-brand-blue dark:text-[#7c7fd4]"
               : "text-gray-700 dark:text-gray-300",
           )}
         >

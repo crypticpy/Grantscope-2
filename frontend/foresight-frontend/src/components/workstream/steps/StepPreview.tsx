@@ -47,7 +47,7 @@ export function StepPreview({
       {/* Preview Result */}
       <div
         className={cn(
-          "rounded-lg p-5 border transition-all",
+          "rounded-lg p-5 border transition-all duration-200",
           isLoading
             ? "bg-gray-50 dark:bg-dark-surface/50 border-gray-200 dark:border-gray-700"
             : hasPreview && matchCount >= 3
@@ -152,7 +152,7 @@ export function StepPreview({
                   onAutoScanChange(false);
                 }}
                 className={cn(
-                  "w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all",
+                  "w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all duration-200",
                   formData.analyze_now && !formData.auto_scan
                     ? "border-brand-blue bg-brand-light-blue/30 dark:bg-brand-blue/10"
                     : "border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-dark-surface-hover",
@@ -177,7 +177,7 @@ export function StepPreview({
                   onAutoScanChange(true);
                 }}
                 className={cn(
-                  "w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all",
+                  "w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all duration-200",
                   formData.analyze_now && formData.auto_scan
                     ? "border-brand-blue bg-brand-light-blue/30 dark:bg-brand-blue/10"
                     : "border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-dark-surface-hover",
@@ -201,7 +201,7 @@ export function StepPreview({
                   onAutoScanChange(false);
                 }}
                 className={cn(
-                  "w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all",
+                  "w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all duration-200",
                   !formData.analyze_now && !formData.auto_scan
                     ? "border-brand-blue bg-brand-light-blue/30 dark:bg-brand-blue/10"
                     : "border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-dark-surface-hover",
@@ -240,7 +240,7 @@ export function StepPreview({
                   onAutoScanChange(true);
                 }}
                 className={cn(
-                  "w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all",
+                  "w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all duration-200",
                   formData.analyze_now && formData.auto_scan
                     ? "border-brand-blue bg-brand-light-blue/30 dark:bg-brand-blue/10"
                     : "border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-dark-surface-hover",
@@ -264,7 +264,7 @@ export function StepPreview({
                   onAutoScanChange(false);
                 }}
                 className={cn(
-                  "w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all",
+                  "w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all duration-200",
                   formData.analyze_now && !formData.auto_scan
                     ? "border-brand-blue bg-brand-light-blue/30 dark:bg-brand-blue/10"
                     : "border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-dark-surface-hover",
@@ -288,7 +288,7 @@ export function StepPreview({
                   onAutoScanChange(false);
                 }}
                 className={cn(
-                  "w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all",
+                  "w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all duration-200",
                   !formData.analyze_now && !formData.auto_scan
                     ? "border-brand-blue bg-brand-light-blue/30 dark:bg-brand-blue/10"
                     : "border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-dark-surface-hover",

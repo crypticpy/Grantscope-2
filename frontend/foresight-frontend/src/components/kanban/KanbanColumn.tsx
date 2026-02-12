@@ -248,10 +248,10 @@ export const KanbanColumn = memo(function KanbanColumn({
                   className={cn(
                     "inline-flex items-center gap-1 px-2 py-1",
                     "text-xs font-medium rounded-md",
-                    "bg-[#44499C]/10 text-[#44499C]",
-                    "hover:bg-[#44499C]/20",
-                    "dark:bg-[#44499C]/20 dark:text-[#9b9edb]",
-                    "dark:hover:bg-[#44499C]/30",
+                    "bg-brand-blue/10 text-brand-blue",
+                    "hover:bg-brand-blue/20",
+                    "dark:bg-brand-blue/20 dark:text-[#9b9edb]",
+                    "dark:hover:bg-brand-blue/30",
                     "transition-colors",
                   )}
                   aria-label="Export all briefs as portfolio"

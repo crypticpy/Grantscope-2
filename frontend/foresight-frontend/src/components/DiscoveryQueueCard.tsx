@@ -156,7 +156,7 @@ function ImpactScoreTooltipContent({ score }: { score: number }) {
         <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
           <div
             className={cn(
-              "h-full rounded-full transition-all",
+              "h-full rounded-full transition-all duration-200",
               impactInfo.level === "high" && "bg-purple-500 dark:bg-purple-400",
               impactInfo.level === "medium" &&
                 "bg-indigo-500 dark:bg-indigo-400",
@@ -377,7 +377,7 @@ function SwipeableCardWrapper({
           >
             <span
               className={cn(
-                "text-xs font-medium transition-all",
+                "text-xs font-medium transition-all duration-200",
                 willTrigger
                   ? "text-red-600 dark:text-red-400"
                   : "text-red-400 dark:text-red-500",
@@ -387,7 +387,7 @@ function SwipeableCardWrapper({
             </span>
             <div
               className={cn(
-                "p-1.5 rounded-full transition-all",
+                "p-1.5 rounded-full transition-all duration-200",
                 willTrigger
                   ? "bg-red-500 text-white scale-110"
                   : "bg-red-100 dark:bg-red-900/30 text-red-500 dark:text-red-400",
@@ -406,7 +406,7 @@ function SwipeableCardWrapper({
           >
             <div
               className={cn(
-                "p-1.5 rounded-full transition-all",
+                "p-1.5 rounded-full transition-all duration-200",
                 willTrigger
                   ? "bg-green-500 text-white scale-110"
                   : "bg-green-100 dark:bg-green-900/30 text-green-500 dark:text-green-400",
@@ -416,7 +416,7 @@ function SwipeableCardWrapper({
             </div>
             <span
               className={cn(
-                "text-xs font-medium transition-all",
+                "text-xs font-medium transition-all duration-200",
                 willTrigger
                   ? "text-green-600 dark:text-green-400"
                   : "text-green-400 dark:text-green-500",

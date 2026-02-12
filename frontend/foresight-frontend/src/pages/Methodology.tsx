@@ -41,7 +41,10 @@ const SqiBar: React.FC<SqiBarProps> = ({ score, label }) => {
       </span>
       <div className="flex-1 h-3 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
         <div
-          className={cn("h-full rounded-full transition-all", color)}
+          className={cn(
+            "h-full rounded-full transition-all duration-200",
+            color,
+          )}
           style={{ width: `${score}%` }}
         />
       </div>
@@ -94,7 +97,7 @@ const AccordionContent = React.forwardRef<
   <Accordion.Content
     ref={ref}
     className={cn(
-      "overflow-hidden transition-all",
+      "overflow-hidden transition-all duration-200",
       "data-[state=open]:animate-accordion-down data-[state=closed]:animate-accordion-up",
       className,
     )}

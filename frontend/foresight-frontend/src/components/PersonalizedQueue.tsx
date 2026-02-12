@@ -151,7 +151,7 @@ function ScoreBreakdownTooltip({
         <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
           <div
             className={cn(
-              "h-full rounded-full transition-all",
+              "h-full rounded-full transition-all duration-200",
               scoreInfo.level === "high" && "bg-green-500 dark:bg-green-400",
               scoreInfo.level === "medium" && "bg-amber-500 dark:bg-amber-400",
               scoreInfo.level === "low" && "bg-blue-500 dark:bg-blue-400",

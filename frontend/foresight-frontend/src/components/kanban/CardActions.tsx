@@ -181,7 +181,7 @@ const NotesModal = memo(function NotesModal({
     >
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/50 transition-opacity"
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
         onClick={isSaving ? undefined : onClose}
         aria-hidden="true"
       />
@@ -189,7 +189,7 @@ const NotesModal = memo(function NotesModal({
       {/* Modal Content */}
       <div
         ref={modalRef}
-        className="relative bg-white dark:bg-dark-surface rounded-lg shadow-xl w-full max-w-lg transform transition-all"
+        className="relative bg-white dark:bg-dark-surface rounded-xl shadow-2xl w-full max-w-lg transform transition-all duration-200"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-600">

@@ -249,7 +249,7 @@ export const AddToWorkstreamModal = memo(function AddToWorkstreamModal({
                   disabled={!!isAdding}
                   className={cn(
                     "w-full flex items-center gap-3 p-3 rounded-lg border transition-colors text-left",
-                    "hover:bg-gray-50 dark:hover:bg-[#3d4176]",
+                    "hover:bg-gray-50 dark:hover:bg-dark-surface-elevated",
                     "border-gray-200 dark:border-gray-600",
                     "disabled:opacity-50 disabled:cursor-not-allowed",
                     isAdding === ws.id && "bg-brand-blue/5 border-brand-blue",

@@ -190,7 +190,7 @@ export function StepStart({
         type="button"
         onClick={onBuildYourOwn}
         className={cn(
-          "w-full flex items-center justify-center gap-3 p-4 rounded-lg border-2 border-dashed transition-all",
+          "w-full flex items-center justify-center gap-3 p-4 rounded-lg border-2 border-dashed transition-all duration-200",
           "border-gray-300 dark:border-gray-600",
           "hover:border-brand-blue dark:hover:border-brand-blue",
           "hover:bg-brand-light-blue/20 dark:hover:bg-brand-blue/10",

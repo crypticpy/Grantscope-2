@@ -54,7 +54,7 @@ export function StepFocus({
               className={cn(
                 "transition-all duration-200 cursor-pointer",
                 formData.pillar_ids.includes(pillar.code)
-                  ? "ring-2 ring-brand-blue ring-offset-1 dark:ring-offset-[#2d3166] rounded scale-105"
+                  ? "ring-2 ring-brand-blue ring-offset-1 dark:ring-offset-dark-surface rounded scale-105"
                   : "hover:scale-105 hover:ring-1 hover:ring-gray-300 dark:hover:ring-gray-500 rounded",
               )}
               aria-pressed={formData.pillar_ids.includes(pillar.code)}
@@ -186,7 +186,7 @@ export function StepFocus({
               type="button"
               onClick={() => onHorizonChange(h.code)}
               className={cn(
-                "flex flex-col items-start p-3 rounded-lg border transition-all text-left",
+                "flex flex-col items-start p-3 rounded-lg border transition-all duration-200 text-left",
                 formData.horizon === h.code
                   ? "bg-brand-light-blue dark:bg-brand-blue/20 border-brand-blue ring-2 ring-brand-blue/30"
                   : "bg-white dark:bg-dark-surface-elevated border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-dark-surface-hover",

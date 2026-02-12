@@ -168,7 +168,7 @@ export function WorkstreamForm({
               className={cn(
                 "transition-all duration-200",
                 form.formData.pillar_ids.includes(pillar.code)
-                  ? "ring-2 ring-brand-blue ring-offset-1 dark:ring-offset-[#2d3166] rounded"
+                  ? "ring-2 ring-brand-blue ring-offset-1 dark:ring-offset-dark-surface rounded"
                   : "opacity-60 hover:opacity-100",
               )}
               aria-pressed={form.formData.pillar_ids.includes(pillar.code)}
@@ -442,7 +442,7 @@ export function WorkstreamForm({
       {form.hasFilters && (
         <div
           className={cn(
-            "rounded-lg p-4 border transition-all",
+            "rounded-lg p-4 border transition-all duration-200",
             form.preview && form.preview.estimated_count > 0
               ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700"
               : form.preview && form.preview.estimated_count === 0

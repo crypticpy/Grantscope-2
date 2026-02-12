@@ -6,18 +6,18 @@
  * - Tooltip showing horizon name, timeframe, and description
  */
 
-import React from 'react';
-import { Clock, TrendingUp, Sparkles } from 'lucide-react';
-import { Tooltip } from './ui/Tooltip';
-import { cn } from '../lib/utils';
-import { getHorizonByCode, type Horizon } from '../data/taxonomy';
-import { getSizeClasses, getIconSize } from '../lib/badge-utils';
+import React from "react";
+import { Clock, TrendingUp, Sparkles } from "lucide-react";
+import { Tooltip } from "./ui/Tooltip";
+import { cn } from "../lib/utils";
+import { getHorizonByCode, type Horizon } from "../data/taxonomy";
+import { getSizeClasses, getIconSize } from "../lib/badge-utils";
 
 export interface HorizonBadgeProps {
   /** Horizon code ('H1', 'H2', or 'H3') */
-  horizon: 'H1' | 'H2' | 'H3';
+  horizon: "H1" | "H2" | "H3";
   /** Size variant */
-  size?: 'sm' | 'md' | 'lg';
+  size?: "sm" | "md" | "lg";
   /** Whether to show an icon */
   showIcon?: boolean;
   /** Additional className */
@@ -25,7 +25,7 @@ export interface HorizonBadgeProps {
   /** Whether tooltip is disabled */
   disableTooltip?: boolean;
   /** Display style: 'badge' or 'pill' */
-  variant?: 'badge' | 'pill';
+  variant?: "badge" | "pill";
 }
 
 /**
@@ -37,28 +37,38 @@ function getHorizonColorClasses(horizonCode: string): {
   border: string;
   iconBg: string;
 } {
-  const colorMap: Record<string, { bg: string; text: string; border: string; iconBg: string }> = {
+  const colorMap: Record<
+    string,
+    { bg: string; text: string; border: string; iconBg: string }
+  > = {
     H1: {
-      bg: 'bg-green-100',
-      text: 'text-green-700',
-      border: 'border-green-300',
-      iconBg: 'bg-green-200',
+      bg: "bg-green-100",
+      text: "text-green-700",
+      border: "border-green-300",
+      iconBg: "bg-green-200",
     },
     H2: {
-      bg: 'bg-amber-100',
-      text: 'text-amber-700',
-      border: 'border-amber-300',
-      iconBg: 'bg-amber-200',
+      bg: "bg-amber-100",
+      text: "text-amber-700",
+      border: "border-amber-300",
+      iconBg: "bg-amber-200",
     },
     H3: {
-      bg: 'bg-purple-100',
-      text: 'text-purple-700',
-      border: 'border-purple-300',
-      iconBg: 'bg-purple-200',
+      bg: "bg-purple-100",
+      text: "text-purple-700",
+      border: "border-purple-300",
+      iconBg: "bg-purple-200",
     },
   };
 
-  return colorMap[horizonCode] || { bg: 'bg-gray-100', text: 'text-gray-700', border: 'border-gray-300', iconBg: 'bg-gray-200' };
+  return (
+    colorMap[horizonCode] || {
+      bg: "bg-gray-100",
+      text: "text-gray-700",
+      border: "border-gray-300",
+      iconBg: "bg-gray-200",
+    }
+  );
 }
 
 /**
@@ -66,13 +76,12 @@ function getHorizonColorClasses(horizonCode: string): {
  */
 function getHorizonIcon(horizonCode: string) {
   const iconMap: Record<string, typeof Clock> = {
-    H1: Clock,        // Current/Mainstream
-    H2: TrendingUp,   // Transitional/Emerging
-    H3: Sparkles,     // Transformative/Future
+    H1: Clock, // Current/Mainstream
+    H2: TrendingUp, // Transitional/Emerging
+    H3: Sparkles, // Transformative/Future
   };
   return iconMap[horizonCode] || Clock;
 }
-
 
 /**
  * Tooltip content component for horizon
@@ -85,8 +94,8 @@ function HorizonTooltipContent({ horizon }: { horizon: Horizon }) {
     <div className="space-y-2 min-w-[180px] max-w-[240px]">
       {/* Header */}
       <div className="flex items-center gap-2">
-        <div className={cn('p-1.5 rounded-md', colors.iconBg)}>
-          <Icon className={cn('h-4 w-4', colors.text)} />
+        <div className={cn("p-1.5 rounded-md", colors.iconBg)}>
+          <Icon className={cn("h-4 w-4", colors.text)} />
         </div>
         <div>
           <div className="font-semibold text-gray-900 dark:text-gray-100">
@@ -109,10 +118,10 @@ function HorizonTooltipContent({ horizon }: { horizon: Horizon }) {
           <div className="flex-1 h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
             <div
               className={cn(
-                'h-full rounded-full transition-all',
-                horizon.code === 'H1' && 'w-1/3 bg-green-500',
-                horizon.code === 'H2' && 'w-2/3 bg-amber-500',
-                horizon.code === 'H3' && 'w-full bg-purple-500'
+                "h-full rounded-full transition-all duration-200",
+                horizon.code === "H1" && "w-1/3 bg-green-500",
+                horizon.code === "H2" && "w-2/3 bg-amber-500",
+                horizon.code === "H3" && "w-full bg-purple-500",
               )}
             />
           </div>
@@ -131,11 +140,11 @@ function HorizonTooltipContent({ horizon }: { horizon: Horizon }) {
  */
 export function HorizonBadge({
   horizon,
-  size = 'md',
+  size = "md",
   showIcon = false,
   className,
   disableTooltip = false,
-  variant = 'badge',
+  variant = "badge",
 }: HorizonBadgeProps) {
   const horizonData = getHorizonByCode(horizon);
 
@@ -143,11 +152,11 @@ export function HorizonBadge({
     return (
       <span
         className={cn(
-          'inline-flex items-center gap-1 font-medium border',
-          'bg-gray-100 text-gray-600 border-gray-300',
-          variant === 'pill' ? 'rounded-full' : 'rounded',
+          "inline-flex items-center gap-1 font-medium border",
+          "bg-gray-100 text-gray-600 border-gray-300",
+          variant === "pill" ? "rounded-full" : "rounded",
           getSizeClasses(size, { variant }),
-          className
+          className,
         )}
       >
         {horizon}
@@ -157,19 +166,19 @@ export function HorizonBadge({
 
   const colors = getHorizonColorClasses(horizon);
   const Icon = getHorizonIcon(horizon);
-  const iconSize = getIconSize(size, 'small');
+  const iconSize = getIconSize(size, "small");
 
   const badge = (
     <span
       className={cn(
-        'inline-flex items-center gap-1 font-semibold border cursor-default',
+        "inline-flex items-center gap-1 font-semibold border cursor-default",
         colors.bg,
         colors.text,
         colors.border,
-        variant === 'pill' ? 'rounded-full' : 'rounded',
+        variant === "pill" ? "rounded-full" : "rounded",
         getSizeClasses(size, { variant }),
-        !disableTooltip && 'cursor-pointer',
-        className
+        !disableTooltip && "cursor-pointer",
+        className,
       )}
       role="status"
       aria-label={`${horizonData.name} horizon (${horizonData.timeframe})`}
@@ -200,22 +209,22 @@ export function HorizonBadge({
  */
 export interface HorizonIndicatorProps {
   /** Current horizon */
-  horizon: 'H1' | 'H2' | 'H3';
+  horizon: "H1" | "H2" | "H3";
   /** Size variant */
-  size?: 'sm' | 'md' | 'lg';
+  size?: "sm" | "md" | "lg";
   /** Additional className */
   className?: string;
 }
 
 export function HorizonIndicator({
   horizon,
-  size: _size = 'sm',
+  size: _size = "sm",
   className,
 }: HorizonIndicatorProps) {
-  const horizons: ('H1' | 'H2' | 'H3')[] = ['H1', 'H2', 'H3'];
+  const horizons: ("H1" | "H2" | "H3")[] = ["H1", "H2", "H3"];
 
   return (
-    <div className={cn('inline-flex items-center gap-0.5', className)}>
+    <div className={cn("inline-flex items-center gap-0.5", className)}>
       {horizons.map((h) => {
         const isActive = h === horizon;
         const colors = getHorizonColorClasses(h);
@@ -224,12 +233,12 @@ export function HorizonIndicator({
           <span
             key={h}
             className={cn(
-              'text-xs font-medium px-1.5 py-0.5 transition-all',
-              h === 'H1' && 'rounded-l',
-              h === 'H3' && 'rounded-r',
+              "text-xs font-medium px-1.5 py-0.5 transition-all duration-200",
+              h === "H1" && "rounded-l",
+              h === "H3" && "rounded-r",
               isActive
-                ? cn(colors.bg, colors.text, 'border', colors.border)
-                : 'bg-gray-100 text-gray-400 border border-gray-200'
+                ? cn(colors.bg, colors.text, "border", colors.border)
+                : "bg-gray-100 text-gray-400 border border-gray-200",
             )}
           >
             {h}

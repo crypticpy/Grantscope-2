@@ -8,11 +8,17 @@
  * @module CardDetail/tabs/TimelineTab
  */
 
-import React, { useState, useCallback } from 'react';
-import { Calendar, Search, FileText, ChevronDown, ChevronUp } from 'lucide-react';
-import { cn } from '../../../lib/utils';
-import { MarkdownReport } from '../MarkdownReport';
-import type { TimelineEvent } from '../types';
+import React, { useState, useCallback } from "react";
+import {
+  Calendar,
+  Search,
+  FileText,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
+import { cn } from "../../../lib/utils";
+import { MarkdownReport } from "../MarkdownReport";
+import type { TimelineEvent } from "../types";
 
 /**
  * Props for the TimelineTab component
@@ -66,10 +72,12 @@ export interface TimelineTabProps {
  */
 export const TimelineTab: React.FC<TimelineTabProps> = ({
   timeline,
-  className = '',
+  className = "",
 }) => {
   // State for tracking which detailed report is expanded
-  const [expandedTimelineId, setExpandedTimelineId] = useState<string | null>(null);
+  const [expandedTimelineId, setExpandedTimelineId] = useState<string | null>(
+    null,
+  );
 
   /**
    * Toggle expansion of a detailed report
@@ -97,8 +105,8 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
     return (
       <div
         className={cn(
-          'bg-white dark:bg-dark-surface rounded-lg shadow',
-          className
+          "bg-white dark:bg-dark-surface rounded-lg shadow",
+          className,
         )}
       >
         <div className="text-center py-12">
@@ -117,22 +125,24 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
   return (
     <div
       className={cn(
-        'bg-white dark:bg-dark-surface rounded-lg shadow',
-        className
+        "bg-white dark:bg-dark-surface rounded-lg shadow",
+        className,
       )}
     >
       <div className="divide-y divide-gray-200 dark:divide-gray-700">
         {timeline.map((event) => {
-          const isDeepResearch = event.event_type === 'deep_research';
-          const hasDetailedReport = isDeepResearch && event.metadata?.detailed_report;
+          const isDeepResearch = event.event_type === "deep_research";
+          const hasDetailedReport =
+            isDeepResearch && event.metadata?.detailed_report;
           const isExpanded = expandedTimelineId === event.id;
 
           return (
             <div
               key={event.id}
               className={cn(
-                'p-4 sm:p-6',
-                isDeepResearch && 'bg-gradient-to-r from-brand-light-blue/10 to-transparent'
+                "p-4 sm:p-6",
+                isDeepResearch &&
+                  "bg-gradient-to-r from-brand-light-blue/10 to-transparent",
               )}
             >
               <div className="flex items-start">
@@ -153,8 +163,8 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                   <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
                     <h3
                       className={cn(
-                        'font-medium text-gray-900 dark:text-white break-words',
-                        isDeepResearch ? 'text-base' : 'text-sm'
+                        "font-medium text-gray-900 dark:text-white break-words",
+                        isDeepResearch ? "text-base" : "text-sm",
                       )}
                     >
                       {event.title}
@@ -180,7 +190,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                           <span className="text-gray-600 dark:text-gray-300">
                             <span className="font-semibold text-gray-900 dark:text-white">
                               {event.metadata.sources_found}
-                            </span>{' '}
+                            </span>{" "}
                             sources found
                           </span>
                         </div>
@@ -191,7 +201,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                           <span className="text-gray-600 dark:text-gray-300">
                             <span className="font-semibold text-gray-900 dark:text-white">
                               {event.metadata.sources_added}
-                            </span>{' '}
+                            </span>{" "}
                             added
                           </span>
                         </div>
@@ -202,7 +212,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                           <span className="text-gray-600 dark:text-gray-300">
                             <span className="font-semibold text-gray-900 dark:text-white">
                               {event.metadata.entities_extracted}
-                            </span>{' '}
+                            </span>{" "}
                             entities
                           </span>
                         </div>
@@ -216,18 +226,18 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                       <button
                         onClick={() => handleToggleExpand(event.id)}
                         className={cn(
-                          'inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200',
+                          "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200",
                           isExpanded
-                            ? 'bg-brand-blue text-white shadow-md hover:bg-brand-dark-blue'
-                            : 'bg-brand-light-blue text-brand-blue hover:bg-brand-blue hover:text-white'
+                            ? "bg-brand-blue text-white shadow-md hover:bg-brand-dark-blue"
+                            : "bg-brand-light-blue text-brand-blue hover:bg-brand-blue hover:text-white",
                         )}
                         aria-expanded={isExpanded}
                         aria-controls={`timeline-report-${event.id}`}
                       >
                         <FileText className="h-4 w-4" />
                         {isExpanded
-                          ? 'Collapse Strategic Report'
-                          : 'View Strategic Intelligence Report'}
+                          ? "Collapse Strategic Report"
+                          : "View Strategic Intelligence Report"}
                         {isExpanded ? (
                           <ChevronUp className="h-4 w-4" />
                         ) : (
@@ -257,8 +267,10 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                           </div>
 
                           {/* Report Content */}
-                          <div className="p-4 sm:p-6 bg-white dark:bg-[#1d2156] max-h-[70vh] sm:max-h-[80vh] overflow-y-auto overflow-x-hidden">
-                            <MarkdownReport content={event.metadata!.detailed_report!} />
+                          <div className="p-4 sm:p-6 bg-white dark:bg-dark-surface-deep max-h-[70vh] sm:max-h-[80vh] overflow-y-auto overflow-x-hidden">
+                            <MarkdownReport
+                              content={event.metadata!.detailed_report!}
+                            />
                           </div>
                         </div>
                       )}

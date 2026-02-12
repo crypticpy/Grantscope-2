@@ -5,7 +5,7 @@
  * Allows users to quickly re-run saved searches and manage their search library.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Bookmark,
   Trash2,
@@ -17,15 +17,15 @@ import {
   Sparkles,
   Filter,
   Search as SearchIcon,
-} from 'lucide-react';
-import { cn } from '../lib/utils';
+} from "lucide-react";
+import { cn } from "../lib/utils";
 import {
   listSavedSearches,
   deleteSavedSearch,
   SavedSearch,
   SavedSearchQueryConfig,
-} from '../lib/discovery-api';
-import { supabase } from '../App';
+} from "../lib/discovery-api";
+import { supabase } from "../App";
 
 // ============================================================================
 // Types
@@ -60,7 +60,9 @@ export function SearchSidebar({
 
   // Get auth token helper
   const getAuthToken = useCallback(async (): Promise<string | null> => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     return session?.access_token || null;
   }, []);
 
@@ -72,7 +74,7 @@ export function SearchSidebar({
     try {
       const token = await getAuthToken();
       if (!token) {
-        setError('Not authenticated');
+        setError("Not authenticated");
         return;
       }
 
@@ -80,9 +82,7 @@ export function SearchSidebar({
       setSavedSearches(response.saved_searches);
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : 'Failed to load saved searches'
+        err instanceof Error ? err.message : "Failed to load saved searches",
       );
     } finally {
       setIsLoading(false);
@@ -102,17 +102,13 @@ export function SearchSidebar({
     try {
       const token = await getAuthToken();
       if (!token) {
-        throw new Error('Not authenticated');
+        throw new Error("Not authenticated");
       }
 
       await deleteSavedSearch(token, searchId);
       setSavedSearches((prev) => prev.filter((s) => s.id !== searchId));
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Failed to delete search'
-      );
+      setError(err instanceof Error ? err.message : "Failed to delete search");
       // Clear error after 3 seconds
       setTimeout(() => setError(null), 3000);
     } finally {
@@ -134,7 +130,8 @@ export function SearchSidebar({
     }
 
     if (config.filters) {
-      const { pillar_ids, stage_ids, horizon, date_range, score_thresholds } = config.filters;
+      const { pillar_ids, stage_ids, horizon, date_range, score_thresholds } =
+        config.filters;
 
       if (pillar_ids && pillar_ids.length > 0) {
         parts.push(`${pillar_ids.length} pillar(s)`);
@@ -142,22 +139,22 @@ export function SearchSidebar({
       if (stage_ids && stage_ids.length > 0) {
         parts.push(`${stage_ids.length} stage(s)`);
       }
-      if (horizon && horizon !== 'ALL') {
+      if (horizon && horizon !== "ALL") {
         parts.push(`Horizon ${horizon}`);
       }
       if (date_range && (date_range.start || date_range.end)) {
-        parts.push('date filter');
+        parts.push("date filter");
       }
       if (score_thresholds && Object.keys(score_thresholds).length > 0) {
-        parts.push('score thresholds');
+        parts.push("score thresholds");
       }
     }
 
     if (config.use_vector_search) {
-      parts.push('semantic');
+      parts.push("semantic");
     }
 
-    return parts.length > 0 ? parts.join(' • ') : 'No filters';
+    return parts.length > 0 ? parts.join(" • ") : "No filters";
   };
 
   // Format relative time
@@ -167,8 +164,8 @@ export function SearchSidebar({
     const diffMs = now.getTime() - date.getTime();
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
+    if (diffDays === 0) return "Today";
+    if (diffDays === 1) return "Yesterday";
     if (diffDays < 7) return `${diffDays} days ago`;
     if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
     return date.toLocaleDateString();
@@ -180,7 +177,7 @@ export function SearchSidebar({
       {!isOpen && (
         <button
           onClick={onToggle}
-          className="fixed left-0 top-1/2 -translate-y-1/2 z-40 bg-white dark:bg-dark-surface shadow-lg rounded-r-lg px-2 py-4 hover:bg-gray-50 dark:hover:bg-[#3d4176] transition-colors border-r border-t border-b border-gray-200 dark:border-gray-600"
+          className="fixed left-0 top-1/2 -translate-y-1/2 z-40 bg-white dark:bg-dark-surface shadow-lg rounded-r-lg px-2 py-4 hover:bg-gray-50 dark:hover:bg-dark-surface-elevated transition-colors border-r border-t border-b border-gray-200 dark:border-gray-600"
           aria-label="Open saved searches sidebar"
           title="Saved Searches"
         >
@@ -194,8 +191,8 @@ export function SearchSidebar({
       {/* Sidebar Panel */}
       <div
         className={cn(
-          'fixed left-0 top-16 bottom-0 z-40 bg-white dark:bg-dark-surface shadow-xl border-r border-gray-200 dark:border-gray-600 transition-transform duration-300 ease-in-out w-80',
-          isOpen ? 'translate-x-0' : '-translate-x-full'
+          "fixed left-0 top-16 bottom-0 z-40 bg-white dark:bg-dark-surface shadow-xl border-r border-gray-200 dark:border-gray-600 transition-transform duration-300 ease-in-out w-80",
+          isOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
         {/* Header */}
@@ -208,7 +205,7 @@ export function SearchSidebar({
           </div>
           <button
             onClick={onToggle}
-            className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-md hover:bg-gray-100 dark:hover:bg-[#3d4176] transition-colors"
+            className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-md hover:bg-gray-100 dark:hover:bg-dark-surface-elevated transition-colors"
             aria-label="Close sidebar"
           >
             <ChevronLeft className="h-5 w-5" />
@@ -255,11 +252,11 @@ export function SearchSidebar({
                 <div
                   key={search.id}
                   onClick={() => handleSelect(search)}
-                  className="group mx-2 mb-2 p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-brand-blue hover:bg-brand-light-blue/50 dark:hover:bg-brand-blue/10 cursor-pointer transition-all"
+                  className="group mx-2 mb-2 p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-brand-blue hover:bg-brand-light-blue/50 dark:hover:bg-brand-blue/10 cursor-pointer transition-all duration-200"
                   role="button"
                   tabIndex={0}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
+                    if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
                       handleSelect(search);
                     }
@@ -317,12 +314,13 @@ export function SearchSidebar({
                       </span>
                     )}
                     {/* Filter Badge */}
-                    {search.query_config.filters && Object.keys(search.query_config.filters).length > 0 && (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
-                        <Filter className="h-3 w-3" />
-                        Filters
-                      </span>
-                    )}
+                    {search.query_config.filters &&
+                      Object.keys(search.query_config.filters).length > 0 && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
+                          <Filter className="h-3 w-3" />
+                          Filters
+                        </span>
+                      )}
                     {/* Last Used */}
                     <span className="text-xs text-gray-400 ml-auto">
                       {formatRelativeTime(search.last_used_at)}

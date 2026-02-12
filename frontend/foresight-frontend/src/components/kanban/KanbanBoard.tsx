@@ -14,7 +14,7 @@
  * - Dark mode support
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -26,11 +26,11 @@ import {
   type DragStartEvent,
   type DragEndEvent,
   type DragOverEvent,
-} from '@dnd-kit/core';
-import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
-import { cn } from '../../lib/utils';
-import { KanbanColumn } from './KanbanColumn';
-import { KanbanCard } from './KanbanCard';
+} from "@dnd-kit/core";
+import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import { cn } from "../../lib/utils";
+import { KanbanColumn } from "./KanbanColumn";
+import { KanbanCard } from "./KanbanCard";
 import {
   KANBAN_COLUMNS,
   type KanbanStatus,
@@ -38,7 +38,7 @@ import {
   type OnCardMoveCallback,
   type OnCardClickCallback,
   type CardActionCallbacks,
-} from './types';
+} from "./types";
 
 // =============================================================================
 // Types
@@ -70,7 +70,7 @@ export interface KanbanBoardProps {
  */
 function findColumnForCard(
   cardId: string,
-  cards: Record<KanbanStatus, WorkstreamCard[]>
+  cards: Record<KanbanStatus, WorkstreamCard[]>,
 ): KanbanStatus | null {
   for (const [status, columnCards] of Object.entries(cards)) {
     if (columnCards.some((card) => card.id === cardId)) {
@@ -85,7 +85,7 @@ function findColumnForCard(
  */
 function findCard(
   cardId: string,
-  cards: Record<KanbanStatus, WorkstreamCard[]>
+  cards: Record<KanbanStatus, WorkstreamCard[]>,
 ): WorkstreamCard | null {
   for (const columnCards of Object.values(cards)) {
     const card = columnCards.find((c) => c.id === cardId);
@@ -129,7 +129,7 @@ export function KanbanBoard({
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
-    })
+    }),
   );
 
   /**
@@ -143,7 +143,7 @@ export function KanbanBoard({
         setActiveCard(card);
       }
     },
-    [cards]
+    [cards],
   );
 
   /**
@@ -198,7 +198,7 @@ export function KanbanBoard({
         // If same column, use arrayMove logic
         if (sourceColumn === targetColumn) {
           const activeIndex = cards[sourceColumn].findIndex(
-            (c) => c.id === activeId
+            (c) => c.id === activeId,
           );
           if (activeIndex === overIndex) return; // Same position
           targetIndex = overIndex;
@@ -211,7 +211,7 @@ export function KanbanBoard({
       // Trigger the callback with the new position
       onCardMove(activeId, targetColumn, targetIndex);
     },
-    [cards, onCardMove]
+    [cards, onCardMove],
   );
 
   /**
@@ -244,15 +244,14 @@ export function KanbanBoard({
       <div
         className={cn(
           // Desktop: horizontal scroll
-          'flex gap-4 overflow-x-auto pb-4',
+          "flex gap-4 overflow-x-auto pb-4",
           // Add padding for scroll shadow effect
-          'px-1',
-          // Hide scrollbar on desktop, show on hover
-          'scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600',
-          'scrollbar-track-transparent',
+          "px-1",
+          // Thin scrollbar on desktop
+          "scrollbar-thin",
           // Mobile: stack vertically
-          'max-md:flex-col max-md:overflow-x-visible',
-          className
+          "max-md:flex-col max-md:overflow-x-visible",
+          className,
         )}
       >
         {columnsWithCards.map((column) => (
@@ -265,16 +264,14 @@ export function KanbanBoard({
             workstreamId={workstreamId}
             onCardClick={onCardClick}
             cardActions={cardActions}
-            onBulkExport={column.id === 'brief' ? onBulkExport : undefined}
+            onBulkExport={column.id === "brief" ? onBulkExport : undefined}
           />
         ))}
       </div>
 
       {/* Drag Overlay - Rendered outside columns for smooth animation */}
       <DragOverlay dropAnimation={null}>
-        {activeCard ? (
-          <KanbanCard card={activeCard} isDragOverlay />
-        ) : null}
+        {activeCard ? <KanbanCard card={activeCard} isDragOverlay /> : null}
       </DragOverlay>
     </DndContext>
   );
