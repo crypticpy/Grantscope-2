@@ -41,13 +41,13 @@ logger = logging.getLogger(__name__)
 
 def _get_required_env(name: str) -> str:
     """Get a required environment variable or raise an error."""
-    value = os.getenv(name)
-    if not value:
+    if value := os.getenv(name):
+        return value
+    else:
         raise ValueError(
             f"Missing required environment variable: {name}. "
             f"Azure OpenAI configuration is required for this application."
         )
-    return value
 
 
 def _get_optional_env(name: str, default: str) -> str:

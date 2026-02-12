@@ -154,7 +154,7 @@ def compute_signal_quality_score(supabase: Client, card_id: str) -> dict:
             }
         )
         unique_domains = len(
-            set(row["domain"] for row in diversity_data if row.get("domain"))
+            {row["domain"] for row in diversity_data if row.get("domain")}
         )
     except Exception as e:
         logger.warning(f"Failed to fetch source diversity for card {card_id}: {e}")

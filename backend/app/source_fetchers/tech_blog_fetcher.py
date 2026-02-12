@@ -319,15 +319,13 @@ class TechBlogFetcher:
         title = ""
         title_selector = source_config.get("title_selector", "h1")
         for selector in title_selector.split(", "):
-            title_elem = soup.select_one(selector.strip())
-            if title_elem:
+            if title_elem := soup.select_one(selector.strip()):
                 title = title_elem.get_text(strip=True)
                 break
 
         # Fallback title extraction
         if not title:
-            title_elem = soup.find("title")
-            if title_elem:
+            if title_elem := soup.find("title"):
                 title = title_elem.get_text(strip=True)
                 # Remove site name suffix
                 title = re.sub(r'\s*[|\-–]\s*(TechCrunch|Ars Technica|The Verge|Wired).*$', '', title, flags=re.I)
@@ -335,25 +333,22 @@ class TechBlogFetcher:
         # Extract content
         content = ""
         content_selector = source_config.get("content_selector", "article p")
-        content_elems = soup.select(content_selector)
-
-        if content_elems:
+        if content_elems := soup.select(content_selector):
             paragraphs = [elem.get_text(strip=True) for elem in content_elems]
             content = "\n\n".join(p for p in paragraphs if p and len(p) > 20)
 
         # Fallback content extraction
         if not content or len(content) < 100:
-            main_content = (
-                soup.find("article") or
-                soup.find("main") or
-                soup.find(class_=re.compile(r"content|article|body|post", re.I))
-            )
-            if main_content:
+            if main_content := (
+                soup.find("article")
+                or soup.find("main")
+                or soup.find(class_=re.compile(r"content|article|body|post", re.I))
+            ):
                 content = main_content.get_text(separator="\n\n", strip=True)
 
         # Truncate content if too long
         if len(content) > MAX_CONTENT_LENGTH:
-            content = content[:MAX_CONTENT_LENGTH] + "..."
+            content = f"{content[:MAX_CONTENT_LENGTH]}..."
 
         # Extract author
         author = None
@@ -414,26 +409,22 @@ class TechBlogFetcher:
                 except (ValueError, TypeError):
                     continue
 
-        # Try time element
-        time_elem = soup.find("time")
-        if time_elem:
-            datetime_attr = time_elem.get("datetime")
-            if datetime_attr:
+        if time_elem := soup.find("time"):
+            if datetime_attr := time_elem.get("datetime"):
                 try:
                     return datetime.fromisoformat(datetime_attr.replace("Z", "+00:00"))
                 except (ValueError, TypeError):
                     pass
 
-        # Try schema.org datePublished
-        script_ld = soup.find("script", type="application/ld+json")
-        if script_ld:
+        if script_ld := soup.find("script", type="application/ld+json"):
             try:
                 import json
                 ld_data = json.loads(script_ld.string)
                 if isinstance(ld_data, list):
                     ld_data = ld_data[0] if ld_data else {}
-                date_str = ld_data.get("datePublished") or ld_data.get("dateCreated")
-                if date_str:
+                if date_str := ld_data.get("datePublished") or ld_data.get(
+                    "dateCreated"
+                ):
                     return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
             except (json.JSONDecodeError, KeyError, TypeError, ValueError):
                 pass
@@ -486,7 +477,7 @@ class TechBlogFetcher:
             return None
 
         # Create excerpt from first 200 chars of content
-        excerpt = content[:200] + "..." if len(content) > 200 else content
+        excerpt = f"{content[:200]}..." if len(content) > 200 else content
 
         return TechBlogArticle(
             url=url,
@@ -572,8 +563,7 @@ class TechBlogFetcher:
                 tags = []
                 for tag in entry.get("tags", []):
                     if isinstance(tag, dict):
-                        term = tag.get("term", "")
-                        if term:
+                        if term := tag.get("term", ""):
                             tags.append(term)
 
                 article = TechBlogArticle(
@@ -584,10 +574,15 @@ class TechBlogFetcher:
                     source_category=source_config.get("category", "tech_blog"),
                     published_at=published_at,
                     author=author,
-                    excerpt=content[:200] + "..." if len(content) > 200 else content,
+                    excerpt=(
+                        f"{content[:200]}..." if len(content) > 200 else content
+                    ),
                     tags=tags[:10],
                     relevance=0.7,
-                    metadata={"feed_url": rss_url, "fetched_at": datetime.now().isoformat()},
+                    metadata={
+                        "feed_url": rss_url,
+                        "fetched_at": datetime.now().isoformat(),
+                    },
                 )
                 articles.append(article)
 
@@ -852,13 +847,14 @@ async def fetch_tech_blog_rss_feeds(
             if not feed_url:
                 continue
 
-            # Find source config for this feed
-            source_config = None
-            for src in TECH_BLOG_SOURCES:
-                if src.get("rss_url") == feed_url:
-                    source_config = src
-                    break
-
+            source_config = next(
+                (
+                    src
+                    for src in TECH_BLOG_SOURCES
+                    if src.get("rss_url") == feed_url
+                ),
+                None,
+            )
             if source_config is None:
                 source_config = {
                     "name": urlparse(feed_url).netloc,
@@ -890,9 +886,4 @@ async def fetch_articles_from_urls(urls: List[str]) -> List[TechBlogArticle]:
         tasks = [fetcher.fetch_article(url) for url in urls]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        articles = []
-        for result in results:
-            if isinstance(result, TechBlogArticle):
-                articles.append(result)
-
-        return articles
+        return [result for result in results if isinstance(result, TechBlogArticle)]

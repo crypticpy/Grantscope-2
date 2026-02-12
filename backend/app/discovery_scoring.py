@@ -51,9 +51,7 @@ def calculate_novelty_score(card: Dict[str, Any], user_dismissed_card_ids: Optio
     """
     score = 0.0
 
-    # Determine card age - prefer discovered_at, fall back to created_at
-    card_date_str = card.get("discovered_at") or card.get("created_at")
-    if card_date_str:
+    if card_date_str := card.get("discovered_at") or card.get("created_at"):
         try:
             # Parse ISO format datetime
             if isinstance(card_date_str, str):
@@ -128,26 +126,26 @@ def calculate_workstream_relevance(card: Dict[str, Any], workstreams: List[Dict[
         # Pillar matching: +0.3 per match (max 1.0)
         ws_pillars = ws.get("pillar_ids") or []
         if ws_pillars and card_pillar:
-            pillar_matches = sum(1 for p in ws_pillars if p == card_pillar)
+            pillar_matches = sum(bool(p == card_pillar)
+                             for p in ws_pillars)
             ws_score += min(1.0, pillar_matches * 0.3)
 
         # Goal matching: +0.4 per match (max 1.0)
         ws_goals = ws.get("goal_ids") or []
         if ws_goals and card_goal:
-            goal_matches = sum(1 for g in ws_goals if g == card_goal)
+            goal_matches = sum(bool(g == card_goal)
+                           for g in ws_goals)
             ws_score += min(1.0, goal_matches * 0.4)
 
-        # Keyword matching: +0.5 per match in name/summary (max 1.0)
-        ws_keywords = ws.get("keywords") or []
-        if ws_keywords:
-            keyword_matches = sum(1 for kw in ws_keywords if kw.lower() in card_text)
+        if ws_keywords := ws.get("keywords") or []:
+            keyword_matches = sum(bool(kw.lower() in card_text)
+                              for kw in ws_keywords)
             ws_score += min(1.0, keyword_matches * 0.5)
 
         # Horizon matching: +0.3 if exact match
         ws_horizon = ws.get("horizon")
-        if ws_horizon and ws_horizon != "ALL" and card_horizon:
-            if ws_horizon == card_horizon:
-                ws_score += 0.3
+        if ws_horizon and ws_horizon != "ALL" and card_horizon and ws_horizon == card_horizon:
+            ws_score += 0.3
 
         # Cap individual workstream score at 1.0
         workstream_scores.append(min(1.0, ws_score))

@@ -335,9 +335,6 @@ def get_export_filename(name: str, format: ExportFormat) -> str:
     """
     # Sanitize name for filename use
     safe_name = "".join(c if c.isalnum() or c in (' ', '-', '_') else '' for c in name)
-    safe_name = safe_name.strip().replace(' ', '_')[:50]  # Limit length
-
-    if not safe_name:
-        safe_name = "export"
+    safe_name = safe_name.strip().replace(' ', '_')[:50] or "export"
 
     return f"{safe_name}.{format.value}"

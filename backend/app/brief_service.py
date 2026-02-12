@@ -261,10 +261,7 @@ def sections_to_markdown(sections: List[Dict[str, Any]], title: str = "") -> str
         md_parts.append(f"# {title}\n")
 
     for section in sorted(sections, key=lambda s: s.get("order", 0)):
-        md_parts.append(f"## {section['title']}\n")
-        md_parts.append(section["content"])
-        md_parts.append("")
-
+        md_parts.extend((f"## {section['title']}\n", section["content"], ""))
     return "\n".join(md_parts)
 
 
@@ -318,14 +315,12 @@ def extract_executive_summary(content: str) -> str:
     """
     # Look for executive summary section
     pattern = r'##\s*EXECUTIVE\s*SUMMARY\s*\n(.*?)(?=\n##|\Z)'
-    match = re.search(pattern, content, re.IGNORECASE | re.DOTALL)
-
-    if match:
-        summary = match.group(1).strip()
+    if match := re.search(pattern, content, re.IGNORECASE | re.DOTALL):
+        summary = match[1].strip()
         # Clean up and limit length
         summary = summary.replace('\n', ' ').strip()
         if len(summary) > 500:
-            summary = summary[:497] + "..."
+            summary = f"{summary[:497]}..."
         return summary
 
     # Fallback: first paragraph
@@ -333,11 +328,8 @@ def extract_executive_summary(content: str) -> str:
     for p in paragraphs:
         p = p.strip()
         if p and not p.startswith('#'):
-            if len(p) > 500:
-                return p[:497] + "..."
-            return p
-
-    return content[:500] + "..." if len(content) > 500 else content
+            return f"{p[:497]}..." if len(p) > 500 else p
+    return f"{content[:500]}..." if len(content) > 500 else content
 
 
 def parse_brief_sections(content: str) -> Dict[str, Any]:
@@ -533,7 +525,7 @@ class ExecutiveBriefService:
             "workstream_card_id", workstream_card_id
         ).order("version", desc=True).execute()
 
-        return result.data if result.data else []
+        return result.data or []
 
     async def get_latest_completed_brief(
         self,
@@ -600,7 +592,7 @@ class ExecutiveBriefService:
         if error_message:
             update_data["error_message"] = error_message
 
-        update_data.update(kwargs)
+        update_data |= kwargs
 
         self.supabase.table("executive_briefs").update(update_data).eq(
             "id", brief_id
@@ -697,11 +689,10 @@ class ExecutiveBriefService:
         lines = []
         card_map = {c["id"]: c for c in cards_result.data}
         for rel in result.data:
-            card = card_map.get(rel["target_card_id"])
-            if card:
+            if card := card_map.get(rel["target_card_id"]):
                 summary_text = card.get('summary', 'No summary')
                 if summary_text and len(summary_text) > 150:
-                    summary_text = summary_text[:147] + "..."
+                    summary_text = f"{summary_text[:147]}..."
                 lines.append(
                     f"- **{card['name']}** ({rel['relationship_type']}, "
                     f"strength: {rel.get('strength', 0):.0%}): {summary_text}"
@@ -744,11 +735,11 @@ class ExecutiveBriefService:
         for src in result.data:
             title = src.get("title", "Untitled")
             if len(title) > 80:
-                title = title[:77] + "..."
+                title = f"{title[:77]}..."
             source = src.get("domain", "Unknown")
             summary = src.get("analysis_summary", "")
             if summary and len(summary) > 200:
-                summary = summary[:197] + "..."
+                summary = f"{summary[:197]}..."
             url = src.get("url", "")
 
             line = f"- **{title}** ({source})"
@@ -781,7 +772,7 @@ class ExecutiveBriefService:
             "created_at", since_timestamp
         ).execute()
 
-        return result.count if result.count else 0
+        return result.count or 0
 
     # ========================================================================
     # Brief Generation

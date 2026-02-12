@@ -258,7 +258,8 @@ def validate_summary_quality(summary: str) -> SummaryQualityResult:
 
     for element, keywords in SUMMARY_STRUCTURE_KEYWORDS.items():
         # Count how many keywords from each category are present
-        matches = sum(1 for kw in keywords if kw in summary_lower)
+        matches = sum(bool(kw in summary_lower)
+                  for kw in keywords)
         # Normalize to 0-1 score (at least 2 matches for good score)
         score = min(matches / 2.0, 1.0)
         structure_scores[element] = score
@@ -678,17 +679,14 @@ class AIService:
                 scores_are_defaults=True,
             )
 
-        # Parse entities
-        entities = []
-        for ent in result.get("entities", []):
-            entities.append(
-                ExtractedEntity(
-                    name=ent.get("name", ""),
-                    entity_type=ent.get("type", "concept"),
-                    context=ent.get("context", ""),
-                )
+        entities = [
+            ExtractedEntity(
+                name=ent.get("name", ""),
+                entity_type=ent.get("type", "concept"),
+                context=ent.get("context", ""),
             )
-
+            for ent in result.get("entities", [])
+        ]
         # Validate summary quality
         summary = result.get("summary", "")
         quality_result = validate_summary_quality(summary)

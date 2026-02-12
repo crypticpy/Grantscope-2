@@ -245,40 +245,41 @@ class NewsFetcher:
         """
         # Extract title
         title = ""
-        title_elem = soup.select_one(source_config.get("title_selector", "h1"))
-        if title_elem:
+        if title_elem := soup.select_one(
+            source_config.get("title_selector", "h1")
+        ):
             title = title_elem.get_text(strip=True)
 
         # Fallback title extraction
         if not title:
-            title_elem = soup.find("title")
-            if title_elem:
+            if title_elem := soup.find("title"):
                 title = title_elem.get_text(strip=True)
 
         # Extract content
         content = ""
         content_selector = source_config.get("content_selector", "article p")
-        content_elems = soup.select(content_selector)
-
-        if content_elems:
+        if content_elems := soup.select(content_selector):
             paragraphs = [elem.get_text(strip=True) for elem in content_elems]
             content = "\n\n".join(p for p in paragraphs if p and len(p) > 20)
 
         # Fallback content extraction
         if not content or len(content) < 100:
-            # Try main content area
-            main_content = soup.find("article") or soup.find("main") or soup.find(class_=re.compile(r"content|article|body", re.I))
-            if main_content:
+            if (
+                main_content := soup.find("article")
+                or soup.find("main")
+                or soup.find(class_=re.compile(r"content|article|body", re.I))
+            ):
                 content = main_content.get_text(separator="\n\n", strip=True)
 
         # Truncate content if too long
         if len(content) > MAX_CONTENT_LENGTH:
-            content = content[:MAX_CONTENT_LENGTH] + "..."
+            content = f"{content[:MAX_CONTENT_LENGTH]}..."
 
         # Extract author
         author = None
-        author_elem = soup.find(class_=re.compile(r"author|byline", re.I)) or soup.find("meta", attrs={"name": "author"})
-        if author_elem:
+        if author_elem := soup.find(
+            class_=re.compile(r"author|byline", re.I)
+        ) or soup.find("meta", attrs={"name": "author"}):
             if hasattr(author_elem, "get_text"):
                 author = author_elem.get_text(strip=True)
             elif author_elem.get("content"):
@@ -311,11 +312,8 @@ class NewsFetcher:
                 except (ValueError, TypeError):
                     continue
 
-        # Try time element
-        time_elem = soup.find("time")
-        if time_elem:
-            datetime_attr = time_elem.get("datetime")
-            if datetime_attr:
+        if time_elem := soup.find("time"):
+            if datetime_attr := time_elem.get("datetime"):
                 try:
                     return datetime.fromisoformat(datetime_attr.replace("Z", "+00:00"))
                 except (ValueError, TypeError):
@@ -370,7 +368,7 @@ class NewsFetcher:
             return None
 
         # Create excerpt from first 200 chars of content
-        excerpt = content[:200] + "..." if len(content) > 200 else content
+        excerpt = f"{content[:200]}..." if len(content) > 200 else content
 
         return NewsArticle(
             url=url,
@@ -602,9 +600,4 @@ async def fetch_articles_from_urls(urls: List[str]) -> List[NewsArticle]:
         tasks = [fetcher.fetch_article(url) for url in urls]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        articles = []
-        for result in results:
-            if isinstance(result, NewsArticle):
-                articles.append(result)
-
-        return articles
+        return [result for result in results if isinstance(result, NewsArticle)]

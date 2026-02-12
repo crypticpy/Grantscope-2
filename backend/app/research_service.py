@@ -1034,7 +1034,7 @@ class ResearchService:
             await self._create_timeline_event(
                 card_id=card_id,
                 event_type="created",
-                description=f"Card created from research",
+                description="Card created from research",
             )
 
             return card_id
@@ -1258,12 +1258,9 @@ class ResearchService:
             name=card["name"], summary=card.get("summary", "")
         )
 
-        # Steer research via source_preferences if available on the card
-        source_prefs = card.get("source_preferences") or {}
-        if source_prefs:
+        if source_prefs := card.get("source_preferences") or {}:
             steer_parts = []
-            priority_domains = source_prefs.get("priority_domains")
-            if priority_domains:
+            if priority_domains := source_prefs.get("priority_domains"):
                 steer_parts.append(
                     f"Focus on sources from: {', '.join(priority_domains)}."
                 )
@@ -1277,8 +1274,7 @@ class ResearchService:
             }
             if preferred_type and preferred_type in type_labels:
                 steer_parts.append(f"Prefer {type_labels[preferred_type]}.")
-            keywords = source_prefs.get("keywords")
-            if keywords:
+            if keywords := source_prefs.get("keywords"):
                 steer_parts.append(f"Key topics to emphasize: {', '.join(keywords)}.")
             if steer_parts:
                 query += "\n\n" + " ".join(steer_parts)
@@ -1321,21 +1317,18 @@ class ResearchService:
         # Step 7: Generate COMPREHENSIVE strategic intelligence report
         comprehensive_report = None
         try:
-            # Collect source analyses for report generation (including URLs for citations)
-            source_analyses = []
-            for p in processed:
-                if p.analysis:
-                    source_analyses.append(
-                        {
-                            "title": p.raw.title,
-                            "url": p.raw.url,  # Include URL for source citations
-                            "source_name": p.raw.source_name,  # Include publication/source name
-                            "summary": p.analysis.summary,
-                            "key_excerpts": p.analysis.key_excerpts,
-                            "relevance": p.analysis.relevance,
-                        }
-                    )
-
+            source_analyses = [
+                {
+                    "title": p.raw.title,
+                    "url": p.raw.url,  # Include URL for source citations
+                    "source_name": p.raw.source_name,  # Include publication/source name
+                    "summary": p.analysis.summary,
+                    "key_excerpts": p.analysis.key_excerpts,
+                    "relevance": p.analysis.relevance,
+                }
+                for p in processed
+                if p.analysis
+            ]
             # Parse stage_id safely - it could be "4", "4_stage", "4_proof", etc.
             stage_id_raw = card.get("stage_id", "4") or "4"
             try:

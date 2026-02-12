@@ -136,9 +136,7 @@ def _get_parent_domain(domain: str) -> Optional[str]:
     """
     parts = domain.split(".")
     # Need at least 3 parts to have a subdomain (sub.domain.tld)
-    if len(parts) <= 2:
-        return None
-    return ".".join(parts[1:])
+    return None if len(parts) <= 2 else ".".join(parts[1:])
 
 
 def _get_tld_wildcard(domain: str) -> Optional[str]:
@@ -173,9 +171,7 @@ def _get_subdomain_wildcard(domain: str) -> Optional[str]:
         has two or fewer labels.
     """
     parent = _get_parent_domain(domain)
-    if parent is None:
-        return None
-    return f"*.{parent}"
+    return None if parent is None else f"*.{parent}"
 
 
 def _compute_composite_score(
@@ -322,16 +318,13 @@ def get_reputation(supabase_client: Client, url: str) -> Optional[dict]:
     # Priority: exact domain > parent domain > subdomain wildcard > TLD wildcard
     candidates: list[str] = [domain]
 
-    parent = _get_parent_domain(domain)
-    if parent:
+    if parent := _get_parent_domain(domain):
         candidates.append(parent)
 
-    subdomain_wc = _get_subdomain_wildcard(domain)
-    if subdomain_wc:
+    if subdomain_wc := _get_subdomain_wildcard(domain):
         candidates.append(subdomain_wc)
 
-    tld_wc = _get_tld_wildcard(domain)
-    if tld_wc:
+    if tld_wc := _get_tld_wildcard(domain):
         candidates.append(tld_wc)
 
     # Query all candidates in one round-trip, then pick the highest-priority match
@@ -450,23 +443,17 @@ def _resolve_from_cache(domain: str) -> Optional[dict]:
     if exact is not None:
         return exact
 
-    # Priority 2: parent domain match
-    parent = _get_parent_domain(domain)
-    if parent:
+    if parent := _get_parent_domain(domain):
         parent_match = _batch_cache.get_by_pattern(parent)
         if parent_match is not None:
             return parent_match
 
-    # Priority 3: subdomain wildcard
-    subdomain_wc = _get_subdomain_wildcard(domain)
-    if subdomain_wc:
+    if subdomain_wc := _get_subdomain_wildcard(domain):
         sub_match = _batch_cache.get_by_pattern(subdomain_wc)
         if sub_match is not None:
             return sub_match
 
-    # Priority 4: TLD wildcard
-    tld_wc = _get_tld_wildcard(domain)
-    if tld_wc:
+    if tld_wc := _get_tld_wildcard(domain):
         tld_match = _batch_cache.get_by_pattern(tld_wc)
         if tld_match is not None:
             return tld_match
@@ -537,13 +524,14 @@ def get_confidence_adjustment(reputation: Optional[dict]) -> float:
 
     composite = float(reputation.get("composite_score", 0))
 
-    # Walk thresholds from highest to lowest; first match wins
-    for threshold, adjustment in CONFIDENCE_THRESHOLDS:
-        if composite >= threshold:
-            return adjustment
-
-    # Below the lowest explicit threshold
-    return CONFIDENCE_FLOOR
+    return next(
+        (
+            adjustment
+            for threshold, adjustment in CONFIDENCE_THRESHOLDS
+            if composite >= threshold
+        ),
+        CONFIDENCE_FLOOR,
+    )
 
 
 def recalculate_all(supabase_client: Client) -> dict:
@@ -621,8 +609,7 @@ def recalculate_all(supabase_client: Client) -> dict:
             elif isinstance(sources_data, list) and sources_data:
                 source_url = sources_data[0].get("url", "")
 
-            domain = _extract_domain(source_url)
-            if domain:
+            if domain := _extract_domain(source_url):
                 domain_ratings.setdefault(domain, []).append(row)
 
         # Compute averages per domain
@@ -807,14 +794,11 @@ def record_triage_result(supabase_client: Client, domain: str, passed: bool) -> 
     # parent domain (same logic as get_reputation, but simplified since
     # we already have the domain, not a full URL).
     candidates = [domain]
-    parent = _get_parent_domain(domain)
-    if parent:
+    if parent := _get_parent_domain(domain):
         candidates.append(parent)
-    subdomain_wc = _get_subdomain_wildcard(domain)
-    if subdomain_wc:
+    if subdomain_wc := _get_subdomain_wildcard(domain):
         candidates.append(subdomain_wc)
-    tld_wc = _get_tld_wildcard(domain)
-    if tld_wc:
+    if tld_wc := _get_tld_wildcard(domain):
         candidates.append(tld_wc)
 
     try:
@@ -836,12 +820,14 @@ def record_triage_result(supabase_client: Client, domain: str, passed: bool) -> 
 
     # Pick the highest-priority match
     rows_by_pattern = {row["domain_pattern"]: row for row in rows}
-    matched_row = None
-    for candidate in candidates:
-        if candidate in rows_by_pattern:
-            matched_row = rows_by_pattern[candidate]
-            break
-
+    matched_row = next(
+        (
+            rows_by_pattern[candidate]
+            for candidate in candidates
+            if candidate in rows_by_pattern
+        ),
+        None,
+    )
     if matched_row is None:
         return
 

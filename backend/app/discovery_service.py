@@ -255,8 +255,9 @@ def apply_source_preferences(
     # Apply custom_rss_feeds: add to RSS category config
     custom_feeds = source_prefs.get("custom_rss_feeds")
     if custom_feeds and isinstance(custom_feeds, list):
-        rss_config = config.source_categories.get(SourceCategory.RSS.value)
-        if rss_config:
+        if rss_config := config.source_categories.get(
+            SourceCategory.RSS.value
+        ):
             rss_config.rss_feeds = list(set(rss_config.rss_feeds + custom_feeds))
             rss_config.enabled = True
 
@@ -617,9 +618,8 @@ class MultiSourceFetchResult:
         """Calculate diversity score (0-1) based on category distribution."""
         if self.total_sources == 0:
             return 0.0
-        active_categories = sum(
-            1 for count in self.sources_by_category.values() if count > 0
-        )
+        active_categories = sum(bool(count > 0)
+                            for count in self.sources_by_category.values())
         return active_categories / 5.0  # 5 categories total
 
 
@@ -1374,10 +1374,9 @@ class DiscoveryService:
             # Look up domain reputation ID (Task 2.7)
             _domain_rep_id = None
             try:
-                _rep = domain_reputation_service.get_reputation(
+                if _rep := domain_reputation_service.get_reputation(
                     self.supabase, source.url or ""
-                )
-                if _rep:
+                ):
                     _domain_rep_id = _rep.get("id")
             except Exception:
                 pass  # Non-fatal
@@ -1556,9 +1555,7 @@ class DiscoveryService:
         )
 
         if not cards_result.data:
-            logger.info(
-                f"PYTHON FALLBACK: No cards with embeddings found - NEW CONCEPT"
-            )
+            logger.info("PYTHON FALLBACK: No cards with embeddings found - NEW CONCEPT")
             new_concept_candidates.append(source)
             if source.discovered_source_id:
                 await self._update_source_dedup(source.discovered_source_id, "unique")
@@ -1700,8 +1697,8 @@ class DiscoveryService:
             List of QueryConfig objects
         """
         return self.query_generator.generate_queries(
-            pillars_filter=config.pillars_filter if config.pillars_filter else None,
-            horizons=config.horizons_filter if config.horizons_filter else None,
+            pillars_filter=config.pillars_filter or None,
+            horizons=config.horizons_filter or None,
             include_priorities=config.include_priorities,
             max_queries=config.max_queries_per_run,
         )
@@ -1916,9 +1913,8 @@ class DiscoveryService:
 
         # Calculate metrics
         fetch_time = (datetime.now() - start_time).total_seconds()
-        categories_fetched = sum(
-            1 for count in sources_by_category.values() if count > 0
-        )
+        categories_fetched = sum(bool(count > 0)
+                             for count in sources_by_category.values())
 
         logger.info(
             f"Multi-source fetch complete: {len(all_sources)} sources from "
@@ -2149,8 +2145,7 @@ class DiscoveryService:
                 try:
                     from urllib.parse import urlparse as _urlparse
 
-                    _domain = _urlparse(source.url or "").netloc
-                    if _domain:
+                    if _domain := _urlparse(source.url or "").netloc:
                         domain_reputation_service.record_triage_result(
                             self.supabase, _domain, passed=passed_triage
                         )
@@ -2313,8 +2308,7 @@ class DiscoveryService:
                 try:
                     from urllib.parse import urlparse as _urlparse
 
-                    _domain = _urlparse(source.url or "").netloc
-                    if _domain:
+                    if _domain := _urlparse(source.url or "").netloc:
                         domain_reputation_service.record_triage_result(
                             self.supabase, _domain, passed=passed_triage
                         )
@@ -2427,8 +2421,7 @@ class DiscoveryService:
                 keywords = block.get("keywords", [])
                 if isinstance(keywords, list):
                     blocked_keywords.update(kw.lower() for kw in keywords)
-                topic = block.get("topic_name", "")
-                if topic:
+                if topic := block.get("topic_name", ""):
                     blocked_keywords.add(topic.lower())
 
             if not blocked_keywords:
@@ -2667,7 +2660,7 @@ class DiscoveryService:
                     logger.warning(
                         f"Vector search RPC failed for '{suggested_name}': {e}"
                     )
-                    logger.info(f"Falling back to Python-based similarity search...")
+                    logger.info("Falling back to Python-based similarity search...")
 
                     # Python fallback: fetch cards with embeddings and calculate similarity locally
                     try:
@@ -2679,10 +2672,6 @@ class DiscoveryService:
                             enrichment_candidates,
                             new_concept_candidates,
                         )
-                        if fallback_result == "enriched":
-                            pass  # Already added to enrichment_candidates
-                        elif fallback_result == "new":
-                            pass  # Already added to new_concept_candidates
                     except Exception as fallback_error:
                         logger.error(f"Python fallback also failed: {fallback_error}")
                         new_concept_candidates.append(source)
@@ -3175,11 +3164,7 @@ class DiscoveryService:
         # Convert stage number to stage_id (foreign key)
         stage_id = STAGE_NUMBER_TO_ID.get(analysis.suggested_stage, "4_proof")
 
-        # Convert goal format (CH.1 -> CH-01)
-        goal_id = None
-        if analysis.goals:
-            goal_id = convert_goal_id(analysis.goals[0])
-
+        goal_id = convert_goal_id(analysis.goals[0]) if analysis.goals else None
         try:
             now = datetime.now().isoformat()
             ai_confidence = None
@@ -3239,7 +3224,7 @@ class DiscoveryService:
                 await self._create_timeline_event(
                     card_id=card_id,
                     event_type="discovered",
-                    description=f"Card discovered via automated scan",
+                    description="Card discovered via automated scan",
                 )
 
                 return card_id
@@ -3278,10 +3263,9 @@ class DiscoveryService:
             # Look up domain reputation ID for this source (Task 2.7)
             _domain_reputation_id = None
             try:
-                _rep = domain_reputation_service.get_reputation(
+                if _rep := domain_reputation_service.get_reputation(
                     self.supabase, source.raw.url or ""
-                )
-                if _rep:
+                ):
                     _domain_reputation_id = _rep.get("id")
             except Exception:
                 pass  # Non-fatal
@@ -3430,7 +3414,7 @@ class DiscoveryService:
                 "cards_enriched_ids": result.cards_enriched,
             }
 
-            updated_report = {**existing_report, **final_report}
+            updated_report = existing_report | final_report
 
             self.supabase.table("discovery_runs").update(
                 {

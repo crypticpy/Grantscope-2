@@ -83,8 +83,7 @@ def _parse_published_date(entry: Dict[str, Any]) -> Optional[datetime]:
 
     # Try string date fields as fallback
     for date_field in ["published", "updated", "created", "pubDate"]:
-        date_str = entry.get(date_field)
-        if date_str:
+        if date_str := entry.get(date_field):
             try:
                 # feedparser usually provides parsed versions, but just in case
                 from dateutil import parser as date_parser
@@ -105,12 +104,14 @@ def _extract_content(entry: Dict[str, Any]) -> str:
     # Try content array first (Atom feeds)
     content_list = entry.get("content", [])
     if content_list and isinstance(content_list, list):
-        for content_item in content_list:
-            if isinstance(content_item, dict) and content_item.get("value"):
-                raw_content = content_item["value"]
-                break
-        else:
-            raw_content = ""
+        raw_content = next(
+            (
+                content_item["value"]
+                for content_item in content_list
+                if isinstance(content_item, dict) and content_item.get("value")
+            ),
+            "",
+        )
     else:
         raw_content = ""
 
@@ -144,8 +145,7 @@ def _extract_tags(entry: Dict[str, Any]) -> List[str]:
     # Try tags field (common in Atom)
     for tag in entry.get("tags", []):
         if isinstance(tag, dict):
-            term = tag.get("term") or tag.get("label")
-            if term:
+            if term := tag.get("term") or tag.get("label"):
                 tags.append(str(term))
         elif isinstance(tag, str):
             tags.append(tag)
@@ -160,9 +160,7 @@ def _extract_tags(entry: Dict[str, Any]) -> List[str]:
 
 def _extract_author(entry: Dict[str, Any]) -> Optional[str]:
     """Extract author from feed entry."""
-    # Try author field
-    author = entry.get("author")
-    if author:
+    if author := entry.get("author"):
         return str(author)[:200]
 
     # Try author_detail
@@ -170,9 +168,7 @@ def _extract_author(entry: Dict[str, Any]) -> Optional[str]:
     if author_detail.get("name"):
         return str(author_detail["name"])[:200]
 
-    # Try dc:creator (Dublin Core)
-    creator = entry.get("dc_creator") or entry.get("creator")
-    if creator:
+    if creator := entry.get("dc_creator") or entry.get("creator"):
         return str(creator)[:200]
 
     return None
@@ -256,9 +252,7 @@ async def fetch_single_feed(
                 # Extract title
                 title = entry.get("title", "Untitled")
                 if not title or title == "Untitled":
-                    # Try to extract title from content
-                    content_preview = _extract_content(entry)[:100]
-                    if content_preview:
+                    if content_preview := _extract_content(entry)[:100]:
                         title = content_preview.split(".")[0][:100] or "Untitled"
 
                 article = FetchedArticle(

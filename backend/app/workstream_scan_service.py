@@ -217,12 +217,10 @@ class WorkstreamScanService:
                 await self._finalize_scan(config.scan_id, result)
                 return result
 
-            # Step 2b: Enrich sources with full article text (replaces Firecrawl)
-            if raw_sources:
-                logger.info(
-                    f"Enriching {len(raw_sources)} sources with full content..."
-                )
-                raw_sources = await enrich_sources(raw_sources, max_concurrent=5)
+            logger.info(
+                f"Enriching {len(raw_sources)} sources with full content..."
+            )
+            raw_sources = await enrich_sources(raw_sources, max_concurrent=5)
 
             # Step 2c: Preload domain reputation cache (Task 2.7)
             try:
@@ -447,7 +445,7 @@ class WorkstreamScanService:
             existing_context = f"""
 Signals already tracked (DO NOT search for these — find NEW, DIFFERENT topics):
 {chr(10).join(f'- {name}' for name in names_sample)}
-{'... and ' + str(len(existing_names) - 15) + ' more' if len(existing_names) > 15 else ''}
+{f'... and {str(len(existing_names) - 15)} more' if len(existing_names) > 15 else ''}
 """
 
         # Determine scan mode: seed (no cards yet) vs follow-up (has cards)
@@ -573,26 +571,27 @@ Example: ["query 1", "query 2", ...]"""
 
         # Generate queries from keywords
         for keyword in config.keywords[:10]:  # Limit keywords
-            # Basic keyword query with municipal context
-            queries.append(f'"{keyword}" {municipal_modifiers[0]}')
-
-            # Keyword with horizon modifier
-            queries.append(f"{keyword} {horizon_mods[0]} technology")
-
+            queries.extend(
+                (
+                    f'"{keyword}" {municipal_modifiers[0]}',
+                    f"{keyword} {horizon_mods[0]} technology",
+                )
+            )
             # Keyword with pillar context
             for pillar_id in config.pillar_ids[:2]:  # Limit pillars
-                pillar_name = PILLAR_NAMES.get(pillar_id, "")
-                if pillar_name:
+                if pillar_name := PILLAR_NAMES.get(pillar_id, ""):
                     queries.append(f"{keyword} {pillar_name}")
 
         # Add pillar-specific queries if few keywords
         if len(config.keywords) < 3:
             for pillar_id in config.pillar_ids:
-                pillar_name = PILLAR_NAMES.get(pillar_id, "")
-                if pillar_name:
-                    queries.append(f"{pillar_name} {horizon_mods[0]} technology city")
-                    queries.append(f"{pillar_name} municipal innovation")
-
+                if pillar_name := PILLAR_NAMES.get(pillar_id, ""):
+                    queries.extend(
+                        (
+                            f"{pillar_name} {horizon_mods[0]} technology city",
+                            f"{pillar_name} municipal innovation",
+                        )
+                    )
         # Dedupe and limit
         seen = set()
         unique_queries = []
@@ -878,16 +877,16 @@ Example: ["query 1", "query 2", ...]"""
             result = await fetch_rss_sources(
                 default_feeds, max_items_per_feed=limit // 2
             )
-            for article in result.articles[:limit]:
-                sources.append(
-                    RawSource(
-                        url=article.url,
-                        title=article.title,
-                        content=article.content or article.summary or "",
-                        source_name=article.feed_title or "RSS",
-                        published_at=article.published_at,
-                    )
+            sources.extend(
+                RawSource(
+                    url=article.url,
+                    title=article.title,
+                    content=article.content or article.summary or "",
+                    source_name=article.feed_title or "RSS",
+                    published_at=article.published_at,
                 )
+                for article in result.articles[:limit]
+            )
         except Exception as e:
             logger.warning(f"RSS fetch error: {e}")
         return sources[:limit]
@@ -986,8 +985,7 @@ Example: ["query 1", "query 2", ...]"""
                 try:
                     from urllib.parse import urlparse as _urlparse
 
-                    _domain = _urlparse(source.url or "").netloc
-                    if _domain:
+                    if _domain := _urlparse(source.url or "").netloc:
                         domain_reputation_service.record_triage_result(
                             self.supabase, _domain, passed=passed_triage
                         )
@@ -1203,10 +1201,9 @@ Example: ["query 1", "query 2", ...]"""
             # Look up domain reputation ID for this source (Task 2.7)
             _domain_reputation_id = None
             try:
-                _rep = domain_reputation_service.get_reputation(
+                if _rep := domain_reputation_service.get_reputation(
                     self.supabase, source.raw.url or ""
-                )
-                if _rep:
+                ):
                     _domain_reputation_id = _rep.get("id")
             except Exception:
                 pass  # Non-fatal

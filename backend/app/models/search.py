@@ -131,9 +131,7 @@ class SearchFilters(BaseModel):
     @validator('pillar_ids', 'goal_ids', 'stage_ids', pre=True)
     def filter_empty_strings(cls, v):
         """Remove empty strings from filter lists."""
-        if v is not None:
-            return [item for item in v if item and item.strip()]
-        return v
+        return [item for item in v if item and item.strip()] if v is not None else v
 
 
 class AdvancedSearchRequest(BaseModel):
