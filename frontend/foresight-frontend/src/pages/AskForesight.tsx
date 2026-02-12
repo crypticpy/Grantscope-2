@@ -583,6 +583,7 @@ export default function AskForesight() {
               scope={effectiveScope}
               scopeId={effectiveScopeId}
               initialQuery={initialQuery}
+              initialConversationId={activeConversationId ?? undefined}
               className="flex-1"
               placeholder="Ask Foresight about signals, trends, and strategy..."
               emptyStateTitle="Ask Foresight"

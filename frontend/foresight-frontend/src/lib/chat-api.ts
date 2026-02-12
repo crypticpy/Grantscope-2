@@ -41,6 +41,8 @@ export interface Citation {
   index: number;
   /** UUID of the referenced card, if applicable */
   card_id?: string;
+  /** Slug of the referenced card for URL-friendly navigation */
+  card_slug?: string;
   /** UUID of the referenced source, if applicable */
   source_id?: string;
   /** Display title of the cited resource */

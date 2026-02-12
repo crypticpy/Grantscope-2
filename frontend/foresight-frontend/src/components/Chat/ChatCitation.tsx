@@ -63,11 +63,13 @@ export function ChatCitation({ citation, onClick }: ChatCitationProps) {
       return;
     }
 
-    // Default navigation behavior
-    if (citation.card_id) {
-      navigate(`/signals/${citation.card_id}`);
-    } else if (citation.url) {
+    // Default navigation behavior: prioritize source URL
+    if (citation.url) {
       window.open(citation.url, "_blank", "noopener,noreferrer");
+    } else if (citation.card_slug) {
+      navigate(`/signals/${citation.card_slug}`);
+    } else if (citation.card_id) {
+      navigate(`/signals/${citation.card_id}`);
     }
   };
 

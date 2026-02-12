@@ -55,6 +55,33 @@ function parseMarkdown(
   while (i < lines.length) {
     const line = lines[i];
 
+    // Heading: # through ####
+    const headingMatch = line?.match(/^(#{1,4})\s+(.+)$/);
+    if (headingMatch) {
+      const level = headingMatch[1]!.length;
+      const content = headingMatch[2] ?? "";
+      const Tag = `h${level + 1}` as keyof JSX.IntrinsicElements; // h2-h5
+      const sizeClass =
+        level === 1
+          ? "text-lg font-bold"
+          : level === 2
+            ? "text-base font-semibold"
+            : "text-sm font-semibold";
+      nodes.push(
+        <Tag
+          key={`h-${i}`}
+          className={cn(
+            sizeClass,
+            "mt-3 mb-1.5 text-gray-900 dark:text-gray-100",
+          )}
+        >
+          {parseInline(content!, citations, onCitationClick)}
+        </Tag>,
+      );
+      i++;
+      continue;
+    }
+
     // Code block: ```...```
     if (line!.trimStart().startsWith("```")) {
       const codeLines: string[] = [];
@@ -125,7 +152,7 @@ function parseMarkdown(
     }
 
     // Empty line -> line break
-    if (line.trim() === "") {
+    if (!line || line.trim() === "") {
       nodes.push(<br key={`br-${i}`} />);
       i++;
       continue;
@@ -137,7 +164,7 @@ function parseMarkdown(
         key={`p-${i}`}
         className="text-sm leading-relaxed text-gray-700 dark:text-gray-300"
       >
-        {parseInline(line, citations, onCitationClick)}
+        {parseInline(line ?? "", citations, onCitationClick)}
       </p>,
     );
     i++;
@@ -151,11 +178,14 @@ function parseMarkdown(
  * Handles bold, italic, inline code, and citation references [1].
  */
 function parseInline(
-  text: string,
+  rawText: string,
   citations: Citation[],
   onCitationClick?: (citation: Citation) => void,
 ): React.ReactNode[] {
   const nodes: React.ReactNode[] = [];
+
+  // Strip empty brackets [] (no number inside) before parsing
+  const text = rawText.replace(/\[\]/g, "");
 
   // Combined regex for all inline elements
   // Match: **bold**, *italic*, `code`, or [number] citation
@@ -207,7 +237,13 @@ function parseInline(
           <button
             key={`cite-${match.index}`}
             type="button"
-            onClick={() => onCitationClick?.(citation)}
+            onClick={() => {
+              if (onCitationClick) {
+                onCitationClick(citation);
+              } else if (citation.url) {
+                window.open(citation.url, "_blank", "noopener,noreferrer");
+              }
+            }}
             className={cn(
               "inline-flex items-center justify-center",
               "min-w-[1.25rem] h-5 px-1 mx-0.5",

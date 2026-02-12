@@ -136,7 +136,7 @@ async def _retrieve_signal_context(
     card_result = (
         supabase.table("cards")
         .select(
-            "id, name, summary, description, pillar_id, goal_id, "
+            "id, slug, name, summary, description, pillar_id, goal_id, "
             "horizon, stage_id, novelty_score, impact_score, "
             "relevance_score, velocity_score, risk_score, "
             "opportunity_score, signal_quality_score, status"
@@ -200,6 +200,7 @@ async def _retrieve_signal_context(
             source_map[i] = {
                 "source_id": src["id"],
                 "card_id": card_id,
+                "card_slug": card.get("slug", ""),
                 "title": src.get("title", "Untitled"),
                 "url": src.get("url", ""),
             }
@@ -266,9 +267,9 @@ async def _retrieve_signal_context(
         for task in research_result.data or []:
             result_summary = task.get("result_summary") or {}
             if isinstance(result_summary, dict):
-                if report := result_summary.get(
-                    "report_preview"
-                ) or result_summary.get("report"):
+                if report := result_summary.get("report_preview") or result_summary.get(
+                    "report"
+                ):
                     parts.append(
                         f"\n## Deep Research Report ({task.get('completed_at', '')[:10]})"
                     )
@@ -345,7 +346,7 @@ async def _retrieve_workstream_context(
         cards_result = (
             supabase.table("cards")
             .select(
-                "id, name, summary, pillar_id, goal_id, horizon, stage_id, "
+                "id, slug, name, summary, pillar_id, goal_id, horizon, stage_id, "
                 "impact_score, relevance_score, velocity_score"
             )
             .in_("id", card_ids)
@@ -390,6 +391,7 @@ async def _retrieve_workstream_context(
                     source_map[source_idx] = {
                         "source_id": src["id"],
                         "card_id": card_id,
+                        "card_slug": card.get("slug", ""),
                         "title": src.get("title", "Untitled"),
                         "url": src.get("url", ""),
                     }
@@ -473,7 +475,7 @@ async def _retrieve_global_context(
         cards_result = (
             supabase.table("cards")
             .select(
-                "id, name, summary, description, pillar_id, goal_id, "
+                "id, slug, name, summary, description, pillar_id, goal_id, "
                 "horizon, stage_id, impact_score, relevance_score, "
                 "velocity_score, risk_score"
             )
@@ -515,6 +517,7 @@ async def _retrieve_global_context(
                     source_map[source_idx] = {
                         "source_id": src["id"],
                         "card_id": card_id,
+                        "card_slug": card.get("slug", ""),
                         "title": src.get("title", "Untitled"),
                         "url": src.get("url", ""),
                     }
@@ -672,6 +675,7 @@ def _parse_citations(
                 {
                     "index": ref_num,
                     "card_id": source_info.get("card_id"),
+                    "card_slug": source_info.get("card_slug", ""),
                     "source_id": source_info.get("source_id"),
                     "title": source_info.get("title", ""),
                     "url": source_info.get("url", ""),
@@ -733,9 +737,7 @@ async def _get_or_create_conversation(
             max_tokens=30,
             temperature=0.5,
         )
-        if generated_title := title_response.choices[
-            0
-        ].message.content.strip():
+        if generated_title := title_response.choices[0].message.content.strip():
             title = generated_title[:100]
     except Exception as e:
         logger.warning(f"Failed to generate conversation title: {e}")
@@ -797,7 +799,7 @@ async def _store_message(
         "conversation_id": conversation_id,
         "role": role,
         "content": content,
-        "citations": json.dumps(citations or []),
+        "citations": citations or [],
         "tokens_used": tokens_used,
         "model": model,
         "created_at": now,
@@ -1037,7 +1039,7 @@ async def _generate_suggestions_internal(
     scope_hints = {
         "signal": f"""The user is exploring a signal called \"{scope_metadata.get('card_name', 'Unknown')}\". Suggest questions about its implications for Austin, implementation timeline, risks, comparison with similar trends, or what other cities are doing.""",
         "workstream": f"""The user is exploring a workstream called \"{scope_metadata.get('workstream_name', 'Unknown')}\" with {scope_metadata.get('card_count', 0)} signals. Suggest questions about cross-cutting themes, priority signals, resource allocation, or strategic recommendations.""",
-        "global": 'The user asked a broad strategic question. Suggest questions about specific pillars, emerging patterns, comparisons between trends, or actionable next steps for the city.',
+        "global": "The user asked a broad strategic question. Suggest questions about specific pillars, emerging patterns, comparisons between trends, or actionable next steps for the city.",
     }
 
     prompt = f"""Based on this Q&A exchange, suggest exactly 3 follow-up questions the user might ask.

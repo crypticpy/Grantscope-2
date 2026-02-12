@@ -47,6 +47,8 @@ export interface ChatPanelProps {
   emptyStateDescription?: string;
   /** Callback when a citation is clicked */
   onCitationClick?: (citation: Citation) => void;
+  /** Resume an existing conversation by ID */
+  initialConversationId?: string;
 }
 
 // ============================================================================
@@ -63,6 +65,7 @@ export function ChatPanel({
   emptyStateTitle = "Ask Foresight",
   emptyStateDescription = "Ask questions about signals, emerging trends, strategic priorities, and more. Foresight uses AI to synthesize intelligence from your data.",
   onCitationClick,
+  initialConversationId,
 }: ChatPanelProps) {
   const {
     messages,
@@ -74,7 +77,7 @@ export function ChatPanel({
     sendMessage,
     stopGenerating,
     startNewConversation,
-  } = useChat({ scope, scopeId });
+  } = useChat({ scope, scopeId, initialConversationId });
 
   // Input state
   const [inputValue, setInputValue] = useState("");
