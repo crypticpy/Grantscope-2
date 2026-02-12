@@ -49,6 +49,8 @@ export interface ChatPanelProps {
   onCitationClick?: (citation: Citation) => void;
   /** Resume an existing conversation by ID */
   initialConversationId?: string;
+  /** Called when the active conversation changes (created or loaded) */
+  onConversationChange?: (conversationId: string | null) => void;
 }
 
 // ============================================================================
@@ -66,18 +68,25 @@ export function ChatPanel({
   emptyStateDescription = "Ask questions about signals, emerging trends, strategic priorities, and more. Foresight uses AI to synthesize intelligence from your data.",
   onCitationClick,
   initialConversationId,
+  onConversationChange,
 }: ChatPanelProps) {
   const {
     messages,
     isStreaming,
     streamingContent,
     streamingCitations,
+    conversationId,
     suggestedQuestions,
     error,
     sendMessage,
     stopGenerating,
     startNewConversation,
   } = useChat({ scope, scopeId, initialConversationId });
+
+  // Notify parent when conversationId changes
+  useEffect(() => {
+    onConversationChange?.(conversationId);
+  }, [conversationId, onConversationChange]);
 
   // Input state
   const [inputValue, setInputValue] = useState("");

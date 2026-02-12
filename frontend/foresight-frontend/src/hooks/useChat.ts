@@ -59,11 +59,48 @@ export interface UseChatReturn {
 }
 
 // ============================================================================
+// Session Storage Helpers
+// ============================================================================
+
+function storageKey(scope: string, scopeId?: string): string {
+  return `foresight:chat:${scope}:${scopeId || "global"}`;
+}
+
+function persistConversationId(
+  scope: string,
+  scopeId: string | undefined,
+  convId: string | null,
+): void {
+  const key = storageKey(scope, scopeId);
+  try {
+    if (convId) {
+      sessionStorage.setItem(key, convId);
+    } else {
+      sessionStorage.removeItem(key);
+    }
+  } catch {
+    // sessionStorage unavailable (SSR, private browsing quota)
+  }
+}
+
+function restoreConversationId(scope: string, scopeId?: string): string | null {
+  try {
+    return sessionStorage.getItem(storageKey(scope, scopeId));
+  } catch {
+    return null;
+  }
+}
+
+// ============================================================================
 // Hook
 // ============================================================================
 
 export function useChat(options: UseChatOptions): UseChatReturn {
   const { scope, scopeId, initialConversationId } = options;
+
+  // Resolve starting conversation: explicit prop > sessionStorage > null
+  const resolvedInitialId =
+    initialConversationId ?? restoreConversationId(scope, scopeId);
 
   // Message state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -73,7 +110,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
 
   // Conversation state
   const [conversationId, setConversationId] = useState<string | null>(
-    initialConversationId ?? null,
+    resolvedInitialId,
   );
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -157,9 +194,10 @@ export function useChat(options: UseChatOptions): UseChatReturn {
           onDone: (data) => {
             if (!isMountedRef.current) return;
 
-            // Set the conversation ID from the server response
+            // Set the conversation ID from the server response and persist
             if (data.conversation_id) {
               setConversationId(data.conversation_id);
+              persistConversationId(scope, scopeId, data.conversation_id);
             }
 
             // Move streaming content into a committed assistant message
@@ -241,23 +279,28 @@ export function useChat(options: UseChatOptions): UseChatReturn {
   // Load Conversation
   // ============================================================================
 
-  const loadConversation = useCallback(async (convId: string) => {
-    setError(null);
+  const loadConversation = useCallback(
+    async (convId: string) => {
+      setError(null);
 
-    try {
-      const data = await fetchConversation(convId);
-      if (!isMountedRef.current) return;
+      try {
+        const data = await fetchConversation(convId);
+        if (!isMountedRef.current) return;
 
-      setConversationId(data.conversation.id);
-      setMessages(data.messages);
-      setSuggestedQuestions([]);
-    } catch (err) {
-      if (!isMountedRef.current) return;
-      setError(
-        err instanceof Error ? err.message : "Failed to load conversation",
-      );
-    }
-  }, []);
+        setConversationId(data.conversation.id);
+        setMessages(data.messages);
+        setSuggestedQuestions([]);
+        persistConversationId(scope, scopeId, data.conversation.id);
+      } catch (err) {
+        if (!isMountedRef.current) return;
+        // If the stored conversation was deleted, clear it and start fresh
+        persistConversationId(scope, scopeId, null);
+        setConversationId(null);
+        setError(null);
+      }
+    },
+    [scope, scopeId],
+  );
 
   // ============================================================================
   // Start New Conversation
@@ -275,7 +318,8 @@ export function useChat(options: UseChatOptions): UseChatReturn {
     setIsStreaming(false);
     setError(null);
     setSuggestedQuestions([]);
-  }, []);
+    persistConversationId(scope, scopeId, null);
+  }, [scope, scopeId]);
 
   // ============================================================================
   // Load Suggestions
@@ -297,17 +341,19 @@ export function useChat(options: UseChatOptions): UseChatReturn {
 
   // Auto-load suggestions on mount if no messages exist
   useEffect(() => {
-    if (messages.length === 0 && !initialConversationId) {
+    if (messages.length === 0 && !resolvedInitialId) {
       loadSuggestions();
     }
-  }, [messages.length, initialConversationId, loadSuggestions]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Load initial conversation if provided
+  // Load conversation on mount (from prop or sessionStorage)
   useEffect(() => {
-    if (initialConversationId) {
-      loadConversation(initialConversationId);
+    if (resolvedInitialId) {
+      loadConversation(resolvedInitialId);
     }
-  }, [initialConversationId, loadConversation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return {
     messages,
