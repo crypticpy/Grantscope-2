@@ -220,8 +220,17 @@ async def get_workstream_scan_status(
         ) from e
 
     if not result.data:
-        raise HTTPException(
-            status_code=404, detail="No scans found for this workstream"
+        # No scans yet — return a default empty status instead of 404
+        return WorkstreamScanStatusResponse(
+            scan_id="",
+            workstream_id=workstream_id,
+            status="idle",
+            started_at=None,
+            completed_at=None,
+            config=None,
+            results=None,
+            error_message=None,
+            created_at="",
         )
 
     scan = result.data[0]
@@ -297,8 +306,10 @@ async def get_workstream_scan_history(
     today_start = datetime.now(timezone.utc).replace(
         hour=0, minute=0, second=0, microsecond=0
     )
-    scans_today = sum(bool(s.get("created_at") and s["created_at"] >= today_start.isoformat())
-                  for s in scans)
+    scans_today = sum(
+        bool(s.get("created_at") and s["created_at"] >= today_start.isoformat())
+        for s in scans
+    )
 
     def parse_json_field(val):
         if isinstance(val, str):
