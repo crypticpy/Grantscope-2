@@ -23,6 +23,7 @@ import {
   TrendingUp,
   GitBranch,
   FolderOpen,
+  MessageSquare,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
@@ -49,6 +50,7 @@ export const DEFAULT_TABS: readonly TabDefinition[] = [
   { id: "timeline", name: "Timeline", icon: Calendar },
   { id: "notes", name: "Notes", icon: TrendingUp },
   { id: "related", name: "Related", icon: GitBranch },
+  { id: "chat", name: "Chat", icon: MessageSquare },
   { id: "assets", name: "Assets", icon: FolderOpen },
 ] as const;
 

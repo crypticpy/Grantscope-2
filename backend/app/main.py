@@ -70,6 +70,12 @@ from app.brief_service import ExecutiveBriefService
 
 # Digest service import
 from app.digest_service import DigestService
+
+# Chat service import
+from app.chat_service import (
+    chat as chat_service_chat,
+    generate_suggestions as chat_generate_suggestions,
+)
 from app.models.brief import (
     ExecutiveBriefResponse,
     BriefGenerateResponse,
@@ -8428,6 +8434,17 @@ def start_scheduler():
         replace_existing=True,
     )
 
+    # Nightly velocity trend calculation at 7:30 AM UTC
+    # Runs after pattern detection so all source data is up to date
+    scheduler.add_job(
+        run_nightly_velocity_calculation,
+        "cron",
+        hour=7,
+        minute=30,
+        id="nightly_velocity_calculation",
+        replace_existing=True,
+    )
+
     # Daily email digest batch at 8:00 AM UTC
     # Runs after all nightly data jobs so digests reflect fresh data
     scheduler.add_job(
@@ -8445,6 +8462,7 @@ def start_scheduler():
         "reputation aggregation at 5:30 AM UTC, "
         "nightly scan at 6:00 AM UTC, SQI recalculation at 6:30 AM UTC, "
         "pattern detection at 7:00 AM UTC, "
+        "velocity calculation at 7:30 AM UTC, "
         "digest batch at 8:00 AM UTC, "
         "weekly discovery Sundays at 2:00 AM UTC"
     )
@@ -8703,6 +8721,29 @@ async def run_nightly_pattern_detection():
         )
     except Exception as e:
         logger.error("Nightly pattern detection failed: %s", str(e))
+
+
+async def run_nightly_velocity_calculation():
+    """
+    Calculate velocity trends for all active cards.
+
+    Runs at 7:30 AM UTC daily, after pattern detection so all source
+    data is up to date. Computes rolling-window source counts and
+    classifies each card as accelerating, stable, decelerating,
+    emerging, or stale.
+    """
+    from app.velocity_service import calculate_velocity_trends
+
+    logger.info("Starting nightly velocity calculation...")
+    try:
+        result = await calculate_velocity_trends(supabase)
+        logger.info(
+            "Nightly velocity calculation complete: %d / %d cards updated",
+            result.get("updated", 0),
+            result.get("total", 0),
+        )
+    except Exception as e:
+        logger.error("Nightly velocity calculation failed: %s", str(e))
 
 
 # ============================================================================
@@ -10763,6 +10804,49 @@ async def generate_pattern_insights(
 
 
 # =============================================================================
+# Velocity Trend Endpoints
+# =============================================================================
+
+
+@app.post("/api/v1/admin/velocity/calculate")
+async def trigger_velocity_calculation(
+    current_user: dict = Depends(get_current_user),
+):
+    """Trigger velocity trend calculation for all active cards. Runs in background."""
+    from app.velocity_service import calculate_velocity_trends
+
+    async def _run_velocity():
+        try:
+            result = await calculate_velocity_trends(supabase)
+            logger.info("On-demand velocity calculation completed: %s", result)
+        except Exception as exc:
+            logger.exception("On-demand velocity calculation failed: %s", exc)
+
+    asyncio.create_task(_run_velocity())
+    return {
+        "status": "started",
+        "message": "Velocity calculation is running in the background.",
+    }
+
+
+@app.get("/api/v1/cards/{card_id}/velocity")
+async def get_card_velocity(
+    card_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Get velocity trend summary for a specific card."""
+    from app.velocity_service import get_velocity_summary
+
+    summary = get_velocity_summary(card_id, supabase)
+    if summary is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Card not found or velocity data unavailable.",
+        )
+    return summary
+
+
+# =============================================================================
 # Notification Preferences & Digest Endpoints
 # =============================================================================
 
@@ -10925,6 +11009,264 @@ async def preview_digest(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("digest preview generation", e),
+        )
+
+
+# =============================================================================
+# Chat / Ask Foresight Endpoints
+# =============================================================================
+
+
+class ChatRequest(BaseModel):
+    """Request model for the main chat endpoint."""
+
+    scope: str = Field(
+        ..., description="Chat scope: 'signal', 'workstream', or 'global'"
+    )
+    scope_id: Optional[str] = Field(
+        None, description="card_id for signal scope, workstream_id for workstream scope"
+    )
+    message: str = Field(..., min_length=1, max_length=4000, description="User message")
+    conversation_id: Optional[str] = Field(
+        None, description="Existing conversation ID for multi-turn chat"
+    )
+
+
+class ChatSuggestRequest(BaseModel):
+    """Request model for the suggestion endpoint."""
+
+    scope: str = Field(
+        ..., description="Chat scope: 'signal', 'workstream', or 'global'"
+    )
+    scope_id: Optional[str] = Field(
+        None, description="card_id or workstream_id depending on scope"
+    )
+
+
+@app.post("/api/v1/chat")
+async def chat_endpoint(
+    request: ChatRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Main chat endpoint for Ask Foresight NLQ feature.
+
+    Streams an AI-powered response using Server-Sent Events (SSE).
+    Supports three scopes:
+    - signal: Q&A about a specific card and its sources
+    - workstream: Analysis across cards in a workstream
+    - global: Broad strategic intelligence search
+
+    Returns streaming SSE events:
+    - {"type": "token", "content": "..."} — incremental response tokens
+    - {"type": "citation", "data": {...}} — resolved source citations
+    - {"type": "suggestions", "data": [...]} — follow-up question suggestions
+    - {"type": "done", "data": {"conversation_id": "...", "message_id": "..."}}
+    - {"type": "error", "content": "..."} — error messages
+    """
+    user_id = current_user["id"]
+
+    # Validate scope
+    if request.scope not in ("signal", "workstream", "global"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid scope. Must be 'signal', 'workstream', or 'global'.",
+        )
+
+    # Validate scope_id is provided for non-global scopes
+    if request.scope in ("signal", "workstream") and not request.scope_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"scope_id is required for '{request.scope}' scope.",
+        )
+
+    async def event_generator():
+        async for event in chat_service_chat(
+            scope=request.scope,
+            scope_id=request.scope_id,
+            message=request.message,
+            conversation_id=request.conversation_id,
+            user_id=user_id,
+            supabase_client=supabase,
+        ):
+            yield event
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+@app.get("/api/v1/chat/conversations")
+async def list_chat_conversations(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    scope: Optional[str] = Query(None, description="Filter by scope"),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    List the current user's chat conversations.
+
+    Returns conversations ordered by most recently updated.
+    Supports pagination and optional scope filtering.
+    """
+    user_id = current_user["id"]
+    try:
+        query = (
+            supabase.table("chat_conversations")
+            .select("id, scope, scope_id, title, created_at, updated_at")
+            .eq("user_id", user_id)
+        )
+
+        if scope:
+            query = query.eq("scope", scope)
+
+        query = query.order("updated_at", desc=True).range(offset, offset + limit - 1)
+
+        result = query.execute()
+        return result.data or []
+    except Exception as e:
+        logger.error(f"Failed to list conversations for user {user_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("listing conversations", e),
+        )
+
+
+@app.get("/api/v1/chat/conversations/{conversation_id}")
+async def get_chat_conversation(
+    conversation_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Get a specific conversation with all its messages.
+
+    Returns the conversation metadata and messages ordered chronologically.
+    """
+    user_id = current_user["id"]
+    try:
+        # Fetch conversation and verify ownership
+        conv_result = (
+            supabase.table("chat_conversations")
+            .select("*")
+            .eq("id", conversation_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+
+        if not conv_result.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found",
+            )
+
+        conversation = conv_result.data[0]
+
+        # Fetch messages
+        msg_result = (
+            supabase.table("chat_messages")
+            .select("id, role, content, citations, tokens_used, model, created_at")
+            .eq("conversation_id", conversation_id)
+            .order("created_at")
+            .execute()
+        )
+
+        conversation["messages"] = msg_result.data or []
+        return conversation
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            f"Failed to get conversation {conversation_id} for user {user_id}: {e}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("fetching conversation", e),
+        )
+
+
+@app.delete("/api/v1/chat/conversations/{conversation_id}")
+async def delete_chat_conversation(
+    conversation_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Delete a conversation and all its messages.
+
+    Messages are cascade-deleted via the foreign key constraint.
+    """
+    user_id = current_user["id"]
+    try:
+        # Verify ownership first
+        conv_result = (
+            supabase.table("chat_conversations")
+            .select("id")
+            .eq("id", conversation_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+
+        if not conv_result.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found",
+            )
+
+        # Delete conversation (messages cascade-deleted via FK)
+        supabase.table("chat_conversations").delete().eq(
+            "id", conversation_id
+        ).execute()
+
+        return {"status": "deleted", "conversation_id": conversation_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            f"Failed to delete conversation {conversation_id} for user {user_id}: {e}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("deleting conversation", e),
+        )
+
+
+@app.post("/api/v1/chat/suggest")
+async def chat_suggest(
+    request: ChatSuggestRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Get AI-generated suggested questions for a given scope.
+
+    Returns context-aware starter questions to help users begin
+    exploring a signal, workstream, or global strategic intelligence.
+    """
+    user_id = current_user["id"]
+
+    if request.scope not in ("signal", "workstream", "global"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid scope. Must be 'signal', 'workstream', or 'global'.",
+        )
+
+    try:
+        suggestions = await chat_generate_suggestions(
+            scope=request.scope,
+            scope_id=request.scope_id,
+            supabase_client=supabase,
+            user_id=user_id,
+        )
+        return {"suggestions": suggestions}
+    except Exception as e:
+        logger.error(f"Failed to generate chat suggestions: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("generating suggestions", e),
         )
 
 

@@ -37,6 +37,7 @@ const Settings = lazy(() => import("./pages/Settings"));
 const Analytics = lazy(() => import("./pages/AnalyticsV2"));
 const Methodology = lazy(() => import("./pages/Methodology"));
 const Signals = lazy(() => import("./pages/Signals"));
+const AskForesight = lazy(() => import("./pages/AskForesight"));
 
 // Guide pages
 const GuideSignals = lazy(() => import("./pages/GuideSignals"));
@@ -209,6 +210,17 @@ function App() {
                     <ProtectedRoute
                       element={<Signals />}
                       loadingMessage="Loading signals..."
+                    />
+                  }
+                />
+
+                {/* Ask Foresight - AI chat interface */}
+                <Route
+                  path="/ask"
+                  element={
+                    <ProtectedRoute
+                      element={<AskForesight />}
+                      loadingMessage="Loading Ask Foresight..."
                     />
                   }
                 />

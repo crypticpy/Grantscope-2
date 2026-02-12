@@ -36,6 +36,7 @@ import {
   Search,
   X,
   Radar,
+  MessageSquare,
 } from "lucide-react";
 import { supabase } from "../App";
 import { useAuthContext } from "../hooks/useAuthContext";
@@ -77,6 +78,7 @@ import { PillarBadgeGroup } from "../components/PillarBadge";
 import { HorizonBadge } from "../components/HorizonBadge";
 import { StageBadge } from "../components/StageBadge";
 import { WorkstreamForm, type Workstream } from "../components/WorkstreamForm";
+import { WorkstreamChatPanel } from "../components/WorkstreamChatPanel";
 import { useWorkstreamScanPolling } from "../hooks/useWorkstreamScanPolling";
 
 // ============================================================================
@@ -391,6 +393,7 @@ const WorkstreamKanban: React.FC = () => {
 
   // Modal state
   const [showEditModal, setShowEditModal] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
 
   // Export state
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -1732,6 +1735,16 @@ const WorkstreamKanban: React.FC = () => {
                 )}
               </div>
 
+              {/* Chat Button */}
+              <button
+                onClick={() => setChatOpen(true)}
+                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-dark-surface-elevated hover:bg-gray-50 dark:hover:bg-dark-surface-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-dark-surface transition-colors"
+                aria-label="Open workstream chat"
+              >
+                <MessageSquare className="h-4 w-4" />
+                <span className="hidden sm:inline">Chat</span>
+              </button>
+
               {/* Edit Filters Button */}
               <button
                 onClick={() => setShowEditModal(true)}
@@ -1990,6 +2003,14 @@ const WorkstreamKanban: React.FC = () => {
           error={bulkExportError}
           onExport={handleExecuteBulkExport}
           isExporting={isBulkExporting}
+        />
+
+        {/* Workstream Chat Panel */}
+        <WorkstreamChatPanel
+          workstreamId={id!}
+          workstreamName={workstream?.name || "Workstream"}
+          isOpen={chatOpen}
+          onClose={() => setChatOpen(false)}
         />
 
         {/* Toast Notifications */}

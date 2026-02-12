@@ -33,6 +33,7 @@ import {
   TrendingUp,
   GitBranch,
   FolderOpen,
+  MessageSquare,
 } from "lucide-react";
 import { supabase } from "../../App";
 import { useAuthContext } from "../../hooks/useAuthContext";
@@ -55,6 +56,7 @@ import { SourcesTab } from "./tabs/SourcesTab";
 import { TimelineTab } from "./tabs/TimelineTab";
 import { NotesTab } from "./tabs/NotesTab";
 import { AssetsTab } from "./AssetsTab";
+import { ChatTabContent } from "./ChatTabContent";
 
 // Visualization Components
 import { ScoreTimelineChart } from "../visualizations/ScoreTimelineChart";
@@ -474,6 +476,7 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = "" }) => {
     { id: "timeline" as const, name: "Timeline", icon: Calendar },
     { id: "notes" as const, name: "Notes", icon: TrendingUp },
     { id: "related" as const, name: "Related", icon: GitBranch },
+    { id: "chat" as const, name: "Chat", icon: MessageSquare },
     { id: "assets" as const, name: "Assets", icon: FolderOpen },
   ];
 
@@ -667,6 +670,13 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = "" }) => {
           showMinimap
           showBackground
           title="Related Trends Network"
+        />
+      )}
+      {activeTab === "chat" && (
+        <ChatTabContent
+          cardId={card.id}
+          cardName={card.name}
+          primaryPillar={card.pillar_id}
         />
       )}
       {activeTab === "assets" && (

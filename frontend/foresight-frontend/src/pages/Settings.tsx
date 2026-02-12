@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { User, Bell, Shield, Database } from "lucide-react";
+import { User, Bell, Shield, Database, Mail } from "lucide-react";
 import { supabase } from "../App";
 import { useAuthContext } from "../hooks/useAuthContext";
 import { LoadingButton } from "../components/ui/LoadingButton";
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 const Settings: React.FC = () => {
   const { user, signOut } = useAuthContext();
@@ -16,8 +18,23 @@ const Settings: React.FC = () => {
   const [message, setMessage] = useState("");
   const [isSigningOut, setIsSigningOut] = useState(false);
 
+  // Notification preferences state
+  const [notifPrefs, setNotifPrefs] = useState({
+    notification_email: "",
+    digest_frequency: "weekly" as "daily" | "weekly" | "none",
+    digest_day: "monday",
+    include_new_signals: true,
+    include_velocity_changes: true,
+    include_pattern_insights: true,
+    include_workstream_updates: true,
+  });
+  const [notifLoading, setNotifLoading] = useState(false);
+  const [notifMessage, setNotifMessage] = useState("");
+  const [useAccountEmail, setUseAccountEmail] = useState(true);
+
   useEffect(() => {
     loadProfile();
+    loadNotificationPreferences();
   }, []);
 
   const loadProfile = async () => {
@@ -70,6 +87,69 @@ const Settings: React.FC = () => {
     } catch (error) {
       console.error("Error signing out:", error);
       setIsSigningOut(false);
+    }
+  };
+
+  const loadNotificationPreferences = async () => {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/me/notification-preferences`,
+        {
+          headers: {
+            Authorization: `Bearer ${session?.access_token}`,
+          },
+        },
+      );
+      if (response.ok) {
+        const data = await response.json();
+        setNotifPrefs((prev) => ({
+          ...prev,
+          ...data,
+        }));
+        setUseAccountEmail(
+          !data.notification_email || data.notification_email === user?.email,
+        );
+      }
+    } catch (error) {
+      console.error("Error loading notification preferences:", error);
+    }
+  };
+
+  const saveNotificationPreferences = async () => {
+    setNotifLoading(true);
+    setNotifMessage("");
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Not authenticated");
+      const payload = {
+        ...notifPrefs,
+        notification_email: useAccountEmail
+          ? user?.email || ""
+          : notifPrefs.notification_email,
+      };
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/me/notification-preferences`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify(payload),
+        },
+      );
+      if (!response.ok) throw new Error("Failed to save");
+      setNotifMessage("Notification preferences saved!");
+    } catch (_error) {
+      setNotifMessage("Error saving preferences. Please try again.");
+    } finally {
+      setNotifLoading(false);
     }
   };
 
@@ -226,66 +306,203 @@ const Settings: React.FC = () => {
           </div>
         </div>
 
-        {/* Notification Settings */}
+        {/* Notification Preferences */}
         <div className="bg-white dark:bg-dark-surface rounded-lg shadow">
           <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-center">
               <Bell className="h-5 w-5 text-gray-400 mr-2" />
               <h2 className="text-lg font-medium text-gray-900 dark:text-white">
-                Notifications
+                Notification Preferences
               </h2>
             </div>
           </div>
           <div className="p-6">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-medium text-gray-900 dark:text-white">
-                    Email Notifications
-                  </h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Receive email updates about your followed signals and
-                    workstreams.
-                  </p>
+            <div className="space-y-6">
+              {/* Notification Email */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <Mail className="inline h-4 w-4 mr-1.5 -mt-0.5" />
+                  Notification Email
+                </label>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={useAccountEmail}
+                      onChange={(e) => setUseAccountEmail(e.target.checked)}
+                      className="h-4 w-4 text-brand-blue focus:ring-brand-blue border-gray-300 dark:border-gray-600 rounded"
+                    />
+                    Use account email ({user?.email})
+                  </label>
+                  {!useAccountEmail && (
+                    <input
+                      type="email"
+                      value={notifPrefs.notification_email}
+                      onChange={(e) =>
+                        setNotifPrefs({
+                          ...notifPrefs,
+                          notification_email: e.target.value,
+                        })
+                      }
+                      placeholder="Custom notification email"
+                      className="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-white rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                    />
+                  )}
                 </div>
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 text-brand-blue focus:ring-brand-blue border-gray-300 dark:border-gray-600 rounded"
-                  defaultChecked
-                />
               </div>
 
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-medium text-gray-900 dark:text-white">
-                    Weekly Digest
-                  </h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Receive a weekly summary of new intelligence relevant to
-                    your workstreams.
-                  </p>
+              {/* Digest Frequency */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Digest Frequency
+                </label>
+                <div className="space-y-2">
+                  {(
+                    [
+                      { value: "daily", label: "Daily" },
+                      { value: "weekly", label: "Weekly" },
+                      { value: "none", label: "None" },
+                    ] as const
+                  ).map((option) => (
+                    <label
+                      key={option.value}
+                      className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer"
+                    >
+                      <input
+                        type="radio"
+                        name="digest_frequency"
+                        value={option.value}
+                        checked={notifPrefs.digest_frequency === option.value}
+                        onChange={() =>
+                          setNotifPrefs({
+                            ...notifPrefs,
+                            digest_frequency: option.value,
+                          })
+                        }
+                        className="h-4 w-4 text-brand-blue focus:ring-brand-blue border-gray-300 dark:border-gray-600"
+                      />
+                      {option.label}
+                    </label>
+                  ))}
                 </div>
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 text-brand-blue focus:ring-brand-blue border-gray-300 dark:border-gray-600 rounded"
-                  defaultChecked
-                />
               </div>
 
-              <div className="flex items-center justify-between">
+              {/* Digest Day (only when weekly) */}
+              {notifPrefs.digest_frequency === "weekly" && (
                 <div>
-                  <h3 className="text-sm font-medium text-gray-900 dark:text-white">
-                    High Priority Alerts
-                  </h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Get notified immediately about high-impact or high-velocity
-                    signals.
-                  </p>
+                  <label
+                    htmlFor="digest_day"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                  >
+                    Digest Day
+                  </label>
+                  <select
+                    id="digest_day"
+                    value={notifPrefs.digest_day}
+                    onChange={(e) =>
+                      setNotifPrefs({
+                        ...notifPrefs,
+                        digest_day: e.target.value,
+                      })
+                    }
+                    className="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-white rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                  >
+                    <option value="monday">Monday</option>
+                    <option value="tuesday">Tuesday</option>
+                    <option value="wednesday">Wednesday</option>
+                    <option value="thursday">Thursday</option>
+                    <option value="friday">Friday</option>
+                    <option value="saturday">Saturday</option>
+                    <option value="sunday">Sunday</option>
+                  </select>
                 </div>
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 text-brand-blue focus:ring-brand-blue border-gray-300 dark:border-gray-600 rounded"
-                />
+              )}
+
+              {/* Content Preferences */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Content Preferences
+                </label>
+                <div className="space-y-3">
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={notifPrefs.include_new_signals}
+                      onChange={(e) =>
+                        setNotifPrefs({
+                          ...notifPrefs,
+                          include_new_signals: e.target.checked,
+                        })
+                      }
+                      className="h-4 w-4 text-brand-blue focus:ring-brand-blue border-gray-300 dark:border-gray-600 rounded"
+                    />
+                    New signals in my workstreams
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={notifPrefs.include_velocity_changes}
+                      onChange={(e) =>
+                        setNotifPrefs({
+                          ...notifPrefs,
+                          include_velocity_changes: e.target.checked,
+                        })
+                      }
+                      className="h-4 w-4 text-brand-blue focus:ring-brand-blue border-gray-300 dark:border-gray-600 rounded"
+                    />
+                    Velocity changes on followed signals
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={notifPrefs.include_pattern_insights}
+                      onChange={(e) =>
+                        setNotifPrefs({
+                          ...notifPrefs,
+                          include_pattern_insights: e.target.checked,
+                        })
+                      }
+                      className="h-4 w-4 text-brand-blue focus:ring-brand-blue border-gray-300 dark:border-gray-600 rounded"
+                    />
+                    Cross-signal pattern alerts
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={notifPrefs.include_workstream_updates}
+                      onChange={(e) =>
+                        setNotifPrefs({
+                          ...notifPrefs,
+                          include_workstream_updates: e.target.checked,
+                        })
+                      }
+                      className="h-4 w-4 text-brand-blue focus:ring-brand-blue border-gray-300 dark:border-gray-600 rounded"
+                    />
+                    Workstream scan results
+                  </label>
+                </div>
+              </div>
+
+              {/* Save message */}
+              {notifMessage && (
+                <div
+                  className={`text-sm ${notifMessage.includes("Error") ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}
+                >
+                  {notifMessage}
+                </div>
+              )}
+
+              {/* Save Button */}
+              <div className="flex justify-end">
+                <LoadingButton
+                  type="button"
+                  onClick={saveNotificationPreferences}
+                  loading={notifLoading}
+                  loadingText="Saving..."
+                  className="shadow-sm"
+                >
+                  Save Preferences
+                </LoadingButton>
               </div>
             </div>
           </div>

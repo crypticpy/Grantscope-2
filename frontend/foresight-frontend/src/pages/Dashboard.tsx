@@ -19,6 +19,8 @@ import { HorizonBadge } from "../components/HorizonBadge";
 import { StageBadge } from "../components/StageBadge";
 import { Top25Badge } from "../components/Top25Badge";
 import { QualityBadge } from "../components/QualityBadge";
+import { PatternInsightsSection } from "../components/PatternInsightsSection";
+import { AskForesightBar } from "../components/Chat/AskForesightBar";
 import { fetchPendingCount } from "../lib/discovery-api";
 import { parseStageNumber } from "../lib/stage-utils";
 import { logger } from "../lib/logger";
@@ -319,6 +321,9 @@ const Dashboard: React.FC = () => {
         </p>
       </div>
 
+      {/* Ask Foresight Bar */}
+      <AskForesightBar className="mb-8" />
+
       {/* Pending Review Alert */}
       {pendingReviewCount > 0 && (
         <div className="mb-8">
@@ -482,6 +487,9 @@ const Dashboard: React.FC = () => {
           How does Foresight work?
         </Link>
       </div>
+
+      {/* AI-Detected Patterns */}
+      <PatternInsightsSection className="mb-8" />
 
       {/* Following Cards */}
       <div className="mb-8">

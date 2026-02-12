@@ -23,6 +23,7 @@ import {
   FileText,
   Presentation,
   ChevronDown,
+  MessageSquare,
 } from "lucide-react";
 import { supabase } from "../App";
 import { useAuthContext } from "../hooks/useAuthContext";
@@ -32,6 +33,7 @@ import { HorizonBadge } from "../components/HorizonBadge";
 import { StageBadge } from "../components/StageBadge";
 import { Top25Badge } from "../components/Top25Badge";
 import { WorkstreamForm } from "../components/WorkstreamForm";
+import { WorkstreamChatPanel } from "../components/WorkstreamChatPanel";
 
 // ============================================================================
 // Types
@@ -308,6 +310,9 @@ const WorkstreamFeed: React.FC = () => {
 
   // Edit modal state
   const [showEditModal, setShowEditModal] = useState(false);
+
+  // Chat panel state
+  const [chatOpen, setChatOpen] = useState(false);
 
   // Load workstream data
   useEffect(() => {
@@ -752,6 +757,16 @@ const WorkstreamFeed: React.FC = () => {
               )}
             </div>
 
+            {/* Chat Button */}
+            <button
+              onClick={() => setChatOpen(true)}
+              className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-dark-surface-elevated hover:bg-gray-50 dark:hover:bg-dark-surface-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-dark-surface transition-colors"
+              aria-label="Open workstream chat"
+            >
+              <MessageSquare className="h-4 w-4" />
+              <span className="hidden sm:inline">Chat</span>
+            </button>
+
             <button
               onClick={() => setShowEditModal(true)}
               className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-dark-surface-elevated hover:bg-gray-50 dark:hover:bg-dark-surface-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-dark-surface transition-colors"
@@ -910,6 +925,14 @@ const WorkstreamFeed: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Workstream Chat Panel */}
+      <WorkstreamChatPanel
+        workstreamId={id!}
+        workstreamName={workstream?.name || "Workstream"}
+        isOpen={chatOpen}
+        onClose={() => setChatOpen(false)}
+      />
     </div>
   );
 };

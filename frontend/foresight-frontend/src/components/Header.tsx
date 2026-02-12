@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   Home,
   Compass,
@@ -16,6 +16,7 @@ import {
   User,
   BookOpen,
   Radio,
+  Sparkles,
   HelpCircle,
   type LucideIcon,
 } from "lucide-react";
@@ -87,6 +88,7 @@ const NavLinkItem: React.FC<{
 const Header: React.FC = () => {
   const { user, signOut } = useAuthContext();
   const location = useLocation();
+  const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isMoreDropdownOpen, setIsMoreDropdownOpen] = useState(false);
@@ -143,6 +145,18 @@ const Header: React.FC = () => {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  // Cmd+K / Ctrl+K global shortcut to navigate to Ask Foresight
+  useEffect(() => {
+    const handleCmdK = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        navigate("/ask");
+      }
+    };
+    document.addEventListener("keydown", handleCmdK);
+    return () => document.removeEventListener("keydown", handleCmdK);
+  }, [navigate]);
+
   const toggleTheme = () => {
     setIsDarkMode(!isDarkMode);
   };
@@ -150,6 +164,7 @@ const Header: React.FC = () => {
   // Main navigation items (Queue removed - accessible via Discover page)
   const navigation = [
     { name: "Dashboard", href: "/", icon: Home },
+    { name: "Ask", href: "/ask", icon: Sparkles },
     { name: "Discover", href: "/discover", icon: Compass },
     { name: "Signals", href: "/signals", icon: Radio },
     { name: "Workstreams", href: "/workstreams", icon: FolderOpen },
