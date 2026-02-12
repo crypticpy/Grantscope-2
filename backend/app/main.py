@@ -1033,6 +1033,7 @@ async def debug_gpt_researcher():
         ),
         "TAVILY_API_KEY": "SET" if os.getenv("TAVILY_API_KEY") else "NOT SET",
         "FIRECRAWL_API_KEY": "SET" if os.getenv("FIRECRAWL_API_KEY") else "NOT SET",
+        "SERPER_API_KEY": "SET" if os.getenv("SERPER_API_KEY") else "NOT SET",
     }
 
     # Test GPT Researcher config parsing

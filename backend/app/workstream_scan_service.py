@@ -25,9 +25,10 @@ Usage:
 """
 
 import asyncio
+import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta
 from typing import List, Optional, Dict, Any, Tuple
 from enum import Enum
 import uuid
@@ -39,6 +40,7 @@ from .ai_service import AIService, AnalysisResult, TriageResult
 from .research_service import RawSource, ProcessedSource
 from .source_validator import SourceValidator
 from . import domain_reputation_service
+from .openai_provider import get_chat_mini_deployment
 from .source_fetchers import (
     fetch_rss_sources,
     fetch_news_articles,
@@ -47,6 +49,11 @@ from .source_fetchers import (
     fetch_tech_blog_articles,
     convert_to_raw_source as convert_academic_to_raw,
     convert_government_to_raw_source,
+)
+from .source_fetchers.serper_fetcher import (
+    search_all as serper_search_all,
+    is_available as serper_available,
+    SerperResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -187,14 +194,14 @@ class WorkstreamScanService:
                 config.scan_id, "running", started_at=start_time
             )
 
-            # Step 1: Generate queries
-            queries = self._generate_queries(config)
+            # Step 1: Generate queries (AI-powered with static fallback)
+            queries = await self._generate_queries_with_ai(config)
             result.queries_executed = len(queries)
             logger.info(f"Generated {len(queries)} queries for workstream scan")
 
-            # Step 2: Fetch sources from all categories
+            # Step 2: Fetch sources (Serper primary, RSS + academic supplementary)
             raw_sources, sources_by_category = await self._fetch_sources(
-                queries, config
+                queries, config, workstream_id=config.workstream_id
             )
             result.sources_fetched = len(raw_sources)
             result.sources_by_category = sources_by_category
@@ -342,11 +349,185 @@ class WorkstreamScanService:
 
         return result
 
-    def _generate_queries(self, config: WorkstreamScanConfig) -> List[str]:
+    async def _get_workstream_context(
+        self, config: WorkstreamScanConfig
+    ) -> Tuple[List[str], Optional[str]]:
         """
-        Generate search queries from workstream metadata.
+        Fetch existing card names in this workstream and the last scan date.
+
+        Returns:
+            (existing_card_names, last_scan_completed_at_iso)
+        """
+        existing_names: List[str] = []
+        last_scan_date: Optional[str] = None
+
+        try:
+            # Get card names already in this workstream
+            ws_cards = (
+                self.supabase.table("workstream_cards")
+                .select("card_id")
+                .eq("workstream_id", config.workstream_id)
+                .execute()
+            )
+            if ws_cards.data:
+                card_ids = [r["card_id"] for r in ws_cards.data]
+                # Fetch names in batches (Supabase IN filter)
+                cards = (
+                    self.supabase.table("cards")
+                    .select("name")
+                    .in_("id", card_ids[:50])  # Cap to avoid huge queries
+                    .execute()
+                )
+                existing_names = [r["name"] for r in (cards.data or [])]
+
+            # Get the last completed scan for this workstream
+            last_scan = (
+                self.supabase.table("workstream_scans")
+                .select("completed_at")
+                .eq("workstream_id", config.workstream_id)
+                .eq("status", "completed")
+                .order("completed_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if last_scan.data:
+                last_scan_date = last_scan.data[0].get("completed_at")
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch workstream context: {e}")
+
+        return existing_names, last_scan_date
+
+    async def _generate_queries_with_ai(
+        self, config: WorkstreamScanConfig
+    ) -> List[str]:
+        """
+        Generate diverse, time-aware search queries using the LLM.
+
+        Context-aware: looks at existing cards in the workstream to avoid
+        re-searching known topics, and uses the last scan date to narrow
+        the time horizon for subsequent scans.
+        """
+        # Build context strings for the prompt
+        keywords_str = (
+            ", ".join(config.keywords)
+            if config.keywords
+            else "general strategic intelligence"
+        )
+        pillar_names = [PILLAR_NAMES.get(pid, pid) for pid in config.pillar_ids]
+        pillar_str = ", ".join(pillar_names) if pillar_names else "all pillars"
+
+        horizon_descriptions = {
+            "H1": "Near-term (0-2 years) — mainstream and currently adopted technologies",
+            "H2": "Mid-term (2-5 years) — emerging and transitional technologies being piloted",
+            "H3": "Long-term (5-10+ years) — transformative and experimental future technologies",
+            "ALL": "All time horizons — near-term through long-term",
+        }
+        horizon_desc = horizon_descriptions.get(
+            config.horizon, horizon_descriptions["ALL"]
+        )
+
+        today_str = date.today().isoformat()
+
+        # Fetch what's already in the workstream
+        existing_names, last_scan_date = await self._get_workstream_context(config)
+
+        # Build context about existing coverage
+        existing_context = ""
+        if existing_names:
+            names_sample = existing_names[:15]
+            existing_context = f"""
+Signals already tracked (DO NOT search for these — find NEW, DIFFERENT topics):
+{chr(10).join(f'- {name}' for name in names_sample)}
+{'... and ' + str(len(existing_names) - 15) + ' more' if len(existing_names) > 15 else ''}
+"""
+
+        # Determine scan mode based on history
+        scan_mode_hint = ""
+        if last_scan_date:
+            scan_mode_hint = (
+                f"\nThis is a FOLLOW-UP scan (last scan: {last_scan_date}). "
+                f"Focus on finding content published AFTER that date. "
+                f"Look for new developments, breaking news, recently published "
+                f"research, and emerging angles we haven't covered yet."
+            )
+        else:
+            scan_mode_hint = (
+                "\nThis is the FIRST scan for this workstream. "
+                "Cast a wide net — find foundational articles, key reports, "
+                "landmark case studies, and recent news across the topic area."
+            )
+
+        prompt = f"""You are a strategic intelligence research assistant for the City of Austin, Texas.
+
+Generate 10-12 diverse Google search queries to discover NEW content about this topic.
+
+Workstream context:
+- Keywords: {keywords_str}
+- Strategic pillars: {pillar_str}
+- Time horizon: {horizon_desc}
+- Today's date: {today_str}
+{scan_mode_hint}
+{existing_context}
+Requirements:
+- Each query should find DIFFERENT content (vary angles, terminology, geographic scope)
+- Include temporal terms for freshness (e.g., "2026", "latest", "new", "announced")
+- Mix query types: news-oriented, research/academic, case-study, policy/regulation, industry analysis
+- Include municipal/city government context in some queries (but not all — also search private sector, academia)
+- Don't just prepend/append the same modifiers — be creative with phrasing
+- Avoid queries that would return content we already have (see signals list above)
+- Think about adjacent topics, upstream/downstream impacts, and cross-domain connections
+
+Return ONLY a JSON array of query strings, no other text.
+Example: ["query 1", "query 2", ...]"""
+
+        try:
+            model = get_chat_mini_deployment()
+            response = self.openai_client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.9,
+                max_tokens=1000,
+            )
+
+            raw_text = response.choices[0].message.content.strip()
+
+            # Parse the JSON array from the response
+            # Handle cases where the model wraps in markdown code blocks
+            if raw_text.startswith("```"):
+                raw_text = raw_text.strip("`").strip()
+                if raw_text.startswith("json"):
+                    raw_text = raw_text[4:].strip()
+
+            queries = json.loads(raw_text)
+
+            if not isinstance(queries, list) or len(queries) == 0:
+                raise ValueError(f"Expected non-empty JSON array, got: {type(queries)}")
+
+            # Filter to strings only and limit
+            queries = [q for q in queries if isinstance(q, str) and q.strip()]
+            queries = queries[: config.max_queries]
+
+            logger.info(
+                f"AI query generation produced {len(queries)} queries for workstream "
+                f"{config.workstream_id} (keywords: {keywords_str[:60]}, "
+                f"existing_cards: {len(existing_names)}, "
+                f"mode: {'follow-up' if last_scan_date else 'seed'})"
+            )
+            return queries
+
+        except Exception as e:
+            logger.warning(
+                f"AI query generation failed, falling back to static method: {e}"
+            )
+            return self._generate_queries_static(config)
+
+    def _generate_queries_static(self, config: WorkstreamScanConfig) -> List[str]:
+        """
+        Generate search queries from workstream metadata (static/fallback method).
 
         No default topic clamping - queries are purely workstream-driven.
+        Used as a fallback when AI-powered query generation fails.
         """
         queries = []
 
@@ -403,104 +584,158 @@ class WorkstreamScanService:
         return unique_queries[: config.max_queries]
 
     async def _fetch_sources(
-        self, queries: List[str], config: WorkstreamScanConfig
+        self,
+        queries: List[str],
+        config: WorkstreamScanConfig,
+        workstream_id: Optional[str] = None,
     ) -> Tuple[List[RawSource], Dict[str, int]]:
-        """Fetch sources from all 5 categories, respecting source_preferences."""
-        all_sources = []
-        sources_by_category = {
-            "news": 0,
-            "tech_blog": 0,
-            "academic": 0,
-            "government": 0,
-            "rss": 0,
-        }
+        """
+        Fetch sources using Serper as the primary backend, with RSS and
+        academic (arXiv) as supplementary free sources.
 
-        # Determine which categories are enabled via source_preferences
-        enabled = (
-            config.source_preferences.get("enabled_categories")
-            if config.source_preferences
-            else None
-        )
+        Automatically narrows the date filter for follow-up scans:
+        - First scan (seed): past month for broad coverage
+        - Follow-up within a week: past week
+        - Follow-up within a day: past day
 
-        # If enabled_categories is specified, only fetch from those; otherwise fetch all
-        def is_enabled(cat: str) -> bool:
-            if not enabled:
-                return True
-            return cat in enabled
+        Falls back to the old multi-scraper approach if Serper is not available.
+        """
+        all_sources: List[RawSource] = []
+        sources_by_category: Dict[str, int] = {}
 
-        # Distribute queries across categories
-        query_subset = queries[:5] if len(queries) >= 5 else queries
-
-        # Inject keywords from source_preferences into queries
+        # Inject extra keywords from source_preferences into queries
         extra_keywords = (
             config.source_preferences.get("keywords", [])
             if config.source_preferences
             else []
         )
+        all_queries = list(queries)
         if extra_keywords:
-            query_subset = list(set(query_subset + extra_keywords[:3]))
+            all_queries = list(set(all_queries + extra_keywords[:3]))
 
-        if is_enabled("news"):
+        if serper_available():
+            # ----------------------------------------------------------
+            # PRIMARY PATH: Serper.dev Google Search + News
+            # ----------------------------------------------------------
+
+            # Determine date filter based on scan history
+            date_filter = "qdr:m"  # Default: past month (seed scan)
             try:
-                # News articles
-                news_sources = await self._fetch_news(
-                    query_subset, config.max_sources_per_category
-                )
-                all_sources.extend(news_sources)
-                sources_by_category["news"] = len(news_sources)
-                logger.info(f"News: {len(news_sources)} sources")
+                if workstream_id:
+                    last_scan = (
+                        self.supabase.table("workstream_scans")
+                        .select("completed_at")
+                        .eq("workstream_id", workstream_id)
+                        .eq("status", "completed")
+                        .order("completed_at", desc=True)
+                        .limit(1)
+                        .execute()
+                    )
+                    if last_scan.data and last_scan.data[0].get("completed_at"):
+                        last_completed = last_scan.data[0]["completed_at"]
+                        # Parse ISO date and determine how recent the last scan was
+                        try:
+                            last_dt = datetime.fromisoformat(
+                                last_completed.replace("Z", "+00:00")
+                            )
+                            days_since = (datetime.now(last_dt.tzinfo) - last_dt).days
+                            if days_since <= 1:
+                                date_filter = "qdr:d"  # Last scan was today/yesterday
+                            elif days_since <= 7:
+                                date_filter = "qdr:w"  # Last scan within a week
+                            else:
+                                date_filter = "qdr:m"  # Last scan was over a week ago
+                            logger.info(
+                                f"Smart date filter: last scan {days_since}d ago → {date_filter}"
+                            )
+                        except (ValueError, TypeError):
+                            pass  # Use default
             except Exception as e:
-                logger.warning(f"News fetch failed: {e}", exc_info=True)
+                logger.warning(f"Date filter lookup failed, using default: {e}")
 
-        if is_enabled("tech_blog"):
             try:
-                # Tech blogs
-                tech_sources = await self._fetch_tech_blogs(
-                    query_subset, config.max_sources_per_category
+                serper_results: List[SerperResult] = await serper_search_all(
+                    all_queries,
+                    num_results_per_query=10,
+                    date_filter=date_filter,
                 )
-                all_sources.extend(tech_sources)
-                sources_by_category["tech_blog"] = len(tech_sources)
-                logger.info(f"Tech blogs: {len(tech_sources)} sources")
-            except Exception as e:
-                logger.warning(f"Tech blog fetch failed: {e}", exc_info=True)
-
-        if is_enabled("academic"):
-            try:
-                # Academic papers
-                academic_sources = await self._fetch_academic(
-                    query_subset, config.max_sources_per_category
+                serper_sources = [
+                    RawSource(
+                        url=result.url,
+                        title=result.title,
+                        content=result.snippet,
+                        source_name=result.source_name or "Google Search",
+                        published_at=result.date,
+                    )
+                    for result in serper_results
+                ]
+                all_sources.extend(serper_sources)
+                sources_by_category["serper"] = len(serper_sources)
+                logger.info(
+                    f"Serper: {len(serper_sources)} sources from {len(all_queries)} queries"
                 )
-                all_sources.extend(academic_sources)
-                sources_by_category["academic"] = len(academic_sources)
-                logger.info(f"Academic: {len(academic_sources)} sources")
             except Exception as e:
-                logger.warning(f"Academic fetch failed: {e}", exc_info=True)
+                logger.warning(f"Serper fetch failed: {e}", exc_info=True)
+                sources_by_category["serper"] = 0
 
-        if is_enabled("government"):
+            # SUPPLEMENTARY: RSS feeds (free)
             try:
-                # Government sources
-                gov_sources = await self._fetch_government(
-                    query_subset, config.max_sources_per_category
-                )
-                all_sources.extend(gov_sources)
-                sources_by_category["government"] = len(gov_sources)
-                logger.info(f"Government: {len(gov_sources)} sources")
-            except Exception as e:
-                logger.warning(f"Government fetch failed: {e}", exc_info=True)
-
-        if is_enabled("rss"):
-            try:
-                # RSS feeds
                 rss_sources = await self._fetch_rss(
-                    query_subset, config.max_sources_per_category
+                    all_queries, config.max_sources_per_category
                 )
                 all_sources.extend(rss_sources)
                 sources_by_category["rss"] = len(rss_sources)
-                logger.info(f"RSS: {len(rss_sources)} sources")
+                logger.info(f"RSS (supplementary): {len(rss_sources)} sources")
             except Exception as e:
                 logger.warning(f"RSS fetch failed: {e}", exc_info=True)
+                sources_by_category["rss"] = 0
 
-        logger.info(f"Total sources collected: {len(all_sources)}")
+            # SUPPLEMENTARY: Academic / arXiv (free)
+            try:
+                academic_sources = await self._fetch_academic(
+                    all_queries, config.max_sources_per_category
+                )
+                all_sources.extend(academic_sources)
+                sources_by_category["academic"] = len(academic_sources)
+                logger.info(
+                    f"Academic (supplementary): {len(academic_sources)} sources"
+                )
+            except Exception as e:
+                logger.warning(f"Academic fetch failed: {e}", exc_info=True)
+                sources_by_category["academic"] = 0
+
+        else:
+            # ----------------------------------------------------------
+            # FALLBACK PATH: Old multi-scraper approach (no Serper key)
+            # ----------------------------------------------------------
+            logger.warning(
+                "SERPER_API_KEY not set — falling back to legacy scraper sources"
+            )
+            # Use only first 5 queries for scraping (rate-limit friendly)
+            query_subset = all_queries[:5]
+
+            for category, fetcher in [
+                ("news", lambda qs, lim: self._fetch_news(qs, lim)),
+                ("tech_blog", lambda qs, lim: self._fetch_tech_blogs(qs, lim)),
+                ("academic", lambda qs, lim: self._fetch_academic(qs, lim)),
+                ("government", lambda qs, lim: self._fetch_government(qs, lim)),
+                ("rss", lambda qs, lim: self._fetch_rss(qs, lim)),
+            ]:
+                try:
+                    cat_sources = await fetcher(
+                        query_subset, config.max_sources_per_category
+                    )
+                    all_sources.extend(cat_sources)
+                    sources_by_category[category] = len(cat_sources)
+                    logger.info(f"{category}: {len(cat_sources)} sources")
+                except Exception as e:
+                    logger.warning(f"{category} fetch failed: {e}", exc_info=True)
+                    sources_by_category[category] = 0
+
+        logger.info(
+            f"Total sources collected: {len(all_sources)} "
+            f"(breakdown: {sources_by_category})"
+        )
         return all_sources, sources_by_category
 
     async def _fetch_news(self, queries: List[str], limit: int) -> List[RawSource]:
