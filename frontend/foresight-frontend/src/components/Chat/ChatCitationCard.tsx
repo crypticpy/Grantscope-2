@@ -24,6 +24,8 @@ export interface ChatCitationCardProps {
   anchor: HTMLElement;
   /** Called when the card should be closed */
   onClose: () => void;
+  /** Called when the mouse enters the card, so the parent can cancel its leave timer */
+  onMouseEnterCard?: () => void;
 }
 
 // ============================================================================
@@ -34,6 +36,7 @@ export function ChatCitationCard({
   citation,
   anchor,
   onClose,
+  onMouseEnterCard,
 }: ChatCitationCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{
@@ -54,15 +57,15 @@ export function ChatCitationCard({
 
     if (spaceAbove >= cardHeight || spaceAbove > spaceBelow) {
       // Position above
-      top = rect.top + window.scrollY - 8;
+      top = rect.top - 8;
       placement = "above";
     } else {
       // Position below
-      top = rect.bottom + window.scrollY + 8;
+      top = rect.bottom + 8;
       placement = "below";
     }
 
-    let left = rect.left + window.scrollX;
+    let left = rect.left;
     // Ensure card doesn't overflow right edge
     const cardWidth = 384; // max-w-sm = 24rem = 384px
     if (left + cardWidth > window.innerWidth - 16) {
@@ -95,6 +98,8 @@ export function ChatCitationCard({
       clearTimeout(leaveTimerRef.current);
       leaveTimerRef.current = null;
     }
+    // Also cancel the parent's leave timer so the card stays open
+    onMouseEnterCard?.();
   };
 
   const handleMouseLeave = () => {

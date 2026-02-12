@@ -551,14 +551,17 @@ export function ChatPanel({
   const prevConversationIdRef = useRef(conversationId);
 
   useEffect(() => {
-    if (prevConversationIdRef.current !== conversationId) {
-      // Conversation changed — trigger crossfade
+    const prevId = prevConversationIdRef.current;
+    prevConversationIdRef.current = conversationId;
+
+    // Only crossfade on actual conversation switches (both sides non-null),
+    // not on the null→UUID transition that occurs when a new conversation
+    // is auto-created by the streaming done event.
+    if (prevId && conversationId && prevId !== conversationId) {
       setFadeIn(false);
       const timer = requestAnimationFrame(() => {
-        // After one frame at opacity-0, fade back in
         setFadeIn(true);
       });
-      prevConversationIdRef.current = conversationId;
       return () => cancelAnimationFrame(timer);
     }
     return undefined;

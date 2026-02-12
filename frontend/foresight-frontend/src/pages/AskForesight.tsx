@@ -8,7 +8,7 @@
  * @module pages/AskForesight
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Plus,
@@ -198,8 +198,12 @@ export default function AskForesight() {
   // Initial query from URL
   const initialQuery = searchParams.get("q") || undefined;
 
-  // ChatPanel remount key
-  const chatKey = `${activeConversationId || "new"}-${selectedScope.scope}-${selectedScope.scopeId || "none"}`;
+  // ChatPanel remount key — uses a stable session counter instead of
+  // activeConversationId so that the null→UUID transition from the streaming
+  // done event does NOT cause a full remount. Only explicit user actions
+  // (new chat, sidebar click, scope change) increment the counter.
+  const chatSessionRef = useRef(0);
+  const chatKey = `${chatSessionRef.current}-${selectedScope.scope}-${selectedScope.scopeId || "none"}`;
 
   // ============================================================================
   // Data Fetching
@@ -311,6 +315,7 @@ export default function AskForesight() {
 
   /** Start a new chat, clearing the active conversation and URL params. */
   const handleNewChat = useCallback(() => {
+    chatSessionRef.current += 1;
     setActiveConversationId(null);
     setActiveConversationScope("global");
     setActiveConversationScopeId(undefined);
@@ -322,6 +327,7 @@ export default function AskForesight() {
   /** Select a conversation from the sidebar. */
   const handleSelectConversation = useCallback(
     (conv: Conversation) => {
+      chatSessionRef.current += 1;
       setActiveConversationId(conv.id);
       setActiveConversationScope(conv.scope);
       setActiveConversationScopeId(conv.scope_id);
@@ -365,6 +371,7 @@ export default function AskForesight() {
   /** Change the scope. Resets the active conversation. */
   const handleScopeChange = useCallback(
     (option: ScopeOption) => {
+      chatSessionRef.current += 1;
       setSelectedScope(option);
       setScopeDropdownOpen(false);
       setActiveConversationId(null);
