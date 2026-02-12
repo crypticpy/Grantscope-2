@@ -29,6 +29,7 @@ import { supabase } from "../../App";
 import { cn } from "../../lib/utils";
 import { type Card } from "../../lib/discovery-api";
 import { SeedUrlInput } from "./SeedUrlInput";
+import { API_BASE_URL } from "../../lib/config";
 
 // =============================================================================
 // Types
@@ -68,8 +69,6 @@ const STAGE_OPTIONS = [
   { value: "4", label: "Implementing" },
   { value: "5", label: "Scaling" },
 ] as const;
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 // =============================================================================
 // Component

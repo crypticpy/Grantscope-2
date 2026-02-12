@@ -324,7 +324,7 @@ const RunRow: React.FC<{
               <RefreshCw className="w-4 h-4" />
               <span>{run.cards_enriched || 0} updated</span>
             </div>
-            <div className="flex items-center gap-1.5 text-gray-500">
+            <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
               <Clock className="w-4 h-4" />
               <span>{formatDuration(run.started_at, run.completed_at)}</span>
             </div>
@@ -379,27 +379,29 @@ const RunRow: React.FC<{
       )}
 
       {expanded && (
-        <div className="px-4 py-3 bg-gray-50 dark:bg-gray-850 border-t border-gray-200 dark:border-gray-700">
+        <div className="px-4 py-3 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
           {/* Mobile stats */}
           <div className="sm:hidden grid grid-cols-2 gap-3 mb-4">
             <div className="text-sm">
-              <span className="text-gray-500">Sources:</span>{" "}
+              <span className="text-gray-500 dark:text-gray-400">Sources:</span>{" "}
               <span className="font-medium">{run.sources_found}</span>
             </div>
             <div className="text-sm">
-              <span className="text-gray-500">Created:</span>{" "}
+              <span className="text-gray-500 dark:text-gray-400">Created:</span>{" "}
               <span className="font-medium text-green-600">
                 {run.cards_created || 0}
               </span>
             </div>
             <div className="text-sm">
-              <span className="text-gray-500">Updated:</span>{" "}
+              <span className="text-gray-500 dark:text-gray-400">Updated:</span>{" "}
               <span className="font-medium text-blue-600">
                 {run.cards_enriched || 0}
               </span>
             </div>
             <div className="text-sm">
-              <span className="text-gray-500">Duration:</span>{" "}
+              <span className="text-gray-500 dark:text-gray-400">
+                Duration:
+              </span>{" "}
               <span className="font-medium">
                 {formatDuration(run.started_at, run.completed_at)}
               </span>

@@ -97,6 +97,37 @@ function useCountUp(target: number, duration = 500): number {
   return value;
 }
 
+const getPriorityColor = (priority: string) => {
+  const colors: Record<string, string> = {
+    high: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
+    medium:
+      "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+    low: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
+  };
+  return (
+    colors[priority] ||
+    "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
+  );
+};
+
+const getPriorityBorder = (priority: string) => {
+  const borders: Record<string, string> = {
+    high: "border-l-red-500",
+    medium: "border-l-amber-500",
+    low: "border-l-emerald-500",
+  };
+  return borders[priority] || "border-l-gray-300";
+};
+
+const getPriorityGradient = (priority: string) => {
+  const gradients: Record<string, string> = {
+    high: "from-red-50 dark:from-red-900/10",
+    medium: "from-amber-50 dark:from-amber-900/10",
+    low: "from-emerald-50 dark:from-emerald-900/10",
+  };
+  return gradients[priority] || "from-gray-50 dark:from-gray-800/50";
+};
+
 const Dashboard: React.FC = () => {
   const { user } = useAuthContext();
   const [recentCards, setRecentCards] = useState<Card[]>([]);
@@ -266,45 +297,105 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const getPriorityColor = (priority: string) => {
-    const colors: Record<string, string> = {
-      high: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-      medium:
-        "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-      low: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
-    };
-    return (
-      colors[priority] ||
-      "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
-    );
-  };
-
-  const getPriorityBorder = (priority: string) => {
-    const borders: Record<string, string> = {
-      high: "border-l-red-500",
-      medium: "border-l-amber-500",
-      low: "border-l-emerald-500",
-    };
-    return borders[priority] || "border-l-gray-300";
-  };
-
-  const getPriorityGradient = (priority: string) => {
-    const gradients: Record<string, string> = {
-      high: "from-red-50 dark:from-red-900/10",
-      medium: "from-amber-50 dark:from-amber-900/10",
-      low: "from-emerald-50 dark:from-emerald-900/10",
-    };
-    return gradients[priority] || "from-gray-50 dark:from-gray-800/50";
-  };
-
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-blue mx-auto"></div>
-          <p className="mt-4 text-gray-500 dark:text-gray-400">
-            Loading dashboard...
-          </p>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header skeleton */}
+        <div className="mb-8">
+          <div
+            className="animate-pulse bg-gray-200 dark:bg-gray-700/50 rounded-lg h-9 w-72"
+            style={{ animationDelay: "0ms" }}
+          />
+          <div
+            className="animate-pulse bg-gray-200 dark:bg-gray-700/50 rounded-lg h-5 w-96 mt-2"
+            style={{ animationDelay: "50ms" }}
+          />
+        </div>
+
+        {/* Ask Foresight Bar skeleton */}
+        <div
+          className="animate-pulse bg-gray-200 dark:bg-gray-700/50 rounded-xl h-12 mb-8"
+          style={{ animationDelay: "100ms" }}
+        />
+
+        {/* Stat cards skeleton — 5 cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div
+              key={i}
+              className="animate-pulse bg-gray-200 dark:bg-gray-700/50 rounded-xl h-28"
+              style={{ animationDelay: `${150 + i * 50}ms` }}
+            />
+          ))}
+        </div>
+
+        {/* Quality distribution bar skeleton */}
+        <div className="flex items-center justify-between mb-8">
+          <div
+            className="animate-pulse bg-gray-200 dark:bg-gray-700/50 rounded-lg h-5 w-64"
+            style={{ animationDelay: "400ms" }}
+          />
+          <div
+            className="animate-pulse bg-gray-200 dark:bg-gray-700/50 rounded-lg h-5 w-48"
+            style={{ animationDelay: "450ms" }}
+          />
+        </div>
+
+        {/* Pattern Insights skeleton */}
+        <div className="mb-8">
+          <div
+            className="animate-pulse bg-gray-200 dark:bg-gray-700/50 rounded-lg h-6 w-48 mb-4"
+            style={{ animationDelay: "500ms" }}
+          />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div
+                key={i}
+                className="animate-pulse bg-gray-200 dark:bg-gray-700/50 rounded-xl h-48"
+                style={{ animationDelay: `${550 + i * 50}ms` }}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Following Signals skeleton */}
+        <div className="mb-8">
+          <div
+            className="animate-pulse bg-gray-200 dark:bg-gray-700/50 rounded-lg h-6 w-56 mb-4"
+            style={{ animationDelay: "700ms" }}
+          />
+          <div className="grid gap-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div
+                key={i}
+                className="animate-pulse bg-gray-200 dark:bg-gray-700/50 rounded-xl h-24"
+                style={{ animationDelay: `${750 + i * 50}ms` }}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Recent Intelligence skeleton */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div
+              className="animate-pulse bg-gray-200 dark:bg-gray-700/50 rounded-lg h-6 w-48"
+              style={{ animationDelay: "900ms" }}
+            />
+            <div
+              className="animate-pulse bg-gray-200 dark:bg-gray-700/50 rounded-lg h-9 w-24"
+              style={{ animationDelay: "950ms" }}
+            />
+          </div>
+          <div className="grid gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div
+                key={i}
+                className="animate-pulse bg-gray-200 dark:bg-gray-700/50 rounded-xl h-32"
+                style={{ animationDelay: `${1000 + i * 50}ms` }}
+              />
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -330,7 +421,7 @@ const Dashboard: React.FC = () => {
         <div className="mb-8">
           <Link
             to="/discover/queue"
-            className="block bg-gradient-to-r from-brand-blue/10 to-brand-green/10 dark:from-brand-blue/20 dark:to-brand-green/20 border border-brand-blue/20 dark:border-brand-blue/30 rounded-lg p-4 hover:from-brand-blue/15 hover:to-brand-green/15 dark:hover:from-brand-blue/25 dark:hover:to-brand-green/25 transition-all group"
+            className="block bg-gradient-to-r from-brand-blue/10 to-brand-green/10 dark:from-brand-blue/20 dark:to-brand-green/20 border border-brand-blue/20 dark:border-brand-blue/30 rounded-xl p-4 hover:from-brand-blue/15 hover:to-brand-green/15 dark:hover:from-brand-blue/25 dark:hover:to-brand-green/25 transition-all duration-200 group"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -362,7 +453,7 @@ const Dashboard: React.FC = () => {
         <Link
           to="/discover"
           aria-label={`Total Signals: ${stats.totalCards}`}
-          className="bg-white dark:bg-dark-surface rounded-lg shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg active:scale-95 active:shadow-inner cursor-pointer group"
+          className="bg-white dark:bg-dark-surface rounded-xl shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg active:scale-95 active:shadow-inner cursor-pointer group"
         >
           <div className="flex items-center">
             <div className="flex-shrink-0">
@@ -382,7 +473,7 @@ const Dashboard: React.FC = () => {
         <Link
           to="/discover?filter=new"
           aria-label={`New This Week: ${stats.newThisWeek}`}
-          className="bg-white dark:bg-dark-surface rounded-lg shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg active:scale-95 active:shadow-inner cursor-pointer group"
+          className="bg-white dark:bg-dark-surface rounded-xl shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg active:scale-95 active:shadow-inner cursor-pointer group"
         >
           <div className="flex items-center">
             <div className="flex-shrink-0">
@@ -402,7 +493,7 @@ const Dashboard: React.FC = () => {
         <Link
           to="/discover?filter=following"
           aria-label={`Following: ${stats.following}`}
-          className="bg-white dark:bg-dark-surface rounded-lg shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg active:scale-95 active:shadow-inner cursor-pointer group"
+          className="bg-white dark:bg-dark-surface rounded-xl shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg active:scale-95 active:shadow-inner cursor-pointer group"
         >
           <div className="flex items-center">
             <div className="flex-shrink-0">
@@ -422,7 +513,7 @@ const Dashboard: React.FC = () => {
         <Link
           to="/workstreams"
           aria-label={`Workstreams: ${stats.workstreams}`}
-          className="bg-white dark:bg-dark-surface rounded-lg shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg active:scale-95 active:shadow-inner cursor-pointer group"
+          className="bg-white dark:bg-dark-surface rounded-xl shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg active:scale-95 active:shadow-inner cursor-pointer group"
         >
           <div className="flex items-center">
             <div className="flex-shrink-0">
@@ -442,7 +533,7 @@ const Dashboard: React.FC = () => {
         <Link
           to="/discover?filter=updated"
           aria-label={`Updated This Week: ${stats.updatedThisWeek}`}
-          className="bg-white dark:bg-dark-surface rounded-lg shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg active:scale-95 active:shadow-inner cursor-pointer group"
+          className="bg-white dark:bg-dark-surface rounded-xl shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg active:scale-95 active:shadow-inner cursor-pointer group"
         >
           <div className="flex items-center">
             <div className="flex-shrink-0">
@@ -511,7 +602,7 @@ const Dashboard: React.FC = () => {
                     animationDelay: `${Math.min(index, 5) * 50}ms`,
                     animationFillMode: "both",
                   }}
-                  className={`animate-in fade-in slide-in-from-bottom-2 duration-300 bg-gradient-to-r ${getPriorityGradient(following.priority)} to-white dark:to-[#2d3166] rounded-lg shadow p-6 border-l-4 ${getPriorityBorder(following.priority)} transition-all duration-200 hover:-translate-y-1 hover:shadow-lg`}
+                  className={`animate-in fade-in slide-in-from-bottom-2 duration-300 bg-gradient-to-r ${getPriorityGradient(following.priority)} to-white dark:to-[#2d3166] rounded-xl shadow p-6 border-l-4 ${getPriorityBorder(following.priority)} transition-all duration-200 hover:-translate-y-1 hover:shadow-lg`}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -557,12 +648,6 @@ const Dashboard: React.FC = () => {
                               showCount={true}
                             />
                           )}
-                        <VelocityBadge
-                          trend={
-                            following.cards.velocity_trend as VelocityTrend
-                          }
-                          score={following.cards.velocity_score}
-                        />
                         <span
                           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(following.priority)}`}
                         >
@@ -640,7 +725,7 @@ const Dashboard: React.FC = () => {
                   animationDelay: `${Math.min(index, 5) * 50}ms`,
                   animationFillMode: "both",
                 }}
-                className="animate-in fade-in slide-in-from-bottom-2 duration-300 bg-white dark:bg-dark-surface rounded-lg shadow p-6 border-l-4 border-transparent transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-l-brand-blue"
+                className="animate-in fade-in slide-in-from-bottom-2 duration-300 bg-white dark:bg-dark-surface rounded-xl shadow p-6 border-l-4 border-transparent transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-l-brand-blue"
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
@@ -684,10 +769,6 @@ const Dashboard: React.FC = () => {
                             showCount={true}
                           />
                         )}
-                      <VelocityBadge
-                        trend={card.velocity_trend as VelocityTrend}
-                        score={card.velocity_score}
-                      />
                     </div>
                     <p className="text-gray-600 dark:text-gray-300 mb-3">
                       {card.summary}

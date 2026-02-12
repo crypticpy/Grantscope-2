@@ -17,6 +17,7 @@ import { useWorkstreamPreview } from "./useWorkstreamPreview";
 import { useKeywordSuggestions } from "./useKeywordSuggestions";
 import { getGoalsByPillar } from "../data/taxonomy";
 import { startWorkstreamScan } from "../lib/workstream-api";
+import { API_BASE_URL } from "../lib/config";
 import type {
   Workstream,
   FormData,
@@ -316,8 +317,6 @@ export function useWorkstreamForm({
         onSuccess();
       } else {
         // CREATE mode: use backend API so auto-populate and auto-scan queueing runs
-        const API_BASE_URL =
-          import.meta.env.VITE_API_URL || "http://localhost:8000";
         const {
           data: { session },
         } = await supabase.auth.getSession();

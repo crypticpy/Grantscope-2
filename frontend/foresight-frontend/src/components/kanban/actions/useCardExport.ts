@@ -5,11 +5,10 @@
  * Supports PDF and PPTX export formats for leadership briefings.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback } from "react";
+import { API_BASE_URL } from "../../../lib/config";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-
-type ExportFormat = 'pdf' | 'pptx';
+type ExportFormat = "pdf" | "pptx";
 
 interface UseCardExportOptions {
   /** Callback when export starts */
@@ -28,7 +27,7 @@ interface UseCardExportOptions {
  */
 export function useCardExport(
   getToken: () => Promise<string | null>,
-  options: UseCardExportOptions = {}
+  options: UseCardExportOptions = {},
 ) {
   // Destructure options to avoid stale closure issues with default {} object
   const { onStart, onSuccess, onError } = options;
@@ -46,27 +45,29 @@ export function useCardExport(
       try {
         const token = await getToken();
         if (!token) {
-          throw new Error('Authentication required');
+          throw new Error("Authentication required");
         }
 
         // Call the export endpoint
         const response = await fetch(
           `${API_BASE_URL}/api/v1/cards/${cardId}/export/${format}`,
           {
-            method: 'GET',
+            method: "GET",
             headers: {
               Authorization: `Bearer ${token}`,
             },
-          }
+          },
         );
 
         if (!response.ok) {
           // Check for JSON error response
-          const contentType = response.headers.get('content-type');
-          if (contentType?.includes('application/json')) {
+          const contentType = response.headers.get("content-type");
+          if (contentType?.includes("application/json")) {
             const errorData = await response.json().catch(() => ({}));
             throw new Error(
-              errorData.message || errorData.detail || `Export failed: ${response.status}`
+              errorData.message ||
+                errorData.detail ||
+                `Export failed: ${response.status}`,
             );
           }
           throw new Error(`Export failed: ${response.status}`);
@@ -76,19 +77,21 @@ export function useCardExport(
         const blob = await response.blob();
 
         // Extract filename from Content-Disposition header or use default
-        const contentDisposition = response.headers.get('content-disposition');
+        const contentDisposition = response.headers.get("content-disposition");
         let filename = `card-export.${format}`;
 
         if (contentDisposition) {
-          const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+          const filenameMatch = contentDisposition.match(
+            /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/,
+          );
           if (filenameMatch && filenameMatch[1]) {
-            filename = filenameMatch[1].replace(/['"]/g, '');
+            filename = filenameMatch[1].replace(/['"]/g, "");
           }
         }
 
         // Create download link and trigger click
         const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
+        const link = document.createElement("a");
         link.href = url;
         link.download = filename;
         document.body.appendChild(link);
@@ -99,7 +102,7 @@ export function useCardExport(
         onSuccess?.(cardId, format);
         return true;
       } catch (err) {
-        const error = err instanceof Error ? err : new Error('Export failed');
+        const error = err instanceof Error ? err : new Error("Export failed");
         setError((prev) => ({ ...prev, [key]: error }));
         onError?.(cardId, format, error);
         return false;
@@ -107,7 +110,7 @@ export function useCardExport(
         setIsExporting((prev) => ({ ...prev, [key]: false }));
       }
     },
-    [getToken, onStart, onSuccess, onError]
+    [getToken, onStart, onSuccess, onError],
   );
 
   const isCardExporting = useCallback(
@@ -121,13 +124,13 @@ export function useCardExport(
         (isExporting[`${cardId}-pptx`] ?? false)
       );
     },
-    [isExporting]
+    [isExporting],
   );
 
   const getCardError = useCallback(
     (cardId: string, format: ExportFormat): Error | null =>
       error[`${cardId}-${format}`] ?? null,
-    [error]
+    [error],
   );
 
   const clearError = useCallback((cardId: string, format: ExportFormat) => {

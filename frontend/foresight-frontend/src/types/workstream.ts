@@ -6,6 +6,7 @@
  */
 
 import React from "react";
+import { API_BASE_URL } from "../lib/config";
 
 // ============================================================================
 // Core Types
@@ -80,8 +81,6 @@ export async function fetchFilterPreview(
     keywords: string[];
   },
 ): Promise<FilterPreviewResult> {
-  const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
-
   const response = await fetch(`${API_BASE_URL}/api/v1/cards/filter-preview`, {
     method: "POST",
     headers: {

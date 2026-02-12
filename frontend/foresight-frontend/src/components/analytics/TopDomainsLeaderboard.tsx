@@ -18,8 +18,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Globe, Search, Shield, Star, Trophy, AlertCircle } from "lucide-react";
 import { supabase } from "../../App";
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+import { API_BASE_URL } from "../../lib/config";
 
 // ============================================================================
 // Type Definitions
@@ -378,7 +377,7 @@ const TopDomainsLeaderboard: React.FC = () => {
                   return (
                     <tr
                       key={domain.id}
-                      className="hover:bg-gray-50 dark:hover:bg-[#1e2048] transition-colors"
+                      className="hover:bg-gray-50 dark:hover:bg-dark-surface-deep transition-colors"
                     >
                       {/* Rank */}
                       <td className="py-2.5 pr-2">

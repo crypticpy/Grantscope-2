@@ -5,9 +5,8 @@
  * Triggers a lightweight research update to help with initial triage.
  */
 
-import { useState, useCallback } from 'react';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { useState, useCallback } from "react";
+import { API_BASE_URL } from "../../../lib/config";
 
 interface UseQuickUpdateOptions {
   /** Callback when update starts */
@@ -34,7 +33,7 @@ interface QuickUpdateResult {
 export function useQuickUpdate(
   getToken: () => Promise<string | null>,
   workstreamId: string,
-  options: UseQuickUpdateOptions = {}
+  options: UseQuickUpdateOptions = {},
 ) {
   // Destructure options to avoid stale closure issues with default {} object
   const { onStart, onSuccess, onError } = options;
@@ -51,25 +50,27 @@ export function useQuickUpdate(
       try {
         const token = await getToken();
         if (!token) {
-          throw new Error('Authentication required');
+          throw new Error("Authentication required");
         }
 
         // Call the research endpoint with task_type='update' for a quick 5-source update
         const response = await fetch(
           `${API_BASE_URL}/api/v1/me/workstreams/${workstreamId}/cards/${cardId}/quick-update`,
           {
-            method: 'POST',
+            method: "POST",
             headers: {
-              'Content-Type': 'application/json',
+              "Content-Type": "application/json",
               Authorization: `Bearer ${token}`,
             },
-          }
+          },
         );
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(
-            errorData.message || errorData.detail || `Quick update failed: ${response.status}`
+            errorData.message ||
+              errorData.detail ||
+              `Quick update failed: ${response.status}`,
           );
         }
 
@@ -77,7 +78,8 @@ export function useQuickUpdate(
         onSuccess?.(cardId, result);
         return result;
       } catch (err) {
-        const error = err instanceof Error ? err : new Error('Quick update failed');
+        const error =
+          err instanceof Error ? err : new Error("Quick update failed");
         setError((prev) => ({ ...prev, [cardId]: error }));
         onError?.(cardId, error);
         return null;
@@ -85,17 +87,17 @@ export function useQuickUpdate(
         setIsLoading((prev) => ({ ...prev, [cardId]: false }));
       }
     },
-    [getToken, workstreamId, onStart, onSuccess, onError]
+    [getToken, workstreamId, onStart, onSuccess, onError],
   );
 
   const isCardLoading = useCallback(
     (cardId: string): boolean => isLoading[cardId] ?? false,
-    [isLoading]
+    [isLoading],
   );
 
   const getCardError = useCallback(
     (cardId: string): Error | null => error[cardId] ?? null,
-    [error]
+    [error],
   );
 
   const clearError = useCallback((cardId: string) => {

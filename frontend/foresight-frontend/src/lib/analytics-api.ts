@@ -6,7 +6,7 @@
  * AI-generated strategic insights for the analytics dashboard.
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { API_BASE_URL } from "./config";
 
 // ============================================================================
 // Velocity Types
@@ -60,7 +60,7 @@ export interface PillarCoverageItem {
   count: number; // Number of cards in this pillar
   percentage: number; // Percentage of total cards (0-100)
   avg_velocity?: number; // Average velocity score (0-100)
-  trend_direction?: 'up' | 'down' | 'stable'; // Trend vs previous period
+  trend_direction?: "up" | "down" | "stable"; // Trend vs previous period
 }
 
 /**
@@ -132,7 +132,7 @@ export interface InsightsFilters {
 export interface AnalyticsFilterOptions {
   pillar_id?: string;
   stage_id?: string;
-  time_period?: '7d' | '30d' | '90d' | '1y';
+  time_period?: "7d" | "30d" | "90d" | "1y";
   start_date?: string;
   end_date?: string;
 }
@@ -147,20 +147,24 @@ export interface AnalyticsFilterOptions {
 async function apiRequest<T>(
   endpoint: string,
   token: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
 ): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
       ...options.headers,
     },
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Request failed' }));
-    throw new Error(error.message || error.detail || `API error: ${response.status}`);
+    const error = await response
+      .json()
+      .catch(() => ({ message: "Request failed" }));
+    throw new Error(
+      error.message || error.detail || `API error: ${response.status}`,
+    );
   }
 
   return response.json();
@@ -169,44 +173,49 @@ async function apiRequest<T>(
 /**
  * Build URL query string from filter object
  */
-function buildQueryString(filters: Record<string, string | number | undefined>): string {
+function buildQueryString(
+  filters: Record<string, string | number | undefined>,
+): string {
   const params = new URLSearchParams();
 
   for (const [key, value] of Object.entries(filters)) {
-    if (value !== undefined && value !== null && value !== '') {
+    if (value !== undefined && value !== null && value !== "") {
       params.append(key, String(value));
     }
   }
 
   const queryString = params.toString();
-  return queryString ? `?${queryString}` : '';
+  return queryString ? `?${queryString}` : "";
 }
 
 /**
  * Convert time period to start/end dates
  */
-export function timePeriodToDates(period: '7d' | '30d' | '90d' | '1y'): { start_date: string; end_date: string } {
+export function timePeriodToDates(period: "7d" | "30d" | "90d" | "1y"): {
+  start_date: string;
+  end_date: string;
+} {
   const endDate = new Date();
   const startDate = new Date();
 
   switch (period) {
-    case '7d':
+    case "7d":
       startDate.setDate(startDate.getDate() - 7);
       break;
-    case '30d':
+    case "30d":
       startDate.setDate(startDate.getDate() - 30);
       break;
-    case '90d':
+    case "90d":
       startDate.setDate(startDate.getDate() - 90);
       break;
-    case '1y':
+    case "1y":
       startDate.setFullYear(startDate.getFullYear() - 1);
       break;
   }
 
   return {
-    start_date: startDate.toISOString().split('T')[0],
-    end_date: endDate.toISOString().split('T')[0],
+    start_date: startDate.toISOString().split("T")[0],
+    end_date: endDate.toISOString().split("T")[0],
   };
 }
 
@@ -222,7 +231,7 @@ export function timePeriodToDates(period: '7d' | '30d' | '90d' | '1y'): { start_
  */
 export async function fetchVelocityData(
   token: string,
-  filters?: VelocityFilters
+  filters?: VelocityFilters,
 ): Promise<VelocityResponse> {
   const queryString = buildQueryString({
     pillar_id: filters?.pillar_id,
@@ -231,7 +240,10 @@ export async function fetchVelocityData(
     end_date: filters?.end_date,
   });
 
-  return apiRequest<VelocityResponse>(`/api/v1/analytics/velocity${queryString}`, token);
+  return apiRequest<VelocityResponse>(
+    `/api/v1/analytics/velocity${queryString}`,
+    token,
+  );
 }
 
 /**
@@ -239,8 +251,8 @@ export async function fetchVelocityData(
  */
 export async function fetchVelocityDataForPeriod(
   token: string,
-  period: '7d' | '30d' | '90d' | '1y',
-  filters?: Omit<VelocityFilters, 'start_date' | 'end_date'>
+  period: "7d" | "30d" | "90d" | "1y",
+  filters?: Omit<VelocityFilters, "start_date" | "end_date">,
 ): Promise<VelocityResponse> {
   const { start_date, end_date } = timePeriodToDates(period);
 
@@ -263,7 +275,7 @@ export async function fetchVelocityDataForPeriod(
  */
 export async function fetchPillarCoverage(
   token: string,
-  filters?: PillarCoverageFilters
+  filters?: PillarCoverageFilters,
 ): Promise<PillarCoverageResponse> {
   const queryString = buildQueryString({
     stage_id: filters?.stage_id,
@@ -271,7 +283,10 @@ export async function fetchPillarCoverage(
     end_date: filters?.end_date,
   });
 
-  return apiRequest<PillarCoverageResponse>(`/api/v1/analytics/pillar-coverage${queryString}`, token);
+  return apiRequest<PillarCoverageResponse>(
+    `/api/v1/analytics/pillar-coverage${queryString}`,
+    token,
+  );
 }
 
 /**
@@ -279,8 +294,8 @@ export async function fetchPillarCoverage(
  */
 export async function fetchPillarCoverageForPeriod(
   token: string,
-  period: '7d' | '30d' | '90d' | '1y',
-  filters?: Omit<PillarCoverageFilters, 'start_date' | 'end_date'>
+  period: "7d" | "30d" | "90d" | "1y",
+  filters?: Omit<PillarCoverageFilters, "start_date" | "end_date">,
 ): Promise<PillarCoverageResponse> {
   const { start_date, end_date } = timePeriodToDates(period);
 
@@ -304,14 +319,17 @@ export async function fetchPillarCoverageForPeriod(
  */
 export async function fetchInsights(
   token: string,
-  filters?: InsightsFilters
+  filters?: InsightsFilters,
 ): Promise<InsightsResponse> {
   const queryString = buildQueryString({
     pillar_id: filters?.pillar_id,
     limit: filters?.limit,
   });
 
-  return apiRequest<InsightsResponse>(`/api/v1/analytics/insights${queryString}`, token);
+  return apiRequest<InsightsResponse>(
+    `/api/v1/analytics/insights${queryString}`,
+    token,
+  );
 }
 
 /**
@@ -320,7 +338,7 @@ export async function fetchInsights(
 export async function fetchPillarInsights(
   token: string,
   pillarId: string,
-  limit: number = 5
+  limit: number = 5,
 ): Promise<InsightsResponse> {
   return fetchInsights(token, {
     pillar_id: pillarId,
@@ -340,7 +358,7 @@ export async function fetchPillarInsights(
  */
 export async function fetchAllAnalyticsData(
   token: string,
-  filters?: AnalyticsFilterOptions
+  filters?: AnalyticsFilterOptions,
 ): Promise<{
   velocity: VelocityResponse;
   pillarCoverage: PillarCoverageResponse;

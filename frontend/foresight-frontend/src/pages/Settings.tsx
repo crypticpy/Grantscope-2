@@ -3,8 +3,7 @@ import { User, Bell, Shield, Database, Mail } from "lucide-react";
 import { supabase } from "../App";
 import { useAuthContext } from "../hooks/useAuthContext";
 import { LoadingButton } from "../components/ui/LoadingButton";
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+import { API_BASE_URL } from "../lib/config";
 
 const Settings: React.FC = () => {
   const { user, signOut } = useAuthContext();

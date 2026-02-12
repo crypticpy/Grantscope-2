@@ -54,6 +54,7 @@ import {
   SourcePreferencesStep,
   type SourcePreferences,
 } from "./SourcePreferencesStep";
+import { API_BASE_URL } from "../../lib/config";
 
 // =============================================================================
 // Types
@@ -104,8 +105,6 @@ interface WizardState {
 // =============================================================================
 // Constants
 // =============================================================================
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 /** Available strategic pillars for multi-select */
 const PILLAR_OPTIONS = [
@@ -215,7 +214,7 @@ function StepIndicator({ currentStep, onStepClick }: StepIndicatorProps) {
                   "transition-colors duration-200",
                   isCompleted && "bg-brand-blue text-white",
                   isCurrent &&
-                    "bg-brand-blue text-white ring-2 ring-brand-blue/30 ring-offset-1 ring-offset-white dark:ring-offset-[#1e2158]",
+                    "bg-brand-blue text-white ring-2 ring-brand-blue/30 ring-offset-1 ring-offset-white dark:ring-offset-dark-surface-deep",
                   isUpcoming &&
                     "bg-gray-200 dark:bg-dark-surface-elevated text-gray-500 dark:text-gray-400",
                   isClickable &&

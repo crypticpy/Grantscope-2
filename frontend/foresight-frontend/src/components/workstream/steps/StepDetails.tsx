@@ -8,6 +8,7 @@ import { useState } from "react";
 import { Sparkles, Loader2 } from "lucide-react";
 import { cn } from "../../../lib/utils";
 import { supabase } from "../../../App";
+import { API_BASE_URL } from "../../../lib/config";
 import type { FormData, FormErrors } from "../../../types/workstream";
 
 interface StepDetailsProps {
@@ -36,8 +37,6 @@ export function StepDetails({
       } = await supabase.auth.getSession();
       if (!session?.access_token) return;
 
-      const API_BASE_URL =
-        import.meta.env.VITE_API_URL || "http://localhost:8000";
       const response = await fetch(
         `${API_BASE_URL}/api/v1/ai/suggest-description`,
         {

@@ -14,8 +14,7 @@ import type {
   ExportStatus,
   ExportFormat,
 } from "../components/ExportProgressModal";
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+import { API_BASE_URL } from "../lib/config";
 
 // Gamma exports typically take 30-90 seconds
 const GAMMA_ESTIMATED_TIME = 60;

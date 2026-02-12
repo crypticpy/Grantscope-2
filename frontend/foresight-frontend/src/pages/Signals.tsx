@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   Search,
@@ -32,6 +32,9 @@ import { Top25Badge } from "../components/Top25Badge";
 import { VelocityBadge, type VelocityTrend } from "../components/VelocityBadge";
 import { parseStageNumber } from "../lib/stage-utils";
 import { CreateSignalModal } from "../components/CreateSignal";
+import { VirtualizedGrid } from "../components/VirtualizedGrid";
+import { VirtualizedList } from "../components/VirtualizedList";
+import { API_BASE_URL } from "../lib/config";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -85,8 +88,6 @@ type GroupBy = "none" | "pillar" | "horizon" | "workstream";
 // ---------------------------------------------------------------------------
 // API helper
 // ---------------------------------------------------------------------------
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 async function fetchMySignals(
   params: Record<string, string>,
@@ -775,6 +776,41 @@ const SignalGroup: React.FC<SignalGroupProps> = ({
 }) => {
   const [collapsed, setCollapsed] = useState(false);
 
+  // Stable render callbacks to avoid re-creating on every render
+  const renderGridItem = useCallback(
+    (signal: PersonalSignal, _index: number) => (
+      <div className="h-full">
+        <SignalCard signal={signal} onTogglePin={onTogglePin} />
+      </div>
+    ),
+    [onTogglePin],
+  );
+
+  const renderListItem = useCallback(
+    (signal: PersonalSignal) => (
+      <SignalListItem signal={signal} onTogglePin={onTogglePin} />
+    ),
+    [onTogglePin],
+  );
+
+  const getItemKey = useCallback((signal: PersonalSignal) => signal.id, []);
+
+  // Compute a dynamic height for the virtualized container based on item count.
+  // For grids, each row holds 3 items (lg) and is ~304px (280 + 24 gap).
+  // For lists, each item is ~100px (80 + gap).
+  // Cap at a viewport-relative height so the page doesn't grow unbounded.
+  const containerHeight = useMemo(() => {
+    if (viewMode === "grid") {
+      const rowCount = Math.ceil(signals.length / 3);
+      const totalHeight = rowCount * (280 + 24);
+      // Cap so there is always a scroll context for large sets
+      return Math.min(totalHeight, window.innerHeight - 300);
+    } else {
+      const totalHeight = signals.length * (100 + 12);
+      return Math.min(totalHeight, window.innerHeight - 300);
+    }
+  }, [signals.length, viewMode]);
+
   return (
     <div>
       {/* Group header (only when groupBy is active) */}
@@ -807,34 +843,29 @@ const SignalGroup: React.FC<SignalGroupProps> = ({
       {/* Cards */}
       {!collapsed &&
         (viewMode === "grid" ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {signals.map((signal, index) => (
-              <div
-                key={signal.id}
-                className="animate-in fade-in slide-in-from-bottom-2 duration-300"
-                style={{
-                  animationDelay: `${Math.min(index, 5) * 50}ms`,
-                  animationFillMode: "both",
-                }}
-              >
-                <SignalCard signal={signal} onTogglePin={onTogglePin} />
-              </div>
-            ))}
+          <div style={{ height: `${Math.max(containerHeight, 400)}px` }}>
+            <VirtualizedGrid<PersonalSignal>
+              items={signals}
+              getItemKey={getItemKey}
+              estimatedRowHeight={280}
+              gap={24}
+              columns={{ sm: 1, md: 2, lg: 3 }}
+              overscan={3}
+              renderItem={renderGridItem}
+            />
           </div>
         ) : (
-          <div className="space-y-3">
-            {signals.map((signal, index) => (
-              <div
-                key={signal.id}
-                className="animate-in fade-in slide-in-from-bottom-2 duration-300"
-                style={{
-                  animationDelay: `${Math.min(index, 5) * 50}ms`,
-                  animationFillMode: "both",
-                }}
-              >
-                <SignalListItem signal={signal} onTogglePin={onTogglePin} />
-              </div>
-            ))}
+          <div style={{ height: `${Math.max(containerHeight, 400)}px` }}>
+            <VirtualizedList<PersonalSignal>
+              items={signals}
+              renderItem={renderListItem}
+              getItemKey={getItemKey}
+              estimatedSize={100}
+              gap={12}
+              overscan={5}
+              scrollContainerClassName="h-full"
+              ariaLabel="Signals list"
+            />
           </div>
         ))}
     </div>
@@ -897,7 +928,7 @@ const SignalCard: React.FC<SignalCardProps> = React.memo(
     const stageNumber = parseStageNumber(signal.stage_id);
 
     return (
-      <div className="relative bg-white dark:bg-dark-surface rounded-lg shadow-sm hover:-translate-y-1 hover:shadow-lg transition-all duration-200 overflow-hidden group">
+      <div className="relative bg-white dark:bg-dark-surface rounded-xl shadow-sm hover:-translate-y-1 hover:shadow-lg transition-all duration-200 overflow-hidden group">
         {/* Gradient accent bar */}
         <div className="h-1 bg-gradient-to-r from-brand-blue to-brand-green" />
 
@@ -993,7 +1024,7 @@ const SignalListItem: React.FC<SignalCardProps> = React.memo(
     const stageNumber = parseStageNumber(signal.stage_id);
 
     return (
-      <div className="flex items-center gap-4 bg-white dark:bg-dark-surface rounded-lg shadow-sm p-4 hover:shadow-lg transition-all duration-200 group">
+      <div className="flex items-center gap-4 bg-white dark:bg-dark-surface rounded-xl shadow-sm p-4 hover:shadow-lg transition-all duration-200 group">
         {/* Pin */}
         <button
           onClick={(e) => {

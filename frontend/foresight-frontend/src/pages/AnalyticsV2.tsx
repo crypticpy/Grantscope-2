@@ -36,8 +36,7 @@ import { useAuthContext } from "../hooks/useAuthContext";
 import { PillarBadge } from "../components/PillarBadge";
 import { HorizonBadge } from "../components/HorizonBadge";
 import TopDomainsLeaderboard from "../components/analytics/TopDomainsLeaderboard";
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+import { API_BASE_URL } from "../lib/config";
 
 // ============================================================================
 // Type Definitions
@@ -234,7 +233,7 @@ const StatCard: React.FC<StatCardProps> = ({
   colorClass = "text-brand-blue",
 }) => {
   const content = (
-    <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg group">
+    <div className="bg-white dark:bg-dark-surface rounded-xl shadow p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg group">
       <div className="flex items-center justify-between">
         <div className="flex items-center">
           <div
@@ -298,7 +297,10 @@ const LoadingSkeleton: React.FC = () => (
   <div className="animate-pulse space-y-6">
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
       {[1, 2, 3, 4].map((i) => (
-        <div key={i} className="bg-white dark:bg-dark-surface rounded-lg p-5 h-24">
+        <div
+          key={i}
+          className="bg-white dark:bg-dark-surface rounded-lg p-5 h-24"
+        >
           <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mb-2" />
           <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-1/3" />
         </div>
@@ -306,7 +308,10 @@ const LoadingSkeleton: React.FC = () => (
     </div>
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {[1, 2].map((i) => (
-        <div key={i} className="bg-white dark:bg-dark-surface rounded-lg p-6 h-64">
+        <div
+          key={i}
+          className="bg-white dark:bg-dark-surface rounded-lg p-6 h-64"
+        >
           <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" />
           <div className="space-y-3">
             {[1, 2, 3, 4].map((j) => (
@@ -632,7 +637,7 @@ const PopularCardsSection: React.FC<{
           <Link
             key={card.card_id}
             to={`/signals/${card.card_slug || card.card_id}`}
-            className="block p-3 bg-gray-50 dark:bg-dark-surface rounded-lg hover:bg-gray-100 dark:hover:bg-[#252860] transition-colors"
+            className="block p-3 bg-gray-50 dark:bg-dark-surface rounded-lg hover:bg-gray-100 dark:hover:bg-dark-surface-elevated transition-colors"
           >
             <div className="flex items-start justify-between">
               <div className="flex-1 min-w-0">
@@ -773,7 +778,7 @@ const AnalyticsV2: React.FC = () => {
           className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
             activeTab === "system"
               ? "bg-brand-blue text-white"
-              : "bg-white dark:bg-dark-surface text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#3d4176]"
+              : "bg-white dark:bg-dark-surface text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-dark-surface-elevated"
           }`}
         >
           <Globe className="h-4 w-4" />
@@ -784,7 +789,7 @@ const AnalyticsV2: React.FC = () => {
           className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
             activeTab === "personal"
               ? "bg-brand-blue text-white"
-              : "bg-white dark:bg-dark-surface text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#3d4176]"
+              : "bg-white dark:bg-dark-surface text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-dark-surface-elevated"
           }`}
         >
           <UserCircle className="h-4 w-4" />
@@ -894,7 +899,7 @@ const AnalyticsV2: React.FC = () => {
                     <Link
                       key={card.card_id}
                       to={`/signals/${card.card_slug || card.card_id}`}
-                      className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-dark-surface rounded-lg hover:bg-gray-100 dark:hover:bg-[#252860] transition-colors"
+                      className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-dark-surface rounded-lg hover:bg-gray-100 dark:hover:bg-dark-surface-elevated transition-colors"
                     >
                       <span className="w-6 h-6 flex items-center justify-center text-sm font-bold text-white bg-amber-500 rounded-full">
                         {idx + 1}
@@ -977,7 +982,7 @@ const AnalyticsV2: React.FC = () => {
                     <Link
                       key={item.card_id}
                       to={`/signals/${item.card_slug || item.card_id}`}
-                      className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-[#1e2048] transition-colors"
+                      className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-surface-deep transition-colors"
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="font-medium text-sm text-gray-900 dark:text-white truncate">
@@ -1043,7 +1048,7 @@ const AnalyticsV2: React.FC = () => {
               </p>
             </div>
           </div>
-          <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-brand-blue group-hover:translate-x-1 transition-all" />
+          <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-brand-blue group-hover:translate-x-1 transition-all duration-200" />
         </Link>
 
         <Link
@@ -1063,7 +1068,7 @@ const AnalyticsV2: React.FC = () => {
               </p>
             </div>
           </div>
-          <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-extended-purple group-hover:translate-x-1 transition-all" />
+          <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-extended-purple group-hover:translate-x-1 transition-all duration-200" />
         </Link>
 
         <Link
@@ -1083,7 +1088,7 @@ const AnalyticsV2: React.FC = () => {
               </p>
             </div>
           </div>
-          <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-extended-orange group-hover:translate-x-1 transition-all" />
+          <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-extended-orange group-hover:translate-x-1 transition-all duration-200" />
         </Link>
       </div>
 

@@ -4,8 +4,7 @@ import { Sparkles, ArrowRight } from "lucide-react";
 import { PillarBadge } from "./PillarBadge";
 import { supabase } from "../App";
 import { cn } from "../lib/utils";
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+import { API_BASE_URL } from "../lib/config";
 
 // ---------------------------------------------------------------------------
 // Types

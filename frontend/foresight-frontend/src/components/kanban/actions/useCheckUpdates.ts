@@ -5,9 +5,8 @@
  * Searches for recent developments and news about the card topic.
  */
 
-import { useState, useCallback } from 'react';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { useState, useCallback } from "react";
+import { API_BASE_URL } from "../../../lib/config";
 
 interface UseCheckUpdatesOptions {
   /** Callback when check starts */
@@ -36,7 +35,7 @@ interface CheckUpdatesResult {
 export function useCheckUpdates(
   getToken: () => Promise<string | null>,
   workstreamId: string,
-  options: UseCheckUpdatesOptions = {}
+  options: UseCheckUpdatesOptions = {},
 ) {
   // Destructure options to avoid stale closure issues with default {} object
   const { onStart, onSuccess, onError } = options;
@@ -54,7 +53,7 @@ export function useCheckUpdates(
       try {
         const token = await getToken();
         if (!token) {
-          throw new Error('Authentication required');
+          throw new Error("Authentication required");
         }
 
         // Call the check updates endpoint
@@ -62,18 +61,20 @@ export function useCheckUpdates(
         const response = await fetch(
           `${API_BASE_URL}/api/v1/me/workstreams/${workstreamId}/cards/${cardId}/check-updates`,
           {
-            method: 'POST',
+            method: "POST",
             headers: {
-              'Content-Type': 'application/json',
+              "Content-Type": "application/json",
               Authorization: `Bearer ${token}`,
             },
-          }
+          },
         );
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(
-            errorData.message || errorData.detail || `Check updates failed: ${response.status}`
+            errorData.message ||
+              errorData.detail ||
+              `Check updates failed: ${response.status}`,
           );
         }
 
@@ -82,7 +83,8 @@ export function useCheckUpdates(
         onSuccess?.(cardId, result);
         return result;
       } catch (err) {
-        const error = err instanceof Error ? err : new Error('Check updates failed');
+        const error =
+          err instanceof Error ? err : new Error("Check updates failed");
         setError((prev) => ({ ...prev, [cardId]: error }));
         onError?.(cardId, error);
         return null;
@@ -90,22 +92,22 @@ export function useCheckUpdates(
         setIsChecking((prev) => ({ ...prev, [cardId]: false }));
       }
     },
-    [getToken, workstreamId, onStart, onSuccess, onError]
+    [getToken, workstreamId, onStart, onSuccess, onError],
   );
 
   const isCardChecking = useCallback(
     (cardId: string): boolean => isChecking[cardId] ?? false,
-    [isChecking]
+    [isChecking],
   );
 
   const getCardError = useCallback(
     (cardId: string): Error | null => error[cardId] ?? null,
-    [error]
+    [error],
   );
 
   const getLastChecked = useCallback(
     (cardId: string): Date | null => lastChecked[cardId] ?? null,
-    [lastChecked]
+    [lastChecked],
   );
 
   const clearError = useCallback((cardId: string) => {

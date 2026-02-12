@@ -6,7 +6,7 @@
  * as well as triggering deep dives and auto-population of workstreams.
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { API_BASE_URL } from "./config";
 
 // ============================================================================
 // Types
@@ -22,7 +22,13 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
  * - watching: Cards to monitor for future developments
  * - archived: Completed or dismissed cards
  */
-export type KanbanStatus = 'inbox' | 'screening' | 'research' | 'brief' | 'watching' | 'archived';
+export type KanbanStatus =
+  | "inbox"
+  | "screening"
+  | "research"
+  | "brief"
+  | "watching"
+  | "archived";
 
 /**
  * Detailed card information embedded within workstream cards.
@@ -42,7 +48,7 @@ export interface CardDetails {
   /** Numeric stage identifier (1-8) representing maturity */
   stage_id: number;
   /** Innovation horizon classification */
-  horizon: 'H1' | 'H2' | 'H3';
+  horizon: "H1" | "H2" | "H3";
   /** Novelty score (0-100) indicating how new/unique the concept is */
   novelty_score: number;
   /** Maturity score (0-100) indicating development stage */
@@ -72,7 +78,7 @@ export interface WorkstreamCard {
   /** Optional reminder timestamp (ISO format) */
   reminder_at: string | null;
   /** How the card was added to the workstream */
-  added_from: 'manual' | 'auto' | 'follow';
+  added_from: "manual" | "auto" | "follow";
   /** Timestamp when the card was added (ISO format) */
   added_at: string;
   /** Timestamp of last update (ISO format) */
@@ -124,7 +130,11 @@ export interface AutoPopulateResponse {
  * - completed: Brief has been successfully generated
  * - failed: Brief generation encountered an error
  */
-export type BriefGenerationStatus = 'pending' | 'generating' | 'completed' | 'failed';
+export type BriefGenerationStatus =
+  | "pending"
+  | "generating"
+  | "completed"
+  | "failed";
 
 /**
  * Executive brief for a workstream card.
@@ -273,7 +283,7 @@ export interface BulkBriefStatusResponse {
  * Request for bulk brief export.
  */
 export interface BulkExportRequest {
-  format: 'pptx' | 'pdf';
+  format: "pptx" | "pdf";
   card_order: string[];
 }
 
@@ -309,20 +319,24 @@ export interface BulkExportResponse {
 async function apiRequest<T>(
   endpoint: string,
   token: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
 ): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
       ...options.headers,
     },
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Request failed' }));
-    throw new Error(error.message || error.detail || `API error: ${response.status}`);
+    const error = await response
+      .json()
+      .catch(() => ({ message: "Request failed" }));
+    throw new Error(
+      error.message || error.detail || `API error: ${response.status}`,
+    );
   }
 
   // Handle 204 No Content
@@ -356,7 +370,9 @@ function createEmptyGroupedCards(): GroupedWorkstreamCards {
  * @param cards - Array of workstream cards to group
  * @returns Cards grouped by Kanban status
  */
-export function groupCardsByStatus(cards: WorkstreamCard[]): GroupedWorkstreamCards {
+export function groupCardsByStatus(
+  cards: WorkstreamCard[],
+): GroupedWorkstreamCards {
   const grouped = createEmptyGroupedCards();
 
   for (const card of cards) {
@@ -393,12 +409,12 @@ export function groupCardsByStatus(cards: WorkstreamCard[]): GroupedWorkstreamCa
  */
 export async function fetchWorkstreamCards(
   token: string,
-  workstreamId: string
+  workstreamId: string,
 ): Promise<GroupedWorkstreamCards> {
   // Backend returns already grouped response
   const response = await apiRequest<GroupedWorkstreamCards>(
     `/api/v1/me/workstreams/${workstreamId}/cards`,
-    token
+    token,
   );
 
   // Ensure all status keys exist with proper defaults
@@ -434,7 +450,7 @@ export async function addCardToWorkstream(
   workstreamId: string,
   cardId: string,
   status?: KanbanStatus,
-  notes?: string
+  notes?: string,
 ): Promise<WorkstreamCard> {
   const body: Record<string, unknown> = { card_id: cardId };
 
@@ -450,9 +466,9 @@ export async function addCardToWorkstream(
     `/api/v1/me/workstreams/${workstreamId}/cards`,
     token,
     {
-      method: 'POST',
+      method: "POST",
       body: JSON.stringify(body),
-    }
+    },
   );
 }
 
@@ -490,15 +506,15 @@ export async function updateWorkstreamCard(
     position?: number;
     notes?: string;
     reminder_at?: string | null;
-  }
+  },
 ): Promise<WorkstreamCard> {
   return apiRequest<WorkstreamCard>(
     `/api/v1/me/workstreams/${workstreamId}/cards/${cardId}`,
     token,
     {
-      method: 'PATCH',
+      method: "PATCH",
       body: JSON.stringify(updates),
-    }
+    },
   );
 }
 
@@ -519,14 +535,14 @@ export async function updateWorkstreamCard(
 export async function removeCardFromWorkstream(
   token: string,
   workstreamId: string,
-  cardId: string
+  cardId: string,
 ): Promise<void> {
   return apiRequest<void>(
     `/api/v1/me/workstreams/${workstreamId}/cards/${cardId}`,
     token,
     {
-      method: 'DELETE',
-    }
+      method: "DELETE",
+    },
   );
 }
 
@@ -549,14 +565,14 @@ export async function removeCardFromWorkstream(
 export async function triggerDeepDive(
   token: string,
   workstreamId: string,
-  cardId: string
+  cardId: string,
 ): Promise<DeepDiveResponse> {
   return apiRequest<DeepDiveResponse>(
     `/api/v1/me/workstreams/${workstreamId}/cards/${cardId}/deep-dive`,
     token,
     {
-      method: 'POST',
-    }
+      method: "POST",
+    },
   );
 }
 
@@ -579,7 +595,7 @@ export async function triggerDeepDive(
 export async function autoPopulateWorkstream(
   token: string,
   workstreamId: string,
-  limit?: number
+  limit?: number,
 ): Promise<AutoPopulateResponse> {
   const body: Record<string, unknown> = {};
 
@@ -591,9 +607,9 @@ export async function autoPopulateWorkstream(
     `/api/v1/me/workstreams/${workstreamId}/auto-populate`,
     token,
     {
-      method: 'POST',
+      method: "POST",
       body: JSON.stringify(body),
-    }
+    },
   );
 }
 
@@ -610,9 +626,9 @@ export interface WorkstreamResearchStatus {
   /** UUID of the research task */
   task_id: string;
   /** Type of research (quick_update, deep_research) */
-  task_type: 'quick_update' | 'deep_research';
+  task_type: "quick_update" | "deep_research";
   /** Task status */
-  status: 'queued' | 'processing' | 'completed' | 'failed';
+  status: "queued" | "processing" | "completed" | "failed";
   /** When research started */
   started_at?: string;
   /** When research completed */
@@ -643,11 +659,11 @@ export interface WorkstreamResearchStatusResponse {
  */
 export async function fetchResearchStatus(
   token: string,
-  workstreamId: string
+  workstreamId: string,
 ): Promise<WorkstreamResearchStatusResponse> {
   return apiRequest<WorkstreamResearchStatusResponse>(
     `/api/v1/me/workstreams/${workstreamId}/research-status`,
-    token
+    token,
   );
 }
 
@@ -675,14 +691,14 @@ export async function fetchResearchStatus(
 export async function generateBrief(
   token: string,
   workstreamId: string,
-  cardId: string
+  cardId: string,
 ): Promise<GenerateBriefResponse> {
   return apiRequest<GenerateBriefResponse>(
     `/api/v1/me/workstreams/${workstreamId}/cards/${cardId}/brief`,
     token,
     {
-      method: 'POST',
-    }
+      method: "POST",
+    },
   );
 }
 
@@ -710,7 +726,7 @@ export async function getBrief(
   token: string,
   workstreamId: string,
   cardId: string,
-  version?: number
+  version?: number,
 ): Promise<ExecutiveBrief> {
   const url = version
     ? `/api/v1/me/workstreams/${workstreamId}/cards/${cardId}/brief?version=${version}`
@@ -736,11 +752,11 @@ export async function getBrief(
 export async function getBriefVersions(
   token: string,
   workstreamId: string,
-  cardId: string
+  cardId: string,
 ): Promise<BriefVersionsResponse> {
   return apiRequest<BriefVersionsResponse>(
     `/api/v1/me/workstreams/${workstreamId}/cards/${cardId}/brief/versions`,
-    token
+    token,
   );
 }
 
@@ -767,11 +783,11 @@ export async function getBriefVersions(
 export async function getBriefStatus(
   token: string,
   workstreamId: string,
-  cardId: string
+  cardId: string,
 ): Promise<BriefStatus> {
   return apiRequest<BriefStatus>(
     `/api/v1/me/workstreams/${workstreamId}/cards/${cardId}/brief/status`,
-    token
+    token,
   );
 }
 
@@ -798,8 +814,8 @@ export async function exportBrief(
   token: string,
   workstreamId: string,
   cardId: string,
-  format: 'pdf' | 'pptx',
-  version?: number
+  format: "pdf" | "pptx",
+  version?: number,
 ): Promise<boolean> {
   const url = version
     ? `${API_BASE_URL}/api/v1/me/workstreams/${workstreamId}/cards/${cardId}/brief/export/${format}?version=${version}`
@@ -807,17 +823,21 @@ export async function exportBrief(
 
   try {
     const response = await fetch(url, {
-      method: 'GET',
+      method: "GET",
       headers: {
         Authorization: `Bearer ${token}`,
       },
     });
 
     if (!response.ok) {
-      const contentType = response.headers.get('content-type');
-      if (contentType?.includes('application/json')) {
+      const contentType = response.headers.get("content-type");
+      if (contentType?.includes("application/json")) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || errorData.message || `Export failed: ${response.status}`);
+        throw new Error(
+          errorData.detail ||
+            errorData.message ||
+            `Export failed: ${response.status}`,
+        );
       }
       throw new Error(`Export failed: ${response.status}`);
     }
@@ -826,19 +846,21 @@ export async function exportBrief(
     const blob = await response.blob();
 
     // Extract filename from Content-Disposition header or use default
-    const contentDisposition = response.headers.get('content-disposition');
+    const contentDisposition = response.headers.get("content-disposition");
     let filename = `brief-export.${format}`;
 
     if (contentDisposition) {
-      const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+      const filenameMatch = contentDisposition.match(
+        /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/,
+      );
       if (filenameMatch && filenameMatch[1]) {
-        filename = filenameMatch[1].replace(/['"]/g, '');
+        filename = filenameMatch[1].replace(/['"]/g, "");
       }
     }
 
     // Create download link and trigger click
     const downloadUrl = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = downloadUrl;
     link.download = filename;
     document.body.appendChild(link);
@@ -848,7 +870,7 @@ export async function exportBrief(
 
     return true;
   } catch (error) {
-    console.error('Brief export failed:', error);
+    console.error("Brief export failed:", error);
     throw error;
   }
 }
@@ -867,11 +889,11 @@ export async function exportBrief(
  */
 export async function getBulkBriefStatus(
   token: string,
-  workstreamId: string
+  workstreamId: string,
 ): Promise<BulkBriefStatusResponse> {
   return apiRequest<BulkBriefStatusResponse>(
     `/api/v1/me/workstreams/${workstreamId}/bulk-brief-status`,
-    token
+    token,
   );
 }
 
@@ -889,56 +911,62 @@ export async function getBulkBriefStatus(
 export async function exportBulkBriefs(
   token: string,
   workstreamId: string,
-  format: 'pptx' | 'pdf',
-  cardOrder: string[]
+  format: "pptx" | "pdf",
+  cardOrder: string[],
 ): Promise<BulkExportResponse> {
   const response = await fetch(
     `${API_BASE_URL}/api/v1/me/workstreams/${workstreamId}/bulk-brief-export`,
     {
-      method: 'POST',
+      method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         format,
         card_order: cardOrder,
       }),
-    }
+    },
   );
 
   if (!response.ok) {
-    const contentType = response.headers.get('content-type');
-    if (contentType?.includes('application/json')) {
+    const contentType = response.headers.get("content-type");
+    if (contentType?.includes("application/json")) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.detail || errorData.message || `Export failed: ${response.status}`);
+      throw new Error(
+        errorData.detail ||
+          errorData.message ||
+          `Export failed: ${response.status}`,
+      );
     }
     throw new Error(`Export failed: ${response.status}`);
   }
 
   // Check content type to determine response handling
-  const contentType = response.headers.get('content-type');
-  
+  const contentType = response.headers.get("content-type");
+
   // If JSON response (unlikely but handle it)
-  if (contentType?.includes('application/json')) {
+  if (contentType?.includes("application/json")) {
     return response.json();
   }
-  
+
   // File download response - extract and trigger download
   const blob = await response.blob();
-  const contentDisposition = response.headers.get('content-disposition');
+  const contentDisposition = response.headers.get("content-disposition");
   let filename = `portfolio-export.${format}`;
 
   if (contentDisposition) {
-    const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+    const filenameMatch = contentDisposition.match(
+      /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/,
+    );
     if (filenameMatch && filenameMatch[1]) {
-      filename = filenameMatch[1].replace(/['"]/g, '');
+      filename = filenameMatch[1].replace(/['"]/g, "");
     }
   }
 
   // Trigger download
   const downloadUrl = window.URL.createObjectURL(blob);
-  const link = document.createElement('a');
+  const link = document.createElement("a");
   link.href = downloadUrl;
   link.download = filename;
   document.body.appendChild(link);
@@ -948,8 +976,8 @@ export async function exportBulkBriefs(
 
   // Return success response
   return {
-    status: 'success',
-    message: 'Portfolio downloaded successfully',
+    status: "success",
+    message: "Portfolio downloaded successfully",
     format,
     total_cards: cardOrder.length,
   };
@@ -968,7 +996,7 @@ export interface WorkstreamScanResponse {
   /** UUID of the workstream */
   workstream_id: string;
   /** Scan status (queued, running, completed, failed) */
-  status: 'queued' | 'running' | 'completed' | 'failed';
+  status: "queued" | "running" | "completed" | "failed";
   /** User-friendly status message */
   message: string;
 }
@@ -1006,7 +1034,7 @@ export interface WorkstreamScanResults {
 export interface WorkstreamScanStatusResponse {
   scan_id: string;
   workstream_id: string;
-  status: 'queued' | 'running' | 'completed' | 'failed';
+  status: "queued" | "running" | "completed" | "failed";
   config?: WorkstreamScanConfig;
   results?: WorkstreamScanResults;
   started_at?: string;
@@ -1026,11 +1054,11 @@ export interface WorkstreamScanHistoryResponse {
 
 /**
  * Start a targeted discovery scan for a workstream.
- * 
+ *
  * Generates queries from workstream keywords and pillars, fetches content
  * from all 5 source categories, and creates new cards that are added to
  * the global pool and auto-added to the workstream inbox.
- * 
+ *
  * Rate limited to 2 scans per workstream per day.
  *
  * @param token - Bearer authentication token
@@ -1052,20 +1080,20 @@ export interface WorkstreamScanHistoryResponse {
  */
 export async function startWorkstreamScan(
   token: string,
-  workstreamId: string
+  workstreamId: string,
 ): Promise<WorkstreamScanResponse> {
   return apiRequest<WorkstreamScanResponse>(
     `/api/v1/me/workstreams/${workstreamId}/scan`,
     token,
     {
-      method: 'POST',
-    }
+      method: "POST",
+    },
   );
 }
 
 /**
  * Get the status of a workstream scan.
- * 
+ *
  * Returns the latest scan status by default, or a specific scan if scan_id provided.
  * Use this for polling during scan execution.
  *
@@ -1086,7 +1114,7 @@ export async function startWorkstreamScan(
 export async function getWorkstreamScanStatus(
   token: string,
   workstreamId: string,
-  scanId?: string
+  scanId?: string,
 ): Promise<WorkstreamScanStatusResponse> {
   const url = scanId
     ? `/api/v1/me/workstreams/${workstreamId}/scan/status?scan_id=${scanId}`
@@ -1096,7 +1124,7 @@ export async function getWorkstreamScanStatus(
 
 /**
  * Get scan history for a workstream.
- * 
+ *
  * Returns recent scans and remaining daily quota.
  *
  * @param token - Bearer authentication token
@@ -1113,7 +1141,7 @@ export async function getWorkstreamScanStatus(
 export async function getWorkstreamScanHistory(
   token: string,
   workstreamId: string,
-  limit?: number
+  limit?: number,
 ): Promise<WorkstreamScanHistoryResponse> {
   const url = limit
     ? `/api/v1/me/workstreams/${workstreamId}/scan/history?limit=${limit}`
