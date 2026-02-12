@@ -28,7 +28,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
 
 import matplotlib
-matplotlib.use('Agg')  # Non-GUI backend - must be set before importing pyplot
+
+matplotlib.use("Agg")  # Non-GUI backend - must be set before importing pyplot
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -91,33 +92,33 @@ logger = logging.getLogger(__name__)
 # https://austin.gov/design/brand
 COA_BRAND_COLORS = {
     # Official Palette
-    "logo_blue": "#44499C",      # Primary - headers, titles, accents
-    "logo_green": "#009F4D",     # Secondary - highlights, positive indicators
-    "faded_white": "#f7f6f5",    # Backgrounds
+    "logo_blue": "#44499C",  # Primary - headers, titles, accents
+    "logo_green": "#009F4D",  # Secondary - highlights, positive indicators
+    "faded_white": "#f7f6f5",  # Backgrounds
     # Supporting Palette
-    "dark_blue": "#22254E",      # Emphasis text
+    "dark_blue": "#22254E",  # Emphasis text
     "dark_green": "#005027",
-    "light_blue": "#dcf2fd",     # Subtle backgrounds
-    "light_green": "#dff0e3",    # Callout boxes
+    "light_blue": "#dcf2fd",  # Subtle backgrounds
+    "light_green": "#dff0e3",  # Callout boxes
     # Extended Palette
-    "red": "#F83125",            # Risks, concerns
+    "red": "#F83125",  # Risks, concerns
     "orange": "#FF8F00",
     "yellow": "#FFC600",
     "cyan": "#009CDE",
-    "dark_gray": "#636262",      # Body text
+    "dark_gray": "#636262",  # Body text
     "black": "#000000",
 }
 
 # Foresight branding colors - mapped to City of Austin brand
 FORESIGHT_COLORS = {
-    "primary": COA_BRAND_COLORS["logo_blue"],      # Official Logo Blue
-    "secondary": COA_BRAND_COLORS["logo_green"],   # Official Logo Green
-    "accent": COA_BRAND_COLORS["cyan"],            # Cyan accent
-    "success": COA_BRAND_COLORS["logo_green"],     # Green for positive metrics
-    "warning": COA_BRAND_COLORS["yellow"],         # Yellow for warnings
-    "danger": COA_BRAND_COLORS["red"],             # Red for negative/risk
-    "light": COA_BRAND_COLORS["faded_white"],      # Light background
-    "dark": COA_BRAND_COLORS["dark_gray"],         # Dark text
+    "primary": COA_BRAND_COLORS["logo_blue"],  # Official Logo Blue
+    "secondary": COA_BRAND_COLORS["logo_green"],  # Official Logo Green
+    "accent": COA_BRAND_COLORS["cyan"],  # Cyan accent
+    "success": COA_BRAND_COLORS["logo_green"],  # Green for positive metrics
+    "warning": COA_BRAND_COLORS["yellow"],  # Yellow for warnings
+    "danger": COA_BRAND_COLORS["red"],  # Red for negative/risk
+    "light": COA_BRAND_COLORS["faded_white"],  # Light background
+    "dark": COA_BRAND_COLORS["dark_gray"],  # Dark text
 }
 
 # Score colors for charts - using COA brand palette
@@ -157,10 +158,11 @@ PDF_SMALL_FONT_SIZE = 9
 PDF_CHART_WIDTH = 5.5 * inch
 PDF_CHART_HEIGHT = 4 * inch
 
+
 # ReportLab color conversion helper
 def hex_to_rl_color(hex_color: str) -> rl_colors.Color:
     """Convert hex color string to ReportLab Color object."""
-    hex_color = hex_color.lstrip('#')
+    hex_color = hex_color.lstrip("#")
     r = int(hex_color[:2], 16) / 255.0
     g = int(hex_color[2:4], 16) / 255.0
     b = int(hex_color[4:6], 16) / 255.0
@@ -185,30 +187,98 @@ PDF_COLORS = {
 
 # Pillar colors matching the frontend
 PILLAR_COLORS = {
-    "CH": {"name": "Community Health & Sustainability", "color": "#22c55e", "bg": "#dcfce7", "icon": "♥"},
-    "EW": {"name": "Economic & Workforce Development", "color": "#3b82f6", "bg": "#dbeafe", "icon": "💼"},
-    "HG": {"name": "High-Performing Government", "color": "#6366f1", "bg": "#e0e7ff", "icon": "🏛"},
-    "HH": {"name": "Homelessness & Housing", "color": "#ec4899", "bg": "#fce7f3", "icon": "🏠"},
-    "MC": {"name": "Mobility & Critical Infrastructure", "color": "#f59e0b", "bg": "#fef3c7", "icon": "🚗"},
+    "CH": {
+        "name": "Community Health & Sustainability",
+        "color": "#22c55e",
+        "bg": "#dcfce7",
+        "icon": "♥",
+    },
+    "EW": {
+        "name": "Economic & Workforce Development",
+        "color": "#3b82f6",
+        "bg": "#dbeafe",
+        "icon": "💼",
+    },
+    "HG": {
+        "name": "High-Performing Government",
+        "color": "#6366f1",
+        "bg": "#e0e7ff",
+        "icon": "🏛",
+    },
+    "HH": {
+        "name": "Homelessness & Housing",
+        "color": "#ec4899",
+        "bg": "#fce7f3",
+        "icon": "🏠",
+    },
+    "MC": {
+        "name": "Mobility & Critical Infrastructure",
+        "color": "#f59e0b",
+        "bg": "#fef3c7",
+        "icon": "🚗",
+    },
     "PS": {"name": "Public Safety", "color": "#ef4444", "bg": "#fee2e2", "icon": "🛡"},
-    "ES": {"name": "Environmental Sustainability", "color": "#059669", "bg": "#d1fae5", "icon": "🌿"},
+    "ES": {
+        "name": "Environmental Sustainability",
+        "color": "#059669",
+        "bg": "#d1fae5",
+        "icon": "🌿",
+    },
 }
 
 # Horizon colors matching the frontend
 HORIZON_COLORS = {
-    "H1": {"name": "Mainstream", "timeframe": "0-3 years", "color": "#22c55e", "bg": "#dcfce7", "description": "Current system, confirms baseline"},
-    "H2": {"name": "Transitional", "timeframe": "3-7 years", "color": "#f59e0b", "bg": "#fef3c7", "description": "Emerging alternatives, pilots"},
-    "H3": {"name": "Transformative", "timeframe": "7-15+ years", "color": "#a855f7", "bg": "#f3e8ff", "description": "Weak signals, novel possibilities"},
+    "H1": {
+        "name": "Mainstream",
+        "timeframe": "0-3 years",
+        "color": "#22c55e",
+        "bg": "#dcfce7",
+        "description": "Current system, confirms baseline",
+    },
+    "H2": {
+        "name": "Transitional",
+        "timeframe": "3-7 years",
+        "color": "#f59e0b",
+        "bg": "#fef3c7",
+        "description": "Emerging alternatives, pilots",
+    },
+    "H3": {
+        "name": "Transformative",
+        "timeframe": "7-15+ years",
+        "color": "#a855f7",
+        "bg": "#f3e8ff",
+        "description": "Weak signals, novel possibilities",
+    },
 }
 
 # Stage definitions matching the frontend
 STAGE_INFO = {
-    1: {"name": "Concept", "horizon": "H3", "description": "Academic research, theoretical exploration"},
-    2: {"name": "Emerging", "horizon": "H3", "description": "Startups forming, patents filed"},
+    1: {
+        "name": "Concept",
+        "horizon": "H3",
+        "description": "Academic research, theoretical exploration",
+    },
+    2: {
+        "name": "Emerging",
+        "horizon": "H3",
+        "description": "Startups forming, patents filed",
+    },
     3: {"name": "Prototype", "horizon": "H2", "description": "Working demos exist"},
-    4: {"name": "Pilot", "horizon": "H2", "description": "Real-world testing (private sector)"},
-    5: {"name": "Municipal Pilot", "horizon": "H2", "description": "Government entity testing"},
-    6: {"name": "Early Adoption", "horizon": "H1", "description": "Multiple cities implementing"},
+    4: {
+        "name": "Pilot",
+        "horizon": "H2",
+        "description": "Real-world testing (private sector)",
+    },
+    5: {
+        "name": "Municipal Pilot",
+        "horizon": "H2",
+        "description": "Government entity testing",
+    },
+    6: {
+        "name": "Early Adoption",
+        "horizon": "H1",
+        "description": "Multiple cities implementing",
+    },
     7: {"name": "Mainstream", "horizon": "H1", "description": "Widespread adoption"},
     8: {"name": "Mature", "horizon": "H1", "description": "Established, commoditized"},
 }
@@ -217,24 +287,30 @@ STAGE_INFO = {
 # Branding Assets & AI Disclosure
 # ============================================================================
 
+
 # Path to City of Austin logo (relative to backend directory)
 def _get_logo_path() -> Optional[str]:
     """Get the path to the City of Austin logo, checking multiple locations."""
     # Check relative to this file's location
-    base_dir = Path(__file__).parent.parent.parent  # Go up from app/ to backend/ to project root
+    base_dir = Path(
+        __file__
+    ).parent.parent.parent  # Go up from app/ to backend/ to project root
     possible_paths = [
         base_dir / "branding" / "COA-Logo-Horizontal-Official-RGB.png",
         base_dir / "branding" / "COA-Icon-Official-RGB.png",
-        Path("/app/branding/COA-Logo-Horizontal-Official-RGB.png"),  # Railway deployment
+        Path(
+            "/app/branding/COA-Logo-Horizontal-Official-RGB.png"
+        ),  # Railway deployment
         Path("/app/branding/COA-Icon-Official-RGB.png"),  # Railway deployment fallback
     ]
-    
+
     for path in possible_paths:
         if path.exists():
             return str(path)
-    
+
     logger.warning("City of Austin logo not found in expected locations")
     return None
+
 
 COA_LOGO_PATH = _get_logo_path()
 
@@ -267,25 +343,26 @@ AI_DISCLOSURE_SHORT = (
 # Professional PDF Builder with Header/Footer
 # ============================================================================
 
+
 class ProfessionalPDFBuilder:
     """
     Custom PDF document builder with professional header and footer.
-    
+
     Used for executive briefs and workstream reports that will be shared
     with senior city leadership.
     """
-    
+
     def __init__(
         self,
         filename: str,
         title: str,
         subtitle: Optional[str] = None,
         include_logo: bool = True,
-        include_ai_disclosure: bool = True
+        include_ai_disclosure: bool = True,
     ):
         """
         Initialize the PDF builder.
-        
+
         Args:
             filename: Output PDF file path
             title: Document title for header
@@ -299,25 +376,37 @@ class ProfessionalPDFBuilder:
         self.include_logo = include_logo
         self.include_ai_disclosure = include_ai_disclosure
         self.page_width, self.page_height = letter
-        
+
         # Margins - extra space at top/bottom for header/footer
         self.left_margin = 0.75 * inch
         self.right_margin = 0.75 * inch
         self.top_margin = 1.4 * inch  # Extra space for header
         self.bottom_margin = 1.2 * inch  # Extra space for footer
-        
+
     def _draw_header(self, canvas_obj: canvas.Canvas, doc):
         """Draw the professional header on each page."""
         canvas_obj.saveState()
 
         # Header background - clean white
         canvas_obj.setFillColor(rl_colors.white)
-        canvas_obj.rect(0, self.page_height - 1.1 * inch, self.page_width, 1.1 * inch, fill=True, stroke=False)
+        canvas_obj.rect(
+            0,
+            self.page_height - 1.1 * inch,
+            self.page_width,
+            1.1 * inch,
+            fill=True,
+            stroke=False,
+        )
 
         # Add accent line below header - primary blue for brand consistency
         canvas_obj.setStrokeColor(PDF_COLORS["primary"])
         canvas_obj.setLineWidth(2)
-        canvas_obj.line(0, self.page_height - 1.1 * inch, self.page_width, self.page_height - 1.1 * inch)
+        canvas_obj.line(
+            0,
+            self.page_height - 1.1 * inch,
+            self.page_width,
+            self.page_height - 1.1 * inch,
+        )
 
         # City of Austin logo (if available and enabled)
         logo_width = 0
@@ -333,7 +422,7 @@ class ProfessionalPDFBuilder:
                     width=logo_width,
                     height=logo_height,
                     preserveAspectRatio=True,
-                    mask='auto'
+                    mask="auto",
                 )
                 logo_width += 0.25 * inch  # Add spacing after logo
             except Exception as e:
@@ -345,7 +434,12 @@ class ProfessionalPDFBuilder:
             canvas_obj.setStrokeColor(hex_to_rl_color("#E0E0E0"))
             canvas_obj.setLineWidth(1)
             sep_x = self.left_margin + logo_width + 0.1 * inch
-            canvas_obj.line(sep_x, self.page_height - 0.25 * inch, sep_x, self.page_height - 0.95 * inch)
+            canvas_obj.line(
+                sep_x,
+                self.page_height - 0.25 * inch,
+                sep_x,
+                self.page_height - 0.95 * inch,
+            )
             logo_width += 0.25 * inch  # Extra spacing after separator
 
         # Foresight branding text
@@ -359,7 +453,9 @@ class ProfessionalPDFBuilder:
         # "Strategic Intelligence Platform" subtitle - gray
         canvas_obj.setFillColor(rl_colors.gray)
         canvas_obj.setFont("Helvetica", 9)
-        canvas_obj.drawString(text_x, self.page_height - 0.62 * inch, "Strategic Intelligence Platform")
+        canvas_obj.drawString(
+            text_x, self.page_height - 0.62 * inch, "Strategic Intelligence Platform"
+        )
 
         # Document title on right side - black
         canvas_obj.setFillColor(PDF_COLORS["dark"])
@@ -369,7 +465,7 @@ class ProfessionalPDFBuilder:
         canvas_obj.drawString(
             self.page_width - self.right_margin - title_width,
             self.page_height - 0.45 * inch,
-            title_text
+            title_text,
         )
 
         # Page generation date on right - black
@@ -380,74 +476,77 @@ class ProfessionalPDFBuilder:
         canvas_obj.drawString(
             self.page_width - self.right_margin - date_width,
             self.page_height - 0.62 * inch,
-            date_text
+            date_text,
         )
 
         canvas_obj.restoreState()
-    
+
     def _draw_footer(self, canvas_obj: canvas.Canvas, doc):
         """Draw the professional footer on each page."""
         canvas_obj.saveState()
-        
+
         # Footer background
         canvas_obj.setFillColor(hex_to_rl_color("#F8F9FA"))
         canvas_obj.rect(0, 0, self.page_width, 1.0 * inch, fill=True, stroke=False)
-        
+
         # Top border line
         canvas_obj.setStrokeColor(PDF_COLORS["primary"])
         canvas_obj.setLineWidth(1)
-        canvas_obj.line(self.left_margin, 1.0 * inch, self.page_width - self.right_margin, 1.0 * inch)
-        
+        canvas_obj.line(
+            self.left_margin,
+            1.0 * inch,
+            self.page_width - self.right_margin,
+            1.0 * inch,
+        )
+
         # AI Technology Disclosure (if enabled)
         if self.include_ai_disclosure:
             canvas_obj.setFillColor(PDF_COLORS["dark"])
             canvas_obj.setFont("Helvetica", 7)
-            
+
             # Multi-line disclosure
             disclosure_lines = [
                 "AI-Powered Intelligence: This report was generated using Anthropic Claude, OpenAI GPT-4o,",
                 "GPT Researcher, Exa AI, Firecrawl, and Tavily. The City of Austin is committed to",
-                "transparent and responsible use of AI technology in public service."
+                "transparent and responsible use of AI technology in public service.",
             ]
-            
+
             y_pos = 0.75 * inch
             for line in disclosure_lines:
                 canvas_obj.drawString(self.left_margin, y_pos, line)
                 y_pos -= 0.12 * inch
-        
+
         # Page number on right
         canvas_obj.setFont("Helvetica", 9)
         page_text = f"Page {doc.page}"
         page_width = canvas_obj.stringWidth(page_text, "Helvetica", 9)
         canvas_obj.drawString(
-            self.page_width - self.right_margin - page_width,
-            0.4 * inch,
-            page_text
+            self.page_width - self.right_margin - page_width, 0.4 * inch, page_text
         )
-        
+
         # Confidentiality notice
         canvas_obj.setFont("Helvetica-Oblique", 7)
         canvas_obj.setFillColor(rl_colors.gray)
         canvas_obj.drawString(
             self.left_margin,
             0.25 * inch,
-            "City of Austin Internal Document - For Official Use"
+            "City of Austin Internal Document - For Official Use",
         )
-        
+
         canvas_obj.restoreState()
-    
+
     def _draw_header_footer(self, canvas_obj: canvas.Canvas, doc):
         """Combined callback for header and footer."""
         self._draw_header(canvas_obj, doc)
         self._draw_footer(canvas_obj, doc)
-    
+
     def build(self, elements: List[Any]) -> str:
         """
         Build the PDF document with all elements.
-        
+
         Args:
             elements: List of ReportLab flowable elements
-            
+
         Returns:
             Path to the generated PDF file
         """
@@ -458,83 +557,81 @@ class ProfessionalPDFBuilder:
             leftMargin=self.left_margin,
             rightMargin=self.right_margin,
             topMargin=self.top_margin,
-            bottomMargin=self.bottom_margin
+            bottomMargin=self.bottom_margin,
         )
-        
+
         # Create frame for content
         frame = Frame(
             self.left_margin,
             self.bottom_margin,
             self.page_width - self.left_margin - self.right_margin,
             self.page_height - self.top_margin - self.bottom_margin,
-            id='normal'
+            id="normal",
         )
-        
+
         # Create page template with header/footer
         template = PageTemplate(
-            id='professional',
-            frames=[frame],
-            onPage=self._draw_header_footer
+            id="professional", frames=[frame], onPage=self._draw_header_footer
         )
-        
+
         doc.addPageTemplates([template])
         doc.build(elements)
-        
+
         return self.filename
 
 
 def get_professional_pdf_styles() -> Dict[str, ParagraphStyle]:
     """
     Create custom paragraph styles for professional PDF generation.
-    
+
     Returns:
         Dictionary of ParagraphStyle objects for executive documents
     """
     styles = getSampleStyleSheet()
-    
+
     return {
-        'DocTitle': ParagraphStyle(
-            'DocTitle',
-            parent=styles['Heading1'],
+        "DocTitle": ParagraphStyle(
+            "DocTitle",
+            parent=styles["Heading1"],
             fontSize=28,
             textColor=PDF_COLORS["primary"],
             spaceAfter=16,
             spaceBefore=8,
             alignment=TA_LEFT,
-            fontName='Helvetica-Bold',
+            fontName="Helvetica-Bold",
             leading=34,
         ),
-        'DocSubtitle': ParagraphStyle(
-            'DocSubtitle',
-            parent=styles['Normal'],
+        "DocSubtitle": ParagraphStyle(
+            "DocSubtitle",
+            parent=styles["Normal"],
             fontSize=14,
             textColor=PDF_COLORS["secondary"],
             spaceAfter=20,
-            fontName='Helvetica',
+            fontName="Helvetica",
             leading=18,
         ),
-        'SectionHeading': ParagraphStyle(
-            'SectionHeading',
-            parent=styles['Heading1'],
+        "SectionHeading": ParagraphStyle(
+            "SectionHeading",
+            parent=styles["Heading1"],
             fontSize=16,
             textColor=PDF_COLORS["primary"],
             spaceBefore=20,
             spaceAfter=10,
-            fontName='Helvetica-Bold',
+            fontName="Helvetica-Bold",
             borderPadding=(0, 0, 4, 0),
         ),
-        'SubsectionHeading': ParagraphStyle(
-            'SubsectionHeading',
-            parent=styles['Heading2'],
+        "SubsectionHeading": ParagraphStyle(
+            "SubsectionHeading",
+            parent=styles["Heading2"],
             fontSize=13,
             textColor=PDF_COLORS["secondary"],
             spaceBefore=14,
             spaceAfter=6,
-            fontName='Helvetica-Bold',
+            fontName="Helvetica-Bold",
         ),
-        'BodyText': ParagraphStyle(
-            'BodyText',
-            parent=styles['Normal'],
+        "BodyText": ParagraphStyle(
+            "BodyText",
+            parent=styles["Normal"],
             fontSize=11,
             textColor=PDF_COLORS["dark"],
             spaceBefore=4,
@@ -542,9 +639,9 @@ def get_professional_pdf_styles() -> Dict[str, ParagraphStyle]:
             leading=15,
             alignment=TA_JUSTIFY,
         ),
-        'BulletText': ParagraphStyle(
-            'BulletText',
-            parent=styles['Normal'],
+        "BulletText": ParagraphStyle(
+            "BulletText",
+            parent=styles["Normal"],
             fontSize=11,
             textColor=PDF_COLORS["dark"],
             spaceBefore=2,
@@ -553,26 +650,26 @@ def get_professional_pdf_styles() -> Dict[str, ParagraphStyle]:
             bulletIndent=10,
             leading=14,
         ),
-        'SmallText': ParagraphStyle(
-            'SmallText',
-            parent=styles['Normal'],
+        "SmallText": ParagraphStyle(
+            "SmallText",
+            parent=styles["Normal"],
             fontSize=9,
             textColor=rl_colors.gray,
             spaceBefore=2,
             spaceAfter=2,
         ),
-        'MetadataText': ParagraphStyle(
-            'MetadataText',
-            parent=styles['Normal'],
+        "MetadataText": ParagraphStyle(
+            "MetadataText",
+            parent=styles["Normal"],
             fontSize=10,
             textColor=PDF_COLORS["dark"],
             spaceBefore=2,
             spaceAfter=2,
-            fontName='Helvetica',
+            fontName="Helvetica",
         ),
-        'CalloutText': ParagraphStyle(
-            'CalloutText',
-            parent=styles['Normal'],
+        "CalloutText": ParagraphStyle(
+            "CalloutText",
+            parent=styles["Normal"],
             fontSize=11,
             textColor=PDF_COLORS["primary"],
             spaceBefore=8,
@@ -583,20 +680,20 @@ def get_professional_pdf_styles() -> Dict[str, ParagraphStyle]:
             backColor=hex_to_rl_color("#F0F4F8"),
             leading=15,
         ),
-        'ExecutiveSummary': ParagraphStyle(
-            'ExecutiveSummary',
-            parent=styles['Normal'],
+        "ExecutiveSummary": ParagraphStyle(
+            "ExecutiveSummary",
+            parent=styles["Normal"],
             fontSize=12,
             textColor=PDF_COLORS["dark"],
             spaceBefore=6,
             spaceAfter=12,
             leading=17,
             alignment=TA_JUSTIFY,
-            fontName='Helvetica',
+            fontName="Helvetica",
         ),
-        'NumberedItem': ParagraphStyle(
-            'NumberedItem',
-            parent=styles['Normal'],
+        "NumberedItem": ParagraphStyle(
+            "NumberedItem",
+            parent=styles["Normal"],
             fontSize=11,
             textColor=PDF_COLORS["dark"],
             spaceBefore=6,
@@ -605,27 +702,27 @@ def get_professional_pdf_styles() -> Dict[str, ParagraphStyle]:
             firstLineIndent=-15,
             leading=14,
         ),
-        'AppendixTitle': ParagraphStyle(
-            'AppendixTitle',
-            parent=styles['Heading1'],
+        "AppendixTitle": ParagraphStyle(
+            "AppendixTitle",
+            parent=styles["Heading1"],
             fontSize=18,
             textColor=PDF_COLORS["primary"],
             spaceBefore=24,
             spaceAfter=16,
-            fontName='Helvetica-Bold',
+            fontName="Helvetica-Bold",
         ),
-        'AppendixHeading': ParagraphStyle(
-            'AppendixHeading',
-            parent=styles['Heading2'],
+        "AppendixHeading": ParagraphStyle(
+            "AppendixHeading",
+            parent=styles["Heading2"],
             fontSize=14,
             textColor=PDF_COLORS["secondary"],
             spaceBefore=16,
             spaceAfter=8,
-            fontName='Helvetica-Bold',
+            fontName="Helvetica-Bold",
         ),
-        'AppendixBody': ParagraphStyle(
-            'AppendixBody',
-            parent=styles['Normal'],
+        "AppendixBody": ParagraphStyle(
+            "AppendixBody",
+            parent=styles["Normal"],
             fontSize=10,
             textColor=PDF_COLORS["dark"],
             spaceBefore=2,
@@ -639,10 +736,11 @@ def get_professional_pdf_styles() -> Dict[str, ParagraphStyle]:
 # Robust Markdown Parser for AI-Generated Content
 # ============================================================================
 
+
 class MarkdownToPDFParser:
     """
     Robust parser for converting markdown to ReportLab PDF elements.
-    
+
     Handles various AI-generated content formats gracefully:
     - Multiple heading styles (# ## ###, underlines, bold headings)
     - Bullet points (-, *, •, >, numbered)
@@ -652,83 +750,84 @@ class MarkdownToPDFParser:
     - Horizontal rules (---, ***, ___)
     - Edge cases: mixed formatting, incomplete markers, nested lists
     """
-    
+
     def __init__(self, styles: Dict[str, ParagraphStyle]):
         """Initialize with PDF styles dictionary."""
         self.styles = styles
         self.import_re()
-    
+
     def import_re(self):
         """Import regex module."""
         import re
+
         self.re = re
-    
+
     def clean_text(self, text: str) -> str:
         """
         Clean and sanitize text for PDF rendering.
-        
+
         - Escapes XML special characters
         - Removes problematic unicode
         - Normalizes whitespace
         """
         if not text:
             return ""
-        
+
         # Replace common problematic characters
-        text = text.replace('\u200b', '')  # Zero-width space
-        text = text.replace('\u00a0', ' ')  # Non-breaking space
-        text = text.replace('\r\n', '\n')
-        text = text.replace('\r', '\n')
-        
+        text = text.replace("\u200b", "")  # Zero-width space
+        text = text.replace("\u00a0", " ")  # Non-breaking space
+        text = text.replace("\r\n", "\n")
+        text = text.replace("\r", "\n")
+
         # Normalize multiple spaces
-        text = self.re.sub(r'  +', ' ', text)
-        
+        text = self.re.sub(r"  +", " ", text)
+
         return text.strip()
-    
+
     def escape_xml(self, text: str) -> str:
         """Escape XML special characters for ReportLab."""
         if not text:
             return ""
-        text = text.replace('&', '&amp;')
-        text = text.replace('<', '&lt;')
-        return text.replace('>', '&gt;')
-    
+        text = text.replace("&", "&amp;")
+        text = text.replace("<", "&lt;")
+        return text.replace(">", "&gt;")
+
     def convert_inline_formatting(self, text: str) -> str:
         """
         Convert markdown inline formatting to ReportLab XML tags.
-        
+
         Handles: **bold**, *italic*, __bold__, _italic_, `code`, [links](url)
         """
         if not text:
             return ""
-        
+
         # First escape XML characters
         text = self.escape_xml(text)
-        
+
         # Convert bold: **text** or __text__
-        text = self.re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
-        text = self.re.sub(r'__(.+?)__', r'<b>\1</b>', text)
-        
+        text = self.re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
+        text = self.re.sub(r"__(.+?)__", r"<b>\1</b>", text)
+
         # Convert italic: *text* or _text_ (but not within words)
         # Be careful not to match already-converted bold markers
-        text = self.re.sub(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', r'<i>\1</i>', text)
-        text = self.re.sub(r'(?<!_)_(?!_)(.+?)(?<!_)_(?!_)', r'<i>\1</i>', text)
-        
+        text = self.re.sub(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", r"<i>\1</i>", text)
+        text = self.re.sub(r"(?<!_)_(?!_)(.+?)(?<!_)_(?!_)", r"<i>\1</i>", text)
+
         # Convert inline code: `code`
-        text = self.re.sub(r'`([^`]+)`', r'<font face="Courier">\1</font>', text)
-        
+        text = self.re.sub(r"`([^`]+)`", r'<font face="Courier">\1</font>', text)
+
         # Convert links: [text](url) -> just the text
-        text = self.re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
-        
+        text = self.re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
+
         # Clean up any leftover asterisks that didn't match patterns
         # This handles edge cases like "* Urgency:" which isn't meant to be italic
-        
+
         return text
-    
+
     def is_heading(self, line: str) -> Optional[Tuple[int, str]]:
         """
         Check if line is a heading. Returns (level, text) or None.
-        
+
         Handles:
         - # Heading 1
         - ## Heading 2
@@ -738,36 +837,32 @@ class MarkdownToPDFParser:
         """
         line = line.strip()
 
-        if match := self.re.match(r'^(#{1,3})\s+(.+)$', line):
+        if match := self.re.match(r"^(#{1,3})\s+(.+)$", line):
             level = len(match.group(1))
             text = match.group(2).strip()
             # Remove trailing # if present
-            text = self.re.sub(r'\s*#+\s*$', '', text)
+            text = self.re.sub(r"\s*#+\s*$", "", text)
             return (level, text)
 
         # All caps section headers (common AI pattern)
-        if self.re.match(r'^[A-Z][A-Z\s&\-]{5,}$', line) and not line.startswith('•'):
+        if self.re.match(r"^[A-Z][A-Z\s&\-]{5,}$", line) and not line.startswith("•"):
             return (2, line.title())
 
         return None
-    
+
     def is_bullet_point(self, line: str) -> Optional[str]:
         """
         Check if line is a bullet point. Returns the bullet text or None.
-        
+
         Handles: -, *, •, >, and numbered lists (1., 2., etc.)
         """
         line = line.strip()
 
-        if match := self.re.match(r'^[\-\*•]\s+(.+)$', line):
+        if match := self.re.match(r"^[\-\*•]\s+(.+)$", line):
             return match.group(1)
 
-        return (
-            match.group(1)
-            if (match := self.re.match(r'^>\s+(.+)$', line))
-            else None
-        )
-    
+        return match.group(1) if (match := self.re.match(r"^>\s+(.+)$", line)) else None
+
     def is_numbered_item(self, line: str) -> Optional[Tuple[str, str]]:
         """
         Check if line is a numbered list item.
@@ -775,150 +870,161 @@ class MarkdownToPDFParser:
         """
         line = line.strip()
 
-        if match := self.re.match(r'^(\d+)[.\)]\s+(.+)$', line):
+        if match := self.re.match(r"^(\d+)[.\)]\s+(.+)$", line):
             return (match.group(1), match.group(2))
 
         return None
-    
+
     def is_horizontal_rule(self, line: str) -> bool:
         """Check if line is a horizontal rule."""
         line = line.strip()
-        return bool(self.re.match(r'^[-*_]{3,}$', line))
-    
+        return bool(self.re.match(r"^[-*_]{3,}$", line))
+
     def parse_to_elements(self, markdown_content: str) -> List[Any]:
         """
         Parse markdown content to ReportLab flowable elements.
-        
+
         This is the main entry point for converting AI-generated markdown
         into properly formatted PDF elements.
         """
         if not markdown_content:
-            return [Paragraph("No content available.", self.styles['BodyText'])]
-        
+            return [Paragraph("No content available.", self.styles["BodyText"])]
+
         elements = []
         markdown_content = self.clean_text(markdown_content)
-        lines = markdown_content.split('\n')
-        
+        lines = markdown_content.split("\n")
+
         current_paragraph_lines = []
         in_code_block = False
         code_block_content = []
-        
+
         def flush_paragraph():
             """Helper to flush accumulated paragraph lines."""
             nonlocal current_paragraph_lines
             if current_paragraph_lines:
-                para_text = ' '.join(current_paragraph_lines)
+                para_text = " ".join(current_paragraph_lines)
                 para_text = self.convert_inline_formatting(para_text)
                 if para_text.strip():
-                    elements.append(Paragraph(para_text, self.styles['BodyText']))
+                    elements.append(Paragraph(para_text, self.styles["BodyText"]))
                 current_paragraph_lines = []
-        
+
         for i, line in enumerate(lines):
             original_line = line
             line_stripped = line.strip()
-            
+
             # Handle code blocks
-            if line_stripped.startswith('```'):
+            if line_stripped.startswith("```"):
                 if in_code_block:
                     # End code block
                     in_code_block = False
                     if code_block_content:
-                        code_text = '\n'.join(code_block_content)
+                        code_text = "\n".join(code_block_content)
                         code_text = self.escape_xml(code_text)
-                        elements.append(Paragraph(
-                            f'<font face="Courier" size="9">{code_text}</font>',
-                            self.styles['BodyText']
-                        ))
+                        elements.append(
+                            Paragraph(
+                                f'<font face="Courier" size="9">{code_text}</font>',
+                                self.styles["BodyText"],
+                            )
+                        )
                         code_block_content = []
                 else:
                     # Start code block
                     flush_paragraph()
                     in_code_block = True
                 continue
-            
+
             if in_code_block:
                 code_block_content.append(line)
                 continue
-            
+
             # Empty line - flush paragraph
             if not line_stripped:
                 flush_paragraph()
                 continue
-            
+
             # Check for horizontal rule
             if self.is_horizontal_rule(line_stripped):
                 flush_paragraph()
                 elements.append(Spacer(1, 8))
-                elements.append(HRFlowable(
-                    width="60%",
-                    thickness=1,
-                    color=PDF_COLORS["light"],
-                    spaceBefore=4,
-                    spaceAfter=8
-                ))
+                elements.append(
+                    HRFlowable(
+                        width="60%",
+                        thickness=1,
+                        color=PDF_COLORS["light"],
+                        spaceBefore=4,
+                        spaceAfter=8,
+                    )
+                )
                 continue
-            
+
             # Check for headings
             heading = self.is_heading(line_stripped)
             if heading:
                 flush_paragraph()
                 level, text = heading
                 text = self.convert_inline_formatting(text)
-                
+
                 if level == 1:
                     elements.append(Spacer(1, 10))
-                    elements.append(Paragraph(text, self.styles['SectionHeading']))
+                    elements.append(Paragraph(text, self.styles["SectionHeading"]))
                 elif level == 2:
-                    elements.append(Paragraph(text, self.styles['SubsectionHeading']))
+                    elements.append(Paragraph(text, self.styles["SubsectionHeading"]))
                 else:
-                    elements.append(Paragraph(f"<b>{text}</b>", self.styles['BodyText']))
+                    elements.append(
+                        Paragraph(f"<b>{text}</b>", self.styles["BodyText"])
+                    )
                 continue
-            
+
             # Check for numbered items
             numbered = self.is_numbered_item(line_stripped)
             if numbered:
                 flush_paragraph()
                 num, text = numbered
                 text = self.convert_inline_formatting(text)
-                elements.append(Paragraph(f"<b>{num}.</b> {text}", self.styles['NumberedItem']))
+                elements.append(
+                    Paragraph(f"<b>{num}.</b> {text}", self.styles["NumberedItem"])
+                )
                 continue
-            
+
             # Check for bullet points
             bullet = self.is_bullet_point(line_stripped)
             if bullet:
                 flush_paragraph()
                 bullet_text = self.convert_inline_formatting(bullet)
-                elements.append(Paragraph(f"• {bullet_text}", self.styles['BulletText']))
+                elements.append(
+                    Paragraph(f"• {bullet_text}", self.styles["BulletText"])
+                )
                 continue
-            
+
             # Regular text - accumulate for paragraph
             current_paragraph_lines.append(line_stripped)
-        
+
         # Flush any remaining content
         flush_paragraph()
-        
+
         if in_code_block and code_block_content:
-            code_text = '\n'.join(code_block_content)
+            code_text = "\n".join(code_block_content)
             code_text = self.escape_xml(code_text)
-            elements.append(Paragraph(
-                f'<font face="Courier" size="9">{code_text}</font>',
-                self.styles['BodyText']
-            ))
-        
+            elements.append(
+                Paragraph(
+                    f'<font face="Courier" size="9">{code_text}</font>',
+                    self.styles["BodyText"],
+                )
+            )
+
         return elements
 
 
 def create_classification_badges(
-    classification: Dict[str, str],
-    styles: Dict[str, ParagraphStyle]
+    classification: Dict[str, str], styles: Dict[str, ParagraphStyle]
 ) -> List[Any]:
     """
     Create visually styled classification badges for PDF.
-    
+
     Args:
         classification: Dict with 'pillar', 'horizon', 'stage' keys
         styles: PDF styles dictionary
-    
+
     Returns:
         List of ReportLab flowable elements showing colored badges
     """
@@ -928,48 +1034,53 @@ def create_classification_badges(
     elements = []
     badge_parts = []
 
-    if pillar_code := classification.get('pillar', '').upper():
+    if pillar_code := classification.get("pillar", "").upper():
         if pillar_code in PILLAR_COLORS:
             pillar_info = PILLAR_COLORS[pillar_code]
-            badge_parts.append(f'<font color="{pillar_info["color"]}"><b>{pillar_code}</b></font> {pillar_info["name"]}')
+            badge_parts.append(
+                f'<font color="{pillar_info["color"]}"><b>{pillar_code}</b></font> {pillar_info["name"]}'
+            )
         else:
-            badge_parts.append(f'<b>Pillar:</b> {pillar_code}')
+            badge_parts.append(f"<b>Pillar:</b> {pillar_code}")
 
-    if horizon_code := classification.get('horizon', '').upper():
+    if horizon_code := classification.get("horizon", "").upper():
         if horizon_code in HORIZON_COLORS:
             horizon_info = HORIZON_COLORS[horizon_code]
-            badge_parts.append(f'<font color="{horizon_info["color"]}"><b>{horizon_code}</b></font> {horizon_info["name"]} ({horizon_info["timeframe"]})')
+            badge_parts.append(
+                f'<font color="{horizon_info["color"]}"><b>{horizon_code}</b></font> {horizon_info["name"]} ({horizon_info["timeframe"]})'
+            )
         else:
-            badge_parts.append(f'<b>Horizon:</b> {horizon_code}')
+            badge_parts.append(f"<b>Horizon:</b> {horizon_code}")
 
     # Stage badge
-    stage_raw = classification.get('stage', '')
+    stage_raw = classification.get("stage", "")
     stage_num = None
 
     # Parse stage - can be "4", "stage 4", "4_proof", etc.
     import re
-    if stage_match := re.search(r'(\d+)', str(stage_raw)):
+
+    if stage_match := re.search(r"(\d+)", str(stage_raw)):
         stage_num = int(stage_match.group(1))
 
     if stage_num and stage_num in STAGE_INFO:
         stage_info = STAGE_INFO[stage_num]
         horizon_for_stage = stage_info["horizon"]
         stage_color = HORIZON_COLORS.get(horizon_for_stage, {}).get("color", "#6366f1")
-        badge_parts.append(f'<font color="{stage_color}"><b>Stage {stage_num}</b></font> {stage_info["name"]}')
+        badge_parts.append(
+            f'<font color="{stage_color}"><b>Stage {stage_num}</b></font> {stage_info["name"]}'
+        )
     elif stage_raw:
-        badge_parts.append(f'<b>Stage:</b> {stage_raw}')
+        badge_parts.append(f"<b>Stage:</b> {stage_raw}")
 
     if badge_parts:
         # Create a styled classification line with link hint
         badge_text = "   |   ".join(badge_parts)
         elements.extend(
             (
-                Paragraph(
-                    badge_text, styles.get('MetadataText', styles['SmallText'])
-                ),
+                Paragraph(badge_text, styles.get("MetadataText", styles["SmallText"])),
                 Paragraph(
                     '<i><font size="8" color="gray">See Appendix A for classification definitions</font></i>',
-                    styles.get('SmallText', styles['BodyText']),
+                    styles.get("SmallText", styles["BodyText"]),
                 ),
             )
         )
@@ -979,65 +1090,95 @@ def create_classification_badges(
 def create_classification_appendix(styles: Dict[str, ParagraphStyle]) -> List[Any]:
     """
     Create an appendix explaining the Foresight classification system.
-    
+
     Returns a list of ReportLab flowable elements.
     """
     elements = [PageBreak()]
 
     # Appendix title
-    elements.append(Paragraph("Appendix A: Classification Framework", styles.get('AppendixTitle', styles['SectionHeading'])))
+    elements.append(
+        Paragraph(
+            "Appendix A: Classification Framework",
+            styles.get("AppendixTitle", styles["SectionHeading"]),
+        )
+    )
 
-    elements.append(Paragraph(
-        "This report uses the City of Austin's Foresight strategic classification framework to categorize emerging trends and technologies.",
-        styles.get('AppendixBody', styles['BodyText'])
-    ))
+    elements.append(
+        Paragraph(
+            "This report uses the City of Austin's Foresight strategic classification framework to categorize emerging trends and technologies.",
+            styles.get("AppendixBody", styles["BodyText"]),
+        )
+    )
     elements.append(Spacer(1, 12))
 
     # Pillars section
-    elements.append(Paragraph("Strategic Pillars", styles.get('AppendixHeading', styles['SubsectionHeading'])))
-    elements.append(Paragraph(
-        "Pillars represent the six core areas of Austin's Comprehensive Strategic Plan (CSP):",
-        styles.get('AppendixBody', styles['BodyText'])
-    ))
+    elements.append(
+        Paragraph(
+            "Strategic Pillars",
+            styles.get("AppendixHeading", styles["SubsectionHeading"]),
+        )
+    )
+    elements.append(
+        Paragraph(
+            "Pillars represent the six core areas of Austin's Comprehensive Strategic Plan (CSP):",
+            styles.get("AppendixBody", styles["BodyText"]),
+        )
+    )
 
     elements.extend(
         Paragraph(
             f'<font color="{info["color"]}"><b>{code}</b></font> - <b>{info["name"]}</b>',
-            styles.get('AppendixBody', styles['BodyText']),
+            styles.get("AppendixBody", styles["BodyText"]),
         )
         for code, info in PILLAR_COLORS.items()
     )
     elements.append(Spacer(1, 12))
 
     # Horizons section
-    elements.append(Paragraph("Planning Horizons", styles.get('AppendixHeading', styles['SubsectionHeading'])))
-    elements.append(Paragraph(
-        "Horizons indicate the expected timeline for impact:",
-        styles.get('AppendixBody', styles['BodyText'])
-    ))
+    elements.append(
+        Paragraph(
+            "Planning Horizons",
+            styles.get("AppendixHeading", styles["SubsectionHeading"]),
+        )
+    )
+    elements.append(
+        Paragraph(
+            "Horizons indicate the expected timeline for impact:",
+            styles.get("AppendixBody", styles["BodyText"]),
+        )
+    )
 
     elements.extend(
         Paragraph(
             f'<font color="{info["color"]}"><b>{code}: {info["name"]}</b></font> ({info["timeframe"]}) - {info["description"]}',
-            styles.get('AppendixBody', styles['BodyText']),
+            styles.get("AppendixBody", styles["BodyText"]),
         )
         for code, info in HORIZON_COLORS.items()
     )
     elements.append(Spacer(1, 12))
 
     # Stages section
-    elements.append(Paragraph("Maturity Stages", styles.get('AppendixHeading', styles['SubsectionHeading'])))
-    elements.append(Paragraph(
-        "Stages indicate how mature a trend or technology is in its development lifecycle:",
-        styles.get('AppendixBody', styles['BodyText'])
-    ))
+    elements.append(
+        Paragraph(
+            "Maturity Stages",
+            styles.get("AppendixHeading", styles["SubsectionHeading"]),
+        )
+    )
+    elements.append(
+        Paragraph(
+            "Stages indicate how mature a trend or technology is in its development lifecycle:",
+            styles.get("AppendixBody", styles["BodyText"]),
+        )
+    )
 
     for stage_num, info in STAGE_INFO.items():
         horizon_color = HORIZON_COLORS.get(info["horizon"], {}).get("color", "#6366f1")
-        elements.append(Paragraph(
-            f'<font color="{horizon_color}"><b>Stage {stage_num}: {info["name"]}</b></font> ({info["horizon"]}) - {info["description"]}',
-            styles.get('AppendixBody', styles['BodyText'])
-        ))
+        elements.append(
+            Paragraph(
+                f'<font color="{horizon_color}"><b>Stage {stage_num}: {info["name"]}</b></font> ({info["horizon"]}) - {info["description"]}',
+                styles.get("AppendixBody", styles["BodyText"]),
+            )
+        )
 
     return elements
 
@@ -1045,6 +1186,7 @@ def create_classification_appendix(styles: Dict[str, ParagraphStyle]) -> List[An
 # ============================================================================
 # Export Service
 # ============================================================================
+
 
 class ExportService:
     """
@@ -1069,10 +1211,7 @@ class ExportService:
     # ========================================================================
 
     def generate_score_chart(
-        self,
-        card_data: CardExportData,
-        chart_type: str = "bar",
-        dpi: int = CHART_DPI
+        self, card_data: CardExportData, chart_type: str = "bar", dpi: int = CHART_DPI
     ) -> Optional[str]:
         """
         Generate a chart showing card scores.
@@ -1092,7 +1231,9 @@ class ExportService:
             valid_scores = {k: v for k, v in scores.items() if v is not None}
 
             if not valid_scores:
-                logger.warning(f"No valid scores for card {card_data.id}, skipping chart")
+                logger.warning(
+                    f"No valid scores for card {card_data.id}, skipping chart"
+                )
                 return None
 
             if chart_type == "radar":
@@ -1104,12 +1245,7 @@ class ExportService:
             logger.error(f"Error generating score chart: {e}")
             return None
 
-    def _generate_bar_chart(
-        self,
-        scores: Dict[str, int],
-        title: str,
-        dpi: int
-    ) -> str:
+    def _generate_bar_chart(self, scores: Dict[str, int], title: str, dpi: int) -> str:
         """
         Generate a horizontal bar chart of scores.
 
@@ -1126,48 +1262,53 @@ class ExportService:
         try:
             labels = list(scores.keys())
             values = list(scores.values())
-            colors = [SCORE_COLORS.get(label, FORESIGHT_COLORS["primary"]) for label in labels]
+            colors = [
+                SCORE_COLORS.get(label, FORESIGHT_COLORS["primary"]) for label in labels
+            ]
 
             y_pos = np.arange(len(labels))
 
-            bars = ax.barh(y_pos, values, color=colors, edgecolor='white', height=0.6)
+            bars = ax.barh(y_pos, values, color=colors, edgecolor="white", height=0.6)
 
             # Add value labels on bars
             for bar, value in zip(bars, values):
                 width = bar.get_width()
                 ax.text(
-                    width + 2, bar.get_y() + bar.get_height() / 2,
-                    f'{value}',
-                    va='center', ha='left',
-                    fontsize=10, fontweight='bold',
-                    color=FORESIGHT_COLORS["dark"]
+                    width + 2,
+                    bar.get_y() + bar.get_height() / 2,
+                    f"{value}",
+                    va="center",
+                    ha="left",
+                    fontsize=10,
+                    fontweight="bold",
+                    color=FORESIGHT_COLORS["dark"],
                 )
 
             ax.set_yticks(y_pos)
             ax.set_yticklabels(labels, fontsize=11)
             ax.set_xlim(0, 110)  # Extra space for labels
-            ax.set_xlabel('Score (0-100)', fontsize=11)
-            ax.set_title(f'Scores: {title[:40]}...', fontsize=12, fontweight='bold', pad=15)
+            ax.set_xlabel("Score (0-100)", fontsize=11)
+            ax.set_title(
+                f"Scores: {title[:40]}...", fontsize=12, fontweight="bold", pad=15
+            )
 
             # Style the chart
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
-            ax.spines['bottom'].set_color(FORESIGHT_COLORS["light"])
-            ax.spines['left'].set_color(FORESIGHT_COLORS["light"])
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+            ax.spines["bottom"].set_color(FORESIGHT_COLORS["light"])
+            ax.spines["left"].set_color(FORESIGHT_COLORS["light"])
 
             # Add gridlines
-            ax.xaxis.grid(True, linestyle='--', alpha=0.3)
+            ax.xaxis.grid(True, linestyle="--", alpha=0.3)
             ax.set_axisbelow(True)
 
             plt.tight_layout()
 
             # Save to temp file
             temp_file = tempfile.NamedTemporaryFile(
-                suffix='.png',
-                delete=False,
-                prefix='foresight_chart_'
+                suffix=".png", delete=False, prefix="foresight_chart_"
             )
-            plt.savefig(temp_file.name, dpi=dpi, bbox_inches='tight', facecolor='white')
+            plt.savefig(temp_file.name, dpi=dpi, bbox_inches="tight", facecolor="white")
 
             return temp_file.name
 
@@ -1175,10 +1316,7 @@ class ExportService:
             plt.close(fig)  # CRITICAL: Prevent memory leaks
 
     def _generate_radar_chart(
-        self,
-        scores: Dict[str, int],
-        title: str,
-        dpi: int
+        self, scores: Dict[str, int], title: str, dpi: int
     ) -> str:
         """
         Generate a radar/spider chart of scores.
@@ -1208,8 +1346,16 @@ class ExportService:
             values_plot = values + values[:1]
 
             # Plot the data
-            ax.plot(angles, values_plot, 'o-', linewidth=2, color=FORESIGHT_COLORS["primary"])
-            ax.fill(angles, values_plot, alpha=0.25, color=FORESIGHT_COLORS["secondary"])
+            ax.plot(
+                angles,
+                values_plot,
+                "o-",
+                linewidth=2,
+                color=FORESIGHT_COLORS["primary"],
+            )
+            ax.fill(
+                angles, values_plot, alpha=0.25, color=FORESIGHT_COLORS["secondary"]
+            )
 
             # Set the labels
             ax.set_xticks(angles[:-1])
@@ -1218,23 +1364,25 @@ class ExportService:
             # Set y-axis limits
             ax.set_ylim(0, 100)
             ax.set_yticks([20, 40, 60, 80, 100])
-            ax.set_yticklabels(['20', '40', '60', '80', '100'], fontsize=9, color='gray')
+            ax.set_yticklabels(
+                ["20", "40", "60", "80", "100"], fontsize=9, color="gray"
+            )
 
             # Add title
             ax.set_title(
-                f'Score Profile: {title[:35]}...',
-                fontsize=12, fontweight='bold', pad=20
+                f"Score Profile: {title[:35]}...",
+                fontsize=12,
+                fontweight="bold",
+                pad=20,
             )
 
             plt.tight_layout()
 
             # Save to temp file
             temp_file = tempfile.NamedTemporaryFile(
-                suffix='.png',
-                delete=False,
-                prefix='foresight_radar_'
+                suffix=".png", delete=False, prefix="foresight_radar_"
             )
-            plt.savefig(temp_file.name, dpi=dpi, bbox_inches='tight', facecolor='white')
+            plt.savefig(temp_file.name, dpi=dpi, bbox_inches="tight", facecolor="white")
 
             return temp_file.name
 
@@ -1245,7 +1393,7 @@ class ExportService:
         self,
         pillar_counts: Dict[str, int],
         title: str = "Pillar Distribution",
-        dpi: int = CHART_DPI
+        dpi: int = CHART_DPI,
     ) -> Optional[str]:
         """
         Generate a pie/donut chart showing distribution of cards across pillars.
@@ -1275,38 +1423,37 @@ class ExportService:
             wedges, texts, autotexts = ax.pie(
                 values,
                 labels=labels,
-                autopct='%1.1f%%',
+                autopct="%1.1f%%",
                 colors=colors,
                 pctdistance=0.75,
-                wedgeprops=dict(width=0.5, edgecolor='white'),
-                textprops={'fontsize': 10}
+                wedgeprops=dict(width=0.5, edgecolor="white"),
+                textprops={"fontsize": 10},
             )
 
             # Style the percentage text
             for autotext in autotexts:
                 autotext.set_fontsize(9)
-                autotext.set_fontweight('bold')
+                autotext.set_fontweight("bold")
 
-            ax.set_title(title, fontsize=12, fontweight='bold', pad=15)
+            ax.set_title(title, fontsize=12, fontweight="bold", pad=15)
 
             # Add legend
             ax.legend(
-                wedges, [f'{l} ({v})' for l, v in zip(labels, values)],
+                wedges,
+                [f"{l} ({v})" for l, v in zip(labels, values)],
                 title="Pillars",
                 loc="center left",
                 bbox_to_anchor=(1, 0, 0.5, 1),
-                fontsize=9
+                fontsize=9,
             )
 
             plt.tight_layout()
 
             # Save to temp file
             temp_file = tempfile.NamedTemporaryFile(
-                suffix='.png',
-                delete=False,
-                prefix='foresight_pillar_'
+                suffix=".png", delete=False, prefix="foresight_pillar_"
             )
-            plt.savefig(temp_file.name, dpi=dpi, bbox_inches='tight', facecolor='white')
+            plt.savefig(temp_file.name, dpi=dpi, bbox_inches="tight", facecolor="white")
 
             return temp_file.name
 
@@ -1317,7 +1464,7 @@ class ExportService:
         self,
         horizon_counts: Dict[str, int],
         title: str = "Horizon Distribution",
-        dpi: int = CHART_DPI
+        dpi: int = CHART_DPI,
     ) -> Optional[str]:
         """
         Generate a bar chart showing distribution of cards across horizons.
@@ -1338,7 +1485,7 @@ class ExportService:
 
         try:
             # Order horizons properly
-            horizon_order = ['H1', 'H2', 'H3']
+            horizon_order = ["H1", "H2", "H3"]
             labels = []
             values = []
 
@@ -1355,45 +1502,48 @@ class ExportService:
 
             # Horizon colors
             horizon_colors = {
-                'H1': FORESIGHT_COLORS["success"],
-                'H2': FORESIGHT_COLORS["warning"],
-                'H3': FORESIGHT_COLORS["secondary"],
+                "H1": FORESIGHT_COLORS["success"],
+                "H2": FORESIGHT_COLORS["warning"],
+                "H3": FORESIGHT_COLORS["secondary"],
             }
-            colors = [horizon_colors.get(l, FORESIGHT_COLORS["primary"]) for l in labels]
+            colors = [
+                horizon_colors.get(l, FORESIGHT_COLORS["primary"]) for l in labels
+            ]
 
             x_pos = np.arange(len(labels))
-            bars = ax.bar(x_pos, values, color=colors, edgecolor='white', width=0.6)
+            bars = ax.bar(x_pos, values, color=colors, edgecolor="white", width=0.6)
 
             # Add value labels on bars
             for bar, value in zip(bars, values):
                 height = bar.get_height()
                 ax.text(
-                    bar.get_x() + bar.get_width() / 2, height + 0.5,
-                    f'{value}',
-                    ha='center', va='bottom',
-                    fontsize=11, fontweight='bold'
+                    bar.get_x() + bar.get_width() / 2,
+                    height + 0.5,
+                    f"{value}",
+                    ha="center",
+                    va="bottom",
+                    fontsize=11,
+                    fontweight="bold",
                 )
 
             ax.set_xticks(x_pos)
-            ax.set_xticklabels(labels, fontsize=12, fontweight='bold')
-            ax.set_ylabel('Number of Cards', fontsize=11)
-            ax.set_title(title, fontsize=12, fontweight='bold', pad=15)
+            ax.set_xticklabels(labels, fontsize=12, fontweight="bold")
+            ax.set_ylabel("Number of Cards", fontsize=11)
+            ax.set_title(title, fontsize=12, fontweight="bold", pad=15)
 
             # Style
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
-            ax.yaxis.grid(True, linestyle='--', alpha=0.3)
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+            ax.yaxis.grid(True, linestyle="--", alpha=0.3)
             ax.set_axisbelow(True)
 
             plt.tight_layout()
 
             # Save to temp file
             temp_file = tempfile.NamedTemporaryFile(
-                suffix='.png',
-                delete=False,
-                prefix='foresight_horizon_'
+                suffix=".png", delete=False, prefix="foresight_horizon_"
             )
-            plt.savefig(temp_file.name, dpi=dpi, bbox_inches='tight', facecolor='white')
+            plt.savefig(temp_file.name, dpi=dpi, bbox_inches="tight", facecolor="white")
 
             return temp_file.name
 
@@ -1414,53 +1564,53 @@ class ExportService:
         styles = getSampleStyleSheet()
 
         return {
-            'Title': ParagraphStyle(
-                'CustomTitle',
-                parent=styles['Heading1'],
+            "Title": ParagraphStyle(
+                "CustomTitle",
+                parent=styles["Heading1"],
                 fontSize=PDF_TITLE_FONT_SIZE,
                 textColor=PDF_COLORS["primary"],
                 spaceAfter=12,
                 alignment=TA_CENTER,
-                fontName='Helvetica-Bold',
+                fontName="Helvetica-Bold",
             ),
-            'Heading1': ParagraphStyle(
-                'CustomHeading1',
-                parent=styles['Heading1'],
+            "Heading1": ParagraphStyle(
+                "CustomHeading1",
+                parent=styles["Heading1"],
                 fontSize=PDF_HEADING_FONT_SIZE,
                 textColor=PDF_COLORS["primary"],
                 spaceBefore=18,
                 spaceAfter=8,
-                fontName='Helvetica-Bold',
+                fontName="Helvetica-Bold",
             ),
-            'Heading2': ParagraphStyle(
-                'CustomHeading2',
-                parent=styles['Heading2'],
+            "Heading2": ParagraphStyle(
+                "CustomHeading2",
+                parent=styles["Heading2"],
                 fontSize=PDF_BODY_FONT_SIZE + 1,
                 textColor=PDF_COLORS["secondary"],
                 spaceBefore=12,
                 spaceAfter=6,
-                fontName='Helvetica-Bold',
+                fontName="Helvetica-Bold",
             ),
-            'Body': ParagraphStyle(
-                'CustomBody',
-                parent=styles['Normal'],
+            "Body": ParagraphStyle(
+                "CustomBody",
+                parent=styles["Normal"],
                 fontSize=PDF_BODY_FONT_SIZE,
                 textColor=PDF_COLORS["dark"],
                 spaceBefore=4,
                 spaceAfter=4,
                 leading=14,
             ),
-            'Small': ParagraphStyle(
-                'CustomSmall',
-                parent=styles['Normal'],
+            "Small": ParagraphStyle(
+                "CustomSmall",
+                parent=styles["Normal"],
                 fontSize=PDF_SMALL_FONT_SIZE,
                 textColor=rl_colors.gray,
                 spaceBefore=2,
                 spaceAfter=2,
             ),
-            'Badge': ParagraphStyle(
-                'Badge',
-                parent=styles['Normal'],
+            "Badge": ParagraphStyle(
+                "Badge",
+                parent=styles["Normal"],
                 fontSize=PDF_SMALL_FONT_SIZE,
                 textColor=rl_colors.white,
                 alignment=TA_CENTER,
@@ -1468,9 +1618,7 @@ class ExportService:
         }
 
     def _create_pdf_header(
-        self,
-        card_data: CardExportData,
-        styles: Dict[str, ParagraphStyle]
+        self, card_data: CardExportData, styles: Dict[str, ParagraphStyle]
     ) -> List[Any]:
         """
         Create PDF header elements for a card.
@@ -1485,53 +1633,56 @@ class ExportService:
         elements = []
 
         # Title
-        title = Paragraph(card_data.name, styles['Title'])
+        title = Paragraph(card_data.name, styles["Title"])
         elements.extend((title, Spacer(1, 6)))
         # Horizontal rule
-        elements.append(HRFlowable(
-            width="100%",
-            thickness=2,
-            color=PDF_COLORS["primary"],
-            spaceBefore=6,
-            spaceAfter=12
-        ))
+        elements.append(
+            HRFlowable(
+                width="100%",
+                thickness=2,
+                color=PDF_COLORS["primary"],
+                spaceBefore=6,
+                spaceAfter=12,
+            )
+        )
 
         # Metadata badges (pillar, horizon, stage)
         badge_data = []
         if card_data.pillar_name or card_data.pillar_id:
-            badge_data.append(('Pillar', card_data.pillar_name or card_data.pillar_id))
+            badge_data.append(("Pillar", card_data.pillar_name or card_data.pillar_id))
         if card_data.horizon:
-            badge_data.append(('Horizon', card_data.horizon))
+            badge_data.append(("Horizon", card_data.horizon))
         if card_data.stage_name or card_data.stage_id:
-            badge_data.append(('Stage', card_data.stage_name or card_data.stage_id))
+            badge_data.append(("Stage", card_data.stage_name or card_data.stage_id))
         if card_data.goal_name or card_data.goal_id:
-            badge_data.append(('Goal', card_data.goal_name or card_data.goal_id))
+            badge_data.append(("Goal", card_data.goal_name or card_data.goal_id))
 
         if badge_data:
             badge_table_data = [[]]
             for label, value in badge_data:
                 badge_text = f"<b>{label}:</b> {value}"
-                badge_table_data[0].append(Paragraph(badge_text, styles['Small']))
+                badge_table_data[0].append(Paragraph(badge_text, styles["Small"]))
 
             badge_table = Table(
-                badge_table_data,
-                colWidths=[1.5 * inch] * len(badge_data)
+                badge_table_data, colWidths=[1.5 * inch] * len(badge_data)
             )
-            badge_table.setStyle(TableStyle([
-                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                ('TOPPADDING', (0, 0), (-1, -1), 4),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-            ]))
+            badge_table.setStyle(
+                TableStyle(
+                    [
+                        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                        ("TOPPADDING", (0, 0), (-1, -1), 4),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                    ]
+                )
+            )
             elements.append(badge_table)
             elements.append(Spacer(1, 12))
 
         return elements
 
     def _create_pdf_summary_section(
-        self,
-        card_data: CardExportData,
-        styles: Dict[str, ParagraphStyle]
+        self, card_data: CardExportData, styles: Dict[str, ParagraphStyle]
     ) -> List[Any]:
         """
         Create PDF summary section for a card.
@@ -1543,46 +1694,56 @@ class ExportService:
         Returns:
             List of flowable elements for the summary
         """
-        elements = [Paragraph("Classification Overview", styles['Heading1'])]
+        elements = [Paragraph("Classification Overview", styles["Heading1"])]
 
         classification_items = []
         if card_data.pillar_name or card_data.pillar_id:
-            classification_items.append(f"<b>Strategic Pillar:</b> {card_data.pillar_name or card_data.pillar_id}")
+            classification_items.append(
+                f"<b>Strategic Pillar:</b> {card_data.pillar_name or card_data.pillar_id}"
+            )
         if card_data.goal_name or card_data.goal_id:
-            classification_items.append(f"<b>Strategic Goal:</b> {card_data.goal_name or card_data.goal_id}")
+            classification_items.append(
+                f"<b>Strategic Goal:</b> {card_data.goal_name or card_data.goal_id}"
+            )
         if card_data.horizon:
-            horizon_desc = {"H1": "Near-term (0-2 years)", "H2": "Mid-term (2-5 years)", "H3": "Long-term (5+ years)"}
-            classification_items.append(f"<b>Time Horizon:</b> {card_data.horizon} - {horizon_desc.get(card_data.horizon, '')}")
+            horizon_desc = {
+                "H1": "Near-term (0-2 years)",
+                "H2": "Mid-term (2-5 years)",
+                "H3": "Long-term (5+ years)",
+            }
+            classification_items.append(
+                f"<b>Time Horizon:</b> {card_data.horizon} - {horizon_desc.get(card_data.horizon, '')}"
+            )
         if card_data.stage_name or card_data.stage_id:
-            classification_items.append(f"<b>Maturity Stage:</b> {card_data.stage_name or card_data.stage_id}")
+            classification_items.append(
+                f"<b>Maturity Stage:</b> {card_data.stage_name or card_data.stage_id}"
+            )
 
         if classification_items:
             for item in classification_items:
-                elements.append(Paragraph(item, styles['Body']))
+                elements.append(Paragraph(item, styles["Body"]))
             elements.append(Spacer(1, 12))
 
         # Executive Summary
         if card_data.summary:
-            elements.append(Paragraph("Executive Summary", styles['Heading1']))
-            elements.append(Paragraph(card_data.summary, styles['Body']))
+            elements.append(Paragraph("Executive Summary", styles["Heading1"]))
+            elements.append(Paragraph(card_data.summary, styles["Body"]))
             elements.append(Spacer(1, 12))
 
         # Full Description
         if card_data.description:
-            elements.append(Paragraph("Detailed Analysis", styles['Heading1']))
+            elements.append(Paragraph("Detailed Analysis", styles["Heading1"]))
             # Truncate very long descriptions
             description = card_data.description
             if len(description) > 3000:
                 description = description[:3000] + "... [truncated]"
-            elements.append(Paragraph(description, styles['Body']))
+            elements.append(Paragraph(description, styles["Body"]))
             elements.append(Spacer(1, 12))
 
         return elements
 
     def _create_pdf_research_section(
-        self,
-        card_data: CardExportData,
-        styles: Dict[str, ParagraphStyle]
+        self, card_data: CardExportData, styles: Dict[str, ParagraphStyle]
     ) -> List[Any]:
         """
         Create PDF section for deep research report.
@@ -1602,12 +1763,12 @@ class ExportService:
         elements.extend(
             (
                 PageBreak(),
-                Paragraph("Strategic Intelligence Report", styles['Title']),
+                Paragraph("Strategic Intelligence Report", styles["Title"]),
                 Spacer(1, 6),
                 Paragraph(
                     "<i>The following strategic intelligence report was generated through deep research analysis, "
                     "synthesizing multiple sources to provide actionable insights for decision-makers.</i>",
-                    styles['Small'],
+                    styles["Small"],
                 ),
                 Spacer(1, 12),
                 HRFlowable(
@@ -1625,44 +1786,47 @@ class ExportService:
 
         # Truncate if extremely long
         if len(report) > 15000:
-            report = report[:15000] + "\n\n... [Report truncated for PDF export. View full report in the application.]"
+            report = (
+                report[:15000]
+                + "\n\n... [Report truncated for PDF export. View full report in the application.]"
+            )
 
         # Process the report line by line
-        lines = report.split('\n')
+        lines = report.split("\n")
         for line in lines:
             line = line.strip()
             if not line:
                 elements.append(Spacer(1, 6))
-            elif line.startswith('# '):
+            elif line.startswith("# "):
                 # Main heading
-                elements.append(Paragraph(line[2:], styles['Heading1']))
-            elif line.startswith('## '):
+                elements.append(Paragraph(line[2:], styles["Heading1"]))
+            elif line.startswith("## "):
                 # Section heading
-                elements.append(Paragraph(line[3:], styles['Heading2']))
-            elif line.startswith('### '):
+                elements.append(Paragraph(line[3:], styles["Heading2"]))
+            elif line.startswith("### "):
                 # Subsection heading
                 text = f"<b>{line[4:]}</b>"
-                elements.append(Paragraph(text, styles['Body']))
-            elif line.startswith('- ') or line.startswith('* '):
+                elements.append(Paragraph(text, styles["Body"]))
+            elif line.startswith("- ") or line.startswith("* "):
                 # Bullet point
                 text = f"• {line[2:]}"
-                elements.append(Paragraph(text, styles['Body']))
-            elif line.startswith('**') and line.endswith('**'):
+                elements.append(Paragraph(text, styles["Body"]))
+            elif line.startswith("**") and line.endswith("**"):
                 # Bold text
                 text = f"<b>{line[2:-2]}</b>"
-                elements.append(Paragraph(text, styles['Body']))
+                elements.append(Paragraph(text, styles["Body"]))
             else:
                 # Regular paragraph
                 # Escape any XML-unsafe characters
-                safe_line = line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-                elements.append(Paragraph(safe_line, styles['Body']))
+                safe_line = (
+                    line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                )
+                elements.append(Paragraph(safe_line, styles["Body"]))
 
         return elements
 
     def _create_pdf_scores_table(
-        self,
-        card_data: CardExportData,
-        styles: Dict[str, ParagraphStyle]
+        self, card_data: CardExportData, styles: Dict[str, ParagraphStyle]
     ) -> List[Any]:
         """
         Create PDF scores table for a card.
@@ -1674,11 +1838,11 @@ class ExportService:
         Returns:
             List of flowable elements for the scores section
         """
-        elements = [Paragraph("Scores", styles['Heading1'])]
+        elements = [Paragraph("Scores", styles["Heading1"])]
 
         # Build scores table
         scores = card_data.get_all_scores()
-        table_data = [['Metric', 'Score', 'Rating']]
+        table_data = [["Metric", "Score", "Rating"]]
 
         for name, score in scores.items():
             score_display = self.format_score_display(score)
@@ -1699,29 +1863,38 @@ class ExportService:
 
         # Create table with styling
         table = Table(table_data, colWidths=[2 * inch, 1 * inch, 1.5 * inch])
-        table.setStyle(TableStyle([
-            # Header styling
-            ('BACKGROUND', (0, 0), (-1, 0), PDF_COLORS["primary"]),
-            ('TEXTCOLOR', (0, 0), (-1, 0), rl_colors.white),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), PDF_BODY_FONT_SIZE),
-            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
-            # Body styling
-            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (-1, -1), PDF_BODY_FONT_SIZE),
-            ('ALIGN', (1, 1), (1, -1), 'CENTER'),  # Center score column
-            ('ALIGN', (2, 1), (2, -1), 'CENTER'),  # Center rating column
-            # Alternating row colors
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [rl_colors.white, PDF_COLORS["light"]]),
-            # Grid
-            ('GRID', (0, 0), (-1, -1), 0.5, PDF_COLORS["light"]),
-            ('BOX', (0, 0), (-1, -1), 1, PDF_COLORS["primary"]),
-            # Padding
-            ('TOPPADDING', (0, 0), (-1, -1), 8),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-            ('LEFTPADDING', (0, 0), (-1, -1), 8),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
-        ]))
+        table.setStyle(
+            TableStyle(
+                [
+                    # Header styling
+                    ("BACKGROUND", (0, 0), (-1, 0), PDF_COLORS["primary"]),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), rl_colors.white),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, 0), PDF_BODY_FONT_SIZE),
+                    ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+                    # Body styling
+                    ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+                    ("FONTSIZE", (0, 1), (-1, -1), PDF_BODY_FONT_SIZE),
+                    ("ALIGN", (1, 1), (1, -1), "CENTER"),  # Center score column
+                    ("ALIGN", (2, 1), (2, -1), "CENTER"),  # Center rating column
+                    # Alternating row colors
+                    (
+                        "ROWBACKGROUNDS",
+                        (0, 1),
+                        (-1, -1),
+                        [rl_colors.white, PDF_COLORS["light"]],
+                    ),
+                    # Grid
+                    ("GRID", (0, 0), (-1, -1), 0.5, PDF_COLORS["light"]),
+                    ("BOX", (0, 0), (-1, -1), 1, PDF_COLORS["primary"]),
+                    # Padding
+                    ("TOPPADDING", (0, 0), (-1, -1), 8),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ]
+            )
+        )
 
         elements.append(table)
         elements.append(Spacer(1, 18))
@@ -1729,9 +1902,7 @@ class ExportService:
         return elements
 
     def _create_pdf_chart_section(
-        self,
-        card_data: CardExportData,
-        styles: Dict[str, ParagraphStyle]
+        self, card_data: CardExportData, styles: Dict[str, ParagraphStyle]
     ) -> Tuple[List[Any], List[str]]:
         """
         Create PDF chart section for a card.
@@ -1748,10 +1919,12 @@ class ExportService:
 
         if chart_path := self.generate_score_chart(card_data, chart_type="bar"):
             temp_files.append(chart_path)
-            elements.append(Paragraph("Score Visualization", styles['Heading1']))
+            elements.append(Paragraph("Score Visualization", styles["Heading1"]))
 
             try:
-                img = RLImage(chart_path, width=PDF_CHART_WIDTH, height=PDF_CHART_HEIGHT)
+                img = RLImage(
+                    chart_path, width=PDF_CHART_WIDTH, height=PDF_CHART_HEIGHT
+                )
                 elements.extend((img, Spacer(1, 12)))
             except Exception as e:
                 logger.warning(f"Failed to add chart image to PDF: {e}")
@@ -1759,9 +1932,7 @@ class ExportService:
         return elements, temp_files
 
     def _create_pdf_footer(
-        self,
-        card_data: CardExportData,
-        styles: Dict[str, ParagraphStyle]
+        self, card_data: CardExportData, styles: Dict[str, ParagraphStyle]
     ) -> List[Any]:
         """
         Create PDF footer elements for a card.
@@ -1775,13 +1946,15 @@ class ExportService:
         """
         elements = [Spacer(1, 24)]
 
-        elements.append(HRFlowable(
-            width="100%",
-            thickness=1,
-            color=PDF_COLORS["light"],
-            spaceBefore=6,
-            spaceAfter=6
-        ))
+        elements.append(
+            HRFlowable(
+                width="100%",
+                thickness=1,
+                color=PDF_COLORS["light"],
+                spaceBefore=6,
+                spaceAfter=6,
+            )
+        )
 
         # Metadata footer
         footer_parts = []
@@ -1789,28 +1962,27 @@ class ExportService:
             footer_parts.append(f"Created: {card_data.created_at.strftime('%Y-%m-%d')}")
         if card_data.updated_at:
             footer_parts.append(f"Updated: {card_data.updated_at.strftime('%Y-%m-%d')}")
-        footer_parts.append(f"Export Date: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+        footer_parts.append(
+            f"Export Date: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}"
+        )
 
         footer_text = " | ".join(footer_parts)
-        elements.append(Paragraph(footer_text, styles['Small']))
+        elements.append(Paragraph(footer_text, styles["Small"]))
 
         # Branding
         elements.append(Spacer(1, 6))
-        elements.append(Paragraph(
-            "Generated by Foresight Intelligence Platform",
-            styles['Small']
-        ))
+        elements.append(
+            Paragraph("Generated by Foresight Intelligence Platform", styles["Small"])
+        )
 
         return elements
 
     async def generate_pdf(
-        self,
-        card_data: CardExportData,
-        include_charts: bool = True
+        self, card_data: CardExportData, include_charts: bool = True
     ) -> str:
         """
         Generate a professional PDF export for an intelligence card.
-        
+
         Uses the professional PDF builder with City of Austin branding,
         Foresight header, and AI technology disclosure footer.
 
@@ -1825,14 +1997,13 @@ class ExportService:
             Exception: If PDF generation fails
         """
         import re
+
         temp_files = []
 
         try:
             # Create temp file for PDF
             pdf_file = tempfile.NamedTemporaryFile(
-                suffix='.pdf',
-                delete=False,
-                prefix='foresight_card_export_'
+                suffix=".pdf", delete=False, prefix="foresight_card_export_"
             )
             pdf_path = pdf_file.name
             pdf_file.close()
@@ -1841,52 +2012,66 @@ class ExportService:
             styles = get_professional_pdf_styles()
 
             # Build document elements
-            elements = [Paragraph(card_data.name, styles['DocTitle'])]
+            elements = [Paragraph(card_data.name, styles["DocTitle"])]
 
             # Classification subtitle
             subtitle_parts = []
             if card_data.pillar_name or card_data.pillar_id:
-                subtitle_parts.append(f"Pillar: {card_data.pillar_name or card_data.pillar_id}")
+                subtitle_parts.append(
+                    f"Pillar: {card_data.pillar_name or card_data.pillar_id}"
+                )
             if card_data.horizon:
                 subtitle_parts.append(f"Horizon: {card_data.horizon}")
             if card_data.stage_name or card_data.stage_id:
-                subtitle_parts.append(f"Stage: {card_data.stage_name or card_data.stage_id}")
+                subtitle_parts.append(
+                    f"Stage: {card_data.stage_name or card_data.stage_id}"
+                )
             if subtitle_parts:
-                elements.append(Paragraph(" | ".join(subtitle_parts), styles['DocSubtitle']))
+                elements.append(
+                    Paragraph(" | ".join(subtitle_parts), styles["DocSubtitle"])
+                )
 
             elements.append(Spacer(1, 6))
-            elements.append(HRFlowable(
-                width="100%",
-                thickness=2,
-                color=PDF_COLORS["secondary"],
-                spaceBefore=4,
-                spaceAfter=16
-            ))
+            elements.append(
+                HRFlowable(
+                    width="100%",
+                    thickness=2,
+                    color=PDF_COLORS["secondary"],
+                    spaceBefore=4,
+                    spaceAfter=16,
+                )
+            )
 
             # Executive Summary
             if card_data.summary:
-                elements.append(Paragraph("Executive Summary", styles['SectionHeading']))
-                elements.append(Paragraph(card_data.summary, styles['ExecutiveSummary']))
+                elements.append(
+                    Paragraph("Executive Summary", styles["SectionHeading"])
+                )
+                elements.append(
+                    Paragraph(card_data.summary, styles["ExecutiveSummary"])
+                )
                 elements.append(Spacer(1, 12))
 
             # Detailed Analysis / Description
             if card_data.description:
-                elements.append(Paragraph("Detailed Analysis", styles['SectionHeading']))
+                elements.append(
+                    Paragraph("Detailed Analysis", styles["SectionHeading"])
+                )
                 # Truncate very long descriptions
                 description = card_data.description
                 if len(description) > 5000:
                     description = description[:5000] + "... [truncated]"
-                elements.append(Paragraph(description, styles['BodyText']))
+                elements.append(Paragraph(description, styles["BodyText"]))
                 elements.append(Spacer(1, 12))
 
             # Scores Section
             scores = card_data.get_all_scores()
             valid_scores = {k: v for k, v in scores.items() if v is not None}
             if valid_scores:
-                elements.append(Paragraph("Score Analysis", styles['SectionHeading']))
+                elements.append(Paragraph("Score Analysis", styles["SectionHeading"]))
 
                 # Build scores table
-                table_data = [['Metric', 'Score', 'Rating']]
+                table_data = [["Metric", "Score", "Rating"]]
                 for name, score in valid_scores.items():
                     if score >= 80:
                         rating = "Excellent"
@@ -1899,29 +2084,36 @@ class ExportService:
                     table_data.append([name, str(score), rating])
 
                 table = Table(table_data, colWidths=[2 * inch, 1 * inch, 1.2 * inch])
-                table.setStyle(TableStyle([
-                    ('BACKGROUND', (0, 0), (-1, 0), PDF_COLORS["primary"]),
-                    ('TEXTCOLOR', (0, 0), (-1, 0), rl_colors.white),
-                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                    ('FONTSIZE', (0, 0), (-1, 0), 10),
-                    ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
-                    ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-                    ('FONTSIZE', (0, 1), (-1, -1), 10),
-                    ('ALIGN', (1, 1), (-1, -1), 'CENTER'),
-                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [rl_colors.white, hex_to_rl_color("#F8F9FA")]),
-                    ('GRID', (0, 0), (-1, -1), 0.5, hex_to_rl_color("#E0E0E0")),
-                    ('BOX', (0, 0), (-1, -1), 1, PDF_COLORS["primary"]),
-                    ('TOPPADDING', (0, 0), (-1, -1), 8),
-                    ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-                ]))
+                table.setStyle(
+                    TableStyle(
+                        [
+                            ("BACKGROUND", (0, 0), (-1, 0), PDF_COLORS["primary"]),
+                            ("TEXTCOLOR", (0, 0), (-1, 0), rl_colors.white),
+                            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                            ("FONTSIZE", (0, 0), (-1, 0), 10),
+                            ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+                            ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+                            ("FONTSIZE", (0, 1), (-1, -1), 10),
+                            ("ALIGN", (1, 1), (-1, -1), "CENTER"),
+                            (
+                                "ROWBACKGROUNDS",
+                                (0, 1),
+                                (-1, -1),
+                                [rl_colors.white, hex_to_rl_color("#F8F9FA")],
+                            ),
+                            ("GRID", (0, 0), (-1, -1), 0.5, hex_to_rl_color("#E0E0E0")),
+                            ("BOX", (0, 0), (-1, -1), 1, PDF_COLORS["primary"]),
+                            ("TOPPADDING", (0, 0), (-1, -1), 8),
+                            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                        ]
+                    )
+                )
                 elements.append(table)
                 elements.append(Spacer(1, 16))
 
             # Charts (if enabled)
             if include_charts and valid_scores:
-                if chart_path := self.generate_score_chart(
-                    card_data, chart_type="bar"
-                ):
+                if chart_path := self.generate_score_chart(card_data, chart_type="bar"):
                     temp_files.append(chart_path)
                     try:
                         img = RLImage(chart_path, width=5 * inch, height=3.5 * inch)
@@ -1933,15 +2125,19 @@ class ExportService:
             # Deep Research Report (if available)
             if card_data.deep_research_report:
                 elements.append(PageBreak())
-                elements.append(Paragraph("Strategic Intelligence Report", styles['SectionHeading']))
+                elements.append(
+                    Paragraph("Strategic Intelligence Report", styles["SectionHeading"])
+                )
                 elements.append(Spacer(1, 8))
 
                 # Parse and render the markdown report
                 report = card_data.deep_research_report
                 if len(report) > 20000:
-                    report = report[:20000] + "\n\n... [Report truncated for PDF export]"
+                    report = (
+                        report[:20000] + "\n\n... [Report truncated for PDF export]"
+                    )
 
-                lines = report.split('\n')
+                lines = report.split("\n")
                 current_paragraph = []
 
                 for line in lines:
@@ -1949,74 +2145,122 @@ class ExportService:
 
                     if not line_stripped:
                         if current_paragraph:
-                            para_text = ' '.join(current_paragraph)
-                            para_text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', para_text)
-                            para_text = re.sub(r'\*(.+?)\*', r'<i>\1</i>', para_text)
-                            elements.append(Paragraph(para_text, styles['BodyText']))
+                            para_text = " ".join(current_paragraph)
+                            para_text = re.sub(
+                                r"\*\*(.+?)\*\*", r"<b>\1</b>", para_text
+                            )
+                            para_text = re.sub(r"\*(.+?)\*", r"<i>\1</i>", para_text)
+                            elements.append(Paragraph(para_text, styles["BodyText"]))
                             current_paragraph = []
                         continue
 
-                    if line_stripped.startswith('# '):
+                    if line_stripped.startswith("# "):
                         if current_paragraph:
-                            elements.append(Paragraph(' '.join(current_paragraph), styles['BodyText']))
+                            elements.append(
+                                Paragraph(
+                                    " ".join(current_paragraph), styles["BodyText"]
+                                )
+                            )
                             current_paragraph = []
                         elements.append(Spacer(1, 8))
-                        elements.append(Paragraph(line_stripped[2:], styles['SectionHeading']))
-                    elif line_stripped.startswith('## '):
+                        elements.append(
+                            Paragraph(line_stripped[2:], styles["SectionHeading"])
+                        )
+                    elif line_stripped.startswith("## "):
                         if current_paragraph:
-                            elements.append(Paragraph(' '.join(current_paragraph), styles['BodyText']))
+                            elements.append(
+                                Paragraph(
+                                    " ".join(current_paragraph), styles["BodyText"]
+                                )
+                            )
                             current_paragraph = []
-                        elements.append(Paragraph(line_stripped[3:], styles['SubsectionHeading']))
-                    elif line_stripped.startswith('### '):
+                        elements.append(
+                            Paragraph(line_stripped[3:], styles["SubsectionHeading"])
+                        )
+                    elif line_stripped.startswith("### "):
                         if current_paragraph:
-                            elements.append(Paragraph(' '.join(current_paragraph), styles['BodyText']))
+                            elements.append(
+                                Paragraph(
+                                    " ".join(current_paragraph), styles["BodyText"]
+                                )
+                            )
                             current_paragraph = []
-                        elements.append(Paragraph(f"<b>{line_stripped[4:]}</b>", styles['BodyText']))
-                    elif line_stripped.startswith('- ') or line_stripped.startswith('* '):
+                        elements.append(
+                            Paragraph(f"<b>{line_stripped[4:]}</b>", styles["BodyText"])
+                        )
+                    elif line_stripped.startswith("- ") or line_stripped.startswith(
+                        "* "
+                    ):
                         if current_paragraph:
-                            elements.append(Paragraph(' '.join(current_paragraph), styles['BodyText']))
+                            elements.append(
+                                Paragraph(
+                                    " ".join(current_paragraph), styles["BodyText"]
+                                )
+                            )
                             current_paragraph = []
-                        bullet_text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', line_stripped[2:])
-                        elements.append(Paragraph(f"• {bullet_text}", styles['BulletText']))
-                    elif re.match(r'^\d+\.\s', line_stripped):
+                        bullet_text = re.sub(
+                            r"\*\*(.+?)\*\*", r"<b>\1</b>", line_stripped[2:]
+                        )
+                        elements.append(
+                            Paragraph(f"• {bullet_text}", styles["BulletText"])
+                        )
+                    elif re.match(r"^\d+\.\s", line_stripped):
                         if current_paragraph:
-                            elements.append(Paragraph(' '.join(current_paragraph), styles['BodyText']))
+                            elements.append(
+                                Paragraph(
+                                    " ".join(current_paragraph), styles["BodyText"]
+                                )
+                            )
                             current_paragraph = []
-                        elements.append(Paragraph(line_stripped, styles['BulletText']))
-                    elif line_stripped in ['---', '***']:
+                        elements.append(Paragraph(line_stripped, styles["BulletText"]))
+                    elif line_stripped in ["---", "***"]:
                         if current_paragraph:
-                            elements.append(Paragraph(' '.join(current_paragraph), styles['BodyText']))
+                            elements.append(
+                                Paragraph(
+                                    " ".join(current_paragraph), styles["BodyText"]
+                                )
+                            )
                             current_paragraph = []
                         elements.append(Spacer(1, 6))
-                        elements.append(HRFlowable(width="50%", thickness=1, color=PDF_COLORS["light"]))
+                        elements.append(
+                            HRFlowable(
+                                width="50%", thickness=1, color=PDF_COLORS["light"]
+                            )
+                        )
                         elements.append(Spacer(1, 6))
                     else:
                         current_paragraph.append(line_stripped)
 
                 if current_paragraph:
-                    para_text = ' '.join(current_paragraph)
-                    para_text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', para_text)
-                    elements.append(Paragraph(para_text, styles['BodyText']))
+                    para_text = " ".join(current_paragraph)
+                    para_text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", para_text)
+                    elements.append(Paragraph(para_text, styles["BodyText"]))
 
             # Metadata footer
             elements.append(Spacer(1, 20))
-            elements.append(HRFlowable(width="100%", thickness=1, color=PDF_COLORS["light"]))
+            elements.append(
+                HRFlowable(width="100%", thickness=1, color=PDF_COLORS["light"])
+            )
             elements.append(Spacer(1, 6))
 
             meta_items = []
             if card_data.created_at:
-                meta_items.append(f"Created: {card_data.created_at.strftime('%B %d, %Y')}")
+                meta_items.append(
+                    f"Created: {card_data.created_at.strftime('%B %d, %Y')}"
+                )
             if card_data.updated_at:
-                meta_items.append(f"Updated: {card_data.updated_at.strftime('%B %d, %Y')}")
+                meta_items.append(
+                    f"Updated: {card_data.updated_at.strftime('%B %d, %Y')}"
+                )
             for item in meta_items:
-                elements.append(Paragraph(item, styles['SmallText']))
+                elements.append(Paragraph(item, styles["SmallText"]))
 
             # Build PDF using professional builder with header/footer
             builder = ProfessionalPDFBuilder(
                 filename=pdf_path,
                 title=card_data.name,
                 include_logo=True,
-                include_ai_disclosure=True
+                include_ai_disclosure=True,
             )
             builder.build(elements)
 
@@ -2032,10 +2276,7 @@ class ExportService:
             self.cleanup_temp_files(temp_files)
 
     async def generate_workstream_pdf(
-        self,
-        workstream_id: str,
-        include_charts: bool = True,
-        max_cards: int = 50
+        self, workstream_id: str, include_charts: bool = True, max_cards: int = 50
     ) -> str:
         """
         Generate a PDF report for a workstream containing all associated cards.
@@ -2055,16 +2296,16 @@ class ExportService:
 
         try:
             # Fetch workstream and cards
-            workstream, cards = await self.get_workstream_cards(workstream_id, max_cards)
+            workstream, cards = await self.get_workstream_cards(
+                workstream_id, max_cards
+            )
 
             if not workstream:
                 raise ValueError(f"Workstream {workstream_id} not found")
 
             # Create temp file for PDF
             pdf_file = tempfile.NamedTemporaryFile(
-                suffix='.pdf',
-                delete=False,
-                prefix='foresight_workstream_'
+                suffix=".pdf", delete=False, prefix="foresight_workstream_"
             )
             pdf_path = pdf_file.name
             pdf_file.close()
@@ -2076,37 +2317,45 @@ class ExportService:
             elements = []
 
             # Title page
-            workstream_name = workstream.get('name', 'Workstream Report')
+            workstream_name = workstream.get("name", "Workstream Report")
             elements.extend(
-                (Paragraph(workstream_name, styles['DocTitle']), Spacer(1, 12))
+                (Paragraph(workstream_name, styles["DocTitle"]), Spacer(1, 12))
             )
-            elements.append(HRFlowable(
-                width="100%",
-                thickness=2,
-                color=PDF_COLORS["secondary"],
-                spaceBefore=6,
-                spaceAfter=12
-            ))
+            elements.append(
+                HRFlowable(
+                    width="100%",
+                    thickness=2,
+                    color=PDF_COLORS["secondary"],
+                    spaceBefore=6,
+                    spaceAfter=12,
+                )
+            )
 
             # Workstream description
-            if workstream.get('description'):
-                elements.append(Paragraph("Overview", styles['SectionHeading']))
-                elements.append(Paragraph(workstream['description'], styles['BodyText']))
+            if workstream.get("description"):
+                elements.append(Paragraph("Overview", styles["SectionHeading"]))
+                elements.append(
+                    Paragraph(workstream["description"], styles["BodyText"])
+                )
                 elements.append(Spacer(1, 12))
 
             # Summary statistics
-            elements.append(Paragraph("Summary", styles['SectionHeading']))
+            elements.append(Paragraph("Summary", styles["SectionHeading"]))
 
             if not cards:
-                elements.append(Paragraph(
-                    "No cards currently match this workstream criteria.",
-                    styles['BodyText']
-                ))
+                elements.append(
+                    Paragraph(
+                        "No cards currently match this workstream criteria.",
+                        styles["BodyText"],
+                    )
+                )
             else:
-                summary_text = f"This workstream contains <b>{len(cards)}</b> intelligence cards."
+                summary_text = (
+                    f"This workstream contains <b>{len(cards)}</b> intelligence cards."
+                )
                 if len(cards) >= max_cards:
                     summary_text += f" (Showing first {max_cards})"
-                elements.append(Paragraph(summary_text, styles['BodyText']))
+                elements.append(Paragraph(summary_text, styles["BodyText"]))
                 elements.append(Spacer(1, 12))
 
                 # Distribution charts
@@ -2119,14 +2368,20 @@ class ExportService:
                         pillar_counts[pillar] = pillar_counts.get(pillar, 0) + 1
 
                         if card.horizon:
-                            horizon_counts[card.horizon] = horizon_counts.get(card.horizon, 0) + 1
+                            horizon_counts[card.horizon] = (
+                                horizon_counts.get(card.horizon, 0) + 1
+                            )
 
                     if pillar_chart_path := self.generate_pillar_distribution_chart(
                         pillar_counts
                     ):
                         temp_files.append(pillar_chart_path)
                         try:
-                            img = RLImage(pillar_chart_path, width=PDF_CHART_WIDTH, height=PDF_CHART_HEIGHT)
+                            img = RLImage(
+                                pillar_chart_path,
+                                width=PDF_CHART_WIDTH,
+                                height=PDF_CHART_HEIGHT,
+                            )
                             elements.append(img)
                             elements.append(Spacer(1, 12))
                         except Exception as e:
@@ -2137,7 +2392,9 @@ class ExportService:
                     ):
                         temp_files.append(horizon_chart_path)
                         try:
-                            img = RLImage(horizon_chart_path, width=4.5 * inch, height=3 * inch)
+                            img = RLImage(
+                                horizon_chart_path, width=4.5 * inch, height=3 * inch
+                            )
                             elements.append(img)
                             elements.append(Spacer(1, 12))
                         except Exception as e:
@@ -2145,70 +2402,92 @@ class ExportService:
 
                 # Cards table summary
                 elements.append(PageBreak())
-                elements.append(Paragraph("Cards Overview", styles['SectionHeading']))
+                elements.append(Paragraph("Cards Overview", styles["SectionHeading"]))
 
-                table_data = [['Name', 'Pillar', 'Horizon', 'Impact']]
+                table_data = [["Name", "Pillar", "Horizon", "Impact"]]
                 for card in cards:
-                    table_data.append([
-                        card.name[:40] + ('...' if len(card.name) > 40 else ''),
-                        card.pillar_name or card.pillar_id or 'N/A',
-                        card.horizon or 'N/A',
-                        self.format_score_display(card.impact_score)
-                    ])
+                    table_data.append(
+                        [
+                            card.name[:40] + ("..." if len(card.name) > 40 else ""),
+                            card.pillar_name or card.pillar_id or "N/A",
+                            card.horizon or "N/A",
+                            self.format_score_display(card.impact_score),
+                        ]
+                    )
 
-                table = Table(table_data, colWidths=[2.5 * inch, 1.5 * inch, 0.8 * inch, 0.8 * inch])
-                table.setStyle(TableStyle([
-                    ('BACKGROUND', (0, 0), (-1, 0), PDF_COLORS["primary"]),
-                    ('TEXTCOLOR', (0, 0), (-1, 0), rl_colors.white),
-                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                    ('FONTSIZE', (0, 0), (-1, 0), PDF_BODY_FONT_SIZE),
-                    ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-                    ('FONTSIZE', (0, 1), (-1, -1), PDF_SMALL_FONT_SIZE),
-                    ('ALIGN', (2, 0), (-1, -1), 'CENTER'),
-                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [rl_colors.white, PDF_COLORS["light"]]),
-                    ('GRID', (0, 0), (-1, -1), 0.5, PDF_COLORS["light"]),
-                    ('BOX', (0, 0), (-1, -1), 1, PDF_COLORS["primary"]),
-                    ('TOPPADDING', (0, 0), (-1, -1), 6),
-                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-                    ('LEFTPADDING', (0, 0), (-1, -1), 6),
-                    ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-                ]))
+                table = Table(
+                    table_data,
+                    colWidths=[2.5 * inch, 1.5 * inch, 0.8 * inch, 0.8 * inch],
+                )
+                table.setStyle(
+                    TableStyle(
+                        [
+                            ("BACKGROUND", (0, 0), (-1, 0), PDF_COLORS["primary"]),
+                            ("TEXTCOLOR", (0, 0), (-1, 0), rl_colors.white),
+                            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                            ("FONTSIZE", (0, 0), (-1, 0), PDF_BODY_FONT_SIZE),
+                            ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+                            ("FONTSIZE", (0, 1), (-1, -1), PDF_SMALL_FONT_SIZE),
+                            ("ALIGN", (2, 0), (-1, -1), "CENTER"),
+                            (
+                                "ROWBACKGROUNDS",
+                                (0, 1),
+                                (-1, -1),
+                                [rl_colors.white, PDF_COLORS["light"]],
+                            ),
+                            ("GRID", (0, 0), (-1, -1), 0.5, PDF_COLORS["light"]),
+                            ("BOX", (0, 0), (-1, -1), 1, PDF_COLORS["primary"]),
+                            ("TOPPADDING", (0, 0), (-1, -1), 6),
+                            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                        ]
+                    )
+                )
                 elements.append(table)
 
                 # Individual card details (paginated)
                 elements.append(PageBreak())
-                elements.append(Paragraph("Card Details", styles['SectionHeading']))
+                elements.append(Paragraph("Card Details", styles["SectionHeading"]))
                 elements.append(Spacer(1, 12))
 
                 for i, card in enumerate(cards):
                     if i > 0:
                         elements.append(Spacer(1, 18))
-                        elements.append(HRFlowable(
-                            width="80%",
-                            thickness=0.5,
-                            color=PDF_COLORS["light"],
-                            spaceBefore=6,
-                            spaceAfter=12
-                        ))
+                        elements.append(
+                            HRFlowable(
+                                width="80%",
+                                thickness=0.5,
+                                color=PDF_COLORS["light"],
+                                spaceBefore=6,
+                                spaceAfter=12,
+                            )
+                        )
 
                     # Card mini-header
-                    elements.append(Paragraph(card.name, styles['SubsectionHeading']))
+                    elements.append(Paragraph(card.name, styles["SubsectionHeading"]))
 
                     # Badges row
                     badge_parts = []
                     if card.pillar_name or card.pillar_id:
-                        badge_parts.append(f"<b>Pillar:</b> {card.pillar_name or card.pillar_id}")
+                        badge_parts.append(
+                            f"<b>Pillar:</b> {card.pillar_name or card.pillar_id}"
+                        )
                     if card.horizon:
                         badge_parts.append(f"<b>Horizon:</b> {card.horizon}")
                     if card.stage_name or card.stage_id:
-                        badge_parts.append(f"<b>Stage:</b> {card.stage_name or card.stage_id}")
+                        badge_parts.append(
+                            f"<b>Stage:</b> {card.stage_name or card.stage_id}"
+                        )
                     if badge_parts:
-                        elements.append(Paragraph(" | ".join(badge_parts), styles['SmallText']))
+                        elements.append(
+                            Paragraph(" | ".join(badge_parts), styles["SmallText"])
+                        )
                         elements.append(Spacer(1, 6))
 
                     # Summary
                     if card.summary:
-                        elements.append(Paragraph(card.summary, styles['BodyText']))
+                        elements.append(Paragraph(card.summary, styles["BodyText"]))
 
                     # Key scores
                     key_scores = []
@@ -2219,34 +2498,42 @@ class ExportService:
                     if card.maturity_score is not None:
                         key_scores.append(f"Maturity: {card.maturity_score}")
                     if key_scores:
-                        elements.append(Paragraph(
-                            "<i>Scores: " + " | ".join(key_scores) + "</i>",
-                            styles['SmallText']
-                        ))
+                        elements.append(
+                            Paragraph(
+                                "<i>Scores: " + " | ".join(key_scores) + "</i>",
+                                styles["SmallText"],
+                            )
+                        )
 
             # Metadata footer
             elements.append(Spacer(1, 24))
-            elements.append(HRFlowable(
-                width="100%",
-                thickness=1,
-                color=PDF_COLORS["light"],
-                spaceBefore=6,
-                spaceAfter=6
-            ))
+            elements.append(
+                HRFlowable(
+                    width="100%",
+                    thickness=1,
+                    color=PDF_COLORS["light"],
+                    spaceBefore=6,
+                    spaceAfter=6,
+                )
+            )
 
-            footer_text = f"Export Date: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}"
-            elements.append(Paragraph(footer_text, styles['SmallText']))
+            footer_text = (
+                f"Export Date: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}"
+            )
+            elements.append(Paragraph(footer_text, styles["SmallText"]))
 
             # Build PDF using professional builder with header/footer
             builder = ProfessionalPDFBuilder(
                 filename=pdf_path,
                 title=workstream_name,
                 include_logo=True,
-                include_ai_disclosure=True
+                include_ai_disclosure=True,
             )
             builder.build(elements)
 
-            logger.info(f"Generated professional workstream PDF for: {workstream_name} with {len(cards)} cards")
+            logger.info(
+                f"Generated professional workstream PDF for: {workstream_name} with {len(cards)} cards"
+            )
             return pdf_path
 
         except Exception as e:
@@ -2287,7 +2574,13 @@ class ExportService:
             CardExportData object or None if not found
         """
         try:
-            response = self.supabase.table("cards").select("*").eq("id", card_id).single().execute()
+            response = (
+                self.supabase.table("cards")
+                .select("*")
+                .eq("id", card_id)
+                .single()
+                .execute()
+            )
 
             return CardExportData(**response.data) if response.data else None
         except Exception as e:
@@ -2295,9 +2588,7 @@ class ExportService:
             return None
 
     async def get_workstream_cards(
-        self,
-        workstream_id: str,
-        max_cards: int = 50
+        self, workstream_id: str, max_cards: int = 50
     ) -> Tuple[Optional[Dict[str, Any]], List[CardExportData]]:
         """
         Fetch workstream metadata and associated cards.
@@ -2311,7 +2602,13 @@ class ExportService:
         """
         try:
             # Fetch workstream
-            ws_response = self.supabase.table("workstreams").select("*").eq("id", workstream_id).single().execute()
+            ws_response = (
+                self.supabase.table("workstreams")
+                .select("*")
+                .eq("id", workstream_id)
+                .single()
+                .execute()
+            )
 
             if not ws_response.data:
                 return None, []
@@ -2319,9 +2616,13 @@ class ExportService:
             workstream = ws_response.data
 
             # Fetch associated cards via workstream_cards junction table
-            cards_response = self.supabase.table("workstream_cards").select(
-                "card_id, cards(*)"
-            ).eq("workstream_id", workstream_id).limit(max_cards).execute()
+            cards_response = (
+                self.supabase.table("workstream_cards")
+                .select("card_id, cards(*)")
+                .eq("workstream_id", workstream_id)
+                .limit(max_cards)
+                .execute()
+            )
 
             cards = []
             if cards_response.data:
@@ -2444,7 +2745,9 @@ class ExportService:
             # Convert to CSV string without index column
             csv_content = df.to_csv(index=False)
 
-            logger.info(f"Generated CSV export for card {card_data.id}: {card_data.name}")
+            logger.info(
+                f"Generated CSV export for card {card_data.id}: {card_data.name}"
+            )
 
             return csv_content
 
@@ -2577,7 +2880,7 @@ class ExportService:
         Returns:
             RGBColor object for use with python-pptx
         """
-        hex_color = hex_color.lstrip('#')
+        hex_color = hex_color.lstrip("#")
         r = int(hex_color[:2], 16)
         g = int(hex_color[2:4], 16)
         b = int(hex_color[4:6], 16)
@@ -2586,51 +2889,44 @@ class ExportService:
     def _add_pptx_header(self, slide, include_logo: bool = True) -> None:
         """
         Add professional header to a PowerPoint slide.
-        
+
         White background with City of Austin logo and Foresight branding,
         matching the website daylight mode and PDF exports.
-        
+
         Args:
             slide: PowerPoint slide object
             include_logo: Whether to include the City of Austin logo
         """
         # White header background
         header_bg = slide.shapes.add_shape(
-            MSO_SHAPE.RECTANGLE,
-            Inches(0), Inches(0),
-            PPTX_SLIDE_WIDTH, Inches(1.1)
+            MSO_SHAPE.RECTANGLE, Inches(0), Inches(0), PPTX_SLIDE_WIDTH, Inches(1.1)
         )
         header_bg.fill.solid()
         header_bg.fill.fore_color.rgb = RGBColor(255, 255, 255)
         header_bg.line.fill.background()
-        
+
         # Blue accent line below header
         accent_line = slide.shapes.add_shape(
-            MSO_SHAPE.RECTANGLE,
-            Inches(0), Inches(1.08),
-            PPTX_SLIDE_WIDTH, Inches(0.03)
+            MSO_SHAPE.RECTANGLE, Inches(0), Inches(1.08), PPTX_SLIDE_WIDTH, Inches(0.03)
         )
         accent_line.fill.solid()
         accent_line.fill.fore_color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
         accent_line.line.fill.background()
-        
+
         # City of Austin logo (if available)
         logo_right_edge = PPTX_MARGIN
         if include_logo and COA_LOGO_PATH and Path(COA_LOGO_PATH).exists():
             try:
                 logo = slide.shapes.add_picture(
-                    COA_LOGO_PATH,
-                    PPTX_MARGIN, Inches(0.25),
-                    height=Inches(0.6)
+                    COA_LOGO_PATH, PPTX_MARGIN, Inches(0.25), height=Inches(0.6)
                 )
                 logo_right_edge = logo.left + logo.width + Inches(0.2)
             except Exception as e:
                 logger.warning(f"Failed to add logo to PPTX slide: {e}")
-        
+
         # FORESIGHT branding text - primary blue
         brand_box = slide.shapes.add_textbox(
-            logo_right_edge, Inches(0.2),
-            Inches(3), Inches(0.5)
+            logo_right_edge, Inches(0.2), Inches(3), Inches(0.5)
         )
         brand_frame = brand_box.text_frame
         brand_para = brand_frame.paragraphs[0]
@@ -2638,22 +2934,20 @@ class ExportService:
         brand_para.font.size = Pt(18)
         brand_para.font.bold = True
         brand_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
-        
+
         # Subtitle - gray
         subtitle_box = slide.shapes.add_textbox(
-            logo_right_edge, Inches(0.55),
-            Inches(3), Inches(0.4)
+            logo_right_edge, Inches(0.55), Inches(3), Inches(0.4)
         )
         subtitle_frame = subtitle_box.text_frame
         subtitle_para = subtitle_frame.paragraphs[0]
         subtitle_para.text = "Strategic Intelligence Platform"
         subtitle_para.font.size = Pt(10)
         subtitle_para.font.color.rgb = RGBColor(128, 128, 128)
-        
+
         # Date on right side - black
         date_box = slide.shapes.add_textbox(
-            PPTX_SLIDE_WIDTH - Inches(2.5), Inches(0.4),
-            Inches(2), Inches(0.4)
+            PPTX_SLIDE_WIDTH - Inches(2.5), Inches(0.4), Inches(2), Inches(0.4)
         )
         date_frame = date_box.text_frame
         date_para = date_frame.paragraphs[0]
@@ -2665,7 +2959,7 @@ class ExportService:
     def _add_pptx_footer(self, slide, include_ai_disclosure: bool = True) -> None:
         """
         Add professional footer to a PowerPoint slide.
-        
+
         Args:
             slide: PowerPoint slide object
             include_ai_disclosure: Whether to include AI technology disclosure
@@ -2673,29 +2967,35 @@ class ExportService:
         # Footer background
         footer_bg = slide.shapes.add_shape(
             MSO_SHAPE.RECTANGLE,
-            Inches(0), PPTX_SLIDE_HEIGHT - Inches(0.6),
-            PPTX_SLIDE_WIDTH, Inches(0.6)
+            Inches(0),
+            PPTX_SLIDE_HEIGHT - Inches(0.6),
+            PPTX_SLIDE_WIDTH,
+            Inches(0.6),
         )
         footer_bg.fill.solid()
         footer_bg.fill.fore_color.rgb = RGBColor(248, 249, 250)  # Light gray
         footer_bg.line.fill.background()
-        
+
         # AI disclosure text
         if include_ai_disclosure:
             disclosure_box = slide.shapes.add_textbox(
-                PPTX_MARGIN, PPTX_SLIDE_HEIGHT - Inches(0.5),
-                PPTX_SLIDE_WIDTH - Inches(2), Inches(0.4)
+                PPTX_MARGIN,
+                PPTX_SLIDE_HEIGHT - Inches(0.5),
+                PPTX_SLIDE_WIDTH - Inches(2),
+                Inches(0.4),
             )
             disclosure_frame = disclosure_box.text_frame
             disclosure_para = disclosure_frame.paragraphs[0]
             disclosure_para.text = "AI Technologies: Anthropic Claude, OpenAI GPT-4o, GPT Researcher, Exa AI, Firecrawl, Tavily"
             disclosure_para.font.size = Pt(8)
             disclosure_para.font.color.rgb = RGBColor(100, 100, 100)
-        
+
         # City of Austin notice
         notice_box = slide.shapes.add_textbox(
-            PPTX_SLIDE_WIDTH - Inches(3), PPTX_SLIDE_HEIGHT - Inches(0.5),
-            Inches(2.5), Inches(0.4)
+            PPTX_SLIDE_WIDTH - Inches(3),
+            PPTX_SLIDE_HEIGHT - Inches(0.5),
+            Inches(2.5),
+            Inches(0.4),
         )
         notice_frame = notice_box.text_frame
         notice_para = notice_frame.paragraphs[0]
@@ -2706,14 +3006,11 @@ class ExportService:
         notice_para.alignment = PP_ALIGN.RIGHT
 
     def _add_title_slide(
-        self,
-        prs: Presentation,
-        title: str,
-        subtitle: Optional[str] = None
+        self, prs: Presentation, title: str, subtitle: Optional[str] = None
     ) -> None:
         """
         Add a professional title slide to the presentation.
-        
+
         Features white header with logo, clean typography, and AI disclosure footer.
 
         Args:
@@ -2727,20 +3024,21 @@ class ExportService:
         # White background
         background = slide.shapes.add_shape(
             MSO_SHAPE.RECTANGLE,
-            Inches(0), Inches(0),
-            PPTX_SLIDE_WIDTH, PPTX_SLIDE_HEIGHT
+            Inches(0),
+            Inches(0),
+            PPTX_SLIDE_WIDTH,
+            PPTX_SLIDE_HEIGHT,
         )
         background.fill.solid()
         background.fill.fore_color.rgb = RGBColor(255, 255, 255)
         background.line.fill.background()
-        
+
         # Add professional header
         self._add_pptx_header(slide)
 
         # Main title - centered, primary blue
         title_box = slide.shapes.add_textbox(
-            PPTX_MARGIN, Inches(2.8),
-            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(1.5)
+            PPTX_MARGIN, Inches(2.8), PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(1.5)
         )
         title_frame = title_box.text_frame
         title_frame.word_wrap = True
@@ -2754,8 +3052,10 @@ class ExportService:
         # Subtitle if provided - gray
         if subtitle:
             subtitle_box = slide.shapes.add_textbox(
-                PPTX_MARGIN, Inches(4.3),
-                PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(1)
+                PPTX_MARGIN,
+                Inches(4.3),
+                PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN),
+                Inches(1),
             )
             subtitle_frame = subtitle_box.text_frame
             subtitle_frame.word_wrap = True
@@ -2773,11 +3073,11 @@ class ExportService:
         prs: Presentation,
         title: str,
         content_items: List[Tuple[str, str]],
-        chart_path: Optional[str] = None
+        chart_path: Optional[str] = None,
     ) -> None:
         """
         Add a content slide with text and optional chart.
-        
+
         Uses professional white header with logo and footer with AI disclosure.
 
         Args:
@@ -2795,8 +3095,7 @@ class ExportService:
 
         # Slide title - below header, primary blue
         title_box = slide.shapes.add_textbox(
-            PPTX_MARGIN, Inches(1.25),
-            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.6)
+            PPTX_MARGIN, Inches(1.25), PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.6)
         )
         title_frame = title_box.text_frame
         title_para = title_frame.paragraphs[0]
@@ -2816,14 +3115,18 @@ class ExportService:
         # Add content items - adjusted for header/footer
         content_top = Inches(1.95)
         content_box = slide.shapes.add_textbox(
-            PPTX_MARGIN, content_top,
-            content_width, Inches(4.5)  # Reduced height to account for footer
+            PPTX_MARGIN,
+            content_top,
+            content_width,
+            Inches(4.5),  # Reduced height to account for footer
         )
         content_frame = content_box.text_frame
         content_frame.word_wrap = True
 
         for i, (label, value) in enumerate(content_items):
-            para = content_frame.paragraphs[0] if i == 0 else content_frame.add_paragraph()
+            para = (
+                content_frame.paragraphs[0] if i == 0 else content_frame.add_paragraph()
+            )
             para.space_before = Pt(8)
             para.space_after = Pt(4)
 
@@ -2845,8 +3148,10 @@ class ExportService:
             try:
                 slide.shapes.add_picture(
                     chart_path,
-                    chart_left, Inches(2.0),
-                    width=PPTX_CHART_WIDTH, height=Inches(4.0)
+                    chart_left,
+                    Inches(2.0),
+                    width=PPTX_CHART_WIDTH,
+                    height=Inches(4.0),
                 )
             except Exception as e:
                 logger.warning(f"Failed to add chart to slide: {e}")
@@ -2855,11 +3160,11 @@ class ExportService:
         self,
         prs: Presentation,
         card_data: CardExportData,
-        chart_path: Optional[str] = None
+        chart_path: Optional[str] = None,
     ) -> None:
         """
         Add a slide showing all scores with optional chart.
-        
+
         Uses professional white header and footer.
 
         Args:
@@ -2876,8 +3181,7 @@ class ExportService:
 
         # Slide title - below header
         title_box = slide.shapes.add_textbox(
-            PPTX_MARGIN, Inches(1.25),
-            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.6)
+            PPTX_MARGIN, Inches(1.25), PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.6)
         )
         title_frame = title_box.text_frame
         title_para = title_frame.paragraphs[0]
@@ -2891,8 +3195,10 @@ class ExportService:
             try:
                 slide.shapes.add_picture(
                     chart_path,
-                    Inches(0.5), Inches(2.0),
-                    width=Inches(5.5), height=Inches(4.0)
+                    Inches(0.5),
+                    Inches(2.0),
+                    width=Inches(5.5),
+                    height=Inches(4.0),
                 )
             except Exception as e:
                 logger.warning(f"Failed to add score chart: {e}")
@@ -2900,14 +3206,15 @@ class ExportService:
         # Add score details on the right side - adjusted positions
         scores = card_data.get_all_scores()
         scores_box = slide.shapes.add_textbox(
-            Inches(6.5), Inches(2.0),
-            Inches(5.5), Inches(4.0)
+            Inches(6.5), Inches(2.0), Inches(5.5), Inches(4.0)
         )
         scores_frame = scores_box.text_frame
         scores_frame.word_wrap = True
 
         for i, (score_name, score_value) in enumerate(scores.items()):
-            para = scores_frame.paragraphs[0] if i == 0 else scores_frame.add_paragraph()
+            para = (
+                scores_frame.paragraphs[0] if i == 0 else scores_frame.add_paragraph()
+            )
             para.space_before = Pt(12)
             para.space_after = Pt(4)
 
@@ -2927,14 +3234,11 @@ class ExportService:
             run_value.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
 
     def _add_description_slide(
-        self,
-        prs: Presentation,
-        title: str,
-        description: Optional[str]
+        self, prs: Presentation, title: str, description: Optional[str]
     ) -> None:
         """
         Add a slide for long-form description text.
-        
+
         Uses professional white header and footer.
 
         Args:
@@ -2954,8 +3258,7 @@ class ExportService:
 
         # Slide title - below header
         title_box = slide.shapes.add_textbox(
-            PPTX_MARGIN, Inches(1.25),
-            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.6)
+            PPTX_MARGIN, Inches(1.25), PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.6)
         )
         title_frame = title_box.text_frame
         title_para = title_frame.paragraphs[0]
@@ -2971,8 +3274,7 @@ class ExportService:
             display_text += "..."
 
         desc_box = slide.shapes.add_textbox(
-            PPTX_MARGIN, Inches(1.95),
-            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(4.5)
+            PPTX_MARGIN, Inches(1.95), PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(4.5)
         )
         desc_frame = desc_box.text_frame
         desc_frame.word_wrap = True
@@ -2986,7 +3288,7 @@ class ExportService:
         self,
         card_data: CardExportData,
         include_charts: bool = True,
-        include_description: bool = True
+        include_description: bool = True,
     ) -> str:
         """
         Generate a PowerPoint presentation for an individual card.
@@ -3019,11 +3321,7 @@ class ExportService:
             prs.slide_height = PPTX_SLIDE_HEIGHT
 
             # 1. Title slide
-            self._add_title_slide(
-                prs,
-                title=card_data.name,
-                subtitle=card_data.summary
-            )
+            self._add_title_slide(prs, title=card_data.name, subtitle=card_data.summary)
 
             # 2. Overview slide with metadata
             overview_items = [
@@ -3038,9 +3336,7 @@ class ExportService:
             overview_items = [(k, v) for k, v in overview_items if v]
 
             self._add_content_slide(
-                prs,
-                title="Card Overview",
-                content_items=overview_items
+                prs, title="Card Overview", content_items=overview_items
             )
 
             # 3. Scores slide with chart
@@ -3055,16 +3351,12 @@ class ExportService:
             # 4. Description slide (optional)
             if include_description and card_data.description:
                 self._add_description_slide(
-                    prs,
-                    title="Full Description",
-                    description=card_data.description
+                    prs, title="Full Description", description=card_data.description
                 )
 
             # Save presentation to temp file
             temp_file = tempfile.NamedTemporaryFile(
-                suffix='.pptx',
-                delete=False,
-                prefix='foresight_card_'
+                suffix=".pptx", delete=False, prefix="foresight_card_"
             )
             prs.save(temp_file.name)
 
@@ -3084,7 +3376,7 @@ class ExportService:
         workstream: Dict[str, Any],
         cards: List[CardExportData],
         include_charts: bool = True,
-        include_card_details: bool = True
+        include_card_details: bool = True,
     ) -> str:
         """
         Generate a PowerPoint presentation for a workstream report.
@@ -3110,7 +3402,7 @@ class ExportService:
         temp_files_to_cleanup = []
 
         try:
-            workstream_name = workstream.get('name', 'Workstream Report')
+            workstream_name = workstream.get("name", "Workstream Report")
             logger.info(f"Generating workstream PowerPoint: {workstream_name}")
 
             # Create presentation
@@ -3122,13 +3414,13 @@ class ExportService:
             self._add_title_slide(
                 prs,
                 title=workstream_name,
-                subtitle=f"Intelligence Report • {len(cards)} Cards"
+                subtitle=f"Intelligence Report • {len(cards)} Cards",
             )
 
             # 2. Summary slide
             summary_items = [
                 ("Total Cards", str(len(cards))),
-                ("Description", workstream.get('description', 'N/A')),
+                ("Description", workstream.get("description", "N/A")),
             ]
 
             # Calculate pillar distribution
@@ -3142,17 +3434,19 @@ class ExportService:
                 horizon_counts[horizon] = horizon_counts.get(horizon, 0) + 1
 
             if pillar_counts:
-                pillar_summary = ", ".join(f"{k}: {v}" for k, v in pillar_counts.items())
+                pillar_summary = ", ".join(
+                    f"{k}: {v}" for k, v in pillar_counts.items()
+                )
                 summary_items.append(("Pillars", pillar_summary))
 
             if horizon_counts:
-                horizon_summary = ", ".join(f"{k}: {v}" for k, v in horizon_counts.items())
+                horizon_summary = ", ".join(
+                    f"{k}: {v}" for k, v in horizon_counts.items()
+                )
                 summary_items.append(("Horizons", horizon_summary))
 
             self._add_content_slide(
-                prs,
-                title="Workstream Summary",
-                content_items=summary_items
+                prs, title="Workstream Summary", content_items=summary_items
             )
 
             # 3. Distribution charts slide
@@ -3160,14 +3454,18 @@ class ExportService:
                 # Generate pillar distribution chart
                 pillar_chart_path = None
                 if pillar_counts:
-                    pillar_chart_path = self.generate_pillar_distribution_chart(pillar_counts)
+                    pillar_chart_path = self.generate_pillar_distribution_chart(
+                        pillar_counts
+                    )
                     if pillar_chart_path:
                         temp_files_to_cleanup.append(pillar_chart_path)
 
                 # Generate horizon distribution chart
                 horizon_chart_path = None
                 if horizon_counts:
-                    horizon_chart_path = self.generate_horizon_distribution_chart(horizon_counts)
+                    horizon_chart_path = self.generate_horizon_distribution_chart(
+                        horizon_counts
+                    )
                     if horizon_chart_path:
                         temp_files_to_cleanup.append(horizon_chart_path)
 
@@ -3182,23 +3480,29 @@ class ExportService:
 
                     # Slide title - below header
                     title_box = slide.shapes.add_textbox(
-                        PPTX_MARGIN, Inches(1.25),
-                        PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.6)
+                        PPTX_MARGIN,
+                        Inches(1.25),
+                        PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN),
+                        Inches(0.6),
                     )
                     title_frame = title_box.text_frame
                     title_para = title_frame.paragraphs[0]
                     title_para.text = "Distribution Analysis"
                     title_para.font.size = Pt(28)
                     title_para.font.bold = True
-                    title_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
+                    title_para.font.color.rgb = self._hex_to_rgb(
+                        FORESIGHT_COLORS["primary"]
+                    )
 
                 # Add pillar chart on left - adjusted for header/footer
                 if pillar_chart_path and Path(pillar_chart_path).exists():
                     try:
                         slide.shapes.add_picture(
                             pillar_chart_path,
-                            Inches(0.3), Inches(2.0),
-                            width=Inches(5.5), height=Inches(4.0)
+                            Inches(0.3),
+                            Inches(2.0),
+                            width=Inches(5.5),
+                            height=Inches(4.0),
                         )
                     except Exception as e:
                         logger.warning(f"Failed to add pillar chart: {e}")
@@ -3208,8 +3512,10 @@ class ExportService:
                     try:
                         slide.shapes.add_picture(
                             horizon_chart_path,
-                            Inches(6.5), Inches(2.0),
-                            width=Inches(5.5), height=Inches(4.0)
+                            Inches(6.5),
+                            Inches(2.0),
+                            width=Inches(5.5),
+                            height=Inches(4.0),
                         )
                     except Exception as e:
                         logger.warning(f"Failed to add horizon chart: {e}")
@@ -3229,16 +3535,16 @@ class ExportService:
                         if valid_scores := {
                             k: v for k, v in scores.items() if v is not None
                         }:
-                            scores_text = ", ".join(f"{k}: {v}" for k, v in valid_scores.items())
+                            scores_text = ", ".join(
+                                f"{k}: {v}" for k, v in valid_scores.items()
+                            )
                             card_items.append(("Scores", scores_text))
 
                         # Filter out empty items
                         card_items = [(k, v) for k, v in card_items if v]
 
                         self._add_content_slide(
-                            prs,
-                            title=card.name[:50],
-                            content_items=card_items
+                            prs, title=card.name[:50], content_items=card_items
                         )
 
                 else:
@@ -3250,8 +3556,7 @@ class ExportService:
                     self._add_pptx_footer(slide)
 
                     msg_box = slide.shapes.add_textbox(
-                        Inches(2), Inches(3.5),
-                        Inches(9), Inches(2)
+                        Inches(2), Inches(3.5), Inches(9), Inches(2)
                     )
                     msg_frame = msg_box.text_frame
                     msg_para = msg_frame.paragraphs[0]
@@ -3261,9 +3566,7 @@ class ExportService:
                     msg_para.alignment = PP_ALIGN.CENTER
             # Save presentation to temp file
             temp_file = tempfile.NamedTemporaryFile(
-                suffix='.pptx',
-                delete=False,
-                prefix='foresight_workstream_'
+                suffix=".pptx", delete=False, prefix="foresight_workstream_"
             )
             prs.save(temp_file.name)
 
@@ -3289,7 +3592,7 @@ class ExportService:
         executive_summary: str,
         content_markdown: str,
         generated_at: Optional[datetime] = None,
-        version: Optional[int] = None
+        version: Optional[int] = None,
     ) -> str:
         """
         Generate a PDF export for an executive brief.
@@ -3311,9 +3614,7 @@ class ExportService:
         try:
             # Create temp file for PDF
             pdf_file = tempfile.NamedTemporaryFile(
-                suffix='.pdf',
-                delete=False,
-                prefix='foresight_brief_'
+                suffix=".pdf", delete=False, prefix="foresight_brief_"
             )
             pdf_path = pdf_file.name
             pdf_file.close()
@@ -3325,7 +3626,7 @@ class ExportService:
                 rightMargin=PDF_MARGIN,
                 leftMargin=PDF_MARGIN,
                 topMargin=PDF_MARGIN,
-                bottomMargin=PDF_MARGIN
+                bottomMargin=PDF_MARGIN,
             )
 
             # Get styles
@@ -3340,7 +3641,7 @@ class ExportService:
                 title_text += f" (v{version})"
             elements.extend(
                 (
-                    Paragraph(title_text, styles['Title']),
+                    Paragraph(title_text, styles["Title"]),
                     Spacer(1, 6),
                     HRFlowable(
                         width="100%",
@@ -3354,80 +3655,85 @@ class ExportService:
             # Metadata
             meta_parts = [f"Card: {card_name}"]
             if generated_at:
-                meta_parts.append(f"Generated: {generated_at.strftime('%Y-%m-%d %H:%M UTC')}")
+                meta_parts.append(
+                    f"Generated: {generated_at.strftime('%Y-%m-%d %H:%M UTC')}"
+                )
             if version:
                 meta_parts.append(f"Version: {version}")
             elements.extend(
                 (
-                    Paragraph(" | ".join(meta_parts), styles['Small']),
+                    Paragraph(" | ".join(meta_parts), styles["Small"]),
                     Spacer(1, 12),
-                    Paragraph("Executive Summary", styles['Heading1']),
+                    Paragraph("Executive Summary", styles["Heading1"]),
                     Paragraph(
                         executive_summary or "No summary available.",
-                        styles['Body'],
+                        styles["Body"],
                     ),
                     Spacer(1, 18),
-                    Paragraph("Full Brief", styles['Heading1']),
+                    Paragraph("Full Brief", styles["Heading1"]),
                     Spacer(1, 6),
                 )
             )
             # Parse markdown content into paragraphs
             # Simple markdown parsing - split by double newlines for paragraphs
             if content_markdown:
-                paragraphs = content_markdown.split('\n\n')
+                paragraphs = content_markdown.split("\n\n")
                 for para_text in paragraphs:
                     para_text = para_text.strip()
                     if not para_text:
                         continue
 
                     # Handle headers
-                    if para_text.startswith('# '):
-                        elements.append(Paragraph(para_text[2:], styles['Heading1']))
-                    elif para_text.startswith('## '):
-                        elements.append(Paragraph(para_text[3:], styles['Heading2']))
-                    elif para_text.startswith('### '):
+                    if para_text.startswith("# "):
+                        elements.append(Paragraph(para_text[2:], styles["Heading1"]))
+                    elif para_text.startswith("## "):
+                        elements.append(Paragraph(para_text[3:], styles["Heading2"]))
+                    elif para_text.startswith("### "):
                         # Create a heading3 style on the fly
                         heading3_style = ParagraphStyle(
-                            'Heading3',
-                            parent=styles['Body'],
+                            "Heading3",
+                            parent=styles["Body"],
                             fontSize=PDF_BODY_FONT_SIZE,
-                            fontName='Helvetica-Bold',
+                            fontName="Helvetica-Bold",
                             spaceBefore=10,
                             spaceAfter=4,
                         )
                         elements.append(Paragraph(para_text[4:], heading3_style))
-                    elif para_text.startswith('- ') or para_text.startswith('* '):
+                    elif para_text.startswith("- ") or para_text.startswith("* "):
                         # Bullet list items
                         bullet_style = ParagraphStyle(
-                            'Bullet',
-                            parent=styles['Body'],
+                            "Bullet",
+                            parent=styles["Body"],
                             leftIndent=20,
                             firstLineIndent=-10,
                             spaceBefore=2,
                             spaceAfter=2,
                         )
                         # Handle multi-line bullets
-                        lines = para_text.split('\n')
+                        lines = para_text.split("\n")
                         for line in lines:
                             line = line.strip()
-                            if line.startswith('- ') or line.startswith('* '):
-                                elements.append(Paragraph(f"• {line[2:]}", bullet_style))
+                            if line.startswith("- ") or line.startswith("* "):
+                                elements.append(
+                                    Paragraph(f"• {line[2:]}", bullet_style)
+                                )
                             elif line:
-                                elements.append(Paragraph(line, styles['Body']))
+                                elements.append(Paragraph(line, styles["Body"]))
                     else:
                         # Regular paragraph - handle inline markdown
                         # Convert **bold** to <b>bold</b>
                         import re
-                        formatted = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', para_text)
+
+                        formatted = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", para_text)
                         # Convert *italic* to <i>italic</i>
-                        formatted = re.sub(r'\*(.+?)\*', r'<i>\1</i>', formatted)
+                        formatted = re.sub(r"\*(.+?)\*", r"<i>\1</i>", formatted)
                         # Handle line breaks within paragraph
-                        formatted = formatted.replace('\n', '<br/>')
-                        elements.append(Paragraph(formatted, styles['Body']))
+                        formatted = formatted.replace("\n", "<br/>")
+                        elements.append(Paragraph(formatted, styles["Body"]))
 
                     elements.append(Spacer(1, 4))
             else:
-                elements.append(Paragraph("No content available.", styles['Body']))
+                elements.append(Paragraph("No content available.", styles["Body"]))
 
             elements.extend(
                 (
@@ -3441,13 +3747,15 @@ class ExportService:
                     ),
                 )
             )
-            footer_text = f"Export Date: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}"
+            footer_text = (
+                f"Export Date: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}"
+            )
             elements.extend(
                 (
-                    Paragraph(footer_text, styles['Small']),
+                    Paragraph(footer_text, styles["Small"]),
                     Paragraph(
                         "Generated by Foresight Intelligence Platform",
-                        styles['Small'],
+                        styles["Small"],
                     ),
                 )
             )
@@ -3469,11 +3777,11 @@ class ExportService:
         content_markdown: str,
         generated_at: Optional[datetime] = None,
         version: Optional[int] = None,
-        classification: Optional[Dict[str, str]] = None
+        classification: Optional[Dict[str, str]] = None,
     ) -> str:
         """
         Generate a professional PDF export for an executive brief.
-        
+
         This version includes:
         - City of Austin logo in header
         - Foresight Strategic Intelligence Platform branding
@@ -3481,7 +3789,7 @@ class ExportService:
         - Full AI technology disclosure
         - Colored classification badges with appendix reference
         - Robust markdown parsing for AI-generated content
-        
+
         Designed for senior city leadership distribution.
 
         Args:
@@ -3502,9 +3810,7 @@ class ExportService:
         try:
             # Create temp file for PDF
             pdf_file = tempfile.NamedTemporaryFile(
-                suffix='.pdf',
-                delete=False,
-                prefix='foresight_executive_brief_'
+                suffix=".pdf", delete=False, prefix="foresight_executive_brief_"
             )
             pdf_path = pdf_file.name
             pdf_file.close()
@@ -3516,7 +3822,7 @@ class ExportService:
             md_parser = MarkdownToPDFParser(styles)
 
             # Build document elements
-            elements = [Paragraph(brief_title, styles['DocTitle'])]
+            elements = [Paragraph(brief_title, styles["DocTitle"])]
 
             # Classification badges (colored, with appendix reference)
             if classification:
@@ -3526,31 +3832,37 @@ class ExportService:
             elements.append(Spacer(1, 8))
 
             # Decorative line
-            elements.append(HRFlowable(
-                width="100%",
-                thickness=2,
-                color=PDF_COLORS["secondary"],
-                spaceBefore=4,
-                spaceAfter=16
-            ))
+            elements.append(
+                HRFlowable(
+                    width="100%",
+                    thickness=2,
+                    color=PDF_COLORS["secondary"],
+                    spaceBefore=4,
+                    spaceAfter=16,
+                )
+            )
 
             # Executive Summary Section
-            elements.append(Paragraph("Executive Summary", styles['SectionHeading']))
+            elements.append(Paragraph("Executive Summary", styles["SectionHeading"]))
 
             if executive_summary:
                 # Parse executive summary through the robust parser too
                 summary_clean = md_parser.clean_text(executive_summary)
                 summary_formatted = md_parser.convert_inline_formatting(summary_clean)
                 # Replace newlines with line breaks for the summary
-                summary_formatted = summary_formatted.replace('\n', '<br/>')
-                elements.append(Paragraph(summary_formatted, styles['ExecutiveSummary']))
+                summary_formatted = summary_formatted.replace("\n", "<br/>")
+                elements.append(
+                    Paragraph(summary_formatted, styles["ExecutiveSummary"])
+                )
             else:
-                elements.append(Paragraph("No summary available.", styles['BodyText']))
+                elements.append(Paragraph("No summary available.", styles["BodyText"]))
 
             elements.append(Spacer(1, 16))
 
             # Main Content Section
-            elements.append(Paragraph("Strategic Intelligence Report", styles['SectionHeading']))
+            elements.append(
+                Paragraph("Strategic Intelligence Report", styles["SectionHeading"])
+            )
             elements.append(Spacer(1, 8))
 
             # Parse and render markdown content using robust parser
@@ -3558,27 +3870,31 @@ class ExportService:
                 content_elements = md_parser.parse_to_elements(content_markdown)
                 elements.extend(content_elements)
             else:
-                elements.append(Paragraph("No content available.", styles['BodyText']))
+                elements.append(Paragraph("No content available.", styles["BodyText"]))
 
             # Add metadata section at end
             elements.append(Spacer(1, 20))
-            elements.append(HRFlowable(
-                width="100%",
-                thickness=1,
-                color=PDF_COLORS["light"],
-                spaceBefore=8,
-                spaceAfter=8
-            ))
+            elements.append(
+                HRFlowable(
+                    width="100%",
+                    thickness=1,
+                    color=PDF_COLORS["light"],
+                    spaceBefore=8,
+                    spaceAfter=8,
+                )
+            )
 
             # Document metadata
             meta_items = []
             if generated_at:
-                meta_items.append(f"Generated: {generated_at.strftime('%B %d, %Y at %I:%M %p UTC')}")
+                meta_items.append(
+                    f"Generated: {generated_at.strftime('%B %d, %Y at %I:%M %p UTC')}"
+                )
             if version:
                 meta_items.append(f"Version: {version}")
             meta_items.append(f"Card: {card_name}")
 
-            elements.extend(Paragraph(item, styles['SmallText']) for item in meta_items)
+            elements.extend(Paragraph(item, styles["SmallText"]) for item in meta_items)
             # Add classification appendix if we have classification data
             if classification:
                 appendix_elements = create_classification_appendix(styles)
@@ -3589,7 +3905,7 @@ class ExportService:
                 filename=pdf_path,
                 title=brief_title,
                 include_logo=True,
-                include_ai_disclosure=True
+                include_ai_disclosure=True,
             )
             builder.build(elements)
 
@@ -3598,6 +3914,222 @@ class ExportService:
 
         except Exception as e:
             logger.error(f"Error generating professional brief PDF: {e}")
+            raise
+
+    async def generate_chat_response_pdf(
+        self,
+        title: str,
+        question: str,
+        response_content: str,
+        citations: Optional[List[Dict[str, Any]]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        scope: Optional[str] = None,
+        scope_context: Optional[str] = None,
+    ) -> str:
+        """
+        Generate a professional PDF export for a chat response.
+
+        Produces a mayor-ready document matching the executive brief style,
+        using the existing ProfessionalPDFBuilder for header/footer and
+        MarkdownToPDFParser for the response content.
+
+        Args:
+            title: Document title (conversation title or fallback)
+            question: The user's question
+            response_content: The assistant's markdown response
+            citations: Optional list of citation dicts with title, url, excerpt
+            metadata: Optional metadata dict (source_count, etc.)
+            scope: Optional scope type ("signal", "workstream", or "global")
+            scope_context: Optional name of the signal/workstream if scoped
+
+        Returns:
+            Path to the generated PDF file
+
+        Raises:
+            Exception: If PDF generation fails
+        """
+        try:
+            # Create temp file for PDF
+            pdf_file = tempfile.NamedTemporaryFile(
+                suffix=".pdf", delete=False, prefix="foresight_chat_"
+            )
+            pdf_path = pdf_file.name
+            pdf_file.close()
+
+            # Get professional styles
+            styles = get_professional_pdf_styles()
+
+            # Initialize markdown parser
+            md_parser = MarkdownToPDFParser(styles)
+
+            # Build document elements
+            elements = []
+
+            # --- Title area (top of first page, no separate title page) ---
+            elements.append(Paragraph(title, styles["DocTitle"]))
+            elements.append(Paragraph("Intelligence Response", styles["DocSubtitle"]))
+
+            # Current date
+            date_str = datetime.now().strftime("%B %d, %Y")
+            elements.append(Paragraph(date_str, styles["MetadataText"]))
+
+            # Scope context if scoped
+            if scope and scope_context:
+                scope_label = (
+                    "Signal"
+                    if scope == "signal"
+                    else ("Workstream" if scope == "workstream" else "Scope")
+                )
+                elements.append(
+                    Paragraph(
+                        f"<b>{scope_label}:</b> {md_parser.escape_xml(scope_context)}",
+                        styles["MetadataText"],
+                    )
+                )
+
+            elements.append(Spacer(1, 8))
+
+            # --- Horizontal rule separator ---
+            elements.append(
+                HRFlowable(
+                    width="100%",
+                    thickness=2,
+                    color=PDF_COLORS["secondary"],
+                    spaceBefore=4,
+                    spaceAfter=16,
+                )
+            )
+
+            # --- Question box (light blue callout) ---
+            light_blue_bg = hex_to_rl_color(COA_BRAND_COLORS["light_blue"])
+            question_box_style = ParagraphStyle(
+                "QuestionBody",
+                parent=styles["BodyText"],
+                backColor=light_blue_bg,
+                borderPadding=(10, 10, 10, 10),
+                spaceBefore=4,
+                spaceAfter=4,
+            )
+            question_label_style = ParagraphStyle(
+                "QuestionLabel",
+                parent=styles["BodyText"],
+                fontSize=12,
+                fontName="Helvetica-Bold",
+                textColor=PDF_COLORS["primary"],
+                backColor=light_blue_bg,
+                borderPadding=(10, 10, 2, 10),
+                spaceBefore=0,
+                spaceAfter=0,
+            )
+
+            question_escaped = (
+                md_parser.escape_xml(question) if question else "No question recorded."
+            )
+            elements.append(
+                KeepTogether(
+                    [
+                        Paragraph("Question", question_label_style),
+                        Paragraph(question_escaped, question_box_style),
+                    ]
+                )
+            )
+
+            elements.append(Spacer(1, 16))
+
+            # --- Response / Analysis section ---
+            elements.append(Paragraph("Analysis", styles["SectionHeading"]))
+            elements.append(Spacer(1, 8))
+
+            if response_content:
+                content_elements = md_parser.parse_to_elements(response_content)
+                elements.extend(content_elements)
+            else:
+                elements.append(
+                    Paragraph("No response content available.", styles["BodyText"])
+                )
+
+            # --- Sources / Citations section ---
+            if citations:
+                elements.append(Spacer(1, 16))
+                elements.append(
+                    Paragraph("Sources &amp; References", styles["SectionHeading"])
+                )
+                elements.append(Spacer(1, 6))
+
+                for idx, cite in enumerate(citations, 1):
+                    cite_title = md_parser.escape_xml(
+                        cite.get("title", "Untitled Source")
+                    )
+                    cite_url = md_parser.escape_xml(cite.get("url", ""))
+                    cite_excerpt = md_parser.escape_xml(cite.get("excerpt", ""))
+
+                    # Numbered citation entry
+                    citation_parts = [f"<b>{idx}.</b> <b>{cite_title}</b>"]
+                    if cite_url:
+                        citation_parts.append(
+                            f'<font size="9" color="gray">{cite_url}</font>'
+                        )
+                    elements.append(
+                        Paragraph("<br/>".join(citation_parts), styles["NumberedItem"])
+                    )
+
+                    if cite_excerpt:
+                        excerpt_style = ParagraphStyle(
+                            f"Excerpt_{idx}",
+                            parent=styles["SmallText"],
+                            leftIndent=25,
+                            spaceBefore=1,
+                            spaceAfter=6,
+                            textColor=PDF_COLORS["dark"],
+                            fontSize=9,
+                            leading=12,
+                        )
+                        # Truncate long excerpts
+                        if len(cite_excerpt) > 300:
+                            cite_excerpt = cite_excerpt[:297] + "..."
+                        elements.append(
+                            Paragraph(f"<i>{cite_excerpt}</i>", excerpt_style)
+                        )
+
+            # --- Metadata footer ---
+            if metadata:
+                elements.append(Spacer(1, 20))
+                elements.append(
+                    HRFlowable(
+                        width="100%",
+                        thickness=1,
+                        color=PDF_COLORS["light"],
+                        spaceBefore=8,
+                        spaceAfter=8,
+                    )
+                )
+
+                meta_parts = []
+                if metadata.get("source_count"):
+                    meta_parts.append(f"{metadata['source_count']} sources")
+                if metadata.get("signal_count"):
+                    meta_parts.append(f"{metadata['signal_count']} signals")
+                if metadata.get("model"):
+                    meta_parts.append(f"Model: {metadata['model']}")
+
+                if meta_parts:
+                    meta_text = "Based on " + " across ".join(meta_parts)
+                    elements.append(Paragraph(meta_text, styles["SmallText"]))
+
+            # Build PDF using professional builder (header/footer/logo/disclosure)
+            builder = ProfessionalPDFBuilder(
+                filename=pdf_path,
+                title=title,
+                include_logo=True,
+                include_ai_disclosure=True,
+            )
+            builder.build(elements)
+
+            logger.info(f"Generated chat response PDF: {title}")
+            return pdf_path
+
+        except Exception as e:
+            logger.error(f"Error generating chat response PDF: {e}")
             raise
 
     async def generate_brief_pptx(
@@ -3609,11 +4141,11 @@ class ExportService:
         generated_at: Optional[datetime] = None,
         version: Optional[int] = None,
         classification: Optional[Dict[str, str]] = None,
-        use_gamma: bool = True
+        use_gamma: bool = True,
     ) -> str:
         """
         Generate a PowerPoint presentation for an executive brief.
-        
+
         Attempts to use Gamma.app for AI-powered presentation generation.
         Falls back to local python-pptx generation if Gamma is unavailable.
 
@@ -3637,11 +4169,13 @@ class ExportService:
         if use_gamma:
             try:
                 from .gamma_service import GammaService
-                
+
                 gamma = GammaService()
                 if gamma.is_available():
-                    logger.info(f"Attempting Gamma.app presentation generation for: {brief_title}")
-                    
+                    logger.info(
+                        f"Attempting Gamma.app presentation generation for: {brief_title}"
+                    )
+
                     result = await gamma.generate_presentation(
                         title=brief_title,
                         executive_summary=executive_summary,
@@ -3649,40 +4183,48 @@ class ExportService:
                         classification=classification,
                         num_slides=8,
                         include_images=True,
-                        export_format="pptx"
+                        export_format="pptx",
                     )
-                    
+
                     if result.success and result.pptx_url:
                         # Download the PPTX file
                         pptx_bytes = await gamma.download_export(result.pptx_url)
-                        
+
                         if pptx_bytes:
                             # Save to temp file
                             temp_file = tempfile.NamedTemporaryFile(
-                                suffix='.pptx',
+                                suffix=".pptx",
                                 delete=False,
-                                prefix='foresight_gamma_brief_'
+                                prefix="foresight_gamma_brief_",
                             )
                             temp_file.write(pptx_bytes)
                             temp_file.close()
-                            
-                            logger.info(f"Gamma presentation generated successfully: {temp_file.name}")
+
+                            logger.info(
+                                f"Gamma presentation generated successfully: {temp_file.name}"
+                            )
                             if result.credits_used:
-                                logger.info(f"Gamma credits used: {result.credits_used}, remaining: {result.credits_remaining}")
-                            
+                                logger.info(
+                                    f"Gamma credits used: {result.credits_used}, remaining: {result.credits_remaining}"
+                                )
+
                             return temp_file.name
-                    
+
                     # Log why Gamma failed
                     if result.error_message:
-                        logger.warning(f"Gamma generation failed: {result.error_message}")
+                        logger.warning(
+                            f"Gamma generation failed: {result.error_message}"
+                        )
                     else:
-                        logger.warning("Gamma generation completed but no PPTX URL returned")
-                        
+                        logger.warning(
+                            "Gamma generation completed but no PPTX URL returned"
+                        )
+
             except ImportError:
                 logger.warning("Gamma service not available, using fallback")
             except Exception as e:
                 logger.warning(f"Gamma generation error, falling back to local: {e}")
-        
+
         # Fallback to local generation with improved markdown handling
         return await self._generate_brief_pptx_local(
             brief_title=brief_title,
@@ -3691,9 +4233,9 @@ class ExportService:
             content_markdown=content_markdown,
             generated_at=generated_at,
             version=version,
-            classification=classification
+            classification=classification,
         )
-    
+
     async def _generate_brief_pptx_local(
         self,
         brief_title: str,
@@ -3702,11 +4244,11 @@ class ExportService:
         content_markdown: str,
         generated_at: Optional[datetime] = None,
         version: Optional[int] = None,
-        classification: Optional[Dict[str, str]] = None
+        classification: Optional[Dict[str, str]] = None,
     ) -> str:
         """
         Local PowerPoint generation with improved markdown handling.
-        
+
         Used as fallback when Gamma.app is unavailable.
         Includes:
         - Title slide with visual classification tag badges
@@ -3736,25 +4278,33 @@ class ExportService:
                 if classification.get("pillar"):
                     pillar = classification["pillar"].upper()
                     pillar_def = PILLAR_DEFINITIONS.get(pillar, {})
-                    pillar_name = pillar_def.get("name", PILLAR_NAMES.get(pillar, pillar))
+                    pillar_name = pillar_def.get(
+                        "name", PILLAR_NAMES.get(pillar, pillar)
+                    )
                     pillar_icon = pillar_def.get("icon", "")
                     tag_parts.append(f"{pillar_icon} {pillar_name}")
                     used_pillar = pillar
                 if classification.get("horizon"):
                     horizon = classification["horizon"].upper()
                     horizon_def = HORIZON_DEFINITIONS.get(horizon, {})
-                    horizon_name = horizon_def.get("name", HORIZON_NAMES.get(horizon, horizon))
+                    horizon_name = horizon_def.get(
+                        "name", HORIZON_NAMES.get(horizon, horizon)
+                    )
                     horizon_icon = horizon_def.get("icon", "")
                     tag_parts.append(f"{horizon_icon} {horizon_name}")
                     used_horizon = horizon
                 if classification.get("stage"):
                     stage_raw = classification["stage"]
-                    if stage_match := re.search(r'(\d+)', str(stage_raw)):
+                    if stage_match := re.search(r"(\d+)", str(stage_raw)):
                         stage_num = int(stage_match.group(1))
                         stage_def = STAGE_DEFINITIONS.get(stage_num, {})
-                        stage_name = stage_def.get("name", STAGE_NAMES.get(stage_num, f"Stage {stage_num}"))
+                        stage_name = stage_def.get(
+                            "name", STAGE_NAMES.get(stage_num, f"Stage {stage_num}")
+                        )
                         stage_icon = stage_def.get("icon", "")
-                        tag_parts.append(f"{stage_icon} Stage {stage_num}: {stage_name}")
+                        tag_parts.append(
+                            f"{stage_icon} Stage {stage_num}: {stage_name}"
+                        )
                         used_stage = stage_num
                 if tag_parts:
                     subtitle = "  |  ".join(tag_parts)
@@ -3762,11 +4312,7 @@ class ExportService:
             if generated_at:
                 subtitle += f"\n{generated_at.strftime('%B %d, %Y')}"
 
-            self._add_title_slide(
-                prs,
-                title=brief_title,
-                subtitle=subtitle
-            )
+            self._add_title_slide(prs, title=brief_title, subtitle=subtitle)
 
             # 2. Executive Summary slide
             if executive_summary:
@@ -3775,20 +4321,19 @@ class ExportService:
                     prs,
                     title="Executive Summary",
                     content=clean_summary,
-                    max_chars=1200
+                    max_chars=1200,
                 )
 
             # 3. Content slides - parse with improved markdown handling
             if content_markdown:
                 sections = self._parse_markdown_sections_improved(content_markdown)
 
-                for section_title, section_content in sections[:8]:  # Max 8 content slides
+                for section_title, section_content in sections[
+                    :8
+                ]:  # Max 8 content slides
                     clean_content = self._clean_markdown_for_pptx(section_content)
                     self._add_smart_content_slide(
-                        prs,
-                        title=section_title,
-                        content=clean_content,
-                        max_chars=1000
+                        prs, title=section_title, content=clean_content, max_chars=1000
                     )
 
             # 4. AI Disclosure slide
@@ -3803,7 +4348,7 @@ These definitions help ensure consistent understanding across City departments a
                 prs,
                 title="Appendix: Classification Reference",
                 content=appendix_content,
-                max_chars=1000
+                max_chars=1000,
             )
 
             # Pillar backup slide
@@ -3813,7 +4358,7 @@ These definitions help ensure consistent understanding across City departments a
 
 Focus Areas:
 """
-                for area in pillar_def.get('focus_areas', []):
+                for area in pillar_def.get("focus_areas", []):
                     pillar_content += f"- {area}\n"
                 pillar_content += """
 This pillar is one of six strategic focus areas guiding City of Austin planning and investment decisions."""
@@ -3822,7 +4367,7 @@ This pillar is one of six strategic focus areas guiding City of Austin planning 
                     prs,
                     title=f"{pillar_def.get('icon', '')} Strategic Pillar: {pillar_def['name']}",
                     content=pillar_content,
-                    max_chars=1500
+                    max_chars=1500,
                 )
 
             # Horizon backup slide
@@ -3834,7 +4379,7 @@ Definition: {horizon_def['description']}
 
 Characteristics:
 """
-                for char in horizon_def.get('characteristics', []):
+                for char in horizon_def.get("characteristics", []):
                     horizon_content += f"- {char}\n"
                 horizon_content += """
 The planning horizon indicates when this trend is expected to require significant City attention or action."""
@@ -3843,7 +4388,7 @@ The planning horizon indicates when this trend is expected to require significan
                     prs,
                     title=f"{horizon_def.get('icon', '')} Planning Horizon: {horizon_def['name']}",
                     content=horizon_content,
-                    max_chars=1500
+                    max_chars=1500,
                 )
 
             # Stage backup slide
@@ -3853,7 +4398,7 @@ The planning horizon indicates when this trend is expected to require significan
 
 Key Indicators:
 """
-                for indicator in stage_def.get('indicators', []):
+                for indicator in stage_def.get("indicators", []):
                     stage_content += f"- {indicator}\n"
                 stage_content += """
 The maturity stage reflects the current development status of this trend and helps inform appropriate City response strategies."""
@@ -3862,14 +4407,12 @@ The maturity stage reflects the current development status of this trend and hel
                     prs,
                     title=f"{stage_def.get('icon', '')} Maturity Stage {used_stage}: {stage_def['name']}",
                     content=stage_content,
-                    max_chars=1500
+                    max_chars=1500,
                 )
 
             # Save presentation
             temp_file = tempfile.NamedTemporaryFile(
-                suffix='.pptx',
-                delete=False,
-                prefix='foresight_brief_'
+                suffix=".pptx", delete=False, prefix="foresight_brief_"
             )
             prs.save(temp_file.name)
 
@@ -3879,54 +4422,52 @@ The maturity stage reflects the current development status of this trend and hel
         except Exception as e:
             logger.error(f"Error generating local brief PowerPoint: {e}")
             raise
-    
+
     def _clean_markdown_for_pptx(self, text: str) -> str:
         """
         Clean markdown text for PowerPoint display.
-        
+
         Removes markdown artifacts that don't render well in PPTX.
         """
         import re
-        
+
         if not text:
             return ""
-        
+
         # Remove code blocks
-        text = re.sub(r'```[\s\S]*?```', '', text)
-        text = re.sub(r'`([^`]+)`', r'\1', text)
-        
+        text = re.sub(r"```[\s\S]*?```", "", text)
+        text = re.sub(r"`([^`]+)`", r"\1", text)
+
         # Convert bold/italic to plain text (PPTX doesn't support inline markdown)
-        text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
-        text = re.sub(r'__(.+?)__', r'\1', text)
-        text = re.sub(r'\*(.+?)\*', r'\1', text)
-        text = re.sub(r'_(.+?)_', r'\1', text)
-        
+        text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
+        text = re.sub(r"__(.+?)__", r"\1", text)
+        text = re.sub(r"\*(.+?)\*", r"\1", text)
+        text = re.sub(r"_(.+?)_", r"\1", text)
+
         # Remove links, keep text
-        text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
-        
+        text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
+
         # Standardize bullet points
-        text = re.sub(r'^[\-\*•]\s+', '• ', text, flags=re.MULTILINE)
-        
+        text = re.sub(r"^[\-\*•]\s+", "• ", text, flags=re.MULTILINE)
+
         # Remove horizontal rules
-        text = re.sub(r'^[-*_]{3,}\s*$', '', text, flags=re.MULTILINE)
-        
+        text = re.sub(r"^[-*_]{3,}\s*$", "", text, flags=re.MULTILINE)
+
         # Remove headers markers (keep text)
-        text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
-        
+        text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
+
         # Clean up excessive whitespace
-        text = re.sub(r'\n{3,}', '\n\n', text)
-        text = re.sub(r'  +', ' ', text)
-        
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        text = re.sub(r"  +", " ", text)
+
         return text.strip()
-    
+
     def _parse_markdown_sections_improved(
-        self,
-        content_markdown: str,
-        max_sections: int = 10
+        self, content_markdown: str, max_sections: int = 10
     ) -> List[Tuple[str, str]]:
         """
         Improved markdown section parser.
-        
+
         Handles:
         - Multiple header formats (#, ##, ###)
         - ALL CAPS section headers
@@ -3939,36 +4480,38 @@ The maturity stage reflects the current development status of this trend and hel
         current_title = "Overview"
         current_content = []
 
-        lines = content_markdown.split('\n')
+        lines = content_markdown.split("\n")
 
         for line in lines:
             line_stripped = line.strip()
 
-            if header_match := re.match(r'^(#{1,3})\s+(.+)$', line_stripped):
+            if header_match := re.match(r"^(#{1,3})\s+(.+)$", line_stripped):
                 if current_content:
-                    content_text = '\n'.join(current_content).strip()
+                    content_text = "\n".join(current_content).strip()
                     if content_text and len(content_text) > 30:
                         sections.append((current_title, content_text))
                 current_title = header_match.group(2).strip()
                 # Remove any trailing # or **
-                current_title = re.sub(r'\s*#+\s*$', '', current_title)
-                current_title = re.sub(r'^\*\*|\*\*$', '', current_title)
+                current_title = re.sub(r"\s*#+\s*$", "", current_title)
+                current_title = re.sub(r"^\*\*|\*\*$", "", current_title)
                 current_content = []
                 continue
 
             # Check for ALL CAPS headers (common AI pattern)
-            if re.match(r'^[A-Z][A-Z\s&\-]{5,}$', line_stripped) and not line_stripped.startswith('•'):
+            if re.match(
+                r"^[A-Z][A-Z\s&\-]{5,}$", line_stripped
+            ) and not line_stripped.startswith("•"):
                 if current_content:
-                    content_text = '\n'.join(current_content).strip()
+                    content_text = "\n".join(current_content).strip()
                     if content_text and len(content_text) > 30:
                         sections.append((current_title, content_text))
                 current_title = line_stripped.title()
                 current_content = []
                 continue
 
-            if bold_match := re.match(r'^\*\*([^*]+)\*\*:?\s*$', line_stripped):
+            if bold_match := re.match(r"^\*\*([^*]+)\*\*:?\s*$", line_stripped):
                 if current_content:
-                    content_text = '\n'.join(current_content).strip()
+                    content_text = "\n".join(current_content).strip()
                     if content_text and len(content_text) > 30:
                         sections.append((current_title, content_text))
                 current_title = bold_match.group(1).strip()
@@ -3979,7 +4522,7 @@ The maturity stage reflects the current development status of this trend and hel
 
         # Don't forget the last section
         if current_content:
-            content_text = '\n'.join(current_content).strip()
+            content_text = "\n".join(current_content).strip()
             if content_text and len(content_text) > 30:
                 sections.append((current_title, content_text))
 
@@ -3988,17 +4531,13 @@ The maturity stage reflects the current development status of this trend and hel
             sections = [("Key Findings", content_markdown.strip())]
 
         return sections[:max_sections]
-    
+
     def _add_smart_content_slide(
-        self,
-        prs: Presentation,
-        title: str,
-        content: str,
-        max_chars: int = 1000
+        self, prs: Presentation, title: str, content: str, max_chars: int = 1000
     ) -> None:
         """
         Add a content slide with smart text handling.
-        
+
         Handles bullet points, truncation, and proper formatting.
         """
         slide_layout = prs.slide_layouts[6]  # Blank layout
@@ -4010,8 +4549,7 @@ The maturity stage reflects the current development status of this trend and hel
 
         # Slide title
         title_box = slide.shapes.add_textbox(
-            PPTX_MARGIN, Inches(1.25),
-            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.6)
+            PPTX_MARGIN, Inches(1.25), PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.6)
         )
         title_frame = title_box.text_frame
         title_para = title_frame.paragraphs[0]
@@ -4026,14 +4564,13 @@ The maturity stage reflects the current development status of this trend and hel
 
         # Content area
         content_box = slide.shapes.add_textbox(
-            PPTX_MARGIN, Inches(1.95),
-            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(4.5)
+            PPTX_MARGIN, Inches(1.95), PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(4.5)
         )
         content_frame = content_box.text_frame
         content_frame.word_wrap = True
 
         # Parse content into paragraphs/bullets
-        lines = content.split('\n')
+        lines = content.split("\n")
         first_para = True
 
         for line in lines:
@@ -4048,12 +4585,12 @@ The maturity stage reflects the current development status of this trend and hel
                 para = content_frame.add_paragraph()
 
             if (
-                is_bullet := line.startswith('•')
-                or line.startswith('-')
-                or line.startswith('*')
+                is_bullet := line.startswith("•")
+                or line.startswith("-")
+                or line.startswith("*")
             ):
                 # Clean bullet marker and add proper bullet
-                line = line.lstrip('•-* ')
+                line = line.lstrip("•-* ")
                 para.text = f"• {line}"
                 para.level = 0
             else:
@@ -4063,19 +4600,18 @@ The maturity stage reflects the current development status of this trend and hel
             para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
             para.space_before = Pt(6)
             para.space_after = Pt(4)
-    
+
     def _add_ai_disclosure_slide(self, prs: Presentation) -> None:
         """Add an AI technology disclosure slide."""
         slide_layout = prs.slide_layouts[6]
         slide = prs.slides.add_slide(slide_layout)
-        
+
         self._add_pptx_header(slide)
         self._add_pptx_footer(slide)
-        
+
         # Title
         title_box = slide.shapes.add_textbox(
-            PPTX_MARGIN, Inches(1.25),
-            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.6)
+            PPTX_MARGIN, Inches(1.25), PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.6)
         )
         title_frame = title_box.text_frame
         title_para = title_frame.paragraphs[0]
@@ -4083,7 +4619,7 @@ The maturity stage reflects the current development status of this trend and hel
         title_para.font.size = Pt(28)
         title_para.font.bold = True
         title_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
-        
+
         # Disclosure content
         disclosure_text = """This strategic intelligence brief was generated using the FORESIGHT platform, powered by advanced AI technologies:
 
@@ -4095,28 +4631,27 @@ The maturity stage reflects the current development status of this trend and hel
 • Tavily - Real-time research aggregation
 
 The City of Austin is committed to transparent and responsible use of AI technology in public service. All AI-generated content is reviewed for accuracy and relevance."""
-        
+
         content_box = slide.shapes.add_textbox(
-            PPTX_MARGIN, Inches(1.95),
-            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(4.5)
+            PPTX_MARGIN, Inches(1.95), PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(4.5)
         )
         content_frame = content_box.text_frame
         content_frame.word_wrap = True
-        
-        lines = disclosure_text.split('\n')
+
+        lines = disclosure_text.split("\n")
         first_para = True
-        
+
         for line in lines:
             line = line.strip()
             if not line:
                 continue
-            
+
             if first_para:
                 para = content_frame.paragraphs[0]
                 first_para = False
             else:
                 para = content_frame.add_paragraph()
-            
+
             para.text = line
             para.font.size = Pt(14)
             para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
@@ -4130,60 +4665,62 @@ The City of Austin is committed to transparent and responsible use of AI technol
     def _extract_key_takeaways(self, brief_markdown: str) -> List[str]:
         """
         Extract key takeaways from brief markdown content.
-        
+
         Looks for sections like "Key Takeaways", "Key Findings", "Key Implications",
         "What This Means", bullet points, or numbered lists.
         """
         import re
+
         takeaways = []
 
         # Try to find key sections
         key_section_patterns = [
-            r'(?:##?\s*)?(?:Key\s+)?(?:Takeaways?|Findings?|Implications?|Insights?)[\s:]*\n((?:[-•*]\s*.+\n?)+)',
-            r'(?:##?\s*)?What\s+This\s+Means[^:]*:?\s*\n((?:[-•*]\s*.+\n?)+)',
-            r'(?:##?\s*)?Strategic\s+(?:Implications?|Considerations?)[\s:]*\n((?:[-•*]\s*.+\n?)+)',
+            r"(?:##?\s*)?(?:Key\s+)?(?:Takeaways?|Findings?|Implications?|Insights?)[\s:]*\n((?:[-•*]\s*.+\n?)+)",
+            r"(?:##?\s*)?What\s+This\s+Means[^:]*:?\s*\n((?:[-•*]\s*.+\n?)+)",
+            r"(?:##?\s*)?Strategic\s+(?:Implications?|Considerations?)[\s:]*\n((?:[-•*]\s*.+\n?)+)",
         ]
 
         for pattern in key_section_patterns:
             matches = re.findall(pattern, brief_markdown, re.IGNORECASE | re.MULTILINE)
             for match in matches:
-                bullets = re.findall(r'[-•*]\s*(.+?)(?:\n|$)', match)
+                bullets = re.findall(r"[-•*]\s*(.+?)(?:\n|$)", match)
                 takeaways.extend([b.strip() for b in bullets if len(b.strip()) > 20])
 
         # If no structured takeaways found, extract from summary section
         if not takeaways:
             if summary_match := re.search(
-                r'(?:##?\s*)?(?:Executive\s+)?Summary[\s:]*\n(.+?)(?:\n##|\n\n\n|$)',
+                r"(?:##?\s*)?(?:Executive\s+)?Summary[\s:]*\n(.+?)(?:\n##|\n\n\n|$)",
                 brief_markdown,
                 re.IGNORECASE | re.DOTALL,
             ):
                 summary = summary_match.group(1)
-                sentences = re.split(r'(?<=[.!?])\s+', summary)
+                sentences = re.split(r"(?<=[.!?])\s+", summary)
                 takeaways = [s.strip() for s in sentences[:3] if len(s.strip()) > 30]
 
         return takeaways[:5]  # Limit to 5 takeaways
-    
+
     def _extract_city_examples(self, brief_markdown: str) -> List[Dict[str, str]]:
         """
         Extract examples of other cities, projects, or implementations from brief content.
-        
+
         Returns list of dicts with 'city', 'project', and 'detail' keys.
         """
         import re
+
         examples = []
-        
+
         # Common city/organization patterns
         city_patterns = [
             # "City of X has implemented/launched/deployed..."
-            r'(?:City\s+of\s+|The\s+)?([\w\s]+?)(?:\s+has|\s+is|\s+launched|\s+implemented|\s+deployed|\s+piloted|\s+tested)\s+(.+?)(?:\.|,\s+(?:which|resulting|leading))',
+            r"(?:City\s+of\s+|The\s+)?([\w\s]+?)(?:\s+has|\s+is|\s+launched|\s+implemented|\s+deployed|\s+piloted|\s+tested)\s+(.+?)(?:\.|,\s+(?:which|resulting|leading))",
             # "In X, they have..."
-            r'In\s+([\w\s,]+?),\s+(?:they|the\s+city|officials|government)\s+(?:have|has)\s+(.+?)(?:\.|,)',
+            r"In\s+([\w\s,]+?),\s+(?:they|the\s+city|officials|government)\s+(?:have|has)\s+(.+?)(?:\.|,)",
             # "X's program/initiative/project..."
             r"([\w\s]+?)'s\s+([\w\s]+?(?:program|initiative|project|pilot|system))\s+(.+?)(?:\.|,)",
             # "programs like X in Y"
-            r'(?:programs?|initiatives?|projects?)\s+(?:like|such\s+as)\s+(.+?)\s+in\s+([\w\s]+?)(?:\.|,|$)',
+            r"(?:programs?|initiatives?|projects?)\s+(?:like|such\s+as)\s+(.+?)\s+in\s+([\w\s]+?)(?:\.|,|$)",
         ]
-        
+
         for pattern in city_patterns:
             matches = re.findall(pattern, brief_markdown, re.IGNORECASE)
             for match in matches:
@@ -4191,42 +4728,51 @@ The City of Austin is committed to transparent and responsible use of AI technol
                     city = match[0].strip() if match[0] else ""
                     detail = match[1].strip() if len(match) > 1 else ""
                     project = match[2].strip() if len(match) > 2 else ""
-                    
+
                     # Filter out generic terms
-                    skip_terms = ['the', 'this', 'that', 'these', 'those', 'austin', 'texas']
+                    skip_terms = [
+                        "the",
+                        "this",
+                        "that",
+                        "these",
+                        "those",
+                        "austin",
+                        "texas",
+                    ]
                     if city.lower() not in skip_terms and len(city) > 2:
-                        examples.append({
-                            'city': city,
-                            'project': project,
-                            'detail': detail[:150] if detail else ""
-                        })
-        
+                        examples.append(
+                            {
+                                "city": city,
+                                "project": project,
+                                "detail": detail[:150] if detail else "",
+                            }
+                        )
+
         # Deduplicate by city name
         seen_cities = set()
         unique_examples = []
         for ex in examples:
-            city_lower = ex['city'].lower()
+            city_lower = ex["city"].lower()
             if city_lower not in seen_cities:
                 seen_cities.add(city_lower)
                 unique_examples.append(ex)
-        
+
         return unique_examples[:4]  # Limit to 4 examples
-    
+
     def _generate_portfolio_comparison_chart(
-        self,
-        briefs: List,  # List of PortfolioBrief
-        dpi: int = CHART_DPI
+        self, briefs: List, dpi: int = CHART_DPI  # List of PortfolioBrief
     ) -> Optional[str]:
         """
         Generate a comparison chart showing all cards' scores.
-        
+
         Creates a grouped bar chart comparing impact/relevance/velocity
         across all portfolio cards.
         """
         try:
             # Filter briefs with valid scores
             valid_briefs = [
-                b for b in briefs 
+                b
+                for b in briefs
                 if b.impact_score is not None or b.relevance_score is not None
             ]
 
@@ -4237,7 +4783,7 @@ The City of Austin is committed to transparent and responsible use of AI technol
 
             # Prepare data
             names = [
-                f'{b.card_name[:25]}...' if len(b.card_name) > 25 else b.card_name
+                f"{b.card_name[:25]}..." if len(b.card_name) > 25 else b.card_name
                 for b in valid_briefs
             ]
             impacts = [b.impact_score or 0 for b in valid_briefs]
@@ -4248,32 +4794,53 @@ The City of Austin is committed to transparent and responsible use of AI technol
             width = 0.25
 
             # Create bars
-            bars1 = ax.bar(x - width, impacts, width, label='Impact', color=COA_BRAND_COLORS["logo_blue"])
-            bars2 = ax.bar(x, relevances, width, label='Relevance', color=COA_BRAND_COLORS["logo_green"])
-            bars3 = ax.bar(x + width, velocities, width, label='Velocity', color=COA_BRAND_COLORS["dark_blue"])
+            bars1 = ax.bar(
+                x - width,
+                impacts,
+                width,
+                label="Impact",
+                color=COA_BRAND_COLORS["logo_blue"],
+            )
+            bars2 = ax.bar(
+                x,
+                relevances,
+                width,
+                label="Relevance",
+                color=COA_BRAND_COLORS["logo_green"],
+            )
+            bars3 = ax.bar(
+                x + width,
+                velocities,
+                width,
+                label="Velocity",
+                color=COA_BRAND_COLORS["dark_blue"],
+            )
 
             # Customize chart
-            ax.set_ylabel('Score (0-100)', fontsize=11)
-            ax.set_title('Portfolio Score Comparison', fontsize=14, fontweight='bold', color=COA_BRAND_COLORS["dark_blue"])
+            ax.set_ylabel("Score (0-100)", fontsize=11)
+            ax.set_title(
+                "Portfolio Score Comparison",
+                fontsize=14,
+                fontweight="bold",
+                color=COA_BRAND_COLORS["dark_blue"],
+            )
             ax.set_xticks(x)
-            ax.set_xticklabels(names, rotation=45, ha='right', fontsize=9)
-            ax.legend(loc='upper right')
+            ax.set_xticklabels(names, rotation=45, ha="right", fontsize=9)
+            ax.legend(loc="upper right")
             ax.set_ylim(0, 110)
 
             # Style
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
-            ax.yaxis.grid(True, linestyle='--', alpha=0.3)
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+            ax.yaxis.grid(True, linestyle="--", alpha=0.3)
 
             plt.tight_layout()
 
             # Save
             temp_file = tempfile.NamedTemporaryFile(
-                suffix='.png',
-                delete=False,
-                prefix='foresight_portfolio_comparison_'
+                suffix=".png", delete=False, prefix="foresight_portfolio_comparison_"
             )
-            plt.savefig(temp_file.name, dpi=dpi, bbox_inches='tight', facecolor='white')
+            plt.savefig(temp_file.name, dpi=dpi, bbox_inches="tight", facecolor="white")
 
             return temp_file.name
 
@@ -4281,17 +4848,17 @@ The City of Austin is committed to transparent and responsible use of AI technol
             logger.error(f"Error generating portfolio comparison chart: {e}")
             return None
         finally:
-            plt.close('all')
-    
+            plt.close("all")
+
     def _generate_priority_matrix_chart(
         self,
-        briefs: List,  # List of PortfolioBrief  
+        briefs: List,  # List of PortfolioBrief
         synthesis,  # PortfolioSynthesisData
-        dpi: int = CHART_DPI
+        dpi: int = CHART_DPI,
     ) -> Optional[str]:
         """
         Generate a visual 2x2 priority matrix chart.
-        
+
         Places cards in quadrants based on synthesis priority_matrix data.
         """
         try:
@@ -4303,16 +4870,60 @@ The City of Austin is committed to transparent and responsible use of AI technol
             fig, ax = plt.subplots(figsize=(10, 8))
 
             # Draw quadrant backgrounds
-            ax.fill([0, 50, 50, 0], [50, 50, 100, 100], color='#FEE2E2', alpha=0.5)  # Urgent - top left
-            ax.fill([50, 100, 100, 50], [50, 50, 100, 100], color='#FEF3C7', alpha=0.5)  # Strategic - top right
-            ax.fill([0, 50, 50, 0], [0, 0, 50, 50], color='#DBEAFE', alpha=0.5)  # Monitor - bottom left
-            ax.fill([50, 100, 100, 50], [0, 0, 50, 50], color='#D1FAE5', alpha=0.5)  # Low priority - bottom right
+            ax.fill(
+                [0, 50, 50, 0], [50, 50, 100, 100], color="#FEE2E2", alpha=0.5
+            )  # Urgent - top left
+            ax.fill(
+                [50, 100, 100, 50], [50, 50, 100, 100], color="#FEF3C7", alpha=0.5
+            )  # Strategic - top right
+            ax.fill(
+                [0, 50, 50, 0], [0, 0, 50, 50], color="#DBEAFE", alpha=0.5
+            )  # Monitor - bottom left
+            ax.fill(
+                [50, 100, 100, 50], [0, 0, 50, 50], color="#D1FAE5", alpha=0.5
+            )  # Low priority - bottom right
 
             # Quadrant labels
-            ax.text(25, 95, '🔴 URGENT ACTION', ha='center', va='top', fontsize=12, fontweight='bold', color='#DC2626')
-            ax.text(75, 95, '🟡 STRATEGIC PLANNING', ha='center', va='top', fontsize=12, fontweight='bold', color='#D97706')
-            ax.text(25, 5, '🔵 MONITOR', ha='center', va='bottom', fontsize=12, fontweight='bold', color='#2563EB')
-            ax.text(75, 5, '🟢 EVALUATE', ha='center', va='bottom', fontsize=12, fontweight='bold', color='#059669')
+            ax.text(
+                25,
+                95,
+                "🔴 URGENT ACTION",
+                ha="center",
+                va="top",
+                fontsize=12,
+                fontweight="bold",
+                color="#DC2626",
+            )
+            ax.text(
+                75,
+                95,
+                "🟡 STRATEGIC PLANNING",
+                ha="center",
+                va="top",
+                fontsize=12,
+                fontweight="bold",
+                color="#D97706",
+            )
+            ax.text(
+                25,
+                5,
+                "🔵 MONITOR",
+                ha="center",
+                va="bottom",
+                fontsize=12,
+                fontweight="bold",
+                color="#2563EB",
+            )
+            ax.text(
+                75,
+                5,
+                "🟢 EVALUATE",
+                ha="center",
+                va="bottom",
+                fontsize=12,
+                fontweight="bold",
+                color="#059669",
+            )
 
             # Place cards
             for i, brief in enumerate(briefs):
@@ -4332,25 +4943,52 @@ The City of Austin is committed to transparent and responsible use of AI technol
                     y = 25 + (i // 3) * 8
 
                 # Get pillar color
-                pillar_def = PILLAR_DEFINITIONS.get(brief.pillar_id.upper() if brief.pillar_id else "", {})
+                pillar_def = PILLAR_DEFINITIONS.get(
+                    brief.pillar_id.upper() if brief.pillar_id else "", {}
+                )
                 pillar_color = pillar_def.get("color", COA_BRAND_COLORS["logo_blue"])
 
                 # Draw card marker
-                ax.scatter(x, y, s=200, c=pillar_color, edgecolors='white', linewidth=2, zorder=5)
+                ax.scatter(
+                    x,
+                    y,
+                    s=200,
+                    c=pillar_color,
+                    edgecolors="white",
+                    linewidth=2,
+                    zorder=5,
+                )
 
                 # Truncate name
-                short_name = f'{name[:18]}..' if len(name) > 18 else name
-                ax.annotate(short_name, (x, y), xytext=(0, -15), textcoords='offset points',
-                           ha='center', fontsize=8, color=COA_BRAND_COLORS["dark_blue"])
+                short_name = f"{name[:18]}.." if len(name) > 18 else name
+                ax.annotate(
+                    short_name,
+                    (x, y),
+                    xytext=(0, -15),
+                    textcoords="offset points",
+                    ha="center",
+                    fontsize=8,
+                    color=COA_BRAND_COLORS["dark_blue"],
+                )
 
             # Draw quadrant lines
-            ax.axhline(y=50, color='gray', linewidth=2, linestyle='-', alpha=0.5)
-            ax.axvline(x=50, color='gray', linewidth=2, linestyle='-', alpha=0.5)
+            ax.axhline(y=50, color="gray", linewidth=2, linestyle="-", alpha=0.5)
+            ax.axvline(x=50, color="gray", linewidth=2, linestyle="-", alpha=0.5)
 
             # Axis labels
-            ax.set_xlabel('← Lower Urgency          Higher Urgency →', fontsize=11, color='gray')
-            ax.set_ylabel('← Lower Impact          Higher Impact →', fontsize=11, color='gray')
-            ax.set_title('Strategic Priority Matrix', fontsize=14, fontweight='bold', color=COA_BRAND_COLORS["dark_blue"], pad=20)
+            ax.set_xlabel(
+                "← Lower Urgency          Higher Urgency →", fontsize=11, color="gray"
+            )
+            ax.set_ylabel(
+                "← Lower Impact          Higher Impact →", fontsize=11, color="gray"
+            )
+            ax.set_title(
+                "Strategic Priority Matrix",
+                fontsize=14,
+                fontweight="bold",
+                color=COA_BRAND_COLORS["dark_blue"],
+                pad=20,
+            )
 
             ax.set_xlim(0, 100)
             ax.set_ylim(0, 100)
@@ -4363,11 +5001,9 @@ The City of Austin is committed to transparent and responsible use of AI technol
             plt.tight_layout()
 
             temp_file = tempfile.NamedTemporaryFile(
-                suffix='.png',
-                delete=False,
-                prefix='foresight_priority_matrix_'
+                suffix=".png", delete=False, prefix="foresight_priority_matrix_"
             )
-            plt.savefig(temp_file.name, dpi=dpi, bbox_inches='tight', facecolor='white')
+            plt.savefig(temp_file.name, dpi=dpi, bbox_inches="tight", facecolor="white")
 
             return temp_file.name
 
@@ -4375,14 +5011,14 @@ The City of Austin is committed to transparent and responsible use of AI technol
             logger.error(f"Error generating priority matrix chart: {e}")
             return None
         finally:
-            plt.close('all')
-    
+            plt.close("all")
+
     def _add_portfolio_dashboard_slide(
         self,
         prs: Presentation,
         briefs: List,  # List of PortfolioBrief
         comparison_chart_path: Optional[str],
-        pillar_chart_path: Optional[str]
+        pillar_chart_path: Optional[str],
     ) -> None:
         """Add a visual dashboard slide with charts and key metrics."""
         slide_layout = prs.slide_layouts[6]
@@ -4393,8 +5029,7 @@ The City of Austin is committed to transparent and responsible use of AI technol
 
         # Title
         title_box = slide.shapes.add_textbox(
-            PPTX_MARGIN, Inches(1.25),
-            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.5)
+            PPTX_MARGIN, Inches(1.25), PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.5)
         )
         title_frame = title_box.text_frame
         title_para = title_frame.paragraphs[0]
@@ -4430,11 +5065,15 @@ The City of Austin is committed to transparent and responsible use of AI technol
                 MSO_SHAPE.ROUNDED_RECTANGLE, x, metrics_y, metric_width, metric_height
             )
             metric_box.fill.solid()
-            metric_box.fill.fore_color.rgb = self._hex_to_rgb(COA_BRAND_COLORS["light_blue"])
+            metric_box.fill.fore_color.rgb = self._hex_to_rgb(
+                COA_BRAND_COLORS["light_blue"]
+            )
             metric_box.line.fill.background()
 
             # Value
-            value_box = slide.shapes.add_textbox(x, metrics_y + Inches(0.1), metric_width, Inches(0.45))
+            value_box = slide.shapes.add_textbox(
+                x, metrics_y + Inches(0.1), metric_width, Inches(0.45)
+            )
             value_frame = value_box.text_frame
             value_para = value_frame.paragraphs[0]
             value_para.text = value
@@ -4444,7 +5083,9 @@ The City of Austin is committed to transparent and responsible use of AI technol
             value_para.alignment = PP_ALIGN.CENTER
 
             # Label
-            label_box = slide.shapes.add_textbox(x, metrics_y + Inches(0.5), metric_width, Inches(0.35))
+            label_box = slide.shapes.add_textbox(
+                x, metrics_y + Inches(0.5), metric_width, Inches(0.35)
+            )
             label_frame = label_box.text_frame
             label_para = label_frame.paragraphs[0]
             label_para.text = label
@@ -4460,8 +5101,10 @@ The City of Austin is committed to transparent and responsible use of AI technol
             try:
                 slide.shapes.add_picture(
                     comparison_chart_path,
-                    PPTX_MARGIN, chart_y,
-                    width=Inches(4.5), height=chart_height
+                    PPTX_MARGIN,
+                    chart_y,
+                    width=Inches(4.5),
+                    height=chart_height,
                 )
             except Exception as e:
                 logger.warning(f"Failed to add comparison chart: {e}")
@@ -4470,34 +5113,42 @@ The City of Austin is committed to transparent and responsible use of AI technol
             try:
                 slide.shapes.add_picture(
                     pillar_chart_path,
-                    Inches(5.0), chart_y,
-                    width=Inches(4.2), height=chart_height
+                    Inches(5.0),
+                    chart_y,
+                    width=Inches(4.2),
+                    height=chart_height,
                 )
             except Exception as e:
                 logger.warning(f"Failed to add pillar chart: {e}")
-    
+
     def _add_card_deep_dive_slides(
         self,
         prs: Presentation,
         brief,  # PortfolioBrief
         index: int,
-        chart_path: Optional[str] = None
+        chart_path: Optional[str] = None,
     ) -> None:
         """
         Add 2-3 slides for a single card with detailed insights.
-        
+
         Slide 1: Overview with pillar, horizon, scores (if available)
         Slide 2: Key takeaways and city examples (if found)
         """
-        pillar_def = PILLAR_DEFINITIONS.get(brief.pillar_id.upper() if brief.pillar_id else "", {})
+        pillar_def = PILLAR_DEFINITIONS.get(
+            brief.pillar_id.upper() if brief.pillar_id else "", {}
+        )
         pillar_name = pillar_def.get("name", brief.pillar_id or "Unknown")
         pillar_icon = pillar_def.get("icon", "🏛️")
         pillar_color = pillar_def.get("color", COA_BRAND_COLORS["logo_blue"])
 
-        horizon_def = HORIZON_DEFINITIONS.get(brief.horizon.upper() if brief.horizon else "", {})
+        horizon_def = HORIZON_DEFINITIONS.get(
+            brief.horizon.upper() if brief.horizon else "", {}
+        )
         horizon_name = horizon_def.get("name", brief.horizon or "Unknown")
 
-        stage_def = STAGE_DEFINITIONS.get(brief.stage_id.upper() if brief.stage_id else "", {})
+        stage_def = STAGE_DEFINITIONS.get(
+            brief.stage_id.upper() if brief.stage_id else "", {}
+        )
         stage_name = stage_def.get("name", brief.stage_id or "Unknown")
 
         # ===== SLIDE 1: Overview =====
@@ -4509,8 +5160,7 @@ The City of Austin is committed to transparent and responsible use of AI technol
 
         # Title with index
         title_box = slide1.shapes.add_textbox(
-            PPTX_MARGIN, Inches(1.25),
-            PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.6)
+            PPTX_MARGIN, Inches(1.25), PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.6)
         )
         title_frame = title_box.text_frame
         title_para = title_frame.paragraphs[0]
@@ -4526,13 +5176,19 @@ The City of Austin is committed to transparent and responsible use of AI technol
 
         # Pillar badge
         pillar_badge = slide1.shapes.add_shape(
-            MSO_SHAPE.ROUNDED_RECTANGLE, PPTX_MARGIN, badges_y, Inches(2.5), badge_height
+            MSO_SHAPE.ROUNDED_RECTANGLE,
+            PPTX_MARGIN,
+            badges_y,
+            Inches(2.5),
+            badge_height,
         )
         pillar_badge.fill.solid()
         pillar_badge.fill.fore_color.rgb = self._hex_to_rgb(pillar_color)
         pillar_badge.line.fill.background()
 
-        pillar_text = slide1.shapes.add_textbox(PPTX_MARGIN, badges_y, Inches(2.5), badge_height)
+        pillar_text = slide1.shapes.add_textbox(
+            PPTX_MARGIN, badges_y, Inches(2.5), badge_height
+        )
         pf = pillar_text.text_frame
         pp = pf.paragraphs[0]
         pp.text = f"{pillar_icon} {pillar_name}"
@@ -4544,13 +5200,21 @@ The City of Austin is committed to transparent and responsible use of AI technol
 
         # Horizon badge
         horizon_badge = slide1.shapes.add_shape(
-            MSO_SHAPE.ROUNDED_RECTANGLE, Inches(3.0), badges_y, Inches(2.0), badge_height
+            MSO_SHAPE.ROUNDED_RECTANGLE,
+            Inches(3.0),
+            badges_y,
+            Inches(2.0),
+            badge_height,
         )
         horizon_badge.fill.solid()
-        horizon_badge.fill.fore_color.rgb = self._hex_to_rgb(COA_BRAND_COLORS["dark_blue"])
+        horizon_badge.fill.fore_color.rgb = self._hex_to_rgb(
+            COA_BRAND_COLORS["dark_blue"]
+        )
         horizon_badge.line.fill.background()
 
-        horizon_text = slide1.shapes.add_textbox(Inches(3.0), badges_y, Inches(2.0), badge_height)
+        horizon_text = slide1.shapes.add_textbox(
+            Inches(3.0), badges_y, Inches(2.0), badge_height
+        )
         hf = horizon_text.text_frame
         hp = hf.paragraphs[0]
         hp.text = f"⏱️ {horizon_name}"
@@ -4562,13 +5226,21 @@ The City of Austin is committed to transparent and responsible use of AI technol
 
         # Stage badge
         stage_badge = slide1.shapes.add_shape(
-            MSO_SHAPE.ROUNDED_RECTANGLE, Inches(5.3), badges_y, Inches(2.2), badge_height
+            MSO_SHAPE.ROUNDED_RECTANGLE,
+            Inches(5.3),
+            badges_y,
+            Inches(2.2),
+            badge_height,
         )
         stage_badge.fill.solid()
-        stage_badge.fill.fore_color.rgb = self._hex_to_rgb(COA_BRAND_COLORS["logo_green"])
+        stage_badge.fill.fore_color.rgb = self._hex_to_rgb(
+            COA_BRAND_COLORS["logo_green"]
+        )
         stage_badge.line.fill.background()
 
-        stage_text = slide1.shapes.add_textbox(Inches(5.3), badges_y, Inches(2.2), badge_height)
+        stage_text = slide1.shapes.add_textbox(
+            Inches(5.3), badges_y, Inches(2.2), badge_height
+        )
         sf = stage_text.text_frame
         sp = sf.paragraphs[0]
         sp.text = f"📊 {stage_name}"
@@ -4593,8 +5265,10 @@ The City of Austin is committed to transparent and responsible use of AI technol
             try:
                 slide1.shapes.add_picture(
                     chart_path,
-                    Inches(5.3), summary_y,
-                    width=Inches(4.0), height=Inches(2.8)
+                    Inches(5.3),
+                    summary_y,
+                    width=Inches(4.0),
+                    height=Inches(2.8),
                 )
             except Exception as e:
                 logger.warning(f"Failed to add score chart for {brief.card_name}: {e}")
@@ -4629,7 +5303,9 @@ The City of Austin is committed to transparent and responsible use of AI technol
             summary_para = summary_frame.paragraphs[0]
 
         summary_text = brief.brief_summary or "Executive summary not available."
-        summary_para.text = summary_text[:600] if len(summary_text) > 600 else summary_text
+        summary_para.text = (
+            summary_text[:600] if len(summary_text) > 600 else summary_text
+        )
         summary_para.font.size = Pt(14)
         summary_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["dark"])
         summary_para.space_before = Pt(6)
@@ -4647,8 +5323,10 @@ The City of Austin is committed to transparent and responsible use of AI technol
 
             # Title
             title_box2 = slide2.shapes.add_textbox(
-                PPTX_MARGIN, Inches(1.25),
-                PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.5)
+                PPTX_MARGIN,
+                Inches(1.25),
+                PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN),
+                Inches(0.5),
             )
             title_frame2 = title_box2.text_frame
             title_para2 = title_frame2.paragraphs[0]
@@ -4662,8 +5340,7 @@ The City of Austin is committed to transparent and responsible use of AI technol
         # Key Takeaways section
         if takeaways:
             takeaways_box = slide2.shapes.add_textbox(
-                PPTX_MARGIN, content_y,
-                Inches(4.5), Inches(4.0)
+                PPTX_MARGIN, content_y, Inches(4.5), Inches(4.0)
             )
             tf = takeaways_box.text_frame
             tf.word_wrap = True
@@ -4687,11 +5364,12 @@ The City of Austin is committed to transparent and responsible use of AI technol
         # City Examples section
         if city_examples:
             examples_x = Inches(5.0) if takeaways else PPTX_MARGIN
-            examples_width = Inches(4.2) if takeaways else PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN)
+            examples_width = (
+                Inches(4.2) if takeaways else PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN)
+            )
 
             examples_box = slide2.shapes.add_textbox(
-                examples_x, content_y,
-                examples_width, Inches(4.0)
+                examples_x, content_y, examples_width, Inches(4.0)
             )
             ef = examples_box.text_frame
             ef.word_wrap = True
@@ -4707,7 +5385,7 @@ The City of Austin is committed to transparent and responsible use of AI technol
             for example in city_examples:
                 city_para = ef.add_paragraph()
                 city_text = f"• {example['city']}"
-                if example.get('detail'):
+                if example.get("detail"):
                     city_text += f": {example['detail']}"
                 city_para.text = city_text[:180] if len(city_text) > 180 else city_text
                 city_para.font.size = Pt(12)
@@ -4718,11 +5396,11 @@ The City of Austin is committed to transparent and responsible use of AI technol
         self,
         workstream_name: str,
         briefs: List,  # List of PortfolioBrief
-        synthesis  # PortfolioSynthesisData
+        synthesis,  # PortfolioSynthesisData
     ) -> str:
         """
         Generate a local portfolio PPTX presentation.
-        
+
         Creates a professional multi-card portfolio deck with:
         - Title slide with branding
         - Portfolio dashboard with metrics and charts
@@ -4735,12 +5413,12 @@ The City of Austin is committed to transparent and responsible use of AI technol
         - Cross-cutting themes
         - Recommended actions
         - AI disclosure
-        
+
         Args:
             workstream_name: Name of the workstream for title
             briefs: List of PortfolioBrief objects
             synthesis: PortfolioSynthesisData with AI-generated overview
-            
+
         Returns:
             Path to the generated PPTX file
         """
@@ -4761,7 +5439,9 @@ The City of Austin is committed to transparent and responsible use of AI technol
             pillar_icons = []
             pillar_counts = {}
             for brief in briefs:
-                pillar_def = PILLAR_DEFINITIONS.get(brief.pillar_id.upper() if brief.pillar_id else "", {})
+                pillar_def = PILLAR_DEFINITIONS.get(
+                    brief.pillar_id.upper() if brief.pillar_id else "", {}
+                )
                 icon = pillar_def.get("icon", "🏛️")
                 pillar_name = pillar_def.get("name", brief.pillar_id or "Other")
                 if icon not in pillar_icons:
@@ -4780,29 +5460,38 @@ The City of Austin is committed to transparent and responsible use of AI technol
 
             pillar_chart_path = None
             if pillar_counts:
-                pillar_chart_path = self.generate_pillar_distribution_chart(pillar_counts, "Distribution by Pillar")
+                pillar_chart_path = self.generate_pillar_distribution_chart(
+                    pillar_counts, "Distribution by Pillar"
+                )
                 if pillar_chart_path:
                     temp_files_to_cleanup.append(pillar_chart_path)
 
-            self._add_portfolio_dashboard_slide(prs, briefs, comparison_chart_path, pillar_chart_path)
+            self._add_portfolio_dashboard_slide(
+                prs, briefs, comparison_chart_path, pillar_chart_path
+            )
 
             # ===== 3. WHY THIS MATTERS NOW =====
-            urgency = getattr(synthesis, 'urgency_statement', '') or f"These {len(briefs)} trends represent critical opportunities and challenges. Early action positions Austin as a leader; delay risks falling behind peer cities."
+            urgency = (
+                getattr(synthesis, "urgency_statement", "")
+                or f"These {len(briefs)} trends represent critical opportunities and challenges. Early action positions Austin as a leader; delay risks falling behind peer cities."
+            )
             urgency_content = f"{urgency}\n\n**The Window of Opportunity**\n\nCities that move first on emerging trends gain competitive advantage in talent attraction, federal funding, and citizen satisfaction."
             self._add_smart_content_slide(
                 prs,
                 title="Why This Matters Now",
                 content=urgency_content,
-                max_chars=1200
+                max_chars=1200,
             )
 
             # ===== 4. EXECUTIVE OVERVIEW =====
-            overview_content = synthesis.executive_overview or "Portfolio synthesis in progress..."
+            overview_content = (
+                synthesis.executive_overview or "Portfolio synthesis in progress..."
+            )
             self._add_smart_content_slide(
                 prs,
                 title="Executive Overview",
                 content=overview_content,
-                max_chars=1400
+                max_chars=1400,
             )
 
             if matrix_chart_path := self._generate_priority_matrix_chart(
@@ -4817,21 +5506,27 @@ The City of Austin is committed to transparent and responsible use of AI technol
                 self._add_pptx_footer(matrix_slide)
 
                 title_box = matrix_slide.shapes.add_textbox(
-                    PPTX_MARGIN, Inches(1.25),
-                    PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN), Inches(0.5)
+                    PPTX_MARGIN,
+                    Inches(1.25),
+                    PPTX_SLIDE_WIDTH - (2 * PPTX_MARGIN),
+                    Inches(0.5),
                 )
                 title_frame = title_box.text_frame
                 title_para = title_frame.paragraphs[0]
                 title_para.text = "Strategic Priority Matrix"
                 title_para.font.size = Pt(28)
                 title_para.font.bold = True
-                title_para.font.color.rgb = self._hex_to_rgb(FORESIGHT_COLORS["primary"])
+                title_para.font.color.rgb = self._hex_to_rgb(
+                    FORESIGHT_COLORS["primary"]
+                )
 
                 try:
                     matrix_slide.shapes.add_picture(
                         matrix_chart_path,
-                        Inches(0.8), Inches(1.9),
-                        width=Inches(8.4), height=Inches(5.0)
+                        Inches(0.8),
+                        Inches(1.9),
+                        width=Inches(8.4),
+                        height=Inches(5.0),
                     )
                 except Exception as e:
                     logger.warning(f"Failed to add priority matrix chart: {e}")
@@ -4848,40 +5543,62 @@ The City of Austin is committed to transparent and responsible use of AI technol
                     else "• None identified"
                 )
                 priority_content += "\n\n🟡 **High Impact - Strategic Planning**\n"
-                priority_content += "\n".join(f"• {item}" for item in strategic) if strategic else "• None identified"
+                priority_content += (
+                    "\n".join(f"• {item}" for item in strategic)
+                    if strategic
+                    else "• None identified"
+                )
                 priority_content += "\n\n🟢 **Monitor & Evaluate**\n"
-                priority_content += "\n".join(f"• {item}" for item in monitor) if monitor else "• None identified"
+                priority_content += (
+                    "\n".join(f"• {item}" for item in monitor)
+                    if monitor
+                    else "• None identified"
+                )
 
                 self._add_smart_content_slide(
                     prs,
                     title="Strategic Priorities",
                     content=priority_content,
-                    max_chars=1500
+                    max_chars=1500,
                 )
 
             # ===== 6. IMPLEMENTATION GUIDANCE =====
-            impl = getattr(synthesis, 'implementation_guidance', {}) or {}
+            impl = getattr(synthesis, "implementation_guidance", {}) or {}
             impl_lines = []
             if impl.get("pilot_now"):
-                impl_lines.append(f"🚀 **Ready to Pilot**: {', '.join(impl['pilot_now'])}")
+                impl_lines.append(
+                    f"🚀 **Ready to Pilot**: {', '.join(impl['pilot_now'])}"
+                )
             if impl.get("investigate_further"):
-                impl_lines.append(f"🔍 **Investigate Further**: {', '.join(impl['investigate_further'])}")
+                impl_lines.append(
+                    f"🔍 **Investigate Further**: {', '.join(impl['investigate_further'])}"
+                )
             if impl.get("meet_with_vendors"):
-                impl_lines.append(f"🤝 **Meet with Vendors**: {', '.join(impl['meet_with_vendors'])}")
+                impl_lines.append(
+                    f"🤝 **Meet with Vendors**: {', '.join(impl['meet_with_vendors'])}"
+                )
             if impl.get("policy_review"):
-                impl_lines.append(f"📋 **Policy Review Needed**: {', '.join(impl['policy_review'])}")
+                impl_lines.append(
+                    f"📋 **Policy Review Needed**: {', '.join(impl['policy_review'])}"
+                )
             if impl.get("staff_training"):
-                impl_lines.append(f"👥 **Staff Training Focus**: {', '.join(impl['staff_training'])}")
+                impl_lines.append(
+                    f"👥 **Staff Training Focus**: {', '.join(impl['staff_training'])}"
+                )
             if impl.get("budget_planning"):
-                impl_lines.append(f"💰 **Budget Planning**: {', '.join(impl['budget_planning'])}")
+                impl_lines.append(
+                    f"💰 **Budget Planning**: {', '.join(impl['budget_planning'])}"
+                )
 
             if impl_lines:
-                impl_content = "What should Austin DO with each trend?\n\n" + "\n".join(impl_lines)
+                impl_content = "What should Austin DO with each trend?\n\n" + "\n".join(
+                    impl_lines
+                )
                 self._add_smart_content_slide(
                     prs,
                     title="Implementation Guidance",
                     content=impl_content,
-                    max_chars=1400
+                    max_chars=1400,
                 )
 
             # ===== 7. PER-CARD DEEP DIVES =====
@@ -4895,15 +5612,13 @@ The City of Austin is committed to transparent and responsible use of AI technol
                 ):
                     # Create a simple CardExportData-like object for chart generation
                     scores = {
-                        'Impact': brief.impact_score or 0,
-                        'Relevance': brief.relevance_score or 0,
-                        'Velocity': brief.velocity_score or 0,
+                        "Impact": brief.impact_score or 0,
+                        "Relevance": brief.relevance_score or 0,
+                        "Velocity": brief.velocity_score or 0,
                     }
                     if valid_scores := {k: v for k, v in scores.items() if v > 0}:
                         card_chart_path = self._generate_radar_chart(
-                            valid_scores,
-                            brief.card_name,
-                            CHART_DPI
+                            valid_scores, brief.card_name, CHART_DPI
                         )
                         if card_chart_path:
                             temp_files_to_cleanup.append(card_chart_path)
@@ -4912,18 +5627,27 @@ The City of Austin is committed to transparent and responsible use of AI technol
 
             # ===== 8. CROSS-CUTTING THEMES =====
             themes_content = "**Common Patterns Across Trends**\n"
-            themes_content += "\n".join(f"• {theme}" for theme in (synthesis.key_themes or [])) or "• Analysis in progress"
+            themes_content += (
+                "\n".join(f"• {theme}" for theme in (synthesis.key_themes or []))
+                or "• Analysis in progress"
+            )
             themes_content += "\n\n**Strategic Connections**\n"
-            themes_content += "\n".join(f"• {insight}" for insight in (synthesis.cross_cutting_insights or [])) or "• Analysis in progress"
+            themes_content += (
+                "\n".join(
+                    f"• {insight}"
+                    for insight in (synthesis.cross_cutting_insights or [])
+                )
+                or "• Analysis in progress"
+            )
 
             self._add_smart_content_slide(
                 prs,
                 title="Cross-Cutting Themes",
                 content=themes_content,
-                max_chars=1400
+                max_chars=1400,
             )
 
-            if ninety_day := getattr(synthesis, 'ninety_day_actions', []) or []:
+            if ninety_day := getattr(synthesis, "ninety_day_actions", []) or []:
                 actions_content = "What Austin should do in the next 90 days:\n\n"
                 for action in ninety_day[:5]:
                     action_text = action.get("action", "")
@@ -4951,25 +5675,30 @@ The City of Austin is committed to transparent and responsible use of AI technol
                     actions_content += "\n\n"
 
                 if not actions_content:
-                    actions_content = "Action plan to be developed based on leadership priorities."
+                    actions_content = (
+                        "Action plan to be developed based on leadership priorities."
+                    )
 
             self._add_smart_content_slide(
-                prs,
-                title="90-Day Action Plan",
-                content=actions_content,
-                max_chars=1400
+                prs, title="90-Day Action Plan", content=actions_content, max_chars=1400
             )
 
             # ===== 10. RISKS & OPPORTUNITIES =====
-            risk_text = getattr(synthesis, 'risk_summary', '') or "Delayed action on these trends could result in Austin falling behind peer cities, missing federal funding windows, and losing competitive advantage."
-            opp_text = getattr(synthesis, 'opportunity_summary', '') or "Early action positions Austin as a national leader, attracts innovation investment, and delivers improved services to residents."
+            risk_text = (
+                getattr(synthesis, "risk_summary", "")
+                or "Delayed action on these trends could result in Austin falling behind peer cities, missing federal funding windows, and losing competitive advantage."
+            )
+            opp_text = (
+                getattr(synthesis, "opportunity_summary", "")
+                or "Early action positions Austin as a national leader, attracts innovation investment, and delivers improved services to residents."
+            )
 
             risk_opp_content = f"⚠️ **If Austin Doesn't Act**\n{risk_text}\n\n✨ **If Austin Leads**\n{opp_text}"
             self._add_smart_content_slide(
                 prs,
                 title="Risks & Opportunities",
                 content=risk_opp_content,
-                max_chars=1400
+                max_chars=1400,
             )
 
             # ===== 11. AI DISCLOSURE =====
@@ -4977,14 +5706,14 @@ The City of Austin is committed to transparent and responsible use of AI technol
 
             # Save to temp file
             temp_file = tempfile.NamedTemporaryFile(
-                suffix='.pptx',
-                delete=False,
-                prefix='foresight_portfolio_local_'
+                suffix=".pptx", delete=False, prefix="foresight_portfolio_local_"
             )
             prs.save(temp_file.name)
             temp_file.close()
 
-            logger.info(f"Generated enhanced local portfolio PPTX: {len(briefs)} cards, {len(prs.slides)} slides")
+            logger.info(
+                f"Generated enhanced local portfolio PPTX: {len(briefs)} cards, {len(prs.slides)} slides"
+            )
             return temp_file.name
 
         finally:
@@ -4995,35 +5724,40 @@ The City of Austin is committed to transparent and responsible use of AI technol
         self,
         workstream_name: str,
         briefs: List,  # List of PortfolioBrief
-        synthesis  # PortfolioSynthesisData
+        synthesis,  # PortfolioSynthesisData
     ) -> str:
         """
         Generate a detailed portfolio PDF document.
-        
+
         PDF version includes MORE detail than PPTX since readers can
         absorb more information. Same structure but expanded content.
-        
+
         Args:
             workstream_name: Name of the workstream for title
             briefs: List of PortfolioBrief objects
             synthesis: PortfolioSynthesisData with AI-generated overview
-            
+
         Returns:
             Path to the generated PDF file
         """
         from reportlab.lib.pagesizes import letter
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.colors import HexColor
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Table, TableStyle
+        from reportlab.platypus import (
+            SimpleDocTemplate,
+            Paragraph,
+            Spacer,
+            PageBreak,
+            Table,
+            TableStyle,
+        )
         from reportlab.lib.units import inch
         from datetime import datetime
         import tempfile
 
         # Create temp file
         temp_file = tempfile.NamedTemporaryFile(
-            suffix='.pdf',
-            delete=False,
-            prefix='foresight_portfolio_'
+            suffix=".pdf", delete=False, prefix="foresight_portfolio_"
         )
 
         doc = SimpleDocTemplate(
@@ -5032,70 +5766,79 @@ The City of Austin is committed to transparent and responsible use of AI technol
             rightMargin=72,
             leftMargin=72,
             topMargin=72,
-            bottomMargin=72
+            bottomMargin=72,
         )
 
         styles = getSampleStyleSheet()
 
         # Custom styles
         title_style = ParagraphStyle(
-            'PortfolioTitle',
-            parent=styles['Heading1'],
+            "PortfolioTitle",
+            parent=styles["Heading1"],
             fontSize=24,
             textColor=HexColor(COA_BRAND_COLORS["logo_blue"]),
             spaceAfter=12,
-            alignment=1  # Center
+            alignment=1,  # Center
         )
 
         subtitle_style = ParagraphStyle(
-            'PortfolioSubtitle',
-            parent=styles['Normal'],
+            "PortfolioSubtitle",
+            parent=styles["Normal"],
             fontSize=14,
             textColor=HexColor(COA_BRAND_COLORS["dark_gray"]),
             spaceAfter=24,
-            alignment=1
+            alignment=1,
         )
 
         section_style = ParagraphStyle(
-            'SectionTitle',
-            parent=styles['Heading2'],
+            "SectionTitle",
+            parent=styles["Heading2"],
             fontSize=16,
             textColor=HexColor(COA_BRAND_COLORS["logo_blue"]),
             spaceBefore=18,
-            spaceAfter=12
+            spaceAfter=12,
         )
 
         card_title_style = ParagraphStyle(
-            'CardTitle',
-            parent=styles['Heading3'],
+            "CardTitle",
+            parent=styles["Heading3"],
             fontSize=14,
             textColor=HexColor(COA_BRAND_COLORS["dark_blue"]),
             spaceBefore=12,
-            spaceAfter=6
+            spaceAfter=6,
         )
 
         body_style = ParagraphStyle(
-            'BodyText',
-            parent=styles['Normal'],
+            "BodyText",
+            parent=styles["Normal"],
             fontSize=11,
             textColor=HexColor(COA_BRAND_COLORS["dark_gray"]),
             spaceAfter=8,
-            leading=14
+            leading=14,
         )
 
         elements = [Spacer(1, inch * 2)]
 
         elements.append(Paragraph(workstream_name, title_style))
         elements.append(Paragraph("Strategic Intelligence Portfolio", subtitle_style))
-        elements.append(Paragraph(f"{len(briefs)} Strategic Trends | {datetime.now().strftime('%B %Y')}", subtitle_style))
-        elements.append(Paragraph("City of Austin | FORESIGHT Platform", subtitle_style))
+        elements.append(
+            Paragraph(
+                f"{len(briefs)} Strategic Trends | {datetime.now().strftime('%B %Y')}",
+                subtitle_style,
+            )
+        )
+        elements.append(
+            Paragraph("City of Austin | FORESIGHT Platform", subtitle_style)
+        )
         elements.append(PageBreak())
 
         # Executive Overview
         elements.append(Paragraph("Executive Overview", section_style))
-        overview_text = synthesis.executive_overview or "Portfolio analysis in progress."
+        overview_text = (
+            synthesis.executive_overview or "Portfolio analysis in progress."
+        )
         # Split into paragraphs for better formatting
-        for para in overview_text.split('\n\n'):
+        for para in overview_text.split("\n\n"):
             if para.strip():
                 elements.append(Paragraph(para.strip(), body_style))
         elements.append(Spacer(1, 12))
@@ -5113,12 +5856,16 @@ The City of Austin is committed to transparent and responsible use of AI technol
         matrix = synthesis.priority_matrix or {}
 
         if urgent := matrix.get("high_impact_urgent", []):
-            elements.append(Paragraph("<b>High Impact - Urgent Action:</b>", body_style))
+            elements.append(
+                Paragraph("<b>High Impact - Urgent Action:</b>", body_style)
+            )
             for item in urgent:
                 elements.append(Paragraph(f"  • {item}", body_style))
 
         if strategic := matrix.get("high_impact_strategic", []):
-            elements.append(Paragraph("<b>High Impact - Strategic Planning:</b>", body_style))
+            elements.append(
+                Paragraph("<b>High Impact - Strategic Planning:</b>", body_style)
+            )
             for item in strategic:
                 elements.append(Paragraph(f"  • {item}", body_style))
 
@@ -5133,20 +5880,26 @@ The City of Austin is committed to transparent and responsible use of AI technol
         elements.append(Paragraph("Trend Analysis", section_style))
 
         for i, brief in enumerate(briefs, 1):
-            pillar_def = PILLAR_DEFINITIONS.get(brief.pillar_id.upper() if brief.pillar_id else "", {})
+            pillar_def = PILLAR_DEFINITIONS.get(
+                brief.pillar_id.upper() if brief.pillar_id else "", {}
+            )
             pillar_name = pillar_def.get("name", brief.pillar_id or "Unknown")
             horizon_name = brief.horizon or "H2"
 
             elements.append(Paragraph(f"{i}. {brief.card_name}", card_title_style))
-            elements.append(Paragraph(
-                f"<b>Pillar:</b> {pillar_name} | <b>Horizon:</b> {horizon_name} | "
-                f"<b>Impact:</b> {brief.impact_score}/100 | <b>Relevance:</b> {brief.relevance_score}/100",
-                body_style
-            ))
+            elements.append(
+                Paragraph(
+                    f"<b>Pillar:</b> {pillar_name} | <b>Horizon:</b> {horizon_name} | "
+                    f"<b>Impact:</b> {brief.impact_score}/100 | <b>Relevance:</b> {brief.relevance_score}/100",
+                    body_style,
+                )
+            )
 
             # Summary
             if brief.brief_summary:
-                elements.append(Paragraph(f"<b>Summary:</b> {brief.brief_summary}", body_style))
+                elements.append(
+                    Paragraph(f"<b>Summary:</b> {brief.brief_summary}", body_style)
+                )
 
             # Full brief content (PDF gets expanded detail)
             if brief.brief_content_markdown:
@@ -5154,15 +5907,16 @@ The City of Austin is committed to transparent and responsible use of AI technol
                 content = brief.brief_content_markdown
                 # Remove markdown headers, keep content
                 import re
-                content = re.sub(r'^#+\s+', '', content, flags=re.MULTILINE)
-                content = re.sub(r'\*\*([^*]+)\*\*', r'<b>\1</b>', content)
-                content = re.sub(r'\*([^*]+)\*', r'<i>\1</i>', content)
+
+                content = re.sub(r"^#+\s+", "", content, flags=re.MULTILINE)
+                content = re.sub(r"\*\*([^*]+)\*\*", r"<b>\1</b>", content)
+                content = re.sub(r"\*([^*]+)\*", r"<i>\1</i>", content)
 
                 # Truncate if very long
                 if len(content) > 2000:
                     content = f"{content[:2000]}..."
 
-                for para in content.split('\n\n')[:5]:  # First 5 paragraphs
+                for para in content.split("\n\n")[:5]:  # First 5 paragraphs
                     if para.strip():
                         elements.append(Paragraph(para.strip(), body_style))
 
@@ -5172,20 +5926,22 @@ The City of Austin is committed to transparent and responsible use of AI technol
 
         # Cross-Cutting Insights
         elements.append(Paragraph("Cross-Cutting Insights", section_style))
-        for insight in (synthesis.cross_cutting_insights or []):
+        for insight in synthesis.cross_cutting_insights or []:
             elements.append(Paragraph(f"• {insight}", body_style))
         elements.append(Spacer(1, 12))
 
         # Recommended Actions
         elements.append(Paragraph("Recommended Actions", section_style))
-        for action in (synthesis.recommended_actions or []):
+        for action in synthesis.recommended_actions or []:
             action_text = action.get("action", "")
             owner = action.get("owner", "TBD")
             timeline = action.get("timeline", "TBD")
             cards = ", ".join(action.get("cards", []))
 
             elements.append(Paragraph(f"<b>{action_text}</b>", body_style))
-            elements.append(Paragraph(f"  Owner: {owner} | Timeline: {timeline}", body_style))
+            elements.append(
+                Paragraph(f"  Owner: {owner} | Timeline: {timeline}", body_style)
+            )
             if cards:
                 elements.append(Paragraph(f"  Related Trends: {cards}", body_style))
             elements.append(Spacer(1, 6))

@@ -4,9 +4,12 @@ import {
   Download,
   Copy,
   FileText,
+  FileDown,
+  Loader2,
   ClipboardCheck,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
+import { exportChatMessagePDF } from "../../lib/chat-api";
 
 interface ChatMessageActionsProps {
   /** The message content in markdown format */
@@ -30,6 +33,8 @@ export function ChatMessageActions({
 }: ChatMessageActionsProps) {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+  const [pdfExporting, setPdfExporting] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close menu on click outside
@@ -75,6 +80,36 @@ export function ChatMessageActions({
       /* clipboard unavailable */
     }
   };
+
+  const handleExportPDF = async () => {
+    if (!messageId || pdfExporting) return;
+
+    setPdfExporting(true);
+    setPdfError(null);
+
+    try {
+      const blob = await exportChatMessagePDF(messageId);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `foresight-response.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      setShowExportMenu(false);
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to export PDF";
+      setPdfError(errorMessage);
+      setTimeout(() => setPdfError(null), 3000);
+    } finally {
+      setPdfExporting(false);
+    }
+  };
+
+  /** Only show the PDF export option for persisted messages (not temp IDs). */
+  const canExportPDF = messageId && !messageId.startsWith("temp-");
 
   return (
     <div className={cn("flex items-center gap-0.5", className)}>
@@ -172,6 +207,38 @@ export function ChatMessageActions({
               <FileText className="h-3.5 w-3.5 text-gray-400" />
               Copy as Plain Text
             </button>
+
+            {/* PDF Export — only for persisted messages */}
+            {canExportPDF && (
+              <>
+                <div className="my-1 border-t border-gray-200 dark:border-gray-700" />
+                <button
+                  type="button"
+                  onClick={handleExportPDF}
+                  disabled={pdfExporting}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-3 py-2 text-sm text-left",
+                    "text-gray-700 dark:text-gray-300",
+                    "hover:bg-gray-50 dark:hover:bg-dark-surface-hover",
+                    "transition-colors duration-100",
+                    pdfExporting && "opacity-60 cursor-not-allowed",
+                  )}
+                  role="menuitem"
+                >
+                  {pdfExporting ? (
+                    <Loader2 className="h-3.5 w-3.5 text-red-500 animate-spin" />
+                  ) : (
+                    <FileDown className="h-3.5 w-3.5 text-red-500" />
+                  )}
+                  {pdfExporting ? "Generating PDF..." : "Export as PDF"}
+                </button>
+                {pdfError && (
+                  <p className="px-3 py-1 text-xs text-red-500 dark:text-red-400">
+                    {pdfError}
+                  </p>
+                )}
+              </>
+            )}
           </div>
         )}
       </div>

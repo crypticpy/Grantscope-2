@@ -554,6 +554,47 @@ export async function searchMentions(query: string): Promise<MentionResult[]> {
 }
 
 // ============================================================================
+// PDF Export
+// ============================================================================
+
+/**
+ * Exports a chat message as a PDF document.
+ *
+ * Makes an authenticated GET request to the backend export endpoint
+ * and returns the response as a Blob for client-side download.
+ *
+ * @param messageId - UUID of the message to export
+ * @returns A Blob containing the PDF file data
+ * @throws Error if authentication fails or the export request errors
+ */
+export async function exportChatMessagePDF(messageId: string): Promise<Blob> {
+  const token = await getAuthToken();
+  if (!token) {
+    throw new Error("Authentication required. Please sign in.");
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/chat/messages/${messageId}/export/pdf`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    const error = await response
+      .json()
+      .catch(() => ({ message: "Failed to export PDF" }));
+    throw new Error(
+      error.message || error.detail || `Export error: ${response.status}`,
+    );
+  }
+
+  return response.blob();
+}
+
+// ============================================================================
 // Pin / Save Messages
 // ============================================================================
 

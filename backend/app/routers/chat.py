@@ -2,13 +2,17 @@
 
 import json
 import logging
+import os
+from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
+from starlette.background import BackgroundTask
 
 from app.deps import supabase, get_current_user, _safe_error
 from app.models.chat import ChatRequest, ConversationUpdateRequest
+from app.export_service import ExportService
 from app.chat_service import (
     chat as chat_service_chat,
     generate_suggestions as chat_generate_suggestions,
@@ -899,4 +903,161 @@ async def list_pinned_messages(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("listing pins", e),
+        ) from e
+
+
+# ---------------------------------------------------------------------------
+# PDF export for chat messages
+# ---------------------------------------------------------------------------
+
+
+def _cleanup_temp_file(path: str):
+    """Remove a temporary file after it has been sent in a response."""
+    try:
+        if path and Path(path).exists():
+            os.unlink(path)
+    except Exception as exc:
+        logger.warning(f"Failed to clean up temp file {path}: {exc}")
+
+
+@router.get("/chat/messages/{message_id}/export/pdf")
+async def export_chat_message_pdf(
+    message_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Export a chat assistant message as a professional PDF document.
+
+    Generates a mayor-ready PDF matching the executive brief style,
+    including the user's question, the AI analysis, and any citations.
+
+    The exported message must be an assistant response belonging to a
+    conversation owned by the authenticated user.
+    """
+    user_id = current_user["id"]
+
+    try:
+        # 1. Fetch the target message
+        msg_result = (
+            supabase.table("chat_messages")
+            .select("id, conversation_id, role, content, citations, model, created_at")
+            .eq("id", message_id)
+            .execute()
+        )
+        if not msg_result.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Message not found",
+            )
+
+        message = msg_result.data[0]
+        conversation_id = message["conversation_id"]
+
+        # 2. Verify conversation ownership
+        conv_result = (
+            supabase.table("chat_conversations")
+            .select("id, title, scope, scope_id, user_id")
+            .eq("id", conversation_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        if not conv_result.data:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to export this message",
+            )
+
+        conversation = conv_result.data[0]
+
+        # 3. Fetch the preceding user message (the question)
+        question_text = ""
+        try:
+            prev_msgs = (
+                supabase.table("chat_messages")
+                .select("role, content, created_at")
+                .eq("conversation_id", conversation_id)
+                .eq("role", "user")
+                .lt("created_at", message["created_at"])
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if prev_msgs.data:
+                question_text = prev_msgs.data[0].get("content", "")
+        except Exception as exc:
+            logger.warning(f"Could not fetch preceding question for export: {exc}")
+
+        # 4. Resolve scope context name
+        scope = conversation.get("scope")
+        scope_id = conversation.get("scope_id")
+        scope_context = None
+
+        if scope == "signal" and scope_id:
+            try:
+                card_res = (
+                    supabase.table("cards").select("name").eq("id", scope_id).execute()
+                )
+                if card_res.data:
+                    scope_context = card_res.data[0].get("name")
+            except Exception:
+                pass
+        elif scope == "workstream" and scope_id:
+            try:
+                ws_res = (
+                    supabase.table("workstreams")
+                    .select("name")
+                    .eq("id", scope_id)
+                    .execute()
+                )
+                if ws_res.data:
+                    scope_context = ws_res.data[0].get("name")
+            except Exception:
+                pass
+
+        # 5. Parse citations
+        citations = message.get("citations") or []
+        if isinstance(citations, str):
+            try:
+                citations = json.loads(citations)
+            except (json.JSONDecodeError, TypeError):
+                citations = []
+
+        # 6. Build metadata
+        metadata: Dict[str, Any] = {}
+        if citations:
+            metadata["source_count"] = len(citations)
+        if message.get("model"):
+            metadata["model"] = message["model"]
+
+        # 7. Generate the PDF
+        title = conversation.get("title") or "Foresight Intelligence Response"
+        export_service = ExportService(supabase)
+        pdf_path = await export_service.generate_chat_response_pdf(
+            title=title,
+            question=question_text,
+            response_content=message.get("content", ""),
+            citations=citations if citations else None,
+            metadata=metadata if metadata else None,
+            scope=scope,
+            scope_context=scope_context,
+        )
+
+        # 8. Return file with cleanup
+        short_id = message_id[:8] if len(message_id) >= 8 else message_id
+        filename = f"foresight-response-{short_id}.pdf"
+
+        return FileResponse(
+            path=pdf_path,
+            filename=filename,
+            media_type="application/pdf",
+            background=BackgroundTask(_cleanup_temp_file, pdf_path),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to export chat message {message_id} as PDF: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("exporting chat message as PDF", e),
         ) from e
