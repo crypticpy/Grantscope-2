@@ -552,20 +552,20 @@ async def recover_analyzed_errors(
     date_end: str = "2026-02-01",
     triggered_by_user_id: Optional[str] = None,
 ) -> dict:
-    """Recover sources that passed triage+analysis but errored at card creation.
+    """Recover sources that errored at card creation — with or without analysis.
 
-    These sources already have full analysis data stored in discovered_sources.
-    We reconstruct ProcessedSource objects from existing analysis and feed them
-    directly to the signal agent — NO re-triage or re-analysis needed.
+    For sources WITH analysis data: reconstructs directly (fast path).
+    For sources WITHOUT analysis but WITH content: runs analysis + embedding first.
+    Both are then fed to the signal agent.
     """
+    from app.ai_service import AIService
     from app.discovery_service import DiscoveryConfig
+    from app.openai_provider import azure_openai_async_client
     from app.signal_agent_service import SignalAgentService
 
-    logger.info(
-        f"Recovering analyzed-but-errored sources for {date_start} to {date_end}"
-    )
+    logger.info(f"Recovering errored sources for {date_start} to {date_end}")
 
-    # Find sources that errored at card_creation (already fully analyzed)
+    # Find sources that errored at card_creation
     errored = (
         supabase.table("discovered_sources")
         .select("*")
@@ -583,35 +583,126 @@ async def recover_analyzed_errors(
 
     logger.info(f"Found {len(errored.data)} sources that errored at card_creation")
 
-    # Reconstruct ProcessedSource objects from existing analysis
+    # Split: sources with analysis (fast path) vs without (need analysis)
     processed: List[ProcessedSource] = []
-    skipped = 0
+    needs_analysis: list = []
+    no_content = 0
 
     for ds in errored.data:
         ps = _reconstruct_processed_source(ds)
         if ps:
             processed.append(ps)
+        elif ds.get("full_content") or ds.get("content_snippet"):
+            needs_analysis.append(ds)
         else:
-            skipped += 1
+            no_content += 1
 
-    logger.info(f"Reconstructed {len(processed)} sources ({skipped} skipped)")
+    logger.info(
+        f"Fast path: {len(processed)} already analyzed, "
+        f"need analysis: {len(needs_analysis)}, no content: {no_content}"
+    )
+
+    # Run analysis on sources that need it (concurrently with semaphore)
+    if needs_analysis:
+        ai_service = AIService(openai_client=azure_openai_async_client)
+        semaphore = asyncio.Semaphore(5)
+        analysis_ok = 0
+        analysis_fail = 0
+
+        async def _analyze_one(ds: dict) -> Optional[ProcessedSource]:
+            async with semaphore:
+                raw = RawSource(
+                    url=ds.get("url", ""),
+                    title=ds.get("title", "") or "",
+                    content=ds.get("full_content") or ds.get("content_snippet") or "",
+                    source_name=ds.get("domain") or "",
+                    published_at=ds.get("published_at"),
+                    source_type=ds.get("source_type"),
+                    discovered_source_id=ds["id"],
+                )
+
+                try:
+                    # Use existing triage data (don't re-triage)
+                    from app.ai_service import TriageResult
+
+                    triage = TriageResult(
+                        is_relevant=ds.get("triage_is_relevant", True),
+                        confidence=ds.get("triage_confidence") or 0.7,
+                        primary_pillar=ds.get("triage_primary_pillar"),
+                        reason=ds.get("triage_reason") or "recovered",
+                    )
+
+                    # Run analysis
+                    analysis = await ai_service.analyze_source(
+                        title=raw.title,
+                        content=raw.content,
+                        source_name=raw.source_name or "",
+                        published_at=str(raw.published_at or ""),
+                    )
+
+                    # Embedding
+                    embed_text = f"{raw.title} {analysis.summary}"
+                    embedding = await _generate_embedding(embed_text)
+
+                    # Update discovered_sources with analysis
+                    supabase.table("discovered_sources").update(
+                        {
+                            "processing_status": "analyzed",
+                            "analysis_summary": analysis.summary,
+                            "analysis_suggested_card_name": analysis.suggested_card_name,
+                            "analysis_pillars": analysis.pillars,
+                            "analysis_goals": analysis.goals,
+                            "analysis_horizon": analysis.horizon,
+                            "analysis_suggested_stage": analysis.suggested_stage,
+                        }
+                    ).eq("id", ds["id"]).execute()
+
+                    return ProcessedSource(
+                        raw=raw,
+                        triage=triage,
+                        analysis=analysis,
+                        embedding=embedding,
+                        discovered_source_id=ds["id"],
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to analyze {ds.get('url', '?')[:60]}: {e}")
+                    return None
+
+        logger.info(f"Analyzing {len(needs_analysis)} sources...")
+        results = await asyncio.gather(
+            *[_analyze_one(ds) for ds in needs_analysis],
+            return_exceptions=True,
+        )
+
+        for r in results:
+            if isinstance(r, Exception):
+                analysis_fail += 1
+            elif r is None:
+                analysis_fail += 1
+            else:
+                processed.append(r)
+                analysis_ok += 1
+
+        logger.info(f"Analysis complete: {analysis_ok} ok, {analysis_fail} failed")
 
     if not processed:
         return {
             "status": "no_recoverable",
             "sources_found": len(errored.data),
-            "skipped": skipped,
+            "needs_analysis": len(needs_analysis),
+            "no_content": no_content,
         }
 
-    # Regenerate embeddings
-    logger.info("Regenerating embeddings...")
+    # Regenerate embeddings for fast-path sources (already analyzed)
+    logger.info("Regenerating embeddings for pre-analyzed sources...")
     for ps in processed:
-        try:
-            embed_text = f"{ps.raw.title} {ps.analysis.summary}"
-            ps.embedding = await _generate_embedding(embed_text)
-        except Exception as e:
-            logger.warning(f"Failed to generate embedding for {ps.raw.url}: {e}")
-            ps.embedding = []
+        if not ps.embedding:
+            try:
+                embed_text = f"{ps.raw.title} {ps.analysis.summary}"
+                ps.embedding = await _generate_embedding(embed_text)
+            except Exception as e:
+                logger.warning(f"Failed to generate embedding for {ps.raw.url}: {e}")
+                ps.embedding = []
 
     # Create discovery run record
     run_id = str(uuid.uuid4())
