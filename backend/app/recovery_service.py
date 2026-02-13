@@ -3,8 +3,12 @@
 When cards are accidentally deleted, this service reconstructs ProcessedSource
 objects from the preserved discovered_sources audit trail and feeds them through
 the signal agent for intelligent re-grouping.
+
+Also supports re-processing errored sources that have URLs/content but failed
+during the original pipeline run.
 """
 
+import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -286,6 +290,247 @@ async def recover_cards_from_discovered_sources(
                 "summary_report": {
                     "stage": "failed",
                     "recovery": True,
+                    "error": str(e),
+                },
+            }
+        ).eq("id", run_id).execute()
+        raise
+
+
+async def reprocess_errored_sources(
+    supabase,
+    date_start: str = "2025-12-01",
+    date_end: str = "2026-02-13",
+    triggered_by_user_id: Optional[str] = None,
+) -> dict:
+    """Re-process errored discovered_sources through triage + analysis + signal agent.
+
+    These sources have URLs and raw content but failed during the original pipeline.
+    We re-run them through the full AI pipeline (triage, analysis, embedding) then
+    feed the results through the signal agent.
+    """
+    from app.ai_service import AIService
+    from app.discovery_service import DiscoveryConfig
+    from app.signal_agent_service import SignalAgentService
+
+    logger.info(f"Starting reprocess of errored sources for {date_start} to {date_end}")
+
+    # Step 1: Find errored sources with content
+    errored = (
+        supabase.table("discovered_sources")
+        .select("*")
+        .gte("created_at", date_start)
+        .lt("created_at", date_end)
+        .in_("processing_status", ["error", "filtered_triage"])
+        .order("created_at", desc=False)
+        .execute()
+    )
+
+    if not errored.data:
+        return {"status": "no_errored_sources", "sources_found": 0}
+
+    # Filter to those with actual content
+    with_content = [
+        ds
+        for ds in errored.data
+        if ds.get("url") and (ds.get("full_content") or ds.get("title"))
+    ]
+
+    logger.info(
+        f"Found {len(errored.data)} errored sources, "
+        f"{len(with_content)} have content to reprocess"
+    )
+
+    if not with_content:
+        return {
+            "status": "no_content",
+            "errored_total": len(errored.data),
+            "with_content": 0,
+        }
+
+    # Step 2: Build RawSource objects and run through triage + analysis
+    ai_service = AIService()
+    processed: List[ProcessedSource] = []
+    triage_passed = 0
+    triage_failed = 0
+    analysis_errors = 0
+
+    # Process in parallel with semaphore to limit concurrency
+    semaphore = asyncio.Semaphore(5)
+
+    async def _process_one(ds: dict) -> Optional[ProcessedSource]:
+        async with semaphore:
+            raw = RawSource(
+                url=ds.get("url", ""),
+                title=ds.get("title", "") or "",
+                content=ds.get("full_content") or ds.get("content_snippet") or "",
+                source_name=ds.get("domain") or "",
+                published_at=ds.get("published_at"),
+                source_type=ds.get("source_type"),
+                discovered_source_id=ds["id"],
+            )
+
+            try:
+                # Triage
+                triage = await ai_service.triage_source(raw)
+                if not triage.is_relevant:
+                    # Update status
+                    supabase.table("discovered_sources").update(
+                        {"processing_status": "filtered_triage"}
+                    ).eq("id", ds["id"]).execute()
+                    return None
+
+                # Analysis
+                analysis = await ai_service.analyze_source(raw, triage)
+
+                # Embedding
+                embed_text = f"{raw.title} {analysis.summary}"
+                embedding = await _generate_embedding(embed_text)
+
+                # Update discovered_sources with analysis
+                supabase.table("discovered_sources").update(
+                    {
+                        "processing_status": "analyzed",
+                        "triage_is_relevant": triage.is_relevant,
+                        "triage_confidence": triage.confidence,
+                        "triage_primary_pillar": triage.primary_pillar,
+                        "triage_reason": triage.reason,
+                        "analysis_summary": analysis.summary,
+                        "analysis_suggested_card_name": analysis.suggested_card_name,
+                        "analysis_pillars": analysis.pillars,
+                        "analysis_goals": analysis.goals,
+                        "analysis_horizon": analysis.horizon,
+                        "analysis_suggested_stage": analysis.suggested_stage,
+                    }
+                ).eq("id", ds["id"]).execute()
+
+                return ProcessedSource(
+                    raw=raw,
+                    triage=triage,
+                    analysis=analysis,
+                    embedding=embedding,
+                    discovered_source_id=ds["id"],
+                )
+
+            except Exception as e:
+                logger.warning(f"Failed to reprocess {ds.get('url', '?')}: {e}")
+                return None
+
+    # Run all in parallel
+    results = await asyncio.gather(
+        *[_process_one(ds) for ds in with_content],
+        return_exceptions=True,
+    )
+
+    for r in results:
+        if isinstance(r, Exception):
+            analysis_errors += 1
+        elif r is None:
+            triage_failed += 1
+        else:
+            processed.append(r)
+            triage_passed += 1
+
+    logger.info(
+        f"Reprocess triage: {triage_passed} passed, {triage_failed} filtered, "
+        f"{analysis_errors} errors"
+    )
+
+    if not processed:
+        return {
+            "status": "no_relevant_sources",
+            "errored_total": len(errored.data),
+            "with_content": len(with_content),
+            "triage_passed": 0,
+            "triage_failed": triage_failed,
+            "errors": analysis_errors,
+        }
+
+    # Step 3: Create a reprocess discovery run
+    run_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+
+    supabase.table("discovery_runs").insert(
+        {
+            "id": run_id,
+            "status": "running",
+            "triggered_by": "manual",
+            "triggered_by_user": triggered_by_user_id,
+            "cards_created": 0,
+            "cards_enriched": 0,
+            "cards_deduplicated": 0,
+            "sources_found": len(processed),
+            "started_at": now,
+            "summary_report": {
+                "stage": "running",
+                "reprocess": True,
+                "errored_sources": len(errored.data),
+                "reprocessed": len(processed),
+            },
+        }
+    ).execute()
+
+    # Step 4: Run through signal agent
+    config = DiscoveryConfig(
+        max_new_cards_per_run=50,
+        use_signal_agent=True,
+    )
+
+    signal_agent = SignalAgentService(
+        supabase=supabase,
+        run_id=run_id,
+        triggered_by_user_id=triggered_by_user_id,
+    )
+
+    try:
+        result = await signal_agent.run_signal_detection(
+            processed_sources=processed,
+            config=config,
+        )
+
+        supabase.table("discovery_runs").update(
+            {
+                "status": "completed",
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "cards_created": len(result.signals_created),
+                "cards_enriched": len(result.signals_enriched),
+                "sources_found": len(processed),
+                "summary_report": {
+                    "stage": "completed",
+                    "reprocess": True,
+                    "signals_created": len(result.signals_created),
+                    "signals_enriched": len(result.signals_enriched),
+                    "sources_linked": result.sources_linked,
+                    "cost_estimate": result.cost_estimate,
+                    "triage_passed": triage_passed,
+                    "triage_failed": triage_failed,
+                },
+            }
+        ).eq("id", run_id).execute()
+
+        return {
+            "status": "completed",
+            "run_id": run_id,
+            "errored_total": len(errored.data),
+            "with_content": len(with_content),
+            "triage_passed": triage_passed,
+            "triage_failed": triage_failed,
+            "analysis_errors": analysis_errors,
+            "signals_created": len(result.signals_created),
+            "signals_enriched": len(result.signals_enriched),
+            "sources_linked": result.sources_linked,
+            "cost_estimate": result.cost_estimate,
+        }
+
+    except Exception as e:
+        logger.error(f"Reprocess failed: {e}", exc_info=True)
+        supabase.table("discovery_runs").update(
+            {
+                "status": "failed",
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "summary_report": {
+                    "stage": "failed",
+                    "reprocess": True,
                     "error": str(e),
                 },
             }

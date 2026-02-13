@@ -455,3 +455,33 @@ async def recover_cards(
     except Exception as e:
         logger.error(f"Recovery failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=_safe_error("card recovery", e))
+
+
+@router.post("/discovery/reprocess")
+@limiter.limit("1/hour")
+async def reprocess_errored_sources(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+    date_start: str = "2025-12-01",
+    date_end: str = "2026-02-13",
+):
+    """Re-process errored discovered_sources through the full AI pipeline.
+
+    Takes sources that errored or were filtered during original processing,
+    re-runs triage + analysis + embedding, then feeds through the signal agent.
+    """
+    from app.recovery_service import reprocess_errored_sources as _reprocess
+
+    try:
+        result = await _reprocess(
+            supabase=supabase,
+            date_start=date_start,
+            date_end=date_end,
+            triggered_by_user_id=current_user["id"],
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Reprocess failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=_safe_error("source reprocessing", e)
+        )

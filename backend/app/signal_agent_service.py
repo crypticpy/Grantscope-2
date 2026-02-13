@@ -508,18 +508,17 @@ class SignalAgentService:
                 f"{', '.join(f'{k}({len(v)})' for k, v in pillar_batches.items())}"
             )
 
-            # Phase 2: Run agent loop per pillar batch
+            # Phase 2: Run agent loops per pillar batch — IN PARALLEL
             all_actions: List[SignalAction] = []
             total_tokens = 0
             total_agent_calls = 0
 
             max_new_cards = getattr(config, "max_new_cards_per_run", 15)
-            cards_created_so_far = 0
 
-            for pillar_id, batch_sources in pillar_batches.items():
-                if not batch_sources:
-                    continue
-
+            async def _process_pillar_batch(
+                pillar_id: str, batch_sources: List[ProcessedSource]
+            ) -> tuple:
+                """Process a single pillar batch. Returns (actions, tokens, stats)."""
                 pillar_name = PILLAR_NAMES.get(pillar_id, pillar_id)
                 logger.info(
                     f"Signal agent: Processing pillar {pillar_id} ({pillar_name}) "
@@ -563,7 +562,7 @@ class SignalAgentService:
                                 f"Process all {len(batch_sources)} sources in the "
                                 f"{pillar_name} pillar batch. Search for existing signals "
                                 f"first, then create or attach as appropriate. "
-                                f"Remaining new-card budget: {max_new_cards - cards_created_so_far}."
+                                f"Budget: up to {max_new_cards} new signals total."
                             ),
                         },
                     ]
@@ -573,33 +572,46 @@ class SignalAgentService:
                         messages, self.tools, batch_sources
                     )
 
-                    # Count how many create actions we got
                     new_creates = sum(
                         1 for a in actions if a.action_type == "create_signal"
                     )
-                    cards_created_so_far += new_creates
 
-                    all_actions.extend(actions)
-                    total_tokens += tokens
-                    total_agent_calls += 1
-
-                    result.pillar_stats[pillar_id] = {
+                    stats = {
                         "sources": len(batch_sources),
                         "actions": len(actions),
                         "creates": new_creates,
                         "attaches": len(actions) - new_creates,
                         "tokens": tokens,
                     }
+                    return actions, tokens, pillar_id, stats
 
                 except Exception as e:
                     logger.error(
                         f"Signal agent: Error processing pillar {pillar_id}: {e}",
                         exc_info=True,
                     )
-                    result.pillar_stats[pillar_id] = {
+                    stats = {
                         "sources": len(batch_sources),
                         "error": str(e),
                     }
+                    return [], 0, pillar_id, stats
+
+            # Launch all pillar batches in parallel
+            import asyncio
+
+            pillar_tasks = [
+                _process_pillar_batch(pid, sources)
+                for pid, sources in pillar_batches.items()
+                if sources
+            ]
+            pillar_results = await asyncio.gather(*pillar_tasks)
+
+            for actions, tokens, pillar_id, stats in pillar_results:
+                all_actions.extend(actions)
+                total_tokens += tokens
+                if actions:
+                    total_agent_calls += 1
+                result.pillar_stats[pillar_id] = stats
 
             # Phase 3: Execute all accumulated actions
             logger.info(
