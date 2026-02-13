@@ -311,6 +311,7 @@ async def reprocess_errored_sources(
     """
     from app.ai_service import AIService
     from app.discovery_service import DiscoveryConfig
+    from app.openai_provider import azure_openai_async_client
     from app.signal_agent_service import SignalAgentService
 
     logger.info(f"Starting reprocess of errored sources for {date_start} to {date_end}")
@@ -349,7 +350,7 @@ async def reprocess_errored_sources(
         }
 
     # Step 2: Build RawSource objects and run through triage + analysis
-    ai_service = AIService()
+    ai_service = AIService(openai_client=azure_openai_async_client)
     processed: List[ProcessedSource] = []
     triage_passed = 0
     triage_failed = 0
@@ -372,7 +373,9 @@ async def reprocess_errored_sources(
 
             try:
                 # Triage
-                triage = await ai_service.triage_source(raw)
+                triage = await ai_service.triage_source(
+                    title=raw.title, content=raw.content[:4000]
+                )
                 if not triage.is_relevant:
                     # Update status
                     supabase.table("discovered_sources").update(
@@ -381,7 +384,12 @@ async def reprocess_errored_sources(
                     return None
 
                 # Analysis
-                analysis = await ai_service.analyze_source(raw, triage)
+                analysis = await ai_service.analyze_source(
+                    title=raw.title,
+                    content=raw.content,
+                    source_name=raw.source_name or "",
+                    published_at=str(raw.published_at or ""),
+                )
 
                 # Embedding
                 embed_text = f"{raw.title} {analysis.summary}"
