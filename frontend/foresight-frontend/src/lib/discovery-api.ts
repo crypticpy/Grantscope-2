@@ -523,8 +523,17 @@ async function apiRequest<T>(
  */
 export async function fetchPendingReviewCards(
   token: string,
+  options?: { limit?: number; offset?: number; sort?: "date" | "confidence" },
 ): Promise<PendingCard[]> {
-  return apiRequest<PendingCard[]>("/api/v1/cards/pending-review", token);
+  const params = new URLSearchParams();
+  if (options?.limit) params.append("limit", String(options.limit));
+  if (options?.offset) params.append("offset", String(options.offset));
+  if (options?.sort) params.append("sort", options.sort);
+  const qs = params.toString();
+  return apiRequest<PendingCard[]>(
+    `/api/v1/cards/pending-review${qs ? `?${qs}` : ""}`,
+    token,
+  );
 }
 
 /**

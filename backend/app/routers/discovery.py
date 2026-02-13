@@ -426,3 +426,32 @@ async def cancel_discovery_run(
         return DiscoveryRun(**update_response.data[0])
     else:
         raise HTTPException(status_code=500, detail="Failed to cancel discovery run")
+
+
+@router.post("/discovery/recover")
+@limiter.limit("1/hour")
+async def recover_cards(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+    date_start: str = "2025-12-01",
+    date_end: str = "2026-01-01",
+):
+    """Recover cards from discovered_sources audit trail.
+
+    Finds orphaned sources (cards deleted or never created) in the date range,
+    reconstructs ProcessedSource objects, and feeds them through the signal agent
+    for intelligent re-grouping into signals.
+    """
+    from app.recovery_service import recover_cards_from_discovered_sources
+
+    try:
+        result = await recover_cards_from_discovered_sources(
+            supabase=supabase,
+            date_start=date_start,
+            date_end=date_end,
+            triggered_by_user_id=current_user["id"],
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Recovery failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=_safe_error("card recovery", e))

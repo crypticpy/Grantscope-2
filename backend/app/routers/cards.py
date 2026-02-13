@@ -76,15 +76,17 @@ async def get_cards(
 @router.get("/cards/pending-review")
 async def get_pending_review_cards(
     current_user: dict = Depends(get_current_user),
-    limit: int = 20,
+    limit: int = 200,
     offset: int = 0,
     pillar_id: Optional[str] = None,
+    sort: Optional[str] = Query(None, regex="^(confidence|date)$"),
 ):
     """
     Get cards pending review.
 
-    Returns discovered cards that need human review, ordered by AI confidence
-    (descending) and discovery date.
+    Returns discovered cards that need human review.
+    Default sort: newest first (discovered_at desc), with confidence as tiebreaker.
+    Use sort=confidence for confidence-first ordering.
     """
     # Backward-compatible: include draft cards even if `review_status` wasn't set correctly.
     query = (
@@ -97,12 +99,18 @@ async def get_pending_review_cards(
     if pillar_id:
         query = query.eq("pillar_id", pillar_id)
 
+    if sort == "confidence":
+        query = query.order("ai_confidence", desc=True).order(
+            "discovered_at", desc=True
+        )
+    else:
+        # Default: newest first
+        query = query.order("discovered_at", desc=True).order(
+            "ai_confidence", desc=True
+        )
+
     response = (
-        query.order("ai_confidence", desc=True)
-        .order("discovered_at", desc=True)
-        .order("created_at", desc=True)
-        .range(offset, offset + limit - 1)
-        .execute()
+        query.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
     )
 
     return response.data

@@ -176,6 +176,9 @@ class DiscoveryConfig:
     include_priorities: bool = True
     dry_run: bool = False  # If True, don't persist anything
     skip_blocked_topics: bool = True
+    use_signal_agent: bool = (
+        True  # Use AI agent for signal detection instead of deterministic clustering
+    )
 
     # Multi-source category configuration
     source_categories: Dict[str, SourceCategoryConfig] = field(default_factory=dict)
@@ -1125,60 +1128,111 @@ class DiscoveryService:
                 datetime.now(timezone.utc) - step_start
             ).total_seconds()
 
-            # Step 5: Deduplicate against existing cards
-            await self._update_progress_simple(
-                run_id,
-                "dedupe",
-                f"Deduplicating {len(filtered_sources)} sources against existing cards...",
-                ["queries", "search", "triage", "blocked"],
-                {
-                    "queries_generated": len(queries),
-                    "sources_found": len(raw_sources),
-                    "sources_relevant": len(triaged_sources),
-                },
-            )
+            # Step 5-6: Signal detection (agent-based or legacy)
             step_start = datetime.now(timezone.utc)
-            dedup_result, dedup_tokens = await self._deduplicate_sources_with_metrics(
-                filtered_sources, config
-            )
-            processing_time.deduplication_seconds = (
-                datetime.now(timezone.utc) - step_start
-            ).total_seconds()
-            api_token_usage.add_tokens("card_match", dedup_tokens)
-            logger.info(
-                f"Deduplication: {dedup_result.duplicate_count} duplicates, "
-                f"{len(dedup_result.enrichment_candidates)} enrichments, "
-                f"{len(dedup_result.new_concept_candidates)} new concepts in {processing_time.deduplication_seconds:.2f}s"
+
+            # Initialize dedup_result for both paths (signal agent skips dedup)
+            dedup_result = DeduplicationResult(
+                unique_sources=[],
+                duplicate_count=0,
+                enrichment_candidates=[],
+                new_concept_candidates=[],
             )
 
-            # Step 6: Create or enrich cards (skip if dry run)
-            await self._update_progress_simple(
-                run_id,
-                "cards",
-                f"Creating/enriching cards from {len(dedup_result.new_concept_candidates)} new concepts...",
-                ["queries", "search", "triage", "blocked", "dedupe"],
-                {
-                    "queries_generated": len(queries),
-                    "sources_found": len(raw_sources),
-                    "sources_relevant": len(triaged_sources),
-                    "duplicates": dedup_result.duplicate_count,
-                    "enrichments": len(dedup_result.enrichment_candidates),
-                    "new_concepts": len(dedup_result.new_concept_candidates),
-                },
-            )
-            step_start = datetime.now(timezone.utc)
-            if config.dry_run:
-                logger.info("Dry run - skipping card creation/enrichment")
-                card_result = CardActionResult([], [], 0, 0, 0)
-            else:
-                card_result = await self._create_or_enrich_cards(
-                    run_id, dedup_result, config
+            if config.use_signal_agent and not config.dry_run:
+                # --- AI Agent-based signal detection ---
+                from app.signal_agent_service import SignalAgentService
+
+                await self._update_progress_simple(
+                    run_id,
+                    "signals",
+                    f"AI agent analyzing {len(filtered_sources)} sources for signal detection...",
+                    ["queries", "search", "triage", "blocked"],
+                    {
+                        "queries_generated": len(queries),
+                        "sources_found": len(raw_sources),
+                        "sources_relevant": len(triaged_sources),
+                    },
+                )
+
+                signal_agent = SignalAgentService(
+                    supabase=self.supabase,
+                    run_id=run_id,
+                    triggered_by_user_id=self.triggered_by_user_id,
+                )
+                signal_result = await signal_agent.run_signal_detection(
+                    processed_sources=filtered_sources,
+                    config=config,
+                )
+
+                # Map SignalDetectionResult -> CardActionResult for backward compat
+                card_result = CardActionResult(
+                    cards_created=signal_result.signals_created,
+                    cards_enriched=signal_result.signals_enriched,
+                    sources_added=signal_result.sources_linked,
+                    auto_approved=signal_result.auto_approved_count,
+                    pending_review=len(signal_result.signals_created)
+                    - signal_result.auto_approved_count,
+                    story_cluster_count=0,
                 )
                 logger.info(
-                    f"Card actions: {len(card_result.cards_created)} created, "
-                    f"{len(card_result.cards_enriched)} enriched, "
-                    f"{card_result.auto_approved} auto-approved"
+                    f"Signal agent: {len(signal_result.signals_created)} signals created, "
+                    f"{len(signal_result.signals_enriched)} enriched, "
+                    f"{signal_result.sources_linked} sources linked, "
+                    f"cost ~${signal_result.cost_estimate:.2f}"
                 )
+            else:
+                # --- Legacy deterministic pipeline ---
+                await self._update_progress_simple(
+                    run_id,
+                    "dedupe",
+                    f"Deduplicating {len(filtered_sources)} sources against existing cards...",
+                    ["queries", "search", "triage", "blocked"],
+                    {
+                        "queries_generated": len(queries),
+                        "sources_found": len(raw_sources),
+                        "sources_relevant": len(triaged_sources),
+                    },
+                )
+                dedup_result, dedup_tokens = (
+                    await self._deduplicate_sources_with_metrics(
+                        filtered_sources, config
+                    )
+                )
+                api_token_usage.add_tokens("card_match", dedup_tokens)
+                logger.info(
+                    f"Deduplication: {dedup_result.duplicate_count} duplicates, "
+                    f"{len(dedup_result.enrichment_candidates)} enrichments, "
+                    f"{len(dedup_result.new_concept_candidates)} new concepts"
+                )
+
+                await self._update_progress_simple(
+                    run_id,
+                    "cards",
+                    f"Creating/enriching cards from {len(dedup_result.new_concept_candidates)} new concepts...",
+                    ["queries", "search", "triage", "blocked", "dedupe"],
+                    {
+                        "queries_generated": len(queries),
+                        "sources_found": len(raw_sources),
+                        "sources_relevant": len(triaged_sources),
+                        "duplicates": dedup_result.duplicate_count,
+                        "enrichments": len(dedup_result.enrichment_candidates),
+                        "new_concepts": len(dedup_result.new_concept_candidates),
+                    },
+                )
+                if config.dry_run:
+                    logger.info("Dry run - skipping card creation/enrichment")
+                    card_result = CardActionResult([], [], 0, 0, 0)
+                else:
+                    card_result = await self._create_or_enrich_cards(
+                        run_id, dedup_result, config
+                    )
+                    logger.info(
+                        f"Card actions: {len(card_result.cards_created)} created, "
+                        f"{len(card_result.cards_enriched)} enriched, "
+                        f"{card_result.auto_approved} auto-approved"
+                    )
+
             processing_time.card_creation_seconds = (
                 datetime.now(timezone.utc) - step_start
             ).total_seconds()
@@ -3032,7 +3086,10 @@ class DiscoveryService:
         """
         Cluster similar new concepts to avoid creating near-duplicate cards.
 
-        Uses name similarity to group sources that should belong to the same card.
+        Uses a two-tier approach:
+        1. Embedding cosine similarity (semantic meaning) — primary signal
+        2. Name similarity (word overlap) — fallback when embeddings are missing
+
         This prevents the situation where 5 sources about "AI in healthcare" create
         5 different cards instead of 1 card with 5 sources.
 
@@ -3050,6 +3107,11 @@ class DiscoveryService:
         clusters: List[List[ProcessedSource]] = []
         used = set()
 
+        # Threshold for embedding-based clustering (lower than dedup's 0.85
+        # to catch topically-related articles that aren't exact duplicates)
+        EMBEDDING_CLUSTER_THRESHOLD = 0.80
+        NAME_CLUSTER_THRESHOLD = 0.6
+
         # Sort by confidence (highest first) to pick best source as cluster representative
         sorted_sources = sorted(
             sources, key=lambda s: self._calculate_discovery_confidence(s), reverse=True
@@ -3064,7 +3126,9 @@ class DiscoveryService:
             used.add(id(source))
 
             source_name = source.analysis.suggested_card_name if source.analysis else ""
-            if not source_name:
+            source_embedding = source.embedding if source.embedding else None
+
+            if not source_name and not source_embedding:
                 clusters.append(cluster)
                 continue
 
@@ -3073,22 +3137,42 @@ class DiscoveryService:
                 if id(other) in used:
                     continue
 
-                other_name = (
-                    other.analysis.suggested_card_name if other.analysis else ""
-                )
-                if not other_name:
-                    continue
+                matched = False
+                match_reason = ""
+                match_score = 0.0
 
-                # Check name similarity
-                similarity = calculate_name_similarity(source_name, other_name)
-                if (
-                    similarity >= 0.6
-                ):  # Lower threshold for clustering (tighter grouping)
+                # Tier 1: Embedding cosine similarity (semantic)
+                other_embedding = other.embedding if other.embedding else None
+                if source_embedding and other_embedding:
+                    sim = cosine_similarity(source_embedding, other_embedding)
+                    if sim >= EMBEDDING_CLUSTER_THRESHOLD:
+                        matched = True
+                        match_reason = "embedding"
+                        match_score = sim
+
+                # Tier 2: Name similarity fallback (when embeddings unavailable)
+                if not matched:
+                    other_name = (
+                        other.analysis.suggested_card_name if other.analysis else ""
+                    )
+                    if source_name and other_name:
+                        name_sim = calculate_name_similarity(source_name, other_name)
+                        if name_sim >= NAME_CLUSTER_THRESHOLD:
+                            matched = True
+                            match_reason = "name"
+                            match_score = name_sim
+
+                if matched:
                     cluster.append(other)
                     used.add(id(other))
-                    logger.debug(
+                    other_name = (
+                        other.analysis.suggested_card_name
+                        if other.analysis
+                        else other.raw.title[:40]
+                    )
+                    logger.info(
                         f"Clustered '{other_name}' with '{source_name}' "
-                        f"(similarity: {similarity:.2f})"
+                        f"({match_reason} similarity: {match_score:.2f})"
                     )
 
             clusters.append(cluster)
