@@ -93,6 +93,7 @@ You will receive a numbered list of source summaries, plus any existing signals 
 - First, use `search_existing_signals` to check if related signals already exist.
 - If a strong match exists (the source covers the same core trend), use `attach_source_to_signal`.
 - If no existing signal matches, check if other sources in THIS batch cover the same theme. If so, group them into a single `create_signal` call with multiple source indices.
+- Before creating any signals, mentally group ALL sources by broad theme first. Look for the 3-5 biggest themes across the entire batch, then assign sources to those themes.
 - Use `get_source_details` if you need the full text of a source to make a better decision.
 - Use `list_strategic_context` if you need to understand the pillar framework.
 
@@ -104,6 +105,10 @@ You will receive a numbered list of source summaries, plus any existing signals 
 - Signal names should describe the TREND, not a specific event (e.g., "Municipal AI Adoption for Permitting" not "Austin Deploys AI Chatbot").
 - Provide honest confidence scores: 0.9+ means very clear fit, 0.5-0.7 means plausible but uncertain.
 - Process ALL sources before finishing. Do not stop early.
+- IMPORTANT: Aim to create FEWER, STRONGER signals rather than many weak ones. A signal with 3-5 sources is much more valuable than 3 signals with 1 source each.
+- When multiple sources cover different aspects of the SAME broad trend, group them into ONE signal with a broader name (e.g., "AI Adoption in Municipal Government" rather than separate signals for each city's AI project).
+- If you have 15 sources, aim for 3-6 signals, not 10-15. Each signal should ideally have 2+ sources.
+- Single-source signals should be rare — only create one when a source represents a truly unique trend with no overlap to any other source in the batch.
 
 ## Existing Related Signals
 {existing_signals}

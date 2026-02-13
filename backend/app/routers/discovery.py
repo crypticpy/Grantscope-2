@@ -485,3 +485,31 @@ async def reprocess_errored_sources(
         raise HTTPException(
             status_code=500, detail=_safe_error("source reprocessing", e)
         )
+
+
+@router.post("/discovery/enrich")
+@limiter.limit("3/hour")
+async def enrich_weak_signals(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+    min_sources: int = 3,
+    max_new_sources_per_card: int = 5,
+):
+    """Enrich signals that have fewer than min_sources with additional web sources.
+
+    Uses Tavily web search to find supporting articles for each weak signal,
+    then stores them as supporting sources.
+    """
+    from app.enrichment_service import enrich_weak_signals as _enrich
+
+    try:
+        result = await _enrich(
+            supabase=supabase,
+            min_sources=min_sources,
+            max_new_sources_per_card=max_new_sources_per_card,
+            triggered_by_user_id=current_user["id"],
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Enrichment failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=_safe_error("signal enrichment", e))
