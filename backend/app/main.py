@@ -4,6 +4,7 @@ Slim app-factory module.  All endpoint logic lives in ``app.routers.*``;
 scheduled background jobs live in ``app.scheduler``.
 """
 
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -116,8 +117,34 @@ async def lifespan(_app: FastAPI):
             "Scheduler disabled (set FORESIGHT_ENABLE_SCHEDULER=true to enable)"
         )
 
+    # Start embedded worker for processing discovery runs, research tasks, etc.
+    worker_task = None
+    enable_worker = os.getenv("FORESIGHT_EMBED_WORKER", "true").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "y",
+        "on",
+    )
+
+    if enable_worker:
+        from app.worker import ForesightWorker
+
+        _embedded_worker = ForesightWorker()
+        worker_task = asyncio.create_task(_embedded_worker.run())
+        logger.info("Embedded worker started within web process")
+
     logger.info("Foresight API started")
     yield
+
+    if worker_task and _embedded_worker:
+        _embedded_worker.request_stop()
+        try:
+            await asyncio.wait_for(worker_task, timeout=5.0)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            worker_task.cancel()
+        logger.info("Embedded worker stopped")
+
     shutdown_scheduler()
     logger.info("Foresight API shutdown complete")
 
