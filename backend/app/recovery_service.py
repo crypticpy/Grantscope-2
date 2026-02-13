@@ -311,7 +311,9 @@ async def reprocess_errored_sources(
     """
     from app.ai_service import AIService
     from app.discovery_service import DiscoveryConfig
-    from app.openai_provider import azure_openai_async_client
+    from app.openai_provider import (
+        azure_openai_client,
+    )  # Sync — AIService methods aren't truly async
     from app.signal_agent_service import SignalAgentService
 
     logger.info(f"Starting reprocess of errored sources for {date_start} to {date_end}")
@@ -350,7 +352,7 @@ async def reprocess_errored_sources(
         }
 
     # Step 2: Build RawSource objects and run through triage + analysis
-    ai_service = AIService(openai_client=azure_openai_async_client)
+    ai_service = AIService(openai_client=azure_openai_client)
     processed: List[ProcessedSource] = []
     triage_passed = 0
     triage_failed = 0
@@ -560,7 +562,9 @@ async def recover_analyzed_errors(
     """
     from app.ai_service import AIService
     from app.discovery_service import DiscoveryConfig
-    from app.openai_provider import azure_openai_async_client
+    from app.openai_provider import (
+        azure_openai_client,
+    )  # Sync client — AIService methods aren't truly async
     from app.signal_agent_service import SignalAgentService
 
     logger.info(f"Recovering errored sources for {date_start} to {date_end}")
@@ -604,7 +608,7 @@ async def recover_analyzed_errors(
 
     # Run analysis on sources that need it (concurrently with semaphore)
     if needs_analysis:
-        ai_service = AIService(openai_client=azure_openai_async_client)
+        ai_service = AIService(openai_client=azure_openai_client)
         semaphore = asyncio.Semaphore(5)
         analysis_ok = 0
         analysis_fail = 0
@@ -773,7 +777,7 @@ async def recover_analyzed_errors(
             "run_id": run_id,
             "sources_found": len(errored.data),
             "reconstructed": len(processed),
-            "skipped": skipped,
+            "no_content": no_content,
             "signals_created": len(result.signals_created),
             "signals_enriched": len(result.signals_enriched),
             "sources_linked": result.sources_linked,
