@@ -487,6 +487,36 @@ async def reprocess_errored_sources(
         )
 
 
+@router.post("/discovery/recover-analyzed")
+@limiter.limit("3/hour")
+async def recover_analyzed_errors(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+    date_start: str = "2025-12-01",
+    date_end: str = "2026-02-01",
+):
+    """Recover sources that already passed triage+analysis but failed at card creation.
+
+    Unlike /reprocess (which re-runs triage from scratch), this endpoint uses
+    the existing analysis data to skip triage and feed directly to the signal agent.
+    """
+    from app.recovery_service import recover_analyzed_errors as _recover
+
+    try:
+        result = await _recover(
+            supabase=supabase,
+            date_start=date_start,
+            date_end=date_end,
+            triggered_by_user_id=current_user["id"],
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Recovery of analyzed errors failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=_safe_error("analyzed error recovery", e)
+        )
+
+
 @router.post("/discovery/enrich")
 @limiter.limit("3/hour")
 async def enrich_weak_signals(

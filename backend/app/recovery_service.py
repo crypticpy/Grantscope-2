@@ -544,3 +544,162 @@ async def reprocess_errored_sources(
             }
         ).eq("id", run_id).execute()
         raise
+
+
+async def recover_analyzed_errors(
+    supabase,
+    date_start: str = "2025-12-01",
+    date_end: str = "2026-02-01",
+    triggered_by_user_id: Optional[str] = None,
+) -> dict:
+    """Recover sources that passed triage+analysis but errored at card creation.
+
+    These sources already have full analysis data stored in discovered_sources.
+    We reconstruct ProcessedSource objects from existing analysis and feed them
+    directly to the signal agent — NO re-triage or re-analysis needed.
+    """
+    from app.discovery_service import DiscoveryConfig
+    from app.signal_agent_service import SignalAgentService
+
+    logger.info(
+        f"Recovering analyzed-but-errored sources for {date_start} to {date_end}"
+    )
+
+    # Find sources that errored at card_creation (already fully analyzed)
+    errored = (
+        supabase.table("discovered_sources")
+        .select("*")
+        .gte("created_at", date_start)
+        .lt("created_at", date_end)
+        .eq("processing_status", "error")
+        .eq("error_stage", "card_creation")
+        .order("created_at", desc=False)
+        .execute()
+    )
+
+    if not errored.data:
+        logger.info("No card_creation errors found in date range")
+        return {"status": "no_sources", "sources_found": 0}
+
+    logger.info(f"Found {len(errored.data)} sources that errored at card_creation")
+
+    # Reconstruct ProcessedSource objects from existing analysis
+    processed: List[ProcessedSource] = []
+    skipped = 0
+
+    for ds in errored.data:
+        ps = _reconstruct_processed_source(ds)
+        if ps:
+            processed.append(ps)
+        else:
+            skipped += 1
+
+    logger.info(f"Reconstructed {len(processed)} sources ({skipped} skipped)")
+
+    if not processed:
+        return {
+            "status": "no_recoverable",
+            "sources_found": len(errored.data),
+            "skipped": skipped,
+        }
+
+    # Regenerate embeddings
+    logger.info("Regenerating embeddings...")
+    for ps in processed:
+        try:
+            embed_text = f"{ps.raw.title} {ps.analysis.summary}"
+            ps.embedding = await _generate_embedding(embed_text)
+        except Exception as e:
+            logger.warning(f"Failed to generate embedding for {ps.raw.url}: {e}")
+            ps.embedding = []
+
+    # Create discovery run record
+    run_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+
+    supabase.table("discovery_runs").insert(
+        {
+            "id": run_id,
+            "status": "running",
+            "triggered_by": "manual",
+            "triggered_by_user": triggered_by_user_id,
+            "cards_created": 0,
+            "cards_enriched": 0,
+            "sources_found": len(processed),
+            "started_at": now,
+            "summary_report": {
+                "stage": "running",
+                "recovery_type": "analyzed_errors",
+                "total_errored": len(errored.data),
+                "reconstructed": len(processed),
+            },
+        }
+    ).execute()
+
+    # Run through signal agent
+    config = DiscoveryConfig(
+        max_new_cards_per_run=50,
+        use_signal_agent=True,
+    )
+
+    signal_agent = SignalAgentService(
+        supabase=supabase,
+        run_id=run_id,
+        triggered_by_user_id=triggered_by_user_id,
+    )
+
+    try:
+        result = await signal_agent.run_signal_detection(
+            processed_sources=processed,
+            config=config,
+        )
+
+        supabase.table("discovery_runs").update(
+            {
+                "status": "completed",
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "cards_created": len(result.signals_created),
+                "cards_enriched": len(result.signals_enriched),
+                "sources_found": len(processed),
+                "summary_report": {
+                    "stage": "completed",
+                    "recovery_type": "analyzed_errors",
+                    "signals_created": len(result.signals_created),
+                    "signals_enriched": len(result.signals_enriched),
+                    "sources_linked": result.sources_linked,
+                    "cost_estimate": result.cost_estimate,
+                },
+            }
+        ).eq("id", run_id).execute()
+
+        logger.info(
+            f"Recovery complete: {len(result.signals_created)} signals created, "
+            f"{len(result.signals_enriched)} enriched from {len(processed)} sources"
+        )
+
+        return {
+            "status": "completed",
+            "run_id": run_id,
+            "sources_found": len(errored.data),
+            "reconstructed": len(processed),
+            "skipped": skipped,
+            "signals_created": len(result.signals_created),
+            "signals_enriched": len(result.signals_enriched),
+            "sources_linked": result.sources_linked,
+            "cost_estimate": result.cost_estimate,
+        }
+
+    except Exception as e:
+        logger.error(f"Recovery of analyzed errors failed: {e}", exc_info=True)
+        supabase.table("discovery_runs").update(
+            {
+                "status": "failed",
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "summary_report": {
+                    "stage": "failed",
+                    "recovery_type": "analyzed_errors",
+                    "error": str(e),
+                },
+            }
+        ).eq("id", run_id).execute()
+        raise
