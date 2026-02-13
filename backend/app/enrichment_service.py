@@ -4,9 +4,73 @@ import asyncio
 import logging
 import os
 from datetime import datetime, timezone
-from typing import List, Optional, Dict
+from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+
+async def _search_exa(query: str, num_results: int = 7) -> list[dict]:
+    """Search via Exa AI. Returns list of {title, url, content, score}."""
+    exa_key = os.getenv("EXA_API_KEY")
+    if not exa_key:
+        return []
+
+    try:
+        from exa_py import Exa
+
+        exa = Exa(api_key=exa_key)
+        result = await asyncio.to_thread(
+            exa.search_and_contents,
+            query,
+            type="neural",
+            use_autoprompt=True,
+            num_results=num_results,
+            text={"max_characters": 3000},
+            start_published_date="2024-01-01",
+        )
+        return [
+            {
+                "title": r.title or "Untitled",
+                "url": r.url,
+                "content": r.text or "",
+                "score": r.score if hasattr(r, "score") else 0.7,
+            }
+            for r in result.results
+        ]
+    except Exception as e:
+        logger.warning(f"Exa search failed: {e}")
+        return []
+
+
+async def _search_tavily(query: str, num_results: int = 7) -> list[dict]:
+    """Search via Tavily. Returns list of {title, url, content, score}."""
+    tavily_key = os.getenv("TAVILY_API_KEY")
+    if not tavily_key:
+        return []
+
+    try:
+        from tavily import TavilyClient
+
+        client = TavilyClient(api_key=tavily_key)
+        result = await asyncio.to_thread(
+            client.search,
+            query,
+            max_results=num_results,
+            search_depth="basic",
+            include_answer=False,
+        )
+        return result.get("results", [])
+    except Exception as e:
+        logger.warning(f"Tavily search failed: {e}")
+        return []
+
+
+async def _web_search(query: str, num_results: int = 7) -> list[dict]:
+    """Search the web using Exa (primary) with Tavily fallback."""
+    results = await _search_exa(query, num_results)
+    if results:
+        return results
+    return await _search_tavily(query, num_results)
 
 
 async def enrich_weak_signals(
@@ -18,26 +82,16 @@ async def enrich_weak_signals(
 ) -> dict:
     """Find cards with fewer than `min_sources` sources and enrich them via web search.
 
-    Args:
-        supabase: Supabase client
-        min_sources: Cards with fewer sources than this get enriched
-        max_cards: Max number of cards to process
-        max_new_sources_per_card: Max additional sources to find per card
-        triggered_by_user_id: User ID for audit trail
-
-    Returns:
-        Summary dict with counts of enriched cards and sources added
+    Uses Exa AI (primary) with Tavily fallback to find supporting articles.
     """
+    exa_key = os.getenv("EXA_API_KEY")
     tavily_key = os.getenv("TAVILY_API_KEY")
-    if not tavily_key:
-        return {"error": "TAVILY_API_KEY not configured"}
-
-    from tavily import TavilyClient
-
-    tavily = TavilyClient(api_key=tavily_key)
+    if not exa_key and not tavily_key:
+        return {
+            "error": "No search API keys configured (EXA_API_KEY or TAVILY_API_KEY)"
+        }
 
     # Step 1: Find cards with source counts
-    # Get all active cards
     cards_resp = (
         supabase.table("cards")
         .select("id, name, summary, pillar_id")
@@ -69,7 +123,8 @@ async def enrich_weak_signals(
             weak_cards.append(card)
 
     logger.info(
-        f"Enrichment: Found {len(weak_cards)} cards with < {min_sources} sources (out of {len(all_cards)} total)"
+        f"Enrichment: Found {len(weak_cards)} cards with < {min_sources} sources "
+        f"(out of {len(all_cards)} total)"
     )
 
     if not weak_cards:
@@ -79,46 +134,37 @@ async def enrich_weak_signals(
             "message": "All cards have sufficient sources",
         }
 
-    # Step 2: Enrich each weak card using Tavily
+    # Step 2: Enrich each weak card
     total_sources_added = 0
     enriched_cards = 0
     errors = 0
     error_samples = []
+    search_provider = "exa" if exa_key else "tavily"
 
-    # Use semaphore to limit concurrent Tavily calls
+    # Use semaphore to limit concurrent API calls
     sem = asyncio.Semaphore(3)
 
     async def enrich_card(card: dict) -> int:
-        """Search for and attach additional sources to a card. Returns count of sources added."""
+        """Search for and attach additional sources to a card."""
         nonlocal errors
         async with sem:
             try:
                 card_name = card["name"]
-                card_summary = card.get("summary", "")
 
-                # Build a search query from the card's topic
-                search_query = (
-                    f"{card_name} {card.get('pillar_id', '')} municipal government"
-                )
-                if len(search_query) > 200:
-                    search_query = card_name[:150]
+                # Build a focused search query
+                search_query = card_name
+                if len(search_query) > 150:
+                    search_query = search_query[:150]
 
-                # Search Tavily
-                result = await asyncio.to_thread(
-                    tavily.search,
-                    search_query,
-                    max_results=max_new_sources_per_card
-                    + 2,  # fetch a few extra in case of dupes
-                    search_depth="basic",
-                    include_answer=False,
+                # Search the web
+                web_results = await _web_search(
+                    search_query, num_results=max_new_sources_per_card + 2
                 )
-                web_results = result.get("results", [])
 
                 if not web_results:
-                    logger.debug(f"Enrichment: No web results for '{card_name[:40]}'")
                     return 0
 
-                # Get existing source URLs for this card to avoid duplicates
+                # Get existing source URLs to avoid duplicates
                 existing_resp = (
                     supabase.table("sources")
                     .select("url")
@@ -143,21 +189,17 @@ async def enrich_weak_signals(
                     title = (wr.get("title") or "Untitled")[:500]
                     content = wr.get("content", "")
 
-                    # Skip very short content
                     if len(content) < 50:
                         continue
 
-                    # Insert source
                     source_record = {
                         "card_id": card["id"],
                         "url": url,
                         "title": title,
                         "full_text": content[:10000],
-                        "ai_summary": content[
-                            :500
-                        ],  # Tavily content is already a summary
+                        "ai_summary": content[:500],
                         "relevance_to_card": wr.get("score", 0.7),
-                        "api_source": "tavily_enrichment",
+                        "api_source": f"{search_provider}_enrichment",
                         "ingested_at": now,
                     }
 
@@ -167,46 +209,50 @@ async def enrich_weak_signals(
                         )
                         if src_result.data:
                             source_id = src_result.data[0]["id"]
-                            # Also create junction entry
                             try:
                                 supabase.table("signal_sources").insert(
                                     {
                                         "card_id": card["id"],
                                         "source_id": source_id,
                                         "relationship_type": "supporting",
-                                        "confidence": wr.get("score", 0.7),
-                                        "agent_reasoning": f"Web enrichment: found via Tavily search for '{card_name[:60]}'",
+                                        "confidence": min(wr.get("score", 0.7), 1.0),
+                                        "agent_reasoning": (
+                                            f"Web enrichment via {search_provider} "
+                                            f"for '{card_name[:60]}'"
+                                        ),
                                         "created_by": "enrichment_service",
                                         "created_at": now,
                                     }
                                 ).execute()
                             except Exception:
-                                pass  # Junction entry is optional (might not exist yet)
+                                pass
 
                             sources_added += 1
                             existing_urls.add(url)
                     except Exception as e:
                         if "duplicate" not in str(e).lower():
                             logger.warning(
-                                f"Enrichment: Failed to store source for '{card_name[:30]}': {e}"
+                                f"Enrichment: Failed to store source for "
+                                f"'{card_name[:30]}': {e}"
                             )
 
                 if sources_added > 0:
-                    # Update card updated_at
                     supabase.table("cards").update({"updated_at": now}).eq(
                         "id", card["id"]
                     ).execute()
 
-                    # Add timeline event
                     try:
                         supabase.table("card_timeline").insert(
                             {
                                 "card_id": card["id"],
                                 "event_type": "sources_enriched",
                                 "title": "Additional sources discovered",
-                                "description": f"Found {sources_added} additional supporting sources via web search",
+                                "description": (
+                                    f"Found {sources_added} additional supporting "
+                                    f"sources via {search_provider} web search"
+                                ),
                                 "metadata": {
-                                    "source": "tavily_enrichment",
+                                    "source": f"{search_provider}_enrichment",
                                     "count": sources_added,
                                 },
                                 "created_at": now,
@@ -216,7 +262,8 @@ async def enrich_weak_signals(
                         pass
 
                 logger.info(
-                    f"Enrichment: Added {sources_added} sources to '{card_name[:40]}' (had {card['_source_count']})"
+                    f"Enrichment: Added {sources_added} sources to "
+                    f"'{card_name[:40]}' (had {card['_source_count']})"
                 )
                 return sources_added
 
@@ -224,7 +271,8 @@ async def enrich_weak_signals(
                 errors += 1
                 err_msg = f"{type(e).__name__}: {e}"
                 logger.error(
-                    f"Enrichment: Error enriching card {card.get('id', '?')}: {err_msg}"
+                    f"Enrichment: Error enriching card "
+                    f"{card.get('id', '?')}: {err_msg}"
                 )
                 if len(error_samples) < 3:
                     error_samples.append(err_msg[:200])
@@ -244,6 +292,7 @@ async def enrich_weak_signals(
         "weak_cards_found": len(weak_cards),
         "total_cards_checked": len(all_cards),
         "errors": errors,
+        "search_provider": search_provider,
         "error_samples": error_samples,
     }
 
