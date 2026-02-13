@@ -23,7 +23,6 @@ async def _search_exa(query: str, num_results: int = 7) -> list[dict]:
             exa.search_and_contents,
             query,
             type="neural",
-            use_autoprompt=True,
             num_results=num_results,
             text={"max_characters": 3000},
             start_published_date="2024-01-01",
