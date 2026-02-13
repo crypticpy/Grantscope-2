@@ -83,6 +83,7 @@ async def enrich_weak_signals(
     total_sources_added = 0
     enriched_cards = 0
     errors = 0
+    error_samples = []
 
     # Use semaphore to limit concurrent Tavily calls
     sem = asyncio.Semaphore(3)
@@ -221,9 +222,12 @@ async def enrich_weak_signals(
 
             except Exception as e:
                 errors += 1
+                err_msg = f"{type(e).__name__}: {e}"
                 logger.error(
-                    f"Enrichment: Error enriching card {card.get('id', '?')}: {e}"
+                    f"Enrichment: Error enriching card {card.get('id', '?')}: {err_msg}"
                 )
+                if len(error_samples) < 3:
+                    error_samples.append(err_msg[:200])
                 return 0
 
     # Run enrichment for all weak cards
@@ -240,6 +244,7 @@ async def enrich_weak_signals(
         "weak_cards_found": len(weak_cards),
         "total_cards_checked": len(all_cards),
         "errors": errors,
+        "error_samples": error_samples,
     }
 
     logger.info(f"Enrichment complete: {summary}")
