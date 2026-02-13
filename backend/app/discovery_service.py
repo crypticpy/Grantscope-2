@@ -903,11 +903,22 @@ class DiscoveryService:
                 )
 
             # Step 2b: Execute query-based searches (traditional GPT Researcher + Exa)
+            # Note: This step depends on Firecrawl. If Firecrawl is down/out of credits,
+            # individual queries will timeout at 120s each. We also cap total step time at 5min.
             if queries:
                 step_start = datetime.now(timezone.utc)
-                query_sources, query_cost = await self._execute_searches(
-                    queries[: config.max_queries_per_run], config
-                )
+                try:
+                    query_sources, query_cost = await asyncio.wait_for(
+                        self._execute_searches(
+                            queries[: config.max_queries_per_run], config
+                        ),
+                        timeout=300,  # 5 minute total cap for query-based searches
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        "Query-based search step timed out after 300s - continuing with multi-source results only"
+                    )
+                    query_sources, query_cost = [], 0.0
                 search_cost += query_cost
                 processing_time.query_search_seconds = (
                     datetime.now(timezone.utc) - step_start
@@ -1826,9 +1837,13 @@ class DiscoveryService:
             Tuple of (sources, cost)
         """
         try:
-            # Use the research service's discovery method
-            sources, _report, cost = await self.research_service._discover_sources(
-                query=query.query_text, report_type="research_report"
+            # Use the research service's discovery method with timeout
+            # GPT Researcher can hang if Firecrawl is down/out of credits
+            sources, _report, cost = await asyncio.wait_for(
+                self.research_service._discover_sources(
+                    query=query.query_text, report_type="research_report"
+                ),
+                timeout=120,  # 2 minute timeout per query
             )
 
             # Limit sources per query
@@ -1843,6 +1858,11 @@ class DiscoveryService:
 
             return sources, cost
 
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"Search timed out for query '{query.query_text[:50]}...' (120s)"
+            )
+            return [], 0.0
         except Exception as e:
             logger.warning(f"Search failed for query '{query.query_text[:50]}...': {e}")
             return [], 0.0
