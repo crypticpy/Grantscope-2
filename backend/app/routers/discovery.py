@@ -571,6 +571,117 @@ async def enrich_profiles(
 
 
 # ============================================================================
+# Card Snapshots — version history for description/summary
+# ============================================================================
+
+
+@router.get("/cards/{card_id}/snapshots")
+async def list_card_snapshots(
+    card_id: str,
+    field_name: str = "description",
+    current_user: dict = Depends(get_current_user),
+):
+    """List all snapshots for a card field, newest first."""
+    result = (
+        supabase.table("card_snapshots")
+        .select("id, field_name, content_length, trigger, created_at, created_by")
+        .eq("card_id", card_id)
+        .eq("field_name", field_name)
+        .order("created_at", desc=True)
+        .limit(50)
+        .execute()
+    )
+    return {"snapshots": result.data or [], "card_id": card_id}
+
+
+@router.get("/cards/{card_id}/snapshots/{snapshot_id}")
+async def get_card_snapshot(
+    card_id: str,
+    snapshot_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Get full content of a specific snapshot."""
+    result = (
+        supabase.table("card_snapshots")
+        .select("*")
+        .eq("id", snapshot_id)
+        .eq("card_id", card_id)
+        .single()
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+    return result.data
+
+
+@router.post("/cards/{card_id}/snapshots/{snapshot_id}/restore")
+async def restore_card_snapshot(
+    card_id: str,
+    snapshot_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Restore a card field from a snapshot. Saves current value as a new snapshot first."""
+    # Get the snapshot to restore
+    snapshot = (
+        supabase.table("card_snapshots")
+        .select("*")
+        .eq("id", snapshot_id)
+        .eq("card_id", card_id)
+        .single()
+        .execute()
+    )
+    if not snapshot.data:
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+
+    field_name = snapshot.data["field_name"]
+    restore_content = snapshot.data["content"]
+
+    # Get current value and save it as a snapshot before overwriting
+    card = (
+        supabase.table("cards")
+        .select(f"id, {field_name}")
+        .eq("id", card_id)
+        .single()
+        .execute()
+    )
+    if not card.data:
+        raise HTTPException(status_code=404, detail="Card not found")
+
+    current_content = card.data.get(field_name, "")
+    now = datetime.now(timezone.utc).isoformat()
+
+    if current_content and len(current_content) > 10:
+        supabase.table("card_snapshots").insert(
+            {
+                "card_id": card_id,
+                "field_name": field_name,
+                "content": current_content,
+                "content_length": len(current_content),
+                "trigger": "restore",
+                "created_at": now,
+                "created_by": current_user.get("id", "user"),
+            }
+        ).execute()
+
+    # Restore the old content
+    supabase.table("cards").update({field_name: restore_content, "updated_at": now}).eq(
+        "id", card_id
+    ).execute()
+
+    logger.info(
+        f"Card {card_id} {field_name} restored from snapshot {snapshot_id} "
+        f"by user {current_user.get('id')}"
+    )
+
+    return {
+        "restored": True,
+        "field_name": field_name,
+        "snapshot_id": snapshot_id,
+        "content_length": len(restore_content),
+    }
+
+
+# ============================================================================
 # Discovery Schedule Management
 # ============================================================================
 

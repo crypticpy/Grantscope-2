@@ -27,11 +27,17 @@ CREATE INDEX IF NOT EXISTS idx_signal_sources_type ON signal_sources(relationshi
 -- RLS
 ALTER TABLE signal_sources ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Authenticated users can view signal_sources"
-    ON signal_sources FOR SELECT TO authenticated USING (true);
+DO $$ BEGIN
+    CREATE POLICY "Authenticated users can view signal_sources"
+        ON signal_sources FOR SELECT TO authenticated USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Service role full access on signal_sources"
-    ON signal_sources FOR ALL TO service_role USING (true) WITH CHECK (true);
+DO $$ BEGIN
+    CREATE POLICY "Service role full access on signal_sources"
+        ON signal_sources FOR ALL TO service_role USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Track agent stats on discovery runs
 ALTER TABLE discovery_runs ADD COLUMN IF NOT EXISTS signal_agent_stats JSONB DEFAULT '{}';

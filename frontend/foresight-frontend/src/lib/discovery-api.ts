@@ -1341,3 +1341,53 @@ export async function pinSignal(
     { method: "POST" },
   );
 }
+
+// ============================================================================
+// Card Snapshots — version history for description/summary
+// ============================================================================
+
+export interface CardSnapshot {
+  id: string;
+  field_name: string;
+  content?: string;
+  content_length: number;
+  trigger: string;
+  created_at: string;
+  created_by: string;
+}
+
+export async function fetchCardSnapshots(
+  token: string,
+  cardId: string,
+  fieldName: string = "description",
+): Promise<{ snapshots: CardSnapshot[]; card_id: string }> {
+  return apiRequest<{ snapshots: CardSnapshot[]; card_id: string }>(
+    `/api/v1/cards/${cardId}/snapshots?field_name=${fieldName}`,
+    token,
+  );
+}
+
+export async function fetchCardSnapshot(
+  token: string,
+  cardId: string,
+  snapshotId: string,
+): Promise<CardSnapshot> {
+  return apiRequest<CardSnapshot>(
+    `/api/v1/cards/${cardId}/snapshots/${snapshotId}`,
+    token,
+  );
+}
+
+export async function restoreCardSnapshot(
+  token: string,
+  cardId: string,
+  snapshotId: string,
+): Promise<{ restored: boolean; field_name: string; content_length: number }> {
+  return apiRequest<{
+    restored: boolean;
+    field_name: string;
+    content_length: number;
+  }>(`/api/v1/cards/${cardId}/snapshots/${snapshotId}/restore`, token, {
+    method: "POST",
+  });
+}

@@ -24,6 +24,15 @@
 --   DROP FUNCTION IF EXISTS match_sources_by_embedding;
 -- ============================================================================
 
+-- Ensure pgvector extension is available (Supabase may have it in 'extensions' schema)
+CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions;
+
+-- Make vector type visible in public schema
+DO $$ BEGIN
+    EXECUTE 'SET search_path TO public, extensions';
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
 CREATE OR REPLACE FUNCTION match_sources_by_embedding(
     query_embedding vector(1536),
     target_card_id uuid,

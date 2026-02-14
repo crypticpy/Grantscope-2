@@ -98,6 +98,11 @@ export interface OverviewTabProps {
   canRequestDeepResearch?: boolean;
 
   /**
+   * Callback when card data should be refreshed (e.g., after restoring a description)
+   */
+  onRefreshCard?: () => void;
+
+  /**
    * Optional custom CSS class name for the container
    */
   className?: string;
@@ -157,6 +162,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   researchHistory,
   onRequestDeepResearch,
   canRequestDeepResearch,
+  onRefreshCard,
   className = "",
 }) => {
   // Filter deep research tasks for the prominent panel
@@ -178,7 +184,11 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
         />
 
         {/* Description Panel */}
-        <CardDescription description={card.description} />
+        <CardDescription
+          description={card.description}
+          cardId={card.id}
+          onRestore={onRefreshCard}
+        />
 
         {/* Classification Section */}
         <CardClassification

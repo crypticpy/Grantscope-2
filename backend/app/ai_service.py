@@ -988,6 +988,37 @@ Respond with JSON:
         # Combine source insights
         source_insights = "\n".join([f"- {s}" for s in source_summaries[:5]])
 
+        # Detect if the existing description is a rich structured profile
+        is_structured = any(
+            hdr in (current_description or "")
+            for hdr in [
+                "## Overview",
+                "## Key Developments",
+                "## Municipal Relevance",
+                "## What to Watch",
+            ]
+        )
+        desc_length = len(current_description or "")
+
+        if is_structured and desc_length > 500:
+            # Rich profile exists — integrate new findings into the existing structure
+            length_guidance = (
+                f"The current description is a {desc_length}-character structured profile with markdown sections. "
+                f"You MUST preserve this structure and length. Update each section with new evidence from the research. "
+                f"Your enhanced_description MUST be at least {desc_length} characters and use the same markdown sections."
+            )
+            format_guidance = (
+                "Maintain the existing markdown structure (## Overview, ## Key Developments, "
+                "## Municipal Relevance, ## What to Watch). Add new findings to the appropriate "
+                "sections. Do NOT shorten or flatten the description into plain paragraphs."
+            )
+        else:
+            length_guidance = (
+                "Write a comprehensive description (2-3 substantial paragraphs) covering key developments, "
+                "implications, and municipal relevance."
+            )
+            format_guidance = "Use clear prose paragraphs. Include specific names, dates, and data points."
+
         prompt = f"""You are enhancing a foresight discovery card based on new research findings.
 The card tracks an emerging technology, trend, or innovation relevant to municipal government.
 
@@ -997,37 +1028,41 @@ Summary: {current_summary}
 Description: {current_description}
 
 NEW RESEARCH FINDINGS:
-{research_report[:3000] if research_report else "No detailed report available"}
+{research_report[:4000] if research_report else "No detailed report available"}
 
 KEY SOURCE INSIGHTS:
 {source_insights or "No specific source insights"}
 
 TASK:
 1. Enhance the card's summary (1-2 sentences) to incorporate the most significant new findings
-2. Enhance the description (2-3 paragraphs) to include:
-   - Key developments and their implications
-   - Notable organizations, projects, or deployments mentioned
-   - Relevance to municipal/city government applications
-   - Maturity and adoption trends
+2. Enhance the description:
+   {length_guidance}
+   {format_guidance}
+   - Integrate new findings from the research — do NOT remove existing valuable content
+   - Be factual, specific, and actionable — cite names, dates, numbers
+   - Preserve ALL important information from the original description
 
-Keep the enhanced content factual, specific, and actionable. Don't just summarize - add value.
-Preserve important information from the original description while integrating new insights.
+CRITICAL: The enhanced_description must be AT LEAST as long as the current description.
+Do NOT condense a detailed description into a shorter summary.
 
 Respond with JSON:
 {{
   "enhanced_summary": "Updated 1-2 sentence summary with key new insights",
-  "enhanced_description": "Updated 2-3 paragraph description integrating new research",
+  "enhanced_description": "Updated description integrating new research (preserve structure and length)",
   "key_updates": ["List of 2-3 most significant new findings"]
 }}
 """
 
         logger.debug(f"Enhancing card from research: {current_name}")
 
+        # Use higher max_tokens for structured profiles to avoid truncation
+        max_tokens = 3000 if is_structured else 1500
+
         response = self.client.chat.completions.create(
             model=get_chat_deployment(),
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
-            max_tokens=1500,
+            max_tokens=max_tokens,
             timeout=REQUEST_TIMEOUT,
         )
 

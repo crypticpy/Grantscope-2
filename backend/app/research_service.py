@@ -250,6 +250,38 @@ class ResearchService:
                 logger.warning(f"Exa initialization failed: {e}")
 
     # ========================================================================
+    # Card Snapshots — version history before overwrites
+    # ========================================================================
+
+    def _snapshot_card_fields(
+        self, card_id: str, card_data: dict, trigger: str
+    ) -> None:
+        """Save snapshots of description and summary before they get overwritten.
+
+        Args:
+            card_id: The card being modified
+            card_data: Current card data (must have 'description' and/or 'summary')
+            trigger: What triggered the overwrite (deep_research, profile_refresh, etc.)
+        """
+        now = datetime.now(timezone.utc).isoformat()
+        for field in ("description", "summary"):
+            content = card_data.get(field)
+            if content and len(content) > 10:
+                try:
+                    self.supabase.table("card_snapshots").insert(
+                        {
+                            "card_id": card_id,
+                            "field_name": field,
+                            "content": content,
+                            "content_length": len(content),
+                            "trigger": trigger,
+                            "created_at": now,
+                        }
+                    ).execute()
+                except Exception as e:
+                    logger.warning(f"Snapshot save failed for {card_id}/{field}: {e}")
+
+    # ========================================================================
     # Rate Limiting
     # ========================================================================
 
@@ -952,19 +984,29 @@ class ResearchService:
 
         except Exception as e:
             error_msg = str(e)
-            # Log detailed error for debugging
-            logger.error(
-                f"Source storage failed for {processed.raw.url[:50]}...: {error_msg}"
-            )
 
-            # Check for specific error types
+            # Check for specific error types and log appropriately
             if "duplicate" in error_msg.lower() or "unique" in error_msg.lower():
-                logger.debug("Duplicate detected via error (OK)")
+                logger.debug(f"Duplicate source skipped: {processed.raw.url[:80]}")
                 return None
-            elif "column" in error_msg.lower():
-                logger.error(f"Schema mismatch - missing column: {error_msg}")
+
+            # Schema and permission errors are critical — they block ALL inserts
+            if "column" in error_msg.lower() or "schema" in error_msg.lower():
+                logger.critical(
+                    f"SCHEMA ERROR blocking source storage — likely a missing "
+                    f"migration. Run 'npx supabase db push' to apply pending "
+                    f"migrations. URL: {processed.raw.url[:80]} | "
+                    f"Error: {error_msg}"
+                )
             elif "permission" in error_msg.lower() or "rls" in error_msg.lower():
-                logger.error(f"Permission/RLS error: {error_msg}")
+                logger.critical(
+                    f"PERMISSION/RLS ERROR blocking source storage: {error_msg}"
+                )
+            else:
+                logger.error(
+                    f"Source storage failed for "
+                    f"{processed.raw.url[:80]}: {error_msg}"
+                )
 
             return None
 
@@ -1207,6 +1249,9 @@ class ResearchService:
             )
 
             if updated_profile:
+                # Snapshot before overwrite
+                self._snapshot_card_fields(card_id, card_data, "profile_refresh")
+
                 update_data = {
                     "description": updated_profile,
                     "profile_generated_at": datetime.now(timezone.utc).isoformat(),
@@ -1339,6 +1384,14 @@ class ResearchService:
             if source_id:
                 sources_added += 1
 
+        # Detect systemic storage failures
+        if processed and sources_added == 0:
+            logger.critical(
+                f"ALL {len(processed)} processed sources failed to store for "
+                f"card {card_id}. This likely indicates a schema mismatch or "
+                f"missing migration. Check logs above for SCHEMA ERROR details."
+            )
+
         # Step 6b: Check if profile needs refresh (auto-regenerate after 3+ new sources)
         if sources_added > 0:
             await self._maybe_refresh_profile(card_id)
@@ -1370,6 +1423,11 @@ class ResearchService:
                         current_description=full_card.data.get("description", ""),
                         research_report=report or "",
                         source_summaries=source_summaries,
+                    )
+
+                    # Snapshot before overwrite
+                    self._snapshot_card_fields(
+                        card_id, full_card.data, "enhance_research"
                     )
 
                     # Update card with enhanced content
@@ -1600,6 +1658,14 @@ class ResearchService:
             source_id = await self._store_source(card_id, proc)
             if source_id:
                 sources_added += 1
+
+        # Detect systemic storage failures (all sources failed = likely schema/config issue)
+        if processed and sources_added == 0:
+            logger.critical(
+                f"ALL {len(processed)} processed sources failed to store for "
+                f"card {card_id}. This likely indicates a schema mismatch or "
+                f"missing migration. Check logs above for SCHEMA ERROR details."
+            )
 
         # Step 6b: Check if profile needs refresh (auto-regenerate after 3+ new sources)
         if sources_added > 0:
@@ -1853,6 +1919,9 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
                 research_report=report or "",
                 source_summaries=source_summaries,
             )
+
+            # Snapshot before overwrite
+            self._snapshot_card_fields(card_id, card, "deep_research")
 
             # Update card with enhanced content and timestamps
             self.supabase.table("cards").update(
