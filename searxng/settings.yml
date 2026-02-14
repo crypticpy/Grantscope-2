@@ -44,7 +44,7 @@ server:
   # Port inside container
   port: 8080
   # Secret key — overridden by SEARXNG_SECRET env var
-  secret_key: "foresight-searxng-default-key"
+  secret_key: "CHANGE_ME_IN_PRODUCTION"
   # Request limiter — relaxed for internal use
   limiter: false
   # Public URL

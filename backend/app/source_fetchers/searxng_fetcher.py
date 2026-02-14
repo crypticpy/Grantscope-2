@@ -21,13 +21,17 @@ import logging
 import asyncio
 from dataclasses import dataclass
 from typing import List, Optional
-from urllib.parse import quote_plus
 
 import httpx
 
 logger = logging.getLogger(__name__)
 
-SEARXNG_BASE_URL = os.getenv("SEARXNG_BASE_URL", "http://localhost:8888")
+_DEFAULT_BASE_URL = "http://localhost:8888"
+
+
+def _get_base_url() -> str:
+    """Get the configured SearXNG base URL, falling back to localhost default."""
+    return os.getenv("SEARXNG_BASE_URL", "") or _DEFAULT_BASE_URL
 
 
 @dataclass
@@ -87,10 +91,7 @@ async def search_web(
         date_filter: Time filter — accepts Serper-style ("qdr:w") or
                      SearXNG-style ("week").
     """
-    base_url = os.getenv("SEARXNG_BASE_URL", SEARXNG_BASE_URL)
-    if not base_url:
-        logger.warning("SEARXNG_BASE_URL not set, skipping web search")
-        return []
+    base_url = _get_base_url()
 
     params = {
         "q": query,
@@ -145,10 +146,7 @@ async def search_news(
 
     Returns news articles sorted by recency.
     """
-    base_url = os.getenv("SEARXNG_BASE_URL", SEARXNG_BASE_URL)
-    if not base_url:
-        logger.warning("SEARXNG_BASE_URL not set, skipping news search")
-        return []
+    base_url = _get_base_url()
 
     params = {
         "q": query,
@@ -247,31 +245,25 @@ async def search_all(
 
 
 def is_available() -> bool:
-    """Check if SearXNG is configured (base URL is set and non-default)."""
-    url = os.getenv("SEARXNG_BASE_URL", "")
-    return bool(url)
+    """Check if SearXNG is configured (SEARXNG_BASE_URL env var is set)."""
+    return bool(os.getenv("SEARXNG_BASE_URL", ""))
 
 
 async def health_check() -> dict:
     """
-    Check SearXNG connectivity and return status info.
+    Check SearXNG connectivity via the /healthz endpoint.
 
     Returns a dict like:
-        {"available": True, "base_url": "...", "engines": 12}
+        {"available": True, "base_url": "http://..."}
     """
-    base_url = os.getenv("SEARXNG_BASE_URL", SEARXNG_BASE_URL)
+    base_url = _get_base_url()
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.get(
-                f"{base_url}/search",
-                params={"q": "test", "format": "json", "pageno": 1},
-            )
+            response = await client.get(f"{base_url}/healthz")
             response.raise_for_status()
-            data = response.json()
             return {
                 "available": True,
                 "base_url": base_url,
-                "engines": len(data.get("results", [])),
             }
     except Exception as e:
         return {

@@ -49,6 +49,17 @@ class SearchResult:
 # ---------------------------------------------------------------------------
 
 
+def _detect_provider() -> str:
+    """Auto-detect the best available search provider from env vars."""
+    if os.getenv("SEARXNG_BASE_URL", ""):
+        return "searxng"
+    if os.getenv("SERPER_API_KEY", ""):
+        return "serper"
+    if os.getenv("TAVILY_API_KEY", ""):
+        return "tavily"
+    return "none"
+
+
 def get_active_provider() -> str:
     """
     Determine which search provider to use based on configuration.
@@ -58,23 +69,13 @@ def get_active_provider() -> str:
     explicit = os.getenv("SEARCH_PROVIDER", "auto").lower().strip()
 
     if explicit == "auto":
-        if os.getenv("SEARXNG_BASE_URL", ""):
-            return "searxng"
-        if os.getenv("SERPER_API_KEY", ""):
-            return "serper"
-        if os.getenv("TAVILY_API_KEY", ""):
-            return "tavily"
-        return "none"
+        return _detect_provider()
 
     if explicit in ("searxng", "serper", "tavily"):
         return explicit
 
-    logger.warning(f"Unknown SEARCH_PROVIDER='{explicit}', falling back to auto")
-    return (
-        get_active_provider.__wrapped__()
-        if hasattr(get_active_provider, "__wrapped__")
-        else "none"
-    )
+    logger.warning(f"Unknown SEARCH_PROVIDER='{explicit}', falling back to auto-detect")
+    return _detect_provider()
 
 
 def is_available() -> bool:

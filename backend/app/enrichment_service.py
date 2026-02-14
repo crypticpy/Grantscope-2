@@ -138,12 +138,12 @@ async def enrich_weak_signals(
 
     Uses Tavily+Serper (primary, low cost) with Exa neural search as fallback.
     """
+    from .search_provider import is_available as search_available
+
     exa_key = os.getenv("EXA_API_KEY")
-    tavily_key = os.getenv("TAVILY_API_KEY")
-    serper_key_check = os.getenv("SERPER_API_KEY")
-    if not exa_key and not tavily_key and not serper_key_check:
+    if not search_available() and not exa_key:
         return {
-            "error": "No search API keys configured (TAVILY_API_KEY, SERPER_API_KEY, or EXA_API_KEY)"
+            "error": "No search provider configured (set SEARXNG_BASE_URL, SERPER_API_KEY, TAVILY_API_KEY, or EXA_API_KEY)"
         }
 
     # Step 1: Find cards with source counts
@@ -194,6 +194,7 @@ async def enrich_weak_signals(
     enriched_cards = 0
     errors = 0
     error_samples = []
+    tavily_key = os.getenv("TAVILY_API_KEY")
     serper_key = os.getenv("SERPER_API_KEY")
     search_provider = "tavily+serper" if (tavily_key or serper_key) else "exa"
 
