@@ -237,7 +237,7 @@ class ResearchService:
 
     DAILY_DEEP_RESEARCH_LIMIT = 2
     MAX_SOURCES_UPDATE = 5
-    MAX_SOURCES_DEEP = 15
+    MAX_SOURCES_DEEP = 25
     TRIAGE_THRESHOLD = 0.6
     VECTOR_MATCH_THRESHOLD = 0.82
     STRONG_MATCH_THRESHOLD = 0.92
@@ -304,7 +304,10 @@ class ResearchService:
     # ========================================================================
 
     async def _discover_sources(
-        self, query: str, report_type: str = "research_report"
+        self,
+        query: str,
+        report_type: str = "research_report",
+        existing_source_urls: Optional[List[str]] = None,
     ) -> Tuple[List[RawSource], str, float]:
         """
         Use GPT Researcher to discover sources, enhanced with Serper + trafilatura.
@@ -326,7 +329,14 @@ class ResearchService:
         else:
             os.environ.setdefault("SCRAPER", "bs")
 
-        researcher = GPTResearcher(query=query, report_type=report_type)
+        researcher = GPTResearcher(
+            query=query,
+            report_type=report_type,
+            max_subtopics=10,
+            source_urls=existing_source_urls or None,
+            complement_source_urls=bool(existing_source_urls),
+            verbose=False,
+        )
 
         # Wrap GPT Researcher calls in try/except to handle LLM failures gracefully
         try:
@@ -359,21 +369,31 @@ class ResearchService:
 
                 # If title is empty or just whitespace, try to extract from URL or content
                 if not raw_title.strip():
-                    # Check if it's a PDF and try to get title from metadata or filename
-                    if url.lower().endswith(".pdf"):
-                        # Extract filename from URL as fallback title
+                    # Try LLM-based title generation if content is available
+                    content_for_title = src.get("content", "") or ""
+                    if content_for_title and len(content_for_title) > 50:
+                        try:
+                            raw_title = await self.ai_service.generate_source_title(
+                                url=url,
+                                content_snippet=content_for_title[:1000],
+                            )
+                            logger.debug(f"LLM-generated title: {raw_title}")
+                        except Exception:
+                            pass
+
+                    # Fallback: extract from URL filename for PDFs
+                    if not raw_title.strip() and url.lower().endswith(".pdf"):
                         from urllib.parse import urlparse, unquote
 
                         path = urlparse(url).path
                         filename = unquote(path.split("/")[-1])
-                        # Remove .pdf extension and clean up
                         raw_title = (
                             filename.replace(".pdf", "")
                             .replace("_", " ")
                             .replace("-", " ")
                             .strip()
                         )
-                        logger.debug(f"PDF title extracted from URL: {raw_title}")
+                        logger.debug(f"PDF title from URL: {raw_title}")
 
                     # If still empty, use "Untitled"
                     if not raw_title.strip():
@@ -396,9 +416,9 @@ class ResearchService:
 
         logger.info(f"GPT Researcher found {len(sources)} sources")
 
-        # Supplement with Serper search for additional high-quality sources
+        # Supplement with Serper search for additional high-quality sources (primary supplement)
         try:
-            serper_sources = await self._search_with_serper(query, num_results=5)
+            serper_sources = await self._search_with_serper(query, num_results=10)
             for src in serper_sources:
                 if src.url not in seen_urls:
                     seen_urls.add(src.url)
@@ -410,14 +430,36 @@ class ResearchService:
                 f"Serper search failed (continuing with GPT Researcher sources): {e}"
             )
 
+        # Exa neural search as FALLBACK — only when Tavily+Serper didn't find enough
+        MIN_SOURCES_BEFORE_EXA = 10
+        if len(sources) < MIN_SOURCES_BEFORE_EXA:
+            logger.info(
+                f"Only {len(sources)} sources from Tavily+Serper (need {MIN_SOURCES_BEFORE_EXA}), falling back to Exa"
+            )
+            try:
+                exa_sources = await self._search_with_exa(query, num_results=10)
+                exa_added = 0
+                for src in exa_sources:
+                    if src.url not in seen_urls:
+                        seen_urls.add(src.url)
+                        sources.append(src)
+                        exa_added += 1
+                if exa_added:
+                    logger.info(f"Exa fallback added {exa_added} additional sources")
+            except Exception as e:
+                logger.warning(f"Exa fallback search failed: {e}")
+        else:
+            logger.info(
+                f"Tavily+Serper found {len(sources)} sources, skipping Exa (cost savings)"
+            )
+
         return sources, report, costs
 
     async def _search_with_exa(
         self, query: str, num_results: int = 10
     ) -> List[RawSource]:
         """
-        Search with Exa AI for high-quality sources with content.
-        (Legacy — kept for backwards compatibility if EXA_API_KEY is still set.)
+        Search with Exa AI neural search for high-quality sources with content.
 
         Args:
             query: Search query
@@ -430,8 +472,8 @@ class ResearchService:
             return []
 
         try:
-            # Calculate date range (last 60 days for freshness)
-            start_date = (datetime.now(timezone.utc) - timedelta(days=60)).strftime(
+            # Calculate date range (last 180 days for broader coverage)
+            start_date = (datetime.now(timezone.utc) - timedelta(days=180)).strftime(
                 "%Y-%m-%d"
             )
 
@@ -440,6 +482,7 @@ class ResearchService:
                 query,
                 num_results=num_results,
                 start_published_date=start_date,
+                type="neural",
                 text=True,
                 highlights=True,
             )
@@ -570,6 +613,25 @@ class ResearchService:
                         or len(source.title) < 5
                     ):
                         source.title = title[:500]
+                    # If title still generic after trafilatura, try LLM
+                    current_title_check = source.title or ""
+                    if source.content and (
+                        not current_title_check.strip()
+                        or current_title_check == "Untitled"
+                        or len(current_title_check) < 5
+                    ):
+                        try:
+                            llm_title = await self.ai_service.generate_source_title(
+                                url=source.url,
+                                content_snippet=source.content[:1000],
+                            )
+                            if llm_title and llm_title != "Untitled":
+                                source.title = llm_title
+                                logger.debug(
+                                    f"LLM title after trafilatura: {llm_title[:50]}"
+                                )
+                        except Exception:
+                            pass
                 except Exception:
                     pass
             logger.info(
@@ -631,6 +693,26 @@ class ResearchService:
                         logger.debug(
                             f"Updated title from Firecrawl: {source.title[:50]}..."
                         )
+
+                # If title is still generic after Firecrawl, try LLM generation
+                current_title = source.title or ""
+                if source.content and (
+                    not current_title.strip()
+                    or current_title == "Untitled"
+                    or len(current_title) < 5
+                ):
+                    try:
+                        llm_title = await self.ai_service.generate_source_title(
+                            url=source.url,
+                            content_snippet=source.content[:1000],
+                        )
+                        if llm_title and llm_title != "Untitled":
+                            source.title = llm_title
+                            logger.debug(
+                                f"LLM-generated title after backfill: {llm_title[:50]}"
+                            )
+                    except Exception:
+                        pass
 
             except Exception as e:
                 logger.warning(f"Firecrawl failed for {source.url}: {e}")
@@ -1283,9 +1365,41 @@ class ResearchService:
             if steer_parts:
                 query += "\n\n" + " ".join(steer_parts)
 
+        # Step 1b: Fetch existing card sources to seed research
+        existing_source_urls = []
+        existing_source_context = []
+        try:
+            existing_sources_result = (
+                self.supabase.table("sources")
+                .select("url, title, ai_summary, full_text")
+                .eq("card_id", card_id)
+                .order("created_at", desc=True)
+                .limit(20)
+                .execute()
+            )
+            if existing_sources_result.data:
+                for es in existing_sources_result.data:
+                    if es.get("url"):
+                        existing_source_urls.append(es["url"])
+                    if es.get("ai_summary"):
+                        existing_source_context.append(
+                            {
+                                "title": es.get("title", "Untitled"),
+                                "url": es.get("url", ""),
+                                "summary": es["ai_summary"],
+                            }
+                        )
+                logger.info(
+                    f"Found {len(existing_source_urls)} existing sources for card {card_id}"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to fetch existing sources: {e}")
+
         # Step 2: Discover sources (GPT Researcher + Serper - detailed report for more depth)
         sources, report, cost = await self._discover_sources(
-            query=query, report_type="detailed_report"
+            query=query,
+            report_type="detailed_report",
+            existing_source_urls=existing_source_urls or None,
         )
 
         # Step 3: Backfill missing content with Firecrawl / trafilatura
@@ -1333,6 +1447,19 @@ class ResearchService:
                 for p in processed
                 if p.analysis
             ]
+            # Include existing card sources in report context
+            for ctx in existing_source_context:
+                if ctx["url"] not in {s.get("url") for s in source_analyses}:
+                    source_analyses.append(
+                        {
+                            "title": ctx["title"],
+                            "url": ctx["url"],
+                            "source_name": "Previously discovered",
+                            "summary": ctx["summary"],
+                            "key_excerpts": [],
+                            "relevance": 0.8,
+                        }
+                    )
             # Parse stage_id safely - it could be "4", "4_stage", "4_proof", etc.
             stage_id_raw = card.get("stage_id", "4") or "4"
             try:

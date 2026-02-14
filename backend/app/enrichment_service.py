@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,9 @@ async def _search_exa(query: str, num_results: int = 7) -> list[dict]:
             type="neural",
             num_results=num_results,
             text={"max_characters": 3000},
-            start_published_date="2024-01-01",
+            start_published_date=(
+                datetime.now(timezone.utc) - timedelta(days=180)
+            ).strftime("%Y-%m-%d"),
         )
         return [
             {
@@ -64,12 +66,64 @@ async def _search_tavily(query: str, num_results: int = 7) -> list[dict]:
         return []
 
 
+async def _search_serper(query: str, num_results: int = 7) -> list[dict]:
+    """Search via Serper (Google). Returns list of {title, url, content, score}."""
+    serper_key = os.getenv("SERPER_API_KEY")
+    if not serper_key:
+        return []
+
+    try:
+        from .source_fetchers.serper_fetcher import search_web, search_news
+
+        web_results = await search_web(query, num_results=num_results)
+        news_results = await search_news(query, num_results=max(num_results // 2, 3))
+
+        seen_urls = set()
+        results = []
+        for r in web_results + news_results:
+            if r.url not in seen_urls:
+                seen_urls.add(r.url)
+                results.append(
+                    {
+                        "title": r.title or "Untitled",
+                        "url": r.url,
+                        "content": r.snippet or "",
+                        "score": 0.7,
+                    }
+                )
+        return results[:num_results]
+    except Exception as e:
+        logger.warning(f"Serper search failed: {e}")
+        return []
+
+
 async def _web_search(query: str, num_results: int = 7) -> list[dict]:
-    """Search the web using Exa (primary) with Tavily fallback."""
-    results = await _search_exa(query, num_results)
-    if results:
+    """Search the web using Tavily+Serper (primary, low cost) with Exa fallback."""
+    # Primary: Try Tavily first (cheapest)
+    results = await _search_tavily(query, num_results)
+    if len(results) >= num_results:
         return results
-    return await _search_tavily(query, num_results)
+
+    # Supplement: Try Serper for additional results
+    serper_results = await _search_serper(query, num_results)
+    seen_urls = {r.get("url") for r in results}
+    for r in serper_results:
+        if r["url"] not in seen_urls:
+            seen_urls.add(r["url"])
+            results.append(r)
+
+    if len(results) >= num_results:
+        return results[:num_results]
+
+    # Fallback: Exa neural search only if primaries didn't deliver
+    logger.info(f"Tavily+Serper found only {len(results)} results, falling back to Exa")
+    exa_results = await _search_exa(query, num_results)
+    for r in exa_results:
+        if r["url"] not in seen_urls:
+            seen_urls.add(r["url"])
+            results.append(r)
+
+    return results[:num_results]
 
 
 async def enrich_weak_signals(
@@ -81,13 +135,14 @@ async def enrich_weak_signals(
 ) -> dict:
     """Find cards with fewer than `min_sources` sources and enrich them via web search.
 
-    Uses Exa AI (primary) with Tavily fallback to find supporting articles.
+    Uses Tavily+Serper (primary, low cost) with Exa neural search as fallback.
     """
     exa_key = os.getenv("EXA_API_KEY")
     tavily_key = os.getenv("TAVILY_API_KEY")
-    if not exa_key and not tavily_key:
+    serper_key_check = os.getenv("SERPER_API_KEY")
+    if not exa_key and not tavily_key and not serper_key_check:
         return {
-            "error": "No search API keys configured (EXA_API_KEY or TAVILY_API_KEY)"
+            "error": "No search API keys configured (TAVILY_API_KEY, SERPER_API_KEY, or EXA_API_KEY)"
         }
 
     # Step 1: Find cards with source counts
@@ -138,7 +193,8 @@ async def enrich_weak_signals(
     enriched_cards = 0
     errors = 0
     error_samples = []
-    search_provider = "exa" if exa_key else "tavily"
+    serper_key = os.getenv("SERPER_API_KEY")
+    search_provider = "tavily+serper" if (tavily_key or serper_key) else "exa"
 
     # Use semaphore to limit concurrent API calls
     sem = asyncio.Semaphore(3)

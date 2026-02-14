@@ -145,6 +145,7 @@ class TriageResult:
     confidence: float
     primary_pillar: Optional[str]
     reason: str
+    relevance_level: str = "medium"  # "high", "medium", or "low"
 
 
 @dataclass
@@ -298,24 +299,32 @@ TRIAGE_PROMPT = """You are a triage analyst for a municipal government horizon s
 Evaluate if this article is potentially relevant to city government operations, planning, or strategic interests.
 
 Relevant topics include:
-- Technology that could affect city services
-- Infrastructure innovations
+- Technology that could affect city services or operations
+- Infrastructure innovations and smart city developments
 - Policy changes affecting municipalities
-- Climate/sustainability developments
-- Public safety innovations
-- Economic development trends
-- Housing and transportation technology
-- Government operations technology
+- Climate, sustainability, and environmental resilience
+- Public safety innovations and emergency management
+- Economic development, workforce, and talent trends
+- Housing, homelessness, and affordability initiatives
+- Transportation, mobility, and urban planning
+- Government operations, procurement, and technology modernization
+- AI, data, and digital transformation in public sector
 
 Article Title: {title}
 Article Content: {content}
 
+Rate the relevance level:
+- "high": Directly relevant to municipal government strategy, operations, or planning. A city official would want to know about this.
+- "medium": Tangentially relevant or potentially useful for context. Could inform municipal strategy indirectly.
+- "low": Not relevant to municipal government interests.
+
 Respond with JSON:
 {{
+  "relevance_level": "high|medium|low",
   "is_relevant": true/false,
   "confidence": 0.0-1.0,
   "primary_pillar": "CH|EW|HG|HH|MC|PS|null",
-  "reason": "brief explanation"
+  "reason": "1-2 sentence explanation of why this is or isn't relevant to municipal government"
 }}
 """
 
@@ -584,7 +593,8 @@ class AIService:
             TriageResult with relevance decision
         """
         prompt = TRIAGE_PROMPT.format(
-            title=title, content=content[:2000]  # Limit content for cheap triage
+            title=title,
+            content=content[:4000],  # Increased from 2000 for better context
         )
 
         logger.debug(f"Triaging source: {title[:50]}...")
@@ -606,6 +616,7 @@ class AIService:
                 confidence=0.0,
                 primary_pillar=None,
                 reason="Parse error",
+                relevance_level="low",
             )
 
         return TriageResult(
@@ -613,7 +624,41 @@ class AIService:
             confidence=result.get("confidence", 0.0),
             primary_pillar=result.get("primary_pillar"),
             reason=result.get("reason", ""),
+            relevance_level=result.get("relevance_level", "medium"),
         )
+
+    async def generate_source_title(self, url: str, content_snippet: str) -> str:
+        """
+        Generate a descriptive title for a source using a cheap model.
+        Useful for PDFs and sources without proper titles.
+
+        Args:
+            url: Source URL (for context)
+            content_snippet: First ~1000 chars of the source content
+
+        Returns:
+            Generated title string
+        """
+        prompt = f"""Generate a concise, descriptive title (under 100 characters) for this document.
+
+URL: {url}
+Content excerpt:
+{content_snippet[:1000]}
+
+Respond with ONLY the title text, nothing else."""
+
+        try:
+            response = self.client.chat.completions.create(
+                model=get_chat_mini_deployment(),
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=50,
+                timeout=15,
+            )
+            title = response.choices[0].message.content.strip().strip('"').strip("'")
+            return title[:200] if title else "Untitled"
+        except Exception as e:
+            logger.warning(f"Title generation failed: {e}")
+            return "Untitled"
 
     @with_retry(max_retries=MAX_RETRIES)
     async def analyze_source(
@@ -1135,8 +1180,9 @@ Respond with JSON:
                 "",
                 "---",
                 "",
-                "**Research Methodology:** This report was generated using GPT Researcher with Firecrawl for source discovery, "
-                "supplemented by Exa AI for additional high-quality sources. Sources were filtered for relevance to municipal "
+                "**Research Methodology:** This report was generated using GPT Researcher for source discovery, "
+                "supplemented by Serper web and news search, with Exa AI neural search as a fallback. "
+                "Content was extracted using Firecrawl or trafilatura. Sources were filtered for relevance to municipal "
                 "government applications and analyzed using AI-powered classification and summarization.",
             ]
         )
