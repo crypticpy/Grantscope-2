@@ -319,9 +319,9 @@ class ResearchService:
         Returns:
             Tuple of (sources, report_text, cost)
         """
-        # Use BeautifulSoup scraper — Firecrawl credits exhausted.
-        # Tavily and Serper handle search; bs handles page scraping.
-        os.environ["SCRAPER"] = "bs"
+        # Use Tavily Extract for page scraping — leverages existing Tavily
+        # subscription for cleaner content extraction than BeautifulSoup.
+        os.environ["SCRAPER"] = "tavily_extract"
 
         researcher = GPTResearcher(
             query=query,
