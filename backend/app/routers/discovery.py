@@ -546,7 +546,7 @@ async def enrich_weak_signals(
 
 
 @router.post("/discovery/enrich-profiles")
-@limiter.limit("3/hour")
+@limiter.limit("30/hour")
 async def enrich_profiles(
     request: Request,
     current_user: dict = Depends(get_current_user),
