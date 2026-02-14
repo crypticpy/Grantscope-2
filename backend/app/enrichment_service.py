@@ -357,7 +357,7 @@ async def enrich_weak_signals(
 
 async def enrich_signal_profiles(
     supabase,
-    max_cards: int = 15,
+    max_cards: int = 5,
     triggered_by_user_id: Optional[str] = None,
 ) -> dict:
     """Batch-generate rich profiles for cards with blank/thin descriptions.
