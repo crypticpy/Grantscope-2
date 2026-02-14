@@ -3344,6 +3344,10 @@ class DiscoveryService:
         """
         Store a processed source to a card.
 
+        Runs embedding-based deduplication before inserting.  If the source
+        is a duplicate (>0.95 similarity), it is skipped.  If related
+        (0.85-0.95), it is stored with ``duplicate_of`` set.
+
         Args:
             source: Processed source
             card_id: Target card ID
@@ -3352,16 +3356,23 @@ class DiscoveryService:
             Source ID or None if failed
         """
         try:
-            # Check for duplicate URL
-            existing = (
-                self.supabase.table("sources")
-                .select("id")
-                .eq("card_id", card_id)
-                .eq("url", source.raw.url)
-                .execute()
+            # --- Deduplication check (URL + embedding) ---
+            from app.deduplication import check_duplicate
+
+            dedup_result = await check_duplicate(
+                supabase=self.supabase,
+                card_id=card_id,
+                content=source.raw.content or "",
+                url=source.raw.url or "",
+                embedding=source.embedding if hasattr(source, "embedding") else None,
+                ai_service=self.ai_service,
             )
 
-            if existing.data:
+            if dedup_result.action == "skip":
+                logger.debug(
+                    f"Dedup: skipping duplicate source (sim={dedup_result.similarity:.4f}): "
+                    f"{source.raw.url[:50]}..."
+                )
                 return None
 
             # Look up domain reputation ID for this source (Task 2.7)
@@ -3373,6 +3384,8 @@ class DiscoveryService:
                     _domain_reputation_id = _rep.get("id")
             except Exception:
                 pass  # Non-fatal
+
+            from app.source_quality import extract_domain
 
             source_record = {
                 "card_id": card_id,
@@ -3406,8 +3419,16 @@ class DiscoveryService:
                     )
                 ),
                 "api_source": "discovery_scan",
+                "domain": extract_domain(source.raw.url or ""),
                 "ingested_at": datetime.now(timezone.utc).isoformat(),
             }
+
+            # If related (0.85-0.95 similarity), mark duplicate_of
+            if (
+                dedup_result.action == "store_as_related"
+                and dedup_result.duplicate_of_id
+            ):
+                source_record["duplicate_of"] = dedup_result.duplicate_of_id
 
             # Add domain_reputation_id if available (Task 2.7)
             if _domain_reputation_id:
@@ -3416,7 +3437,26 @@ class DiscoveryService:
             result = self.supabase.table("sources").insert(source_record).execute()
 
             if result.data:
-                return result.data[0]["id"]
+                source_id = result.data[0]["id"]
+
+                # Compute and store source quality score (non-blocking)
+                try:
+                    from app.source_quality import compute_and_store_quality_score
+
+                    compute_and_store_quality_score(
+                        self.supabase,
+                        source_id,
+                        analysis=(
+                            source.analysis if hasattr(source, "analysis") else None
+                        ),
+                        triage=source.triage if hasattr(source, "triage") else None,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to compute quality score for source {source_id}: {e}"
+                    )
+
+                return source_id
 
         except Exception as e:
             logger.error(f"Failed to store source: {e}")

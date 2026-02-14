@@ -1691,23 +1691,43 @@ class SignalAgentService:
         """
         Store a processed source in the sources table, linked to a card.
 
-        Checks for duplicate URLs. Returns the source ID or None.
+        Runs embedding-based deduplication before inserting.  If the source
+        is a duplicate (>0.95 similarity), it is skipped.  If related
+        (0.85-0.95), it is stored with ``duplicate_of`` set.
+
+        Returns the source ID, or None if skipped/failed.
         """
         try:
-            # Check for duplicate URL on this card
-            existing = (
-                self.supabase.table("sources")
-                .select("id")
-                .eq("card_id", card_id)
-                .eq("url", source.raw.url)
-                .execute()
+            # --- Deduplication check (URL + embedding) ---
+            from app.deduplication import check_duplicate
+
+            # Lazily create an ai_service for embedding generation if needed
+            _ai_service = None
+            try:
+                from app.ai_service import AIService
+                from app.openai_provider import azure_openai_client
+
+                _ai_service = AIService(azure_openai_client)
+            except Exception:
+                pass  # Non-fatal — dedup will proceed without embedding generation
+
+            dedup_result = await check_duplicate(
+                supabase=self.supabase,
+                card_id=card_id,
+                content=source.raw.content or "",
+                url=source.raw.url or "",
+                embedding=source.embedding if hasattr(source, "embedding") else None,
+                ai_service=_ai_service,
             )
-            if existing.data:
+
+            if dedup_result.action == "skip":
                 logger.debug(
-                    f"Signal agent: Source URL already exists on card {card_id}: "
+                    f"Signal agent: Dedup skipping duplicate (sim={dedup_result.similarity:.4f}): "
                     f"{source.raw.url[:80]}"
                 )
-                return existing.data[0]["id"]
+                return None
+
+            from app.source_quality import extract_domain
 
             source_record = {
                 "card_id": card_id,
@@ -1740,13 +1760,40 @@ class SignalAgentService:
                     )
                 ),
                 "api_source": "discovery_scan",
+                "domain": extract_domain(source.raw.url or ""),
                 "ingested_at": datetime.now(timezone.utc).isoformat(),
             }
+
+            # If related (0.85-0.95 similarity), mark duplicate_of
+            if (
+                dedup_result.action == "store_as_related"
+                and dedup_result.duplicate_of_id
+            ):
+                source_record["duplicate_of"] = dedup_result.duplicate_of_id
 
             result = self.supabase.table("sources").insert(source_record).execute()
 
             if result.data:
-                return result.data[0]["id"]
+                source_id = result.data[0]["id"]
+
+                # Compute and store source quality score (non-blocking)
+                try:
+                    from app.source_quality import compute_and_store_quality_score
+
+                    compute_and_store_quality_score(
+                        self.supabase,
+                        source_id,
+                        analysis=(
+                            source.analysis if hasattr(source, "analysis") else None
+                        ),
+                        triage=source.triage if hasattr(source, "triage") else None,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to compute quality score for source {source_id}: {e}"
+                    )
+
+                return source_id
 
         except Exception as e:
             logger.error(

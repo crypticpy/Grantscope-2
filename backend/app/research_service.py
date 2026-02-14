@@ -824,6 +824,10 @@ class ResearchService:
         """
         Store processed source with full schema.
 
+        Runs embedding-based deduplication before inserting.  If the source
+        is a duplicate (>0.95 similarity), it is skipped.  If related
+        (0.85-0.95), it is stored with ``duplicate_of`` set.
+
         Args:
             card_id: Card to associate source with
             processed: Fully processed source
@@ -832,20 +836,30 @@ class ResearchService:
             Source ID if created, None if duplicate or error
         """
         try:
-            # Check for duplicate URL
-            existing = (
-                self.supabase.table("sources")
-                .select("id")
-                .eq("card_id", card_id)
-                .eq("url", processed.raw.url)
-                .execute()
+            # --- Deduplication check (URL + embedding) ---
+            from app.deduplication import check_duplicate
+
+            dedup_result = await check_duplicate(
+                supabase=self.supabase,
+                card_id=card_id,
+                content=processed.raw.content or "",
+                url=processed.raw.url or "",
+                embedding=(
+                    processed.embedding if hasattr(processed, "embedding") else None
+                ),
+                ai_service=self.ai_service,
             )
 
-            if existing.data:
-                logger.debug(f"Duplicate source skipped: {processed.raw.url[:50]}...")
-                return None  # Already exists
+            if dedup_result.action == "skip":
+                logger.debug(
+                    f"Dedup: skipping duplicate source (sim={dedup_result.similarity:.4f}): "
+                    f"{processed.raw.url[:50]}..."
+                )
+                return None
 
             # Prepare insert data with safe defaults
+            from app.source_quality import extract_domain
+
             insert_data = {
                 "card_id": card_id,
                 "url": processed.raw.url,
@@ -870,8 +884,16 @@ class ResearchService:
                     processed.analysis.relevance if processed.analysis else 0.5
                 ),
                 "api_source": "gpt_researcher",
+                "domain": extract_domain(processed.raw.url or ""),
                 "ingested_at": datetime.now(timezone.utc).isoformat(),
             }
+
+            # If related (0.85-0.95 similarity), mark duplicate_of
+            if (
+                dedup_result.action == "store_as_related"
+                and dedup_result.duplicate_of_id
+            ):
+                insert_data["duplicate_of"] = dedup_result.duplicate_of_id
 
             # Insert with full schema
             result = self.supabase.table("sources").insert(insert_data).execute()
@@ -901,6 +923,27 @@ class ResearchService:
                     )
                 except Exception as e:
                     logger.warning(f"Timeline event failed (source still saved): {e}")
+
+                # Compute and store source quality score (non-blocking)
+                try:
+                    from app.source_quality import compute_and_store_quality_score
+
+                    compute_and_store_quality_score(
+                        self.supabase,
+                        source_id,
+                        analysis=(
+                            processed.analysis
+                            if hasattr(processed, "analysis")
+                            else None
+                        ),
+                        triage=(
+                            processed.triage if hasattr(processed, "triage") else None
+                        ),
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to compute quality score for source {source_id}: {e}"
+                    )
 
                 return source_id
 
