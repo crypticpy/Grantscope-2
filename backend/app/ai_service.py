@@ -454,6 +454,8 @@ ANALYZED SOURCE INSIGHTS:
 EXTRACTED ENTITIES:
 {entities}
 
+{austin_context}
+
 ---
 
 Create a COMPREHENSIVE strategic intelligence report with the following sections. Be specific, cite examples, and provide actionable insights.
@@ -471,6 +473,12 @@ Create a COMPREHENSIVE strategic intelligence report with the following sections
 - Leading organizations and initiatives
 - Geographic distribution of implementations
 - Recent significant developments
+
+## PEER CITY APPROACHES
+- Which peer cities have implemented or piloted this (cite specific cities from the list above)
+- What approaches or vendors did they use
+- What outcomes or results have they reported
+- Lessons learned from peer city implementations
 
 ## MUNICIPAL APPLICATIONS
 - Specific use cases for city government
@@ -498,7 +506,10 @@ Create a COMPREHENSIVE strategic intelligence report with the following sections
 - Potential unintended consequences
 
 ## STRATEGIC RECOMMENDATIONS
-(Numbered list of 3-5 specific, actionable recommendations for city decision-makers)
+(Numbered list of 3-5 specific, actionable recommendations for Austin decision-makers. For each recommendation, specify:
+- Which department(s) should lead
+- Timeline: immediate / 6-month / 12-month
+- Next step: pilot, policy review, vendor evaluation, staff briefing, etc.)
 
 ## FUTURE OUTLOOK
 - Expected developments in next 12-24 months
@@ -509,10 +520,11 @@ Create a COMPREHENSIVE strategic intelligence report with the following sections
 
 Important guidelines:
 - Be SPECIFIC with examples, names, dates, and numbers where available
-- Include CITY EXAMPLES where this has been implemented
+- Include PEER CITY examples where this has been implemented
+- Map recommendations to SPECIFIC Austin departments and CMO priorities
 - Make recommendations ACTIONABLE for city planners
 - Note UNCERTAINTIES and knowledge gaps
-- Keep the report between 1500-2500 words
+- Keep the report between 2000-3000 words
 - Use markdown formatting for readability
 - When citing findings from the analyzed sources, reference them by their title in the text
 - DO NOT include a Sources & Methodology section - this will be appended automatically
@@ -1410,6 +1422,14 @@ Respond as JSON:
             if loc_entities:
                 entity_str += f"Locations: {', '.join(e.get('name', '') for e in loc_entities[:5])}\n"
 
+        # Format Austin strategic context for the prompt
+        try:
+            from .austin_context import format_austin_context_for_prompt
+
+            austin_context = format_austin_context_for_prompt(pillar)
+        except Exception:
+            austin_context = ""
+
         prompt = DEEP_RESEARCH_REPORT_PROMPT.format(
             card_name=card_name,
             current_summary=current_summary or "No current summary",
@@ -1424,6 +1444,7 @@ Respond as JSON:
             ),
             source_insights=source_insights or "No additional source insights",
             entities=entity_str or "No entities extracted",
+            austin_context=austin_context,
         )
 
         logger.info(f"Generating comprehensive deep research report for: {card_name}")

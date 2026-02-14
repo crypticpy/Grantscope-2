@@ -1528,6 +1528,22 @@ class ResearchService:
             existing_source_urls=existing_source_urls or None,
         )
 
+        # Step 2b: Peer city benchmarking queries
+        try:
+            from .austin_context import get_peer_city_names
+
+            peer_cities = get_peer_city_names()[:5]
+            if peer_cities:
+                peer_query = (
+                    f'"{card["name"]}" ({" OR ".join(peer_cities)}) city implementation'
+                )
+                peer_sources = await self._search_with_serper(peer_query, max_results=5)
+                if peer_sources:
+                    sources.extend(peer_sources)
+                    logger.info(f"Peer city search added {len(peer_sources)} sources")
+        except Exception as e:
+            logger.warning(f"Peer city benchmarking search failed: {e}")
+
         # Step 3: Backfill missing content via unified crawler
         sources = await self._backfill_content(sources)
 
@@ -1769,6 +1785,58 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
                 comprehensive_report = (
                     report  # Use GPT Researcher report if no source analyses
                 )
+
+        # Step 7c: Research evolution summary (if card has previous reports)
+        try:
+            prev_research = (
+                self.supabase.table("research_tasks")
+                .select("result_summary, completed_at")
+                .eq("card_id", card_id)
+                .eq("status", "completed")
+                .eq("task_type", "deep_research")
+                .order("completed_at", desc=True)
+                .limit(2)
+                .execute()
+            )
+            prev_reports = prev_research.data or []
+            # If there's a prior report (second entry since current is being created)
+            if len(prev_reports) >= 1 and comprehensive_report:
+                prior = prev_reports[0]
+                prior_preview = (
+                    prior.get("result_summary", {}).get("report_preview", "")[:2000]
+                    if prior.get("result_summary")
+                    else ""
+                )
+                if prior_preview:
+                    evo_prompt = (
+                        f'Compare these two research snapshots for "{card["name"]}" '
+                        f"and summarize what changed in 2-3 sentences.\n\n"
+                        f"PREVIOUS RESEARCH (excerpt):\n{prior_preview}\n\n"
+                        f"CURRENT RESEARCH (excerpt):\n{comprehensive_report[:2000]}"
+                    )
+                    try:
+                        from .openai_provider import get_chat_mini_deployment
+
+                        evo_resp = self.ai_service.client.chat.completions.create(
+                            model=get_chat_mini_deployment(),
+                            messages=[{"role": "user", "content": evo_prompt}],
+                            max_tokens=200,
+                            timeout=30,
+                        )
+                        evolution_summary = evo_resp.choices[0].message.content.strip()
+                        if evolution_summary:
+                            comprehensive_report = (
+                                comprehensive_report.rstrip()
+                                + f"\n\n---\n\n## Research Evolution\n\n"
+                                f"*Compared to previous research "
+                                f"({prior.get('completed_at', 'unknown')[:10]}):*\n\n"
+                                f"{evolution_summary}\n"
+                            )
+                            logger.info(f"Added evolution summary for card {card_id}")
+                    except Exception as evo_err:
+                        logger.warning(f"Evolution summary failed: {evo_err}")
+        except Exception as e:
+            logger.warning(f"Research history lookup failed: {e}")
 
         # Step 8: Enhance card with research insights
         try:
