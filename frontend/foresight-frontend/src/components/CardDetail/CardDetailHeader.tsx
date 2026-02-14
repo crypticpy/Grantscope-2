@@ -10,22 +10,23 @@
  * This component is responsive and handles dark mode styling.
  */
 
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import React from "react";
+import { Link } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 
 // Badge Components
-import { PillarBadge } from '../PillarBadge';
-import { HorizonBadge } from '../HorizonBadge';
-import { StageBadge } from '../StageBadge';
-import { AnchorBadge } from '../AnchorBadge';
-import { Top25Badge } from '../Top25Badge';
+import { PillarBadge } from "../PillarBadge";
+import { HorizonBadge } from "../HorizonBadge";
+import { StageBadge } from "../StageBadge";
+import { AnchorBadge } from "../AnchorBadge";
+import { Top25Badge } from "../Top25Badge";
+import { TrendBadge, type TrendDirection } from "../TrendBadge";
 
 // Types
-import type { Card } from './types';
+import type { Card } from "./types";
 
 // Utilities
-import { parseStageNumber } from './utils';
+import { parseStageNumber } from "./utils";
 
 /**
  * Props for the CardDetailHeader component
@@ -60,8 +61,8 @@ export interface CardDetailHeaderProps {
  */
 export const CardDetailHeader: React.FC<CardDetailHeaderProps> = ({
   card,
-  backLink = '/discover',
-  backLinkText = 'Back to Discover',
+  backLink = "/discover",
+  backLinkText = "Back to Discover",
   children,
 }) => {
   // Parse stage number from stage_id string
@@ -82,7 +83,7 @@ export const CardDetailHeader: React.FC<CardDetailHeaderProps> = ({
       <div className="bg-white dark:bg-dark-surface/90 rounded-2xl border border-gray-200 dark:border-gray-700/70 shadow-sm overflow-hidden mb-6">
         {/* Gradient Header Bar - Austin brand colors */}
         <div className="bg-gradient-to-r from-brand-blue to-brand-green h-1.5" />
-        
+
         {/* Action Buttons Row - Top with separator */}
         {children && (
           <div className="px-5 sm:px-6 lg:px-8 pt-4 pb-3 border-b border-gray-200 dark:border-gray-700/50">
@@ -105,11 +106,7 @@ export const CardDetailHeader: React.FC<CardDetailHeaderProps> = ({
               />
             </div>
             <div className="transition-transform hover:scale-105">
-              <HorizonBadge
-                horizon={card.horizon}
-                showIcon
-                size="lg"
-              />
+              <HorizonBadge horizon={card.horizon} showIcon size="lg" />
             </div>
             {card.top25_relevance && card.top25_relevance.length > 0 && (
               <div className="transition-transform hover:scale-105">
@@ -146,12 +143,11 @@ export const CardDetailHeader: React.FC<CardDetailHeaderProps> = ({
             )}
             {card.anchor_id && (
               <div className="transition-transform hover:scale-105">
-                <AnchorBadge
-                  anchor={card.anchor_id}
-                  size="md"
-                  abbreviated
-                />
+                <AnchorBadge anchor={card.anchor_id} size="md" abbreviated />
               </div>
+            )}
+            {card.trend_direction && card.trend_direction !== "unknown" && (
+              <TrendBadge direction={card.trend_direction as TrendDirection} />
             )}
             <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
               Created: {new Date(card.created_at).toLocaleDateString()}

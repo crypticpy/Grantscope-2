@@ -30,6 +30,7 @@ import { StageBadge } from "../components/StageBadge";
 import { QualityScoreBadge } from "../components/QualityScoreBadge";
 import { Top25Badge } from "../components/Top25Badge";
 import { VelocityBadge, type VelocityTrend } from "../components/VelocityBadge";
+import { TrendBadge, type TrendDirection } from "../components/TrendBadge";
 import { parseStageNumber } from "../lib/stage-utils";
 import { CreateSignalModal } from "../components/CreateSignal";
 import { VirtualizedGrid } from "../components/VirtualizedGrid";
@@ -987,6 +988,9 @@ const SignalCard: React.FC<SignalCardProps> = React.memo(
                 trend={signal.velocity_trend as VelocityTrend}
                 score={signal.velocity_score}
               />
+              <TrendBadge
+                direction={signal.trend_direction as TrendDirection}
+              />
             </div>
 
             {/* Personal source badges */}
@@ -1093,6 +1097,7 @@ const SignalListItem: React.FC<SignalCardProps> = React.memo(
             trend={signal.velocity_trend as VelocityTrend}
             score={signal.velocity_score}
           />
+          <TrendBadge direction={signal.trend_direction as TrendDirection} />
         </div>
 
         {/* Scores */}

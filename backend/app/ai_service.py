@@ -1121,6 +1121,76 @@ Respond with JSON:
 *Profile generation encountered an error. Run deep research or try again later to generate a full profile.*
 """
 
+    async def analyze_trend_trajectory(
+        self,
+        signal_name: str,
+        source_dates: List[str],
+        source_summaries: List[str],
+    ) -> str:
+        """Classify the overall trend trajectory of a signal.
+
+        Uses GPT-4o-mini to classify based on source publication patterns
+        and content themes.
+
+        Args:
+            signal_name: Name of the signal/card.
+            source_dates: List of ISO date strings for recent sources.
+            source_summaries: List of brief summaries for recent sources.
+
+        Returns:
+            One of: accelerating, stable, emerging, declining, unknown
+        """
+        if not source_summaries:
+            return "unknown"
+
+        # Build a compact context for the classifier
+        timeline_parts = []
+        for date, summary in zip(source_dates[:15], source_summaries[:15]):
+            short_date = date[:10] if date else "unknown"
+            short_summary = (summary or "")[:150]
+            timeline_parts.append(f"- [{short_date}] {short_summary}")
+
+        timeline_text = "\n".join(timeline_parts) if timeline_parts else "No data"
+
+        prompt = f"""Classify the trend trajectory for the signal "{signal_name}" based on its recent source publications.
+
+Source timeline (newest first):
+{timeline_text}
+
+Based on the publication frequency, recency, and content themes, classify this signal's trajectory as exactly ONE of:
+- **accelerating**: Rapidly increasing coverage, growing momentum, more frequent and urgent publications
+- **stable**: Consistent coverage over time, no major shifts in momentum or urgency
+- **emerging**: Early-stage signal with sparse but growing coverage, recently appeared
+- **declining**: Decreasing coverage, fading from discussion, fewer recent publications
+
+Respond with ONLY the single word classification (accelerating, stable, emerging, or declining). No explanation."""
+
+        try:
+            response = self.client.chat.completions.create(
+                model=get_chat_mini_deployment(),
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=10,
+                temperature=0,
+                timeout=REQUEST_TIMEOUT,
+            )
+            result = response.choices[0].message.content.strip().lower()
+            valid = {"accelerating", "stable", "emerging", "declining"}
+            if result in valid:
+                return result
+            # Try to extract a valid value from longer responses
+            for v in valid:
+                if v in result:
+                    return v
+            logger.warning(
+                f"Unexpected trend trajectory response for '{signal_name[:40]}': {result}"
+            )
+            return "unknown"
+        except Exception as e:
+            logger.warning(
+                f"Trend trajectory analysis failed for '{signal_name[:40]}': {e}"
+            )
+            return "unknown"
+
     @with_retry(max_retries=MAX_RETRIES)
     async def generate_deep_research_report(
         self,

@@ -62,6 +62,14 @@ export interface Card {
     | "emerging"
     | "stale"
     | null;
+  /** Overall trend trajectory based on source publication patterns */
+  trend_direction?:
+    | "accelerating"
+    | "stable"
+    | "emerging"
+    | "declining"
+    | "unknown"
+    | null;
 }
 
 /**

@@ -1113,6 +1113,156 @@ class ResearchService:
         ).eq("id", card_id).execute()
 
     # ========================================================================
+    # Profile Auto-Refresh
+    # ========================================================================
+
+    async def _maybe_refresh_profile(self, card_id: str) -> None:
+        """Check if a card's profile should be regenerated based on new sources.
+
+        Triggers regeneration when 3+ new sources have been added since the
+        last profile generation.  Uses the existing ``generate_signal_profile``
+        method from ``AIService`` with incremental context from the previous
+        profile.
+        """
+        try:
+            # Get card data including profile tracking columns
+            card = (
+                self.supabase.table("cards")
+                .select(
+                    "id, name, summary, description, pillar_id, horizon, "
+                    "profile_generated_at, profile_source_count"
+                )
+                .eq("id", card_id)
+                .single()
+                .execute()
+            )
+
+            if not card.data:
+                return
+
+            card_data = card.data
+
+            # Count current sources on this card
+            source_count_resp = (
+                self.supabase.table("sources")
+                .select("id", count="exact")
+                .eq("card_id", card_id)
+                .execute()
+            )
+            current_source_count = source_count_resp.count or len(
+                source_count_resp.data or []
+            )
+
+            # Check if enough new sources to warrant refresh
+            previous_count = card_data.get("profile_source_count") or 0
+            new_sources = current_source_count - previous_count
+
+            if new_sources < 3:
+                logger.debug(
+                    f"Card {card_id}: only {new_sources} new sources, "
+                    "skipping profile refresh"
+                )
+                return
+
+            logger.info(
+                f"Card {card_id}: {new_sources} new sources, refreshing profile"
+            )
+
+            # Get source data for profile generation
+            sources_resp = (
+                self.supabase.table("sources")
+                .select(
+                    "title, ai_summary, key_excerpts, url, full_text, ingested_at, created_at"
+                )
+                .eq("card_id", card_id)
+                .order("created_at", desc=True)
+                .limit(20)
+                .execute()
+            )
+
+            if not sources_resp.data:
+                return
+
+            # Build source_analyses list in the format expected by
+            # AIService.generate_signal_profile
+            source_analyses = []
+            for src in sources_resp.data:
+                source_analyses.append(
+                    {
+                        "title": src.get("title", "Untitled"),
+                        "url": src.get("url", ""),
+                        "summary": src.get("ai_summary", ""),
+                        "key_excerpts": src.get("key_excerpts") or [],
+                        "content": src.get("full_text", "") or "",
+                    }
+                )
+
+            # Use ai_service to generate updated profile
+            updated_profile = await self.ai_service.generate_signal_profile(
+                signal_name=card_data.get("name", ""),
+                signal_summary=card_data.get("summary", ""),
+                pillar_id=card_data.get("pillar_id", ""),
+                horizon=card_data.get("horizon", "H2"),
+                source_analyses=source_analyses,
+            )
+
+            if updated_profile:
+                update_data = {
+                    "description": updated_profile,
+                    "profile_generated_at": datetime.now(timezone.utc).isoformat(),
+                    "profile_source_count": current_source_count,
+                }
+
+                # Analyze trend trajectory from source publication patterns
+                try:
+                    source_dates = [
+                        s.get("ingested_at") or s.get("created_at", "")
+                        for s in sources_resp.data
+                    ]
+                    source_summaries = [
+                        s.get("ai_summary", "") for s in sources_resp.data
+                    ]
+                    trend = await self.ai_service.analyze_trend_trajectory(
+                        signal_name=card_data.get("name", ""),
+                        source_dates=source_dates,
+                        source_summaries=source_summaries,
+                    )
+                    if trend and trend != "unknown":
+                        update_data["trend_direction"] = trend
+                        logger.info(f"Card {card_id}: trend trajectory = {trend}")
+                except Exception as te:
+                    logger.warning(f"Trend analysis failed for card {card_id}: {te}")
+
+                self.supabase.table("cards").update(update_data).eq(
+                    "id", card_id
+                ).execute()
+
+                # Log timeline event
+                self.supabase.table("card_timeline").insert(
+                    {
+                        "card_id": card_id,
+                        "event_type": "profile_updated",
+                        "title": "Profile Updated",
+                        "description": (
+                            f"Profile auto-refreshed with {new_sources} new sources"
+                        ),
+                        "metadata": {
+                            "new_sources": new_sources,
+                            "total_sources": current_source_count,
+                            "trend_direction": update_data.get("trend_direction"),
+                        },
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                ).execute()
+
+                logger.info(
+                    f"Card {card_id}: profile refreshed "
+                    f"({len(updated_profile)} chars)"
+                )
+        except Exception as e:
+            logger.warning(f"Profile refresh failed for card {card_id}: {e}")
+
+    # ========================================================================
     # Main Entry Points
     # ========================================================================
 
@@ -1169,6 +1319,10 @@ class ResearchService:
             source_id = await self._store_source(card_id, proc)
             if source_id:
                 sources_added += 1
+
+        # Step 6b: Check if profile needs refresh (auto-regenerate after 3+ new sources)
+        if sources_added > 0:
+            await self._maybe_refresh_profile(card_id)
 
         # Step 7: Enhance card with research insights (Level Up!)
         if sources_added > 0 or report:
@@ -1369,6 +1523,10 @@ class ResearchService:
             source_id = await self._store_source(card_id, proc)
             if source_id:
                 sources_added += 1
+
+        # Step 6b: Check if profile needs refresh (auto-regenerate after 3+ new sources)
+        if sources_added > 0:
+            await self._maybe_refresh_profile(card_id)
 
         # Calculate entities count and collect all entities
         entities_count = sum(len(p.analysis.entities) for p in processed if p.analysis)
