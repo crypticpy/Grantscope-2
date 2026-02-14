@@ -18,6 +18,7 @@ import {
   Radio,
   Sparkles,
   HelpCircle,
+  Rss,
   type LucideIcon,
 } from "lucide-react";
 import { useAuthContext } from "../hooks/useAuthContext";
@@ -173,6 +174,7 @@ const Header: React.FC = () => {
   // Items in the "More" dropdown
   const moreNavigation = [
     { name: "Analytics", href: "/analytics", icon: BarChart3 },
+    { name: "Feeds", href: "/feeds", icon: Rss },
     { name: "Methodology", href: "/methodology", icon: BookOpen },
   ];
 

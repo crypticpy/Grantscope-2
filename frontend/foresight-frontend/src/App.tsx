@@ -38,6 +38,7 @@ const Analytics = lazy(() => import("./pages/AnalyticsV2"));
 const Methodology = lazy(() => import("./pages/Methodology"));
 const Signals = lazy(() => import("./pages/Signals"));
 const AskForesight = lazy(() => import("./pages/AskForesight"));
+const Feeds = lazy(() => import("./pages/Feeds"));
 
 // Guide pages
 const GuideSignals = lazy(() => import("./pages/GuideSignals"));
@@ -272,6 +273,17 @@ function App() {
                     <ProtectedRoute
                       element={<WorkstreamFeed />}
                       loadingMessage="Loading workstream..."
+                    />
+                  }
+                />
+
+                {/* Feeds management */}
+                <Route
+                  path="/feeds"
+                  element={
+                    <ProtectedRoute
+                      element={<Feeds />}
+                      loadingMessage="Loading feeds..."
                     />
                   }
                 />
