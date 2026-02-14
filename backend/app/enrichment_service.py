@@ -357,13 +357,13 @@ async def enrich_weak_signals(
 
 async def enrich_signal_profiles(
     supabase,
-    max_cards: int = 50,
+    max_cards: int = 15,
     triggered_by_user_id: Optional[str] = None,
 ) -> dict:
     """Batch-generate rich profiles for cards with blank/thin descriptions.
 
-    Fetches each card's linked sources, synthesizes them into a 500-800 word
-    profile via GPT-4.1, and stores the result in the card's description field.
+    Fetches all active cards, filters to those needing profiles, then processes
+    up to max_cards per call. Designed for repeated calls until all are done.
     """
     from app.ai_service import AIService
     from app.openai_provider import azure_openai_client
@@ -378,13 +378,13 @@ async def enrich_signal_profiles(
 
     ai_service = AIService(azure_openai_client)
 
-    # Find cards with blank or thin descriptions
+    # Fetch ALL active cards (scan everything, limit processing)
     cards_resp = (
         supabase.table("cards")
         .select("id, name, summary, description, pillar_id, horizon")
         .eq("status", "active")
         .order("created_at", desc=True)
-        .limit(max_cards)
+        .limit(500)
         .execute()
     )
 
@@ -405,11 +405,15 @@ async def enrich_signal_profiles(
             "enriched": 0,
         }
 
+    # Only process max_cards per call to avoid gateway timeouts
+    batch = cards_needing_profiles[:max_cards]
+    remaining = len(cards_needing_profiles) - len(batch)
+
     enriched = 0
     errors = 0
     now = datetime.now(timezone.utc).isoformat()
 
-    for card in cards_needing_profiles:
+    for card in batch:
         try:
             card_id = card["id"]
 
@@ -506,4 +510,5 @@ async def enrich_signal_profiles(
         "needing_profiles": len(cards_needing_profiles),
         "enriched": enriched,
         "errors": errors,
+        "remaining": remaining - enriched,
     }
