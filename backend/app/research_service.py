@@ -281,6 +281,34 @@ class ResearchService:
                 except Exception as e:
                     logger.warning(f"Snapshot save failed for {card_id}/{field}: {e}")
 
+    def _save_draft_snapshot(self, card_id: str, content: str, trigger: str) -> None:
+        """Save a generated description as a draft snapshot for user review.
+
+        Unlike _snapshot_card_fields which saves the CURRENT content before
+        an overwrite, this saves NEW generated content without touching the
+        card's live description.  Users can preview and apply it via the
+        Description History panel.
+        """
+        if not content or len(content) < 10:
+            return
+        try:
+            self.supabase.table("card_snapshots").insert(
+                {
+                    "card_id": card_id,
+                    "field_name": "description",
+                    "content": content,
+                    "content_length": len(content),
+                    "trigger": trigger,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                }
+            ).execute()
+            logger.info(
+                f"Card {card_id}: draft description saved "
+                f"({len(content)} chars, trigger={trigger})"
+            )
+        except Exception as e:
+            logger.warning(f"Draft snapshot save failed for {card_id}: {e}")
+
     async def _update_card_embedding(self, card_id: str) -> None:
         """Regenerate and store the card's embedding from its current text content.
 
@@ -1460,20 +1488,17 @@ class ResearchService:
                         source_summaries=source_summaries,
                     )
 
-                    # Snapshot before overwrite
-                    self._snapshot_card_fields(
-                        card_id, full_card.data, "enhance_research"
-                    )
+                    # Save generated description as a draft snapshot for
+                    # user review — do NOT overwrite the current description.
+                    new_desc = enhancement.get("enhanced_description")
+                    if new_desc and new_desc != full_card.data.get("description"):
+                        self._save_draft_snapshot(card_id, new_desc, "enhance_research")
 
-                    # Update card with enhanced content
+                    # Update summary and timestamp only (description preserved)
                     self.supabase.table("cards").update(
                         {
                             "summary": enhancement.get(
                                 "enhanced_summary", full_card.data.get("summary")
-                            ),
-                            "description": enhancement.get(
-                                "enhanced_description",
-                                full_card.data.get("description"),
                             ),
                             "updated_at": datetime.now(timezone.utc).isoformat(),
                         }
@@ -1482,7 +1507,7 @@ class ResearchService:
                     await self._update_card_embedding(card_id)
 
                     logger.info(
-                        f"Card {card_id} enhanced with research insights: {enhancement.get('key_updates', [])}"
+                        f"Card {card_id} enhanced with research insights (description saved as draft): {enhancement.get('key_updates', [])}"
                     )
             except Exception as e:
                 logger.warning(f"Card enhancement failed (research still saved): {e}")
@@ -1957,16 +1982,16 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
                 source_summaries=source_summaries,
             )
 
-            # Snapshot before overwrite
-            self._snapshot_card_fields(card_id, card, "deep_research")
+            # Save generated description as a draft snapshot for user
+            # review — do NOT overwrite the current description.
+            new_desc = enhancement.get("enhanced_description")
+            if new_desc and new_desc != card.get("description"):
+                self._save_draft_snapshot(card_id, new_desc, "deep_research")
 
-            # Update card with enhanced content and timestamps
+            # Update summary and timestamps only (description preserved)
             self.supabase.table("cards").update(
                 {
                     "summary": enhancement.get("enhanced_summary", card.get("summary")),
-                    "description": enhancement.get(
-                        "enhanced_description", card.get("description")
-                    ),
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                     "deep_research_at": datetime.now(timezone.utc).isoformat(),
                 }
@@ -1975,7 +2000,7 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
             await self._update_card_embedding(card_id)
 
             logger.info(
-                f"Card {card_id} enhanced with deep research insights: {enhancement.get('key_updates', [])}"
+                f"Card {card_id} enhanced with deep research insights (description saved as draft): {enhancement.get('key_updates', [])}"
             )
         except Exception as e:
             logger.warning(f"Card enhancement failed (research still saved): {e}")
