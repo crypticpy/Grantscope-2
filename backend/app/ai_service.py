@@ -540,6 +540,42 @@ Respond with JSON:
 }}
 """
 
+SIGNAL_PROFILE_PROMPT = """You are a strategic foresight analyst for the City of Austin's horizon scanning system.
+
+Generate a comprehensive signal profile for the following emerging trend/signal. This profile will be the primary reference document for city officials evaluating this signal.
+
+SIGNAL: {signal_name}
+INITIAL ASSESSMENT: {signal_summary}
+STRATEGIC PILLAR: {pillar_name}
+HORIZON: {horizon}
+
+SOURCE EVIDENCE ({source_count} sources):
+{source_details}
+
+Generate a profile with these sections (use markdown formatting):
+
+## Overview
+What this signal is, why it matters, and how it connects to broader trends. Provide context that helps a non-expert understand the significance. (2-3 paragraphs)
+
+## Key Developments
+Specific examples, data points, timelines, and evidence from the sources. Include names of organizations, programs, technologies, and cities involved. Be concrete — cite specific examples rather than making general statements.
+
+## Municipal Relevance
+How this signal specifically impacts city government operations, service delivery, budgets, or strategic planning. What departments or functions are most affected? Reference specific Austin strategic priorities where applicable.
+
+## What to Watch
+Key indicators that would signal acceleration or deceleration of this trend. Upcoming milestones, decision points, or events that the team should monitor. What would trigger a need for immediate action?
+
+GUIDELINES:
+- Write 500-800 words total
+- Be SPECIFIC — use names, dates, numbers, and examples from the sources
+- Write for a municipal government audience — city managers, department heads, elected officials
+- Avoid jargon without explanation
+- Each section should have substantive content, not just headers
+- If sources are thin, acknowledge gaps rather than fabricating details
+- Do NOT include a sources section — that is handled separately
+"""
+
 
 # ============================================================================
 # AI Service Class
@@ -992,6 +1028,98 @@ Respond with JSON:
                 "enhanced_description": current_description,
                 "key_updates": [],
             }
+
+    async def generate_signal_profile(
+        self,
+        signal_name: str,
+        signal_summary: str,
+        pillar_id: str,
+        horizon: str,
+        source_analyses: List[Dict],
+    ) -> str:
+        """
+        Generate a rich signal profile from existing source analyses.
+        No web search needed — synthesizes from data we already have.
+
+        Args:
+            signal_name: Name of the signal/card
+            signal_summary: Brief summary from signal agent
+            pillar_id: Strategic pillar code (CH, EW, HG, etc.)
+            horizon: H1, H2, or H3
+            source_analyses: List of dicts with keys: title, url, summary, key_excerpts, content
+
+        Returns:
+            Markdown formatted profile (500-800 words)
+        """
+        pillar_names = {
+            "CH": "Community Health & Sustainability",
+            "EW": "Economic & Workforce Development",
+            "HG": "High-Performing Government",
+            "HH": "Homelessness & Housing",
+            "MC": "Mobility & Critical Infrastructure",
+            "PS": "Public Safety",
+        }
+        pillar_name = pillar_names.get(pillar_id, pillar_id or "General")
+
+        # Build source details for the prompt
+        source_details_parts = []
+        for i, src in enumerate(source_analyses[:10], 1):
+            title = src.get("title", "Untitled")
+            url = src.get("url", "")
+            summary = src.get("summary", "")[:400]
+            excerpts = src.get("key_excerpts", [])
+            content = src.get("content", "")[:500]
+
+            part = f"### Source {i}: {title}"
+            if url:
+                part += f"\nURL: {url}"
+            if summary:
+                part += f"\nSummary: {summary}"
+            if excerpts:
+                for ex in excerpts[:2]:
+                    part += f'\nKey excerpt: "{ex[:200]}"'
+            elif content:
+                part += f"\nContent snippet: {content}"
+            source_details_parts.append(part)
+
+        source_details = (
+            "\n\n".join(source_details_parts)
+            if source_details_parts
+            else "No detailed source data available."
+        )
+
+        prompt = SIGNAL_PROFILE_PROMPT.format(
+            signal_name=signal_name,
+            signal_summary=signal_summary or "No initial summary provided.",
+            pillar_name=pillar_name,
+            horizon=horizon or "H2",
+            source_count=len(source_analyses),
+            source_details=source_details,
+        )
+
+        try:
+            response = self.client.chat.completions.create(
+                model=get_chat_deployment(),
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=2000,
+                timeout=REQUEST_TIMEOUT * 2,
+            )
+            profile = response.choices[0].message.content.strip()
+            logger.info(
+                f"Generated signal profile for '{signal_name[:50]}' ({len(profile)} chars)"
+            )
+            return profile
+        except Exception as e:
+            logger.error(
+                f"Signal profile generation failed for '{signal_name[:50]}': {e}"
+            )
+            # Return a minimal profile rather than nothing
+            return f"""## Overview
+
+{signal_summary or signal_name}
+
+*Profile generation encountered an error. Run deep research or try again later to generate a full profile.*
+"""
 
     @with_retry(max_retries=MAX_RETRIES)
     async def generate_deep_research_report(

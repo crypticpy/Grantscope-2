@@ -543,3 +543,27 @@ async def enrich_weak_signals(
     except Exception as e:
         logger.error(f"Enrichment failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=_safe_error("signal enrichment", e))
+
+
+@router.post("/discovery/enrich-profiles")
+@limiter.limit("3/hour")
+async def enrich_profiles(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+    max_cards: int = 50,
+):
+    """Batch-generate rich signal profiles for cards with blank/thin descriptions."""
+    from app.enrichment_service import enrich_signal_profiles
+
+    try:
+        result = await enrich_signal_profiles(
+            supabase=supabase,
+            max_cards=max_cards,
+            triggered_by_user_id=current_user["id"],
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Profile enrichment failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=_safe_error("profile enrichment", e)
+        )

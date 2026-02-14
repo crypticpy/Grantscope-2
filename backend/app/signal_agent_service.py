@@ -1513,11 +1513,103 @@ class SignalAgentService:
             ),
         )
 
+        # Generate rich signal profile from source analyses
+        try:
+            await self._generate_card_profile(card_id, action, all_sources)
+        except Exception as e:
+            logger.warning(f"Signal profile generation failed for {card_id}: {e}")
+
         # Auto-approve if confidence exceeds threshold
         if action.confidence >= auto_approve_threshold:
             await self._auto_approve_card(card_id)
 
         return card_id
+
+    # -------------------------------------------------------------------------
+    # Signal Profile Generation
+    # -------------------------------------------------------------------------
+
+    async def _generate_card_profile(
+        self,
+        card_id: str,
+        action: SignalAction,
+        all_sources: List[ProcessedSource],
+    ) -> None:
+        """Generate a rich signal profile from source data and store as card description."""
+        from app.ai_service import AIService
+        from app.openai_provider import azure_openai_client
+        from app.content_enricher import extract_content
+
+        ai_service = AIService(azure_openai_client)
+
+        # Gather source analyses from the sources attached to this signal
+        source_analyses = []
+        for idx in action.source_indices:
+            if idx < 0 or idx >= len(all_sources):
+                continue
+            src = all_sources[idx]
+            content = src.raw.content or ""
+
+            # Backfill thin content from URL
+            if len(content) < 200 and src.raw.url:
+                try:
+                    text, _ = await extract_content(src.raw.url)
+                    if text and len(text) > len(content):
+                        content = text[:10000]
+                except Exception:
+                    pass
+
+            source_analyses.append(
+                {
+                    "title": src.raw.title or "Untitled",
+                    "url": src.raw.url or "",
+                    "summary": src.analysis.summary if src.analysis else "",
+                    "key_excerpts": (
+                        src.analysis.key_excerpts[:3]
+                        if src.analysis and src.analysis.key_excerpts
+                        else []
+                    ),
+                    "content": content[:500],
+                }
+            )
+
+        if not source_analyses:
+            logger.warning(f"No source data for profile generation on card {card_id}")
+            return
+
+        # Get card metadata for the profile prompt
+        pillar_id = None
+        horizon = "H2"
+        if action.signal_properties:
+            pillar_id = action.signal_properties.get("pillar_id")
+            horizon = action.signal_properties.get("horizon", "H2")
+
+        profile = await ai_service.generate_signal_profile(
+            signal_name=action.signal_name,
+            signal_summary=action.signal_summary or "",
+            pillar_id=pillar_id or "",
+            horizon=horizon,
+            source_analyses=source_analyses,
+        )
+
+        if profile and len(profile) > 100:
+            self.supabase.table("cards").update(
+                {
+                    "description": profile,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            ).eq("id", card_id).execute()
+
+            await self._create_timeline_event(
+                card_id=card_id,
+                event_type="profile_generated",
+                description=f"Signal profile auto-generated from {len(source_analyses)} source(s)",
+            )
+
+            logger.info(
+                f"Signal profile generated for '{action.signal_name[:50]}' "
+                f"({len(profile)} chars, {len(source_analyses)} sources)"
+            )
 
     # -------------------------------------------------------------------------
     # Execute: Attach to Existing

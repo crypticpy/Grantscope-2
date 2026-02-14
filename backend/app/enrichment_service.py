@@ -353,3 +353,149 @@ async def enrich_weak_signals(
 
     logger.info(f"Enrichment complete: {summary}")
     return summary
+
+
+async def enrich_signal_profiles(
+    supabase,
+    max_cards: int = 50,
+    triggered_by_user_id: Optional[str] = None,
+) -> dict:
+    """Batch-generate rich profiles for cards with blank/thin descriptions.
+
+    Fetches each card's linked sources, synthesizes them into a 500-800 word
+    profile via GPT-4.1, and stores the result in the card's description field.
+    """
+    from app.ai_service import AIService
+    from app.openai_provider import azure_openai_client
+    from app.content_enricher import extract_content
+
+    ai_service = AIService(azure_openai_client)
+
+    # Find cards with blank or thin descriptions
+    cards_resp = (
+        supabase.table("cards")
+        .select("id, name, summary, description, pillar_id, horizon")
+        .eq("status", "active")
+        .order("created_at", desc=True)
+        .limit(max_cards)
+        .execute()
+    )
+
+    if not cards_resp.data:
+        return {"status": "no_cards", "enriched": 0}
+
+    # Filter to cards needing profiles
+    cards_needing_profiles = [
+        c
+        for c in cards_resp.data
+        if not c.get("description") or len(c.get("description", "")) < 100
+    ]
+
+    if not cards_needing_profiles:
+        return {
+            "status": "all_cards_have_profiles",
+            "total_checked": len(cards_resp.data),
+            "enriched": 0,
+        }
+
+    enriched = 0
+    errors = 0
+    now = datetime.now(timezone.utc).isoformat()
+
+    for card in cards_needing_profiles:
+        try:
+            card_id = card["id"]
+
+            # Fetch linked sources
+            sources_resp = (
+                supabase.table("sources")
+                .select("title, url, ai_summary, key_excerpts, full_text")
+                .eq("card_id", card_id)
+                .order("created_at", desc=True)
+                .limit(10)
+                .execute()
+            )
+
+            sources = sources_resp.data or []
+            if not sources:
+                continue
+
+            # Backfill thin source content
+            for src in sources:
+                content = src.get("full_text") or src.get("ai_summary") or ""
+                if len(content) < 200 and src.get("url"):
+                    try:
+                        text, title = await extract_content(src["url"])
+                        if text:
+                            src["full_text"] = text[:10000]
+                            # Update in DB too
+                            if src.get("id"):
+                                supabase.table("sources").update(
+                                    {"full_text": text[:10000]}
+                                ).eq("id", src["id"]).execute()
+                    except Exception:
+                        pass
+
+            # Build source analyses for profile generation
+            source_analyses = []
+            for src in sources:
+                source_analyses.append(
+                    {
+                        "title": src.get("title", "Untitled"),
+                        "url": src.get("url", ""),
+                        "summary": src.get("ai_summary", ""),
+                        "key_excerpts": src.get("key_excerpts") or [],
+                        "content": src.get("full_text", "")[:500],
+                    }
+                )
+
+            # Generate profile
+            profile = await ai_service.generate_signal_profile(
+                signal_name=card["name"],
+                signal_summary=card.get("summary", ""),
+                pillar_id=card.get("pillar_id", ""),
+                horizon=card.get("horizon", "H2"),
+                source_analyses=source_analyses,
+            )
+
+            if profile and len(profile) > 100:
+                # Update card description
+                supabase.table("cards").update(
+                    {
+                        "description": profile,
+                        "updated_at": now,
+                    }
+                ).eq("id", card_id).execute()
+
+                # Create timeline event
+                supabase.table("card_timeline").insert(
+                    {
+                        "card_id": card_id,
+                        "event_type": "profile_generated",
+                        "title": "Signal profile auto-generated",
+                        "description": f"Rich profile generated from {len(sources)} source(s)",
+                        "metadata": {
+                            "sources_used": len(source_analyses),
+                            "profile_length": len(profile),
+                            "triggered_by": triggered_by_user_id,
+                        },
+                        "created_at": now,
+                    }
+                ).execute()
+
+                enriched += 1
+                logger.info(
+                    f"Generated profile for card '{card['name'][:50]}' ({len(profile)} chars)"
+                )
+
+        except Exception as e:
+            errors += 1
+            logger.error(f"Profile enrichment failed for card {card.get('id')}: {e}")
+
+    return {
+        "status": "completed",
+        "total_checked": len(cards_resp.data),
+        "needing_profiles": len(cards_needing_profiles),
+        "enriched": enriched,
+        "errors": errors,
+    }
