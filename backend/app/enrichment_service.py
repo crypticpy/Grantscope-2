@@ -367,7 +367,14 @@ async def enrich_signal_profiles(
     """
     from app.ai_service import AIService
     from app.openai_provider import azure_openai_client
-    from app.content_enricher import extract_content
+
+    try:
+        from app.content_enricher import extract_content
+    except ImportError:
+        extract_content = None
+        logger.warning(
+            "trafilatura not available — thin-source backfill will be skipped"
+        )
 
     ai_service = AIService(azure_openai_client)
 
@@ -420,21 +427,22 @@ async def enrich_signal_profiles(
             if not sources:
                 continue
 
-            # Backfill thin source content
-            for src in sources:
-                content = src.get("full_text") or src.get("ai_summary") or ""
-                if len(content) < 200 and src.get("url"):
-                    try:
-                        text, title = await extract_content(src["url"])
-                        if text:
-                            src["full_text"] = text[:10000]
-                            # Update in DB too
-                            if src.get("id"):
-                                supabase.table("sources").update(
-                                    {"full_text": text[:10000]}
-                                ).eq("id", src["id"]).execute()
-                    except Exception:
-                        pass
+            # Backfill thin source content (if trafilatura available)
+            if extract_content:
+                for src in sources:
+                    content = src.get("full_text") or src.get("ai_summary") or ""
+                    if len(content) < 200 and src.get("url"):
+                        try:
+                            text, title = await extract_content(src["url"])
+                            if text:
+                                src["full_text"] = text[:10000]
+                                # Update in DB too
+                                if src.get("id"):
+                                    supabase.table("sources").update(
+                                        {"full_text": text[:10000]}
+                                    ).eq("id", src["id"]).execute()
+                        except Exception:
+                            pass
 
             # Build source analyses for profile generation
             source_analyses = []
