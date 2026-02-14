@@ -48,6 +48,10 @@ const TRIGGER_LABELS: Record<string, { label: string; color: string }> = {
     color:
       "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
   },
+  initial: {
+    label: "Original",
+    color: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+  },
 };
 
 function formatDate(dateStr: string): string {
