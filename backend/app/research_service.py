@@ -281,6 +281,39 @@ class ResearchService:
                 except Exception as e:
                     logger.warning(f"Snapshot save failed for {card_id}/{field}: {e}")
 
+    async def _update_card_embedding(self, card_id: str) -> None:
+        """Regenerate and store the card's embedding from its current text content.
+
+        Non-blocking: logs warnings on failure and continues.
+        """
+        try:
+            card_result = (
+                self.supabase.table("cards")
+                .select("name, summary, description")
+                .eq("id", card_id)
+                .single()
+                .execute()
+            )
+
+            if not card_result.data:
+                return
+
+            card = card_result.data
+            embed_text = f"{card.get('name', '')} {card.get('summary', '')} {card.get('description', '') or ''}"
+
+            if len(embed_text.strip()) < 10:
+                return
+
+            embedding = await self.ai_service.generate_embedding(embed_text)
+
+            self.supabase.table("cards").update({"embedding": embedding}).eq(
+                "id", card_id
+            ).execute()
+
+            logger.info(f"Card {card_id}: embedding updated ({len(embed_text)} chars)")
+        except Exception as e:
+            logger.warning(f"Card embedding update failed for {card_id}: {e}")
+
     # ========================================================================
     # Rate Limiting
     # ========================================================================
@@ -1282,6 +1315,8 @@ class ResearchService:
                     "id", card_id
                 ).execute()
 
+                await self._update_card_embedding(card_id)
+
                 # Log timeline event
                 self.supabase.table("card_timeline").insert(
                     {
@@ -1443,6 +1478,8 @@ class ResearchService:
                             "updated_at": datetime.now(timezone.utc).isoformat(),
                         }
                     ).eq("id", card_id).execute()
+
+                    await self._update_card_embedding(card_id)
 
                     logger.info(
                         f"Card {card_id} enhanced with research insights: {enhancement.get('key_updates', [])}"
@@ -1934,6 +1971,8 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
                     "deep_research_at": datetime.now(timezone.utc).isoformat(),
                 }
             ).eq("id", card_id).execute()
+
+            await self._update_card_embedding(card_id)
 
             logger.info(
                 f"Card {card_id} enhanced with deep research insights: {enhancement.get('key_updates', [])}"

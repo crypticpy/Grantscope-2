@@ -3324,6 +3324,24 @@ class DiscoveryService:
             if result.data:
                 card_id = result.data[0]["id"]
 
+                # Store embedding on the card for Related Trends feature
+                try:
+                    if source.embedding:
+                        self.supabase.table("cards").update(
+                            {"embedding": source.embedding}
+                        ).eq("id", card_id).execute()
+                    else:
+                        # Generate fresh embedding from card text
+                        embed_text = (
+                            f"{analysis.suggested_card_name} {analysis.summary}"
+                        )
+                        embedding = await self.ai_service.generate_embedding(embed_text)
+                        self.supabase.table("cards").update(
+                            {"embedding": embedding}
+                        ).eq("id", card_id).execute()
+                except Exception as e:
+                    logger.warning(f"Failed to store embedding on card {card_id}: {e}")
+
                 # Create timeline event
                 await self._create_timeline_event(
                     card_id=card_id,

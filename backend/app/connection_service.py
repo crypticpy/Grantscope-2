@@ -154,19 +154,20 @@ class ConnectionService:
             )
             return 0
 
-        # 2. Find similar cards via RPC
+        # 2. Find similar cards via RPC (find_similar_cards has proper
+        #    search_path for pgvector and supports exclude_card_id)
         try:
             similar_result = self.supabase.rpc(
-                "match_cards_by_embedding",
+                "find_similar_cards",
                 {
                     "query_embedding": embedding,
+                    "exclude_card_id": card_id,
                     "match_threshold": similarity_threshold,
-                    "match_count": max_connections
-                    + 5,  # fetch extra to account for self-match and existing
+                    "match_count": max_connections + 5,
                 },
             ).execute()
         except Exception as e:
-            logger.error(f"match_cards_by_embedding RPC failed for card {card_id}: {e}")
+            logger.error(f"find_similar_cards RPC failed for card {card_id}: {e}")
             return 0
 
         if not similar_result.data:
@@ -175,13 +176,11 @@ class ConnectionService:
             )
             return 0
 
-        # Filter out self-match
-        candidates = [c for c in similar_result.data if c["id"] != card_id]
+        # find_similar_cards already excludes the source card via exclude_card_id
+        candidates = similar_result.data
 
         if not candidates:
-            logger.debug(
-                f"No candidate connections for card {card_id} (only self-match)"
-            )
+            logger.debug(f"No candidate connections for card {card_id}")
             return 0
 
         # 3. Check which relationships already exist
