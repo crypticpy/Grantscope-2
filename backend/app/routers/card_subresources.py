@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 
 from app.deps import supabase, get_current_user, _safe_error
 from app.models.core import Card
@@ -23,6 +24,27 @@ from app.models.assets import CardAsset, CardAssetsResponse
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["card-subresources"])
+
+
+# ============================================================================
+# Entity models
+# ============================================================================
+
+
+class EntityItem(BaseModel):
+    id: str
+    name: str
+    entity_type: str
+    context: Optional[str] = None
+    source_id: Optional[str] = None
+    canonical_name: Optional[str] = None
+    created_at: str
+
+
+class EntityListResponse(BaseModel):
+    entities: List[EntityItem]
+    total_count: int
+    card_id: str
 
 
 # ============================================================================
@@ -54,6 +76,58 @@ async def get_card_timeline(card_id: str):
         .execute()
     )
     return response.data
+
+
+@router.get("/cards/{card_id}/entities", response_model=EntityListResponse)
+async def get_card_entities(
+    card_id: str,
+    entity_type: Optional[str] = None,
+    limit: int = 50,
+):
+    """
+    Get entities extracted from a card's sources.
+
+    Returns entities (technologies, organizations, concepts, people, locations)
+    associated with the given card, optionally filtered by entity type.
+
+    Args:
+        card_id: UUID of the card to get entities for
+        entity_type: Optional filter by entity type (technology, organization,
+                     concept, person, location)
+        limit: Maximum number of entities to return (default: 50)
+
+    Returns:
+        EntityListResponse with list of entities and metadata
+    """
+    # First verify the card exists
+    card_response = supabase.table("cards").select("id").eq("id", card_id).execute()
+    if not card_response.data:
+        raise HTTPException(status_code=404, detail="Card not found")
+
+    # Build query for entities
+    query = (
+        supabase.table("entities")
+        .select("id, name, entity_type, context, source_id, canonical_name, created_at")
+        .eq("card_id", card_id)
+    )
+
+    # Apply optional entity_type filter
+    if entity_type:
+        query = query.eq("entity_type", entity_type)
+
+    # Execute query ordered by name, with limit
+    response = query.order("name").limit(limit).execute()
+
+    # Convert to EntityItem models
+    entities = (
+        [EntityItem(**record) for record in response.data] if response.data else []
+    )
+
+    return EntityListResponse(
+        entities=entities,
+        total_count=len(entities),
+        card_id=card_id,
+    )
 
 
 @router.get("/cards/{card_id}/score-history", response_model=ScoreHistoryResponse)

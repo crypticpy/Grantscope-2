@@ -1263,6 +1263,25 @@ class ResearchService:
             logger.warning(f"Profile refresh failed for card {card_id}: {e}")
 
     # ========================================================================
+    # Connection Discovery
+    # ========================================================================
+
+    async def _discover_connections(self, card_id: str) -> None:
+        """Discover and create connections to related signals.
+
+        Non-blocking: logs warnings on failure and continues.
+        """
+        try:
+            from .connection_service import ConnectionService
+
+            conn_service = ConnectionService(self.supabase, self.ai_service)
+            count = await conn_service.discover_connections(card_id)
+            if count > 0:
+                logger.info(f"Card {card_id}: discovered {count} new connections")
+        except Exception as e:
+            logger.warning(f"Connection discovery failed for card {card_id}: {e}")
+
+    # ========================================================================
     # Main Entry Points
     # ========================================================================
 
@@ -1323,6 +1342,7 @@ class ResearchService:
         # Step 6b: Check if profile needs refresh (auto-regenerate after 3+ new sources)
         if sources_added > 0:
             await self._maybe_refresh_profile(card_id)
+            await self._discover_connections(card_id)
 
         # Step 7: Enhance card with research insights (Level Up!)
         if sources_added > 0 or report:
@@ -1527,6 +1547,7 @@ class ResearchService:
         # Step 6b: Check if profile needs refresh (auto-regenerate after 3+ new sources)
         if sources_added > 0:
             await self._maybe_refresh_profile(card_id)
+            await self._discover_connections(card_id)
 
         # Calculate entities count and collect all entities
         entities_count = sum(len(p.analysis.entities) for p in processed if p.analysis)

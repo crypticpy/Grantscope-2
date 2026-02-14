@@ -4,28 +4,29 @@
  * Main container component for the Overview tab in CardDetail.
  * Composes all Overview sub-components into a responsive 2-column grid layout:
  * - Main column (2/3): Description, Classification, Score Timeline, Research History
- * - Sidebar (1/3): Impact Metrics, Maturity Score, Activity Stats
+ * - Sidebar (1/3): Impact Metrics, Maturity Score, Activity Stats, Key Entities
  *
  * @module CardDetail/tabs/OverviewTab
  */
 
-import React from 'react';
+import React from "react";
 
 // Sub-components
-import { CardDescription } from './CardDescription';
-import { CardClassification } from './CardClassification';
-import { DeepResearchPanel } from './DeepResearchPanel';
-import { ResearchHistoryPanel } from './ResearchHistoryPanel';
-import { ImpactMetricsPanel } from './ImpactMetricsPanel';
-import { MaturityScorePanel } from './MaturityScorePanel';
-import { ActivityStatsPanel } from './ActivityStatsPanel';
+import { CardDescription } from "./CardDescription";
+import { CardClassification } from "./CardClassification";
+import { DeepResearchPanel } from "./DeepResearchPanel";
+import { ResearchHistoryPanel } from "./ResearchHistoryPanel";
+import { ImpactMetricsPanel } from "./ImpactMetricsPanel";
+import { MaturityScorePanel } from "./MaturityScorePanel";
+import { ActivityStatsPanel } from "./ActivityStatsPanel";
+import { KeyEntitiesPanel } from "./KeyEntitiesPanel";
 
 // Visualization Components
-import { ScoreTimelineChart } from '../../../visualizations/ScoreTimelineChart';
+import { ScoreTimelineChart } from "../../../visualizations/ScoreTimelineChart";
 
 // Types
-import type { Card, ResearchTask } from '../../types';
-import type { ScoreHistory, StageHistory } from '../../../../lib/discovery-api';
+import type { Card, ResearchTask } from "../../types";
+import type { ScoreHistory, StageHistory } from "../../../../lib/discovery-api";
 
 /**
  * Props for the OverviewTab component
@@ -117,6 +118,7 @@ export interface OverviewTabProps {
  * - ImpactMetricsPanel: All 6 impact scores with tooltips
  * - MaturityScorePanel: Circular maturity score display
  * - ActivityStatsPanel: Sources, events, notes counts with timestamps
+ * - KeyEntitiesPanel: Extracted entities grouped by type with color-coded chips
  *
  * Features:
  * - Responsive grid layout (single column on mobile, 3-column on lg+)
@@ -155,11 +157,11 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   researchHistory,
   onRequestDeepResearch,
   canRequestDeepResearch,
-  className = '',
+  className = "",
 }) => {
   // Filter deep research tasks for the prominent panel
   const deepResearchTasks = researchHistory.filter(
-    (task) => task.task_type === 'deep_research' && task.status === 'completed'
+    (task) => task.task_type === "deep_research" && task.status === "completed",
   );
 
   return (
@@ -198,7 +200,9 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
         {/* Research History Panel - Shows all research including updates */}
         {researchHistory.length > deepResearchTasks.length && (
           <ResearchHistoryPanel
-            researchHistory={researchHistory.filter((t) => t.task_type !== 'deep_research')}
+            researchHistory={researchHistory.filter(
+              (t) => t.task_type !== "deep_research",
+            )}
             title="Update History"
           />
         )}
@@ -233,6 +237,9 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
           updatedAt={card.updated_at}
           deepResearchAt={card.deep_research_at}
         />
+
+        {/* Key Entities Panel */}
+        <KeyEntitiesPanel cardId={card.id} />
       </div>
     </div>
   );
@@ -241,23 +248,26 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
 export default OverviewTab;
 
 // Re-export all sub-components and their types for individual use
-export { CardDescription } from './CardDescription';
-export type { CardDescriptionProps } from './CardDescription';
+export { CardDescription } from "./CardDescription";
+export type { CardDescriptionProps } from "./CardDescription";
 
-export { CardClassification } from './CardClassification';
-export type { CardClassificationProps } from './CardClassification';
+export { CardClassification } from "./CardClassification";
+export type { CardClassificationProps } from "./CardClassification";
 
-export { DeepResearchPanel } from './DeepResearchPanel';
-export type { DeepResearchPanelProps } from './DeepResearchPanel';
+export { DeepResearchPanel } from "./DeepResearchPanel";
+export type { DeepResearchPanelProps } from "./DeepResearchPanel";
 
-export { ResearchHistoryPanel } from './ResearchHistoryPanel';
-export type { ResearchHistoryPanelProps } from './ResearchHistoryPanel';
+export { ResearchHistoryPanel } from "./ResearchHistoryPanel";
+export type { ResearchHistoryPanelProps } from "./ResearchHistoryPanel";
 
-export { ImpactMetricsPanel } from './ImpactMetricsPanel';
-export type { ImpactMetricsPanelProps } from './ImpactMetricsPanel';
+export { ImpactMetricsPanel } from "./ImpactMetricsPanel";
+export type { ImpactMetricsPanelProps } from "./ImpactMetricsPanel";
 
-export { MaturityScorePanel } from './MaturityScorePanel';
-export type { MaturityScorePanelProps } from './MaturityScorePanel';
+export { MaturityScorePanel } from "./MaturityScorePanel";
+export type { MaturityScorePanelProps } from "./MaturityScorePanel";
 
-export { ActivityStatsPanel } from './ActivityStatsPanel';
-export type { ActivityStatsPanelProps } from './ActivityStatsPanel';
+export { ActivityStatsPanel } from "./ActivityStatsPanel";
+export type { ActivityStatsPanelProps } from "./ActivityStatsPanel";
+
+export { KeyEntitiesPanel } from "./KeyEntitiesPanel";
+export type { KeyEntitiesPanelProps } from "./KeyEntitiesPanel";
