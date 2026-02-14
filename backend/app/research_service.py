@@ -319,15 +319,9 @@ class ResearchService:
         Returns:
             Tuple of (sources, report_text, cost)
         """
-        # Use Firecrawl as scraper if available for better content extraction
-        # IMPORTANT: Do not pass arbitrary kwargs (e.g. `scraper=`) into GPTResearcher.
-        # GPTResearcher stores unknown kwargs and forwards them into LLM calls, which can
-        # break Azure/OpenAI requests with "unknown parameter" errors and lead to
-        # `LLM Response: None` downstream.
-        if self.firecrawl:
-            os.environ["SCRAPER"] = "firecrawl"
-        else:
-            os.environ["SCRAPER"] = "bs"
+        # Use BeautifulSoup scraper — Firecrawl credits exhausted.
+        # Tavily and Serper handle search; bs handles page scraping.
+        os.environ["SCRAPER"] = "bs"
 
         researcher = GPTResearcher(
             query=query,
