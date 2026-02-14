@@ -1534,8 +1534,49 @@ class ResearchService:
         # Step 4: Triage
         triaged = await self._triage_sources(sources)
 
-        # Step 5: Analyze (more sources for deep research)
+        # Step 5: Analyze Round 1 sources
         processed = await self._analyze_sources(triaged[: self.MAX_SOURCES_DEEP])
+        round_1_count = len(processed)
+
+        # Step 5b: Multi-round research — identify gaps and run follow-up queries
+        round_2_count = 0
+        try:
+            if report and len(processed) >= 3:
+                round_1_summaries = [
+                    p.analysis.summary
+                    for p in processed
+                    if p.analysis and p.analysis.summary
+                ]
+                follow_up_queries = await self.ai_service.generate_gap_analysis(
+                    card_name=card["name"],
+                    initial_report=report,
+                    source_summaries=round_1_summaries,
+                )
+                if follow_up_queries:
+                    logger.info(
+                        f"Round 2: running {len(follow_up_queries)} follow-up queries"
+                    )
+                    # Combine follow-up queries into a single search
+                    combined_query = " OR ".join(
+                        f'"{q}"' for q in follow_up_queries[:3]
+                    )
+                    round_2_sources = await self._search_with_serper(
+                        combined_query, max_results=10
+                    )
+                    if round_2_sources:
+                        round_2_sources = await self._backfill_content(round_2_sources)
+                        round_2_triaged = await self._triage_sources(round_2_sources)
+                        round_2_processed = await self._analyze_sources(
+                            round_2_triaged[:8]
+                        )
+                        round_2_count = len(round_2_processed)
+                        processed.extend(round_2_processed)
+                        logger.info(
+                            f"Round 2 added {round_2_count} sources "
+                            f"(total: {len(processed)})"
+                        )
+        except Exception as e:
+            logger.warning(f"Multi-round research failed (continuing): {e}")
 
         # Step 6: Store
         sources_added = 0
@@ -1591,6 +1632,15 @@ class ResearchService:
                             "relevance": 0.8,
                         }
                     )
+            # Step 7a: Source verification — cross-reference claims
+            verification = {}
+            try:
+                verification = await self.ai_service.verify_source_claims(
+                    source_analyses
+                )
+            except Exception as ve:
+                logger.warning(f"Source verification skipped: {ve}")
+
             # Parse stage_id safely - it could be "4", "4_stage", "4_proof", etc.
             stage_id_raw = card.get("stage_id", "4") or "4"
             try:
@@ -1612,6 +1662,51 @@ class ResearchService:
                 source_analyses=source_analyses,
                 entities=all_entities,
             )
+            # Append source confidence section from verification results
+            if verification and comprehensive_report:
+                confidence = verification.get("confidence_summary", "")
+                verified = verification.get("verified_claims", [])
+                single = verification.get("single_source_claims", [])
+                contradictions = verification.get("contradictions", [])
+                if confidence or verified or single or contradictions:
+                    confidence_section = (
+                        "\n\n---\n\n## Source Confidence Assessment\n\n"
+                    )
+                    if confidence:
+                        confidence_section += f"{confidence}\n\n"
+                    if verified:
+                        confidence_section += (
+                            "**Corroborated findings** (2+ sources):\n"
+                        )
+                        for v in verified[:5]:
+                            confidence_section += f"- {v.get('claim', '')}\n"
+                        confidence_section += "\n"
+                    if single:
+                        confidence_section += (
+                            "**Single-source claims** (lower confidence):\n"
+                        )
+                        for s in single[:5]:
+                            confidence_section += (
+                                f"- \\[Single Source\\] {s.get('claim', '')}\n"
+                            )
+                        confidence_section += "\n"
+                    if contradictions:
+                        confidence_section += "**Contested findings**:\n"
+                        for c in contradictions[:3]:
+                            confidence_section += (
+                                f"- \\[Contested\\] {c.get('claim_a', '')} "
+                                f"vs. {c.get('claim_b', '')}\n"
+                            )
+                    comprehensive_report += confidence_section
+
+            # Append round metadata if multi-round research was performed
+            if round_2_count > 0 and comprehensive_report:
+                comprehensive_report += (
+                    f"\n\n---\n\n*Research conducted in 2 rounds: "
+                    f"Round 1 ({round_1_count} sources), "
+                    f"Round 2 ({round_2_count} follow-up sources)*\n"
+                )
+
             logger.info(
                 f"Generated comprehensive report ({len(comprehensive_report)} chars) for card {card_id}"
             )
@@ -1730,9 +1825,15 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
                 "sources_added": sources_added,
                 "entities_extracted": entities_count,
                 "cost": cost,
+                "research_rounds": 2 if round_2_count > 0 else 1,
+                "round_1_sources": round_1_count,
+                "round_2_sources": round_2_count,
+                "verification_summary": (
+                    verification.get("confidence_summary") if verification else None
+                ),
                 "detailed_report": (
                     comprehensive_report[:50000] if comprehensive_report else None
-                ),  # Store full comprehensive report with sources
+                ),
             },
         )
 

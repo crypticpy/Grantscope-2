@@ -1191,6 +1191,156 @@ Respond with ONLY the single word classification (accelerating, stable, emerging
             )
             return "unknown"
 
+    async def generate_gap_analysis(
+        self,
+        card_name: str,
+        initial_report: str,
+        source_summaries: List[str],
+    ) -> List[str]:
+        """Analyze a research report for gaps and generate follow-up queries.
+
+        Identifies unanswered questions, single-source claims, and
+        unexplored angles, then generates 3-5 targeted follow-up queries.
+
+        Args:
+            card_name: Name of the signal being researched.
+            initial_report: The GPT Researcher report text.
+            source_summaries: Brief summaries of sources found so far.
+
+        Returns:
+            List of 3-5 follow-up search queries targeting identified gaps.
+        """
+        sources_text = "\n".join(f"- {s[:200]}" for s in source_summaries[:10])
+
+        prompt = f"""You are a strategic research analyst. Analyze this initial research on "{card_name}" and identify gaps.
+
+INITIAL REPORT (excerpt):
+{initial_report[:3000]}
+
+SOURCES COVERED:
+{sources_text}
+
+Identify:
+1. What questions does this research NOT answer?
+2. What claims have only one supporting source?
+3. What angles are unexplored (costs, risks, case studies, vendor landscape, peer city implementations)?
+4. What data points are missing (timelines, budgets, outcomes)?
+
+Generate exactly 5 follow-up search queries that would fill the most important gaps. Each query should be specific and search-engine-ready.
+
+Respond as a JSON object:
+{{"queries": ["query 1", "query 2", "query 3", "query 4", "query 5"]}}"""
+
+        try:
+            response = self.client.chat.completions.create(
+                model=get_chat_mini_deployment(),
+                messages=[{"role": "user", "content": prompt}],
+                response_format={"type": "json_object"},
+                max_tokens=500,
+                temperature=0.3,
+                timeout=REQUEST_TIMEOUT,
+            )
+            result = json.loads(response.choices[0].message.content)
+            queries = result.get("queries", [])
+            logger.info(
+                f"Gap analysis for '{card_name[:40]}': {len(queries)} follow-up queries"
+            )
+            return queries[:5]
+        except Exception as e:
+            logger.warning(f"Gap analysis failed for '{card_name[:40]}': {e}")
+            return []
+
+    async def verify_source_claims(
+        self,
+        source_analyses: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Cross-reference claims across sources to assess confidence.
+
+        Groups claims by topic, checks for multi-source corroboration,
+        and identifies contradictions.
+
+        Args:
+            source_analyses: List of dicts with title, summary, key_excerpts.
+
+        Returns:
+            Dict with:
+              - verified_claims: List of claims supported by 2+ sources
+              - single_source_claims: List of claims from only one source
+              - contradictions: List of contradictory claim pairs
+              - confidence_summary: Overall text summary
+        """
+        if not source_analyses or len(source_analyses) < 2:
+            return {
+                "verified_claims": [],
+                "single_source_claims": [],
+                "contradictions": [],
+                "confidence_summary": "Insufficient sources for cross-verification.",
+            }
+
+        # Build compact source digest for the LLM
+        digest_parts = []
+        for i, src in enumerate(source_analyses[:12], 1):
+            title = src.get("title", "Untitled")[:80]
+            summary = src.get("summary", "")[:300]
+            excerpts = src.get("key_excerpts", [])
+            excerpt_text = "; ".join(e[:150] for e in excerpts[:2])
+            digest_parts.append(
+                f"[Source {i}: {title}]\n{summary}\nKey points: {excerpt_text}"
+            )
+
+        digest = "\n\n".join(digest_parts)
+
+        prompt = f"""Analyze these research sources for cross-verification. Identify:
+
+1. **Verified claims**: Key claims that appear in 2+ sources (higher confidence)
+2. **Single-source claims**: Important claims that only one source mentions (lower confidence)
+3. **Contradictions**: Places where sources disagree on facts, timelines, or conclusions
+
+SOURCES:
+{digest}
+
+Respond as JSON:
+{{
+  "verified_claims": [
+    {{"claim": "description", "source_count": 3, "sources": [1, 3, 5]}}
+  ],
+  "single_source_claims": [
+    {{"claim": "description", "source_index": 2}}
+  ],
+  "contradictions": [
+    {{"claim_a": "source 1 says X", "claim_b": "source 4 says Y", "sources": [1, 4]}}
+  ],
+  "confidence_summary": "2-3 sentence overall assessment"
+}}"""
+
+        try:
+            response = self.client.chat.completions.create(
+                model=get_chat_mini_deployment(),
+                messages=[{"role": "user", "content": prompt}],
+                response_format={"type": "json_object"},
+                max_tokens=1500,
+                temperature=0,
+                timeout=REQUEST_TIMEOUT * 2,
+            )
+            result = json.loads(response.choices[0].message.content)
+            verified = result.get("verified_claims", [])
+            single = result.get("single_source_claims", [])
+            contradictions = result.get("contradictions", [])
+            logger.info(
+                f"Source verification: {len(verified)} verified, "
+                f"{len(single)} single-source, "
+                f"{len(contradictions)} contradictions"
+            )
+            return result
+        except Exception as e:
+            logger.warning(f"Source verification failed: {e}")
+            return {
+                "verified_claims": [],
+                "single_source_claims": [],
+                "contradictions": [],
+                "confidence_summary": "Verification analysis unavailable.",
+            }
+
     @with_retry(max_retries=MAX_RETRIES)
     async def generate_deep_research_report(
         self,
