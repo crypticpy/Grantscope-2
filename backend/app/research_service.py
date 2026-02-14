@@ -2,9 +2,9 @@
 Research service using GPT Researcher + AI analysis pipeline.
 
 This service implements a hybrid research approach:
-1. GPT Researcher for source discovery (with Firecrawl scraping)
-2. Serper + trafilatura for supplementary high-quality sources
-3. Firecrawl / trafilatura for content backfill when sources lack content
+1. GPT Researcher for source discovery (Tavily Extract scraping)
+2. Serper + crawler for supplementary high-quality sources
+3. Unified crawler module for content backfill when sources lack content
 4. AI Triage for quick relevance filtering (gpt-4o-mini)
 5. AI Analysis for full classification and scoring (gpt-4o)
 6. Vector matching for card association
@@ -27,13 +27,6 @@ from supabase import Client
 import openai
 
 # Optional imports for enhanced source fetching
-try:
-    from firecrawl import FirecrawlApp
-
-    FIRECRAWL_AVAILABLE = True
-except ImportError:
-    FIRECRAWL_AVAILABLE = False
-
 try:
     from exa_py import Exa
 
@@ -226,9 +219,9 @@ class ResearchService:
     Handles research operations using hybrid GPT Researcher + AI analysis pipeline.
 
     Pipeline:
-    1. Discovery: GPT Researcher with Firecrawl scraping
-    2. Enhancement: Serper + trafilatura for supplementary sources
-    3. Backfill: Firecrawl / trafilatura for missing content
+    1. Discovery: GPT Researcher with Tavily Extract scraping
+    2. Enhancement: Serper + crawler for supplementary sources
+    3. Backfill: Unified crawler module for missing content
     4. Triage: Quick relevance check with gpt-4o-mini
     5. Analysis: Full classification with gpt-4o
     6. Matching: Vector similarity to existing cards
@@ -246,15 +239,6 @@ class ResearchService:
         self.supabase = supabase
         self.openai_client = openai_client
         self.ai_service = AIService(openai_client)
-
-        # Initialize Firecrawl if available
-        self.firecrawl = None
-        if FIRECRAWL_AVAILABLE and os.getenv("FIRECRAWL_API_KEY"):
-            try:
-                self.firecrawl = FirecrawlApp(api_key=os.getenv("FIRECRAWL_API_KEY"))
-                logger.info("Firecrawl initialized for content scraping")
-            except Exception as e:
-                logger.warning(f"Firecrawl initialization failed: {e}")
 
         # Initialize Exa if available
         self.exa = None
@@ -310,7 +294,7 @@ class ResearchService:
         existing_source_urls: Optional[List[str]] = None,
     ) -> Tuple[List[RawSource], str, float]:
         """
-        Use GPT Researcher to discover sources, enhanced with Serper + trafilatura.
+        Use GPT Researcher to discover sources, enhanced with Serper + crawler.
 
         Args:
             query: Research query (customized for municipal focus)
@@ -515,9 +499,10 @@ class ResearchService:
         self, query: str, num_results: int = 5
     ) -> List[RawSource]:
         """
-        Search with Serper + trafilatura (replaces Exa AI).
+        Search with Serper + crawler for supplementary sources.
 
-        Uses Serper for web + news search and trafilatura for full-text extraction.
+        Uses Serper for web + news search and the unified crawler module
+        for full-text extraction.
 
         Args:
             query: Search query
@@ -531,7 +516,7 @@ class ResearchService:
             search_news,
             is_available as serper_available,
         )
-        from .content_enricher import extract_content
+        from .crawler import crawl_url
 
         if not serper_available():
             logger.warning("Serper not available for supplementary search")
@@ -555,9 +540,13 @@ class ResearchService:
             for result in all_results[:num_results]:
                 content = result.snippet
                 try:
-                    full_text, _ = await extract_content(result.url)
-                    if full_text and len(full_text) > len(content):
-                        content = full_text
+                    crawl_result = await crawl_url(result.url)
+                    if (
+                        crawl_result.success
+                        and crawl_result.markdown
+                        and len(crawl_result.markdown) > len(content)
+                    ):
+                        content = crawl_result.markdown
                 except Exception as e:
                     logger.warning(f"Content extraction failed for {result.url}: {e}")
 
@@ -576,12 +565,10 @@ class ResearchService:
 
         return sources
 
-    async def _backfill_content_with_firecrawl(
-        self, sources: List[RawSource]
-    ) -> List[RawSource]:
+    async def _backfill_content(self, sources: List[RawSource]) -> List[RawSource]:
         """
-        Use Firecrawl to fetch content for sources that have URLs but no content.
-        Falls back to trafilatura when Firecrawl is not available.
+        Fetch content for sources that have URLs but no content using the
+        unified crawler module.
 
         Args:
             sources: List of sources, some may have empty content
@@ -589,138 +576,59 @@ class ResearchService:
         Returns:
             Same list with content backfilled where possible
         """
+        from .crawler import crawl_urls
+
         sources_needing_content = [s for s in sources if s.url and not s.content]
         if not sources_needing_content:
             logger.info("All sources already have content")
             return sources
 
-        # Fallback: use trafilatura if Firecrawl not available
-        if not self.firecrawl:
-            from .content_enricher import extract_content
-
-            logger.info(
-                f"Firecrawl not available, using trafilatura to backfill {len(sources_needing_content)} sources"
-            )
-            backfilled_count = 0
-            for source in sources_needing_content:
-                try:
-                    text, title = await extract_content(source.url)
-                    if text:
-                        source.content = text[:10000]
-                        backfilled_count += 1
-                    if title and (
-                        not source.title
-                        or source.title == "Untitled"
-                        or len(source.title) < 5
-                    ):
-                        source.title = title[:500]
-                    # If title still generic after trafilatura, try LLM
-                    current_title_check = source.title or ""
-                    if source.content and (
-                        not current_title_check.strip()
-                        or current_title_check == "Untitled"
-                        or len(current_title_check) < 5
-                    ):
-                        try:
-                            llm_title = await self.ai_service.generate_source_title(
-                                url=source.url,
-                                content_snippet=source.content[:1000],
-                            )
-                            if llm_title and llm_title != "Untitled":
-                                source.title = llm_title
-                                logger.debug(
-                                    f"LLM title after trafilatura: {llm_title[:50]}"
-                                )
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
-            logger.info(
-                f"Trafilatura backfilled content for {backfilled_count}/{len(sources_needing_content)} sources"
-            )
-            return sources
-
         logger.info(
-            f"Attempting to backfill content for {len(sources_needing_content)} sources with Firecrawl"
+            f"Backfilling content for {len(sources_needing_content)} sources via crawler"
         )
+
+        # Batch crawl all URLs that need content
+        urls = [s.url for s in sources_needing_content]
+        results = await crawl_urls(urls, max_concurrent=5)
+
         backfilled_count = 0
+        for source, result in zip(sources_needing_content, results):
+            if result.success and result.markdown:
+                source.content = result.markdown[:10000]
+                backfilled_count += 1
 
-        for source in sources_needing_content:
-            try:
-                # Use Firecrawl to scrape the page
-                result = self.firecrawl.scrape(source.url, formats=["markdown"])
-
-                # Extract markdown content and metadata from result
-                markdown_content = None
-                scraped_title = None
-                if result:
-                    if isinstance(result, dict):
-                        markdown_content = result.get("markdown") or result.get(
-                            "content"
-                        )
-                        # Try to get title from Firecrawl metadata
-                        metadata = result.get("metadata", {})
-                        scraped_title = (
-                            metadata.get("title")
-                            or metadata.get("og:title")
-                            or result.get("title")
-                        )
-                    elif hasattr(result, "markdown"):
-                        markdown_content = result.markdown
-                        # Try to get title from object attributes
-                        if hasattr(result, "metadata") and result.metadata:
-                            scraped_title = getattr(
-                                result.metadata, "title", None
-                            ) or getattr(result.metadata, "og:title", None)
-                        elif hasattr(result, "title"):
-                            scraped_title = result.title
-
-                if markdown_content:
-                    source.content = markdown_content[:10000]  # Limit size
-                    backfilled_count += 1
-                    logger.debug(f"Backfilled content for: {source.url[:50]}...")
-
-                # Update title if we got a better one from Firecrawl and current title is generic
-                if scraped_title and scraped_title.strip():
-                    current_title = source.title or ""
-                    is_generic_title = (
-                        not current_title.strip()
-                        or current_title == "Untitled"
-                        or current_title.lower() == source.url.lower()
-                        or len(current_title) < 5
-                    )
-                    if is_generic_title:
-                        source.title = scraped_title.strip()[:500]
-                        logger.debug(
-                            f"Updated title from Firecrawl: {source.title[:50]}..."
-                        )
-
-                # If title is still generic after Firecrawl, try LLM generation
+            # Update title if crawler returned one and current title is generic
+            if result.title and result.title.strip():
                 current_title = source.title or ""
-                if source.content and (
+                if (
                     not current_title.strip()
                     or current_title == "Untitled"
                     or len(current_title) < 5
                 ):
-                    try:
-                        llm_title = await self.ai_service.generate_source_title(
-                            url=source.url,
-                            content_snippet=source.content[:1000],
-                        )
-                        if llm_title and llm_title != "Untitled":
-                            source.title = llm_title
-                            logger.debug(
-                                f"LLM-generated title after backfill: {llm_title[:50]}"
-                            )
-                    except Exception:
-                        pass
+                    source.title = result.title.strip()[:500]
 
-            except Exception as e:
-                logger.warning(f"Firecrawl failed for {source.url}: {e}")
-                # Continue to next source - don't fail the whole batch
+            # If title is still generic after crawling, try LLM generation
+            current_title = source.title or ""
+            if source.content and (
+                not current_title.strip()
+                or current_title == "Untitled"
+                or len(current_title) < 5
+            ):
+                try:
+                    llm_title = await self.ai_service.generate_source_title(
+                        url=source.url,
+                        content_snippet=source.content[:1000],
+                    )
+                    if llm_title and llm_title != "Untitled":
+                        source.title = llm_title
+                        logger.debug(
+                            f"LLM-generated title after backfill: {llm_title[:50]}"
+                        )
+                except Exception:
+                    pass
 
         logger.info(
-            f"Firecrawl backfilled content for {backfilled_count}/{len(sources_needing_content)} sources"
+            f"Crawler backfilled content for {backfilled_count}/{len(sources_needing_content)} sources"
         )
         return sources
 
@@ -1172,7 +1080,7 @@ class ResearchService:
         Pipeline:
         1. Build municipal-focused query
         2. Discover sources with GPT Researcher + Serper
-        3. Backfill missing content with Firecrawl / trafilatura
+        3. Backfill missing content via unified crawler
         4. Triage for relevance
         5. Analyze relevant sources
         6. Store to existing card
@@ -1203,8 +1111,8 @@ class ResearchService:
             query=query, report_type="research_report"
         )
 
-        # Step 3: Backfill missing content with Firecrawl / trafilatura
-        sources = await self._backfill_content_with_firecrawl(sources)
+        # Step 3: Backfill missing content via unified crawler
+        sources = await self._backfill_content(sources)
 
         # Step 4: Triage
         triaged = await self._triage_sources(sources[: self.MAX_SOURCES_UPDATE * 2])
@@ -1314,7 +1222,7 @@ class ResearchService:
         Pipeline with Serper/trafilatura enhancement:
         1. Build comprehensive query
         2. Discover sources (GPT Researcher + Serper)
-        3. Backfill missing content with Firecrawl / trafilatura
+        3. Backfill missing content via unified crawler
         4. Triage for relevance
         5. Analyze relevant sources
         6. Store to existing card
@@ -1403,8 +1311,8 @@ class ResearchService:
             existing_source_urls=existing_source_urls or None,
         )
 
-        # Step 3: Backfill missing content with Firecrawl / trafilatura
-        sources = await self._backfill_content_with_firecrawl(sources)
+        # Step 3: Backfill missing content via unified crawler
+        sources = await self._backfill_content(sources)
 
         # Step 4: Triage
         triaged = await self._triage_sources(sources)
@@ -1629,10 +1537,10 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
         """
         Analyze a workstream and find/create relevant cards.
 
-        Pipeline with Serper/trafilatura enhancement:
+        Pipeline with Serper/crawler enhancement:
         1. Build workstream query
         2. Discover sources (GPT Researcher + Serper)
-        3. Backfill missing content with Firecrawl / trafilatura
+        3. Backfill missing content via unified crawler
         4. Triage for relevance
         5. Analyze relevant sources
         6. Match or create cards
@@ -1668,8 +1576,8 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
             query=query, report_type="research_report"
         )
 
-        # Step 3: Backfill missing content with Firecrawl / trafilatura
-        sources = await self._backfill_content_with_firecrawl(sources)
+        # Step 3: Backfill missing content via unified crawler
+        sources = await self._backfill_content(sources)
 
         # Step 4: Triage
         triaged = await self._triage_sources(sources)
