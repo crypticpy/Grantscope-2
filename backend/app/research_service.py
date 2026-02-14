@@ -325,9 +325,9 @@ class ResearchService:
         # break Azure/OpenAI requests with "unknown parameter" errors and lead to
         # `LLM Response: None` downstream.
         if self.firecrawl:
-            os.environ.setdefault("SCRAPER", "firecrawl")
+            os.environ["SCRAPER"] = "firecrawl"
         else:
-            os.environ.setdefault("SCRAPER", "bs")
+            os.environ["SCRAPER"] = "bs"
 
         researcher = GPTResearcher(
             query=query,
@@ -338,12 +338,19 @@ class ResearchService:
             verbose=False,
         )
 
-        # Wrap GPT Researcher calls in try/except to handle LLM failures gracefully
+        # Wrap GPT Researcher calls with timeouts to prevent indefinite hangs
         try:
-            await researcher.conduct_research()
-            report = await researcher.write_report()
+            await asyncio.wait_for(researcher.conduct_research(), timeout=300)
+            report = await asyncio.wait_for(researcher.write_report(), timeout=120)
             raw_sources = researcher.get_research_sources()
             costs = researcher.get_costs()
+        except asyncio.TimeoutError:
+            logger.warning(
+                "GPT Researcher timed out during conduct_research/write_report"
+            )
+            raw_sources = []
+            report = None
+            costs = 0.0
         except (TypeError, ValueError) as e:
             # Handle case where LLM returns None or invalid response
             logger.warning(f"GPT Researcher failed (likely LLM timeout): {e}")

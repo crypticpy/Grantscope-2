@@ -76,26 +76,48 @@ async def execute_research_task_background(
 
         timeout_seconds = _get_timeout_seconds(task_data.task_type)
 
-        # Execute based on task type
-        if task_data.task_type == "update":
-            result = await asyncio.wait_for(
-                service.execute_update(task_data.card_id, task_id),
-                timeout=timeout_seconds,
-            )
-        elif task_data.task_type == "deep_research":
-            result = await asyncio.wait_for(
-                service.execute_deep_research(task_data.card_id, task_id),
-                timeout=timeout_seconds,
-            )
-        elif task_data.task_type == "workstream_analysis":
-            result = await asyncio.wait_for(
-                service.execute_workstream_analysis(
-                    task_data.workstream_id, task_id, user_id
-                ),
-                timeout=timeout_seconds,
-            )
-        else:
-            raise ValueError(f"Unknown task type: {task_data.task_type}")
+        # Background heartbeat to prevent the stale-task watchdog from killing
+        # long-running research while it's still making progress.
+        async def _heartbeat():
+            while True:
+                await asyncio.sleep(60)
+                try:
+                    supabase.table("research_tasks").update(
+                        {
+                            "result_summary": {
+                                "stage": f"running:{task_data.task_type}",
+                                "heartbeat_at": datetime.now(timezone.utc).isoformat(),
+                            }
+                        }
+                    ).eq("id", task_id).execute()
+                except Exception:
+                    pass
+
+        heartbeat_task = asyncio.create_task(_heartbeat())
+
+        try:
+            # Execute based on task type
+            if task_data.task_type == "update":
+                result = await asyncio.wait_for(
+                    service.execute_update(task_data.card_id, task_id),
+                    timeout=timeout_seconds,
+                )
+            elif task_data.task_type == "deep_research":
+                result = await asyncio.wait_for(
+                    service.execute_deep_research(task_data.card_id, task_id),
+                    timeout=timeout_seconds,
+                )
+            elif task_data.task_type == "workstream_analysis":
+                result = await asyncio.wait_for(
+                    service.execute_workstream_analysis(
+                        task_data.workstream_id, task_id, user_id
+                    ),
+                    timeout=timeout_seconds,
+                )
+            else:
+                raise ValueError(f"Unknown task type: {task_data.task_type}")
+        finally:
+            heartbeat_task.cancel()
 
         # Convert ResearchResult dataclass to dict for storage
         result_summary = {
