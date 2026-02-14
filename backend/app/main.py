@@ -38,6 +38,7 @@ from app.routers.classification import router as classification_router
 from app.routers.ai_helpers import router as ai_helpers_router
 from app.routers.pattern_insights import router as pattern_insights_router
 from app.routers.admin import router as admin_router
+from app.routers.feeds import router as feeds_router
 
 load_dotenv()
 
@@ -199,6 +200,7 @@ def create_app() -> FastAPI:
     application.include_router(ai_helpers_router)
     application.include_router(pattern_insights_router)
     application.include_router(admin_router)
+    application.include_router(feeds_router)
 
     return application
 

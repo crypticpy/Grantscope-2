@@ -6,6 +6,7 @@ that must survive web restarts / scale-to-zero behaviors:
 - `research_tasks` (update, deep_research, workstream_analysis)
 - `executive_briefs` (pending -> generating -> completed/failed)
 - `discovery_runs` (queued via summary_report.stage)
+- RSS feed monitoring (check feeds + triage new items every 30 min)
 
 Run locally:
   cd backend
@@ -88,11 +89,15 @@ class ForesightWorker:
         self.workstream_scan_timeout_seconds = _get_int_env(
             "FORESIGHT_WORKSTREAM_SCAN_TIMEOUT_SECONDS", 5 * 60
         )
+        self.rss_check_interval_seconds = _get_int_env(
+            "FORESIGHT_RSS_CHECK_INTERVAL_SECONDS", 30 * 60  # 30 minutes
+        )
         self.enable_scheduler = _truthy(
             os.getenv("FORESIGHT_ENABLE_SCHEDULER", "false")
         )
         self._stop_event = asyncio.Event()
         self._current_interval = self.poll_interval_seconds
+        self._last_rss_check: Optional[datetime] = None
 
     def request_stop(self) -> None:
         self._stop_event.set()
@@ -122,6 +127,7 @@ class ForesightWorker:
                 did_work = await self._process_one_brief() or did_work
                 did_work = await self._process_one_discovery_run() or did_work
                 did_work = await self._process_one_workstream_scan() or did_work
+                did_work = await self._check_rss_feeds() or did_work
             except Exception as e:
                 logger.exception(f"Worker loop error: {e}")
 
@@ -451,6 +457,69 @@ class ForesightWorker:
             ).eq("id", scan_id).execute()
             raise
         return True
+
+    async def _check_rss_feeds(self) -> bool:
+        """Check RSS feeds for new items and process them.
+
+        Runs at most once every ``rss_check_interval_seconds`` (default 30 min).
+        Creates an RSSService, calls ``check_feeds()`` to poll due feeds, then
+        ``process_new_items()`` to triage and match new articles to cards.
+
+        Returns:
+            True if any feeds were checked or items processed.
+        """
+        now = datetime.now(timezone.utc)
+
+        # Skip if we checked recently
+        if self._last_rss_check is not None:
+            elapsed = (now - self._last_rss_check).total_seconds()
+            if elapsed < self.rss_check_interval_seconds:
+                return False
+
+        self._last_rss_check = now
+
+        try:
+            from app.rss_service import RSSService
+            from app.ai_service import AIService
+
+            ai_service = AIService(openai_client)
+            rss_service = RSSService(supabase, ai_service)
+
+            # Step 1: Poll feeds that are due
+            check_stats = await rss_service.check_feeds()
+            logger.info(
+                "RSS feed check complete",
+                extra={
+                    "worker_id": self.worker_id,
+                    "feeds_checked": check_stats.get("feeds_checked", 0),
+                    "items_found": check_stats.get("items_found", 0),
+                    "items_new": check_stats.get("items_new", 0),
+                    "errors": check_stats.get("errors", 0),
+                },
+            )
+
+            # Step 2: Process (triage + match) any new items
+            process_stats = await rss_service.process_new_items()
+            logger.info(
+                "RSS item processing complete",
+                extra={
+                    "worker_id": self.worker_id,
+                    "items_processed": process_stats.get("items_processed", 0),
+                    "items_matched": process_stats.get("items_matched", 0),
+                    "items_pending": process_stats.get("items_pending", 0),
+                    "items_irrelevant": process_stats.get("items_irrelevant", 0),
+                },
+            )
+
+            did_work = (
+                check_stats.get("feeds_checked", 0) > 0
+                or process_stats.get("items_processed", 0) > 0
+            )
+            return did_work
+
+        except Exception as e:
+            logger.error(f"RSS feed check failed: {e}", exc_info=True)
+            return False
 
 
 async def _main() -> None:
