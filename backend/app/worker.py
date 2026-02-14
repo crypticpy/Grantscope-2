@@ -7,6 +7,7 @@ that must survive web restarts / scale-to-zero behaviors:
 - `executive_briefs` (pending -> generating -> completed/failed)
 - `discovery_runs` (queued via summary_report.stage)
 - RSS feed monitoring (check feeds + triage new items every 30 min)
+- Scheduled discovery runs (configurable via discovery_schedule table)
 
 Run locally:
   cd backend
@@ -23,7 +24,7 @@ import logging
 import os
 import signal
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
@@ -92,6 +93,9 @@ class ForesightWorker:
         self.rss_check_interval_seconds = _get_int_env(
             "FORESIGHT_RSS_CHECK_INTERVAL_SECONDS", 30 * 60  # 30 minutes
         )
+        self.scheduled_discovery_timeout_seconds = _get_int_env(
+            "FORESIGHT_SCHEDULED_DISCOVERY_TIMEOUT_SECONDS", 120 * 60  # 2 hours
+        )
         self.enable_scheduler = _truthy(
             os.getenv("FORESIGHT_ENABLE_SCHEDULER", "false")
         )
@@ -128,6 +132,7 @@ class ForesightWorker:
                 did_work = await self._process_one_discovery_run() or did_work
                 did_work = await self._process_one_workstream_scan() or did_work
                 did_work = await self._check_rss_feeds() or did_work
+                did_work = await self._run_scheduled_discovery() or did_work
             except Exception as e:
                 logger.exception(f"Worker loop error: {e}")
 
@@ -519,6 +524,218 @@ class ForesightWorker:
 
         except Exception as e:
             logger.error(f"RSS feed check failed: {e}", exc_info=True)
+            return False
+
+    async def _run_scheduled_discovery(self) -> bool:
+        """Run a scheduled discovery if one is due.
+
+        Queries the ``discovery_schedule`` table for any enabled schedule whose
+        ``next_run_at`` is in the past.  When due the method:
+
+        1. Claims the schedule row (optimistic lock via ``next_run_at`` check).
+        2. Processes RSS feeds first (free, no API calls).
+        3. Creates a ``discovery_run`` record per configured pillar and lets the
+           existing worker loop pick them up.
+        4. Stores run statistics in ``last_run_summary``.
+
+        Returns ``True`` if a scheduled discovery was triggered.
+        """
+        try:
+            now = datetime.now(timezone.utc)
+            now_iso = now.isoformat()
+
+            # Check for any due schedules
+            schedules = (
+                supabase.table("discovery_schedule")
+                .select("*")
+                .eq("enabled", True)
+                .lte("next_run_at", now_iso)
+                .order("next_run_at", desc=False)
+                .limit(1)
+                .execute()
+                .data
+                or []
+            )
+
+            if not schedules:
+                return False
+
+            schedule = schedules[0]
+            schedule_id = schedule["id"]
+            interval_hours = schedule.get("interval_hours") or 24
+            pillars = schedule.get("pillars_to_scan") or [
+                "CH",
+                "MC",
+                "HS",
+                "EC",
+                "ES",
+                "CE",
+            ]
+            max_queries = schedule.get("max_search_queries_per_run") or 20
+            process_rss = schedule.get("process_rss_first", True)
+
+            # Claim the schedule by advancing next_run_at (optimistic lock)
+            next_run = now + timedelta(hours=interval_hours)
+            claimed = (
+                supabase.table("discovery_schedule")
+                .update(
+                    {
+                        "last_run_at": now_iso,
+                        "next_run_at": next_run.isoformat(),
+                        "last_run_status": "running",
+                        "updated_at": now_iso,
+                    }
+                )
+                .eq("id", schedule_id)
+                .lte("next_run_at", now_iso)
+                .execute()
+                .data
+            )
+            if not claimed:
+                return False
+
+            logger.info(
+                "Scheduled discovery triggered",
+                extra={
+                    "worker_id": self.worker_id,
+                    "schedule_id": schedule_id,
+                    "schedule_name": schedule.get("name"),
+                    "pillars": pillars,
+                    "max_queries": max_queries,
+                    "interval_hours": interval_hours,
+                },
+            )
+
+            summary: dict = {
+                "schedule_id": schedule_id,
+                "started_at": now_iso,
+                "rss_stats": None,
+                "discovery_run_ids": [],
+                "errors": [],
+            }
+
+            # Step 1: Process RSS feeds first (free, no API budget)
+            if process_rss:
+                try:
+                    from app.rss_service import RSSService
+                    from app.ai_service import AIService
+
+                    ai_service = AIService(openai_client)
+                    rss_service = RSSService(supabase, ai_service)
+
+                    check_stats = await rss_service.check_feeds()
+                    process_stats = await rss_service.process_new_items()
+
+                    summary["rss_stats"] = {
+                        "feeds_checked": check_stats.get("feeds_checked", 0),
+                        "items_found": check_stats.get("items_found", 0),
+                        "items_new": check_stats.get("items_new", 0),
+                        "items_processed": process_stats.get("items_processed", 0),
+                        "items_matched": process_stats.get("items_matched", 0),
+                    }
+                    logger.info(
+                        "Scheduled discovery: RSS processing complete",
+                        extra={"worker_id": self.worker_id, **summary["rss_stats"]},
+                    )
+                except Exception as rss_err:
+                    logger.error(
+                        f"Scheduled discovery: RSS processing failed: {rss_err}",
+                        exc_info=True,
+                    )
+                    summary["errors"].append(f"RSS processing failed: {rss_err}")
+
+            # Step 2: Get a system user for the discovery run
+            system_user = (
+                supabase.table("users").select("id").limit(1).execute().data or []
+            )
+            user_id = system_user[0]["id"] if system_user else None
+
+            if not user_id:
+                logger.warning(
+                    "Scheduled discovery: No system user found, skipping discovery run"
+                )
+                summary["errors"].append("No system user found")
+            else:
+                # Step 3: Create a discovery run with the scheduled pillars
+                try:
+                    run_id = str(uuid.uuid4())
+                    config_data = {
+                        "max_queries_per_run": max_queries,
+                        "max_sources_total": max_queries * 10,  # ~10 sources per query
+                        "auto_approve_threshold": 0.95,
+                        "pillars_filter": pillars,
+                        "dry_run": False,
+                    }
+
+                    run_record = {
+                        "id": run_id,
+                        "status": "running",
+                        "triggered_by": "scheduled",
+                        "triggered_by_user": user_id,
+                        "cards_created": 0,
+                        "cards_enriched": 0,
+                        "cards_deduplicated": 0,
+                        "sources_found": 0,
+                        "started_at": now_iso,
+                        "summary_report": {
+                            "stage": "queued",
+                            "config": config_data,
+                            "scheduled_by": schedule_id,
+                        },
+                    }
+
+                    supabase.table("discovery_runs").insert(run_record).execute()
+                    summary["discovery_run_ids"].append(run_id)
+
+                    logger.info(
+                        "Scheduled discovery: queued discovery run",
+                        extra={
+                            "worker_id": self.worker_id,
+                            "run_id": run_id,
+                            "pillars": pillars,
+                            "max_queries": max_queries,
+                        },
+                    )
+
+                except Exception as disc_err:
+                    logger.error(
+                        f"Scheduled discovery: failed to create discovery run: {disc_err}",
+                        exc_info=True,
+                    )
+                    summary["errors"].append(
+                        f"Discovery run creation failed: {disc_err}"
+                    )
+
+            # Step 4: Update the schedule with results
+            final_status = (
+                "completed" if not summary["errors"] else "completed_with_errors"
+            )
+            summary["completed_at"] = datetime.now(timezone.utc).isoformat()
+            summary["status"] = final_status
+
+            supabase.table("discovery_schedule").update(
+                {
+                    "last_run_status": final_status,
+                    "last_run_summary": summary,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            ).eq("id", schedule_id).execute()
+
+            logger.info(
+                "Scheduled discovery complete",
+                extra={
+                    "worker_id": self.worker_id,
+                    "schedule_id": schedule_id,
+                    "status": final_status,
+                    "discovery_runs": len(summary["discovery_run_ids"]),
+                    "errors": len(summary["errors"]),
+                },
+            )
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Scheduled discovery check failed: {e}", exc_info=True)
             return False
 
 

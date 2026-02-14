@@ -4,9 +4,10 @@ import logging
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
 
 from app.deps import supabase, get_current_user, _safe_error, openai_client, limiter
 from app.models.discovery_models import (
@@ -567,3 +568,149 @@ async def enrich_profiles(
         raise HTTPException(
             status_code=500, detail=_safe_error("profile enrichment", e)
         )
+
+
+# ============================================================================
+# Discovery Schedule Management
+# ============================================================================
+
+
+class DiscoveryScheduleResponse(BaseModel):
+    """Response model for discovery schedule settings."""
+
+    id: str
+    name: str
+    enabled: bool = True
+    cron_expression: Optional[str] = None
+    timezone: Optional[str] = None
+    interval_hours: int = 24
+    max_search_queries_per_run: int = 20
+    pillars_to_scan: Optional[List[str]] = None
+    process_rss_first: bool = True
+    last_run_at: Optional[str] = None
+    next_run_at: Optional[str] = None
+    last_run_status: Optional[str] = None
+    last_run_summary: Optional[dict] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+    class Config:
+        extra = "allow"
+
+
+class DiscoveryScheduleUpdate(BaseModel):
+    """Request model for updating discovery schedule settings."""
+
+    enabled: Optional[bool] = None
+    cron_expression: Optional[str] = Field(
+        None, description="Cron expression (for display/reference)"
+    )
+    interval_hours: Optional[int] = Field(
+        None, ge=1, le=168, description="Run interval in hours"
+    )
+    max_search_queries_per_run: Optional[int] = Field(None, ge=1, le=200)
+    pillars_to_scan: Optional[List[str]] = Field(
+        None, description="Pillar codes to scan: CH, MC, HS, EC, ES, CE"
+    )
+    process_rss_first: Optional[bool] = None
+    next_run_at: Optional[str] = Field(
+        None, description="Override next run time (ISO 8601)"
+    )
+
+
+@router.get("/discovery/schedule", response_model=DiscoveryScheduleResponse)
+async def get_discovery_schedule(current_user: dict = Depends(get_current_user)):
+    """Get the current discovery schedule settings.
+
+    Returns the default (or only) schedule configuration that controls
+    automated discovery runs in the background worker.
+    """
+    try:
+        result = (
+            supabase.table("discovery_schedule")
+            .select("*")
+            .order("created_at", desc=False)
+            .limit(1)
+            .execute()
+        )
+
+        if not result.data:
+            raise HTTPException(
+                status_code=404,
+                detail="No discovery schedule configured. Run the migration first.",
+            )
+
+        return DiscoveryScheduleResponse(**result.data[0])
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get discovery schedule: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=_safe_error("get discovery schedule", e)
+        ) from e
+
+
+@router.put("/discovery/schedule", response_model=DiscoveryScheduleResponse)
+async def update_discovery_schedule(
+    body: DiscoveryScheduleUpdate,
+    current_user: dict = Depends(get_current_user),
+):
+    """Update discovery schedule settings.
+
+    Accepts partial updates. Only provided fields are changed.
+    Use this to enable/disable the schedule, change the interval,
+    adjust which pillars are scanned, or override the next run time.
+    """
+    try:
+        # Get existing schedule
+        existing = (
+            supabase.table("discovery_schedule")
+            .select("id")
+            .order("created_at", desc=False)
+            .limit(1)
+            .execute()
+        )
+
+        if not existing.data:
+            raise HTTPException(
+                status_code=404,
+                detail="No discovery schedule configured. Run the migration first.",
+            )
+
+        schedule_id = existing.data[0]["id"]
+
+        # Build update dict from non-None fields
+        update_data = body.dict(exclude_none=True)
+        if not update_data:
+            raise HTTPException(status_code=400, detail="No fields to update")
+
+        update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+        result = (
+            supabase.table("discovery_schedule")
+            .update(update_data)
+            .eq("id", schedule_id)
+            .execute()
+        )
+
+        if not result.data:
+            raise HTTPException(status_code=500, detail="Failed to update schedule")
+
+        logger.info(
+            f"Discovery schedule updated by user {current_user['id']}",
+            extra={
+                "schedule_id": schedule_id,
+                "updated_fields": list(update_data.keys()),
+            },
+        )
+
+        return DiscoveryScheduleResponse(**result.data[0])
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update discovery schedule: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=_safe_error("update discovery schedule", e)
+        ) from e
