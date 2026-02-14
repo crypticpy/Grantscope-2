@@ -1,5 +1,6 @@
 """Health-check and debug router."""
 
+import os
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict
@@ -18,18 +19,58 @@ async def root():
 
 @router.get("/api/v1/health")
 async def health_check():
-    """Detailed health check"""
+    """Detailed health check with search provider and degradation status."""
+    from ..search_provider import get_provider_info
+
+    search_info = get_provider_info()
+
+    # Determine capability level based on available services
+    capabilities = []
+    degraded = []
+
+    # Core: Azure OpenAI (required for AI features)
+    if os.getenv("AZURE_OPENAI_API_KEY"):
+        capabilities.append("ai_analysis")
+    else:
+        degraded.append("ai_analysis")
+
+    # Search provider
+    if search_info["available"]:
+        capabilities.append(f"search:{search_info['provider']}")
+    else:
+        degraded.append("search")
+
+    # RSS feeds (always available if DB is up)
+    capabilities.append("rss_feeds")
+
+    # Crawl4AI (always available, no API key needed)
+    capabilities.append("web_crawling")
+
+    # Optional paid APIs
+    if os.getenv("TAVILY_API_KEY"):
+        capabilities.append("tavily")
+    if os.getenv("SERPER_API_KEY"):
+        capabilities.append("serper")
+    if os.getenv("EXA_API_KEY"):
+        capabilities.append("exa")
+
     return {
         "status": "healthy",
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "services": {"database": "connected", "ai": "available"},
+        "services": {
+            "database": "connected",
+            "ai": "available" if "ai_analysis" in capabilities else "unavailable",
+            "search": search_info,
+        },
+        "capabilities": capabilities,
+        "degraded": degraded if degraded else None,
+        "mode": "full" if not degraded else "degraded",
     }
 
 
 @router.get("/api/v1/debug/gpt-researcher")
 async def debug_gpt_researcher():
     """Debug GPT Researcher configuration and Azure OpenAI connection. v2"""
-    import os
 
     # Get GPT Researcher relevant env vars
     config_vars = {
@@ -52,6 +93,8 @@ async def debug_gpt_researcher():
         "TAVILY_API_KEY": "SET" if os.getenv("TAVILY_API_KEY") else "NOT SET",
         "FIRECRAWL_API_KEY": "SET" if os.getenv("FIRECRAWL_API_KEY") else "NOT SET",
         "SERPER_API_KEY": "SET" if os.getenv("SERPER_API_KEY") else "NOT SET",
+        "SEARXNG_BASE_URL": os.getenv("SEARXNG_BASE_URL", "NOT SET"),
+        "SEARCH_PROVIDER": os.getenv("SEARCH_PROVIDER", "auto"),
     }
 
     # Test GPT Researcher config parsing
@@ -145,8 +188,14 @@ async def debug_gpt_researcher():
         gptr_llm_test["status"] = "error"
         gptr_llm_test["error"] = str(e)
 
+    # Search provider status
+    from ..search_provider import get_provider_info
+
+    search_status = get_provider_info()
+
     return {
         "env_vars": config_vars,
+        "search_provider": search_status,
         "gptr_config": {
             "status": gptr_config_status,
             "error": gptr_config_error,

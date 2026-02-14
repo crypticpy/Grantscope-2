@@ -67,13 +67,14 @@ async def _search_tavily(query: str, num_results: int = 7) -> list[dict]:
 
 
 async def _search_serper(query: str, num_results: int = 7) -> list[dict]:
-    """Search via Serper (Google). Returns list of {title, url, content, score}."""
-    serper_key = os.getenv("SERPER_API_KEY")
-    if not serper_key:
+    """Search via configured provider (SearXNG/Serper/Tavily). Returns list of {title, url, content, score}."""
+    from .search_provider import is_available as search_available
+
+    if not search_available():
         return []
 
     try:
-        from .source_fetchers.serper_fetcher import search_web, search_news
+        from .search_provider import search_web, search_news
 
         web_results = await search_web(query, num_results=num_results)
         news_results = await search_news(query, num_results=max(num_results // 2, 3))
@@ -93,7 +94,7 @@ async def _search_serper(query: str, num_results: int = 7) -> list[dict]:
                 )
         return results[:num_results]
     except Exception as e:
-        logger.warning(f"Serper search failed: {e}")
+        logger.warning(f"Search provider failed: {e}")
         return []
 
 

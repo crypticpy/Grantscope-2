@@ -511,15 +511,15 @@ class ResearchService:
         Returns:
             List of RawSource with content included
         """
-        from .source_fetchers.serper_fetcher import (
+        from .search_provider import (
             search_web,
             search_news,
-            is_available as serper_available,
+            is_available as search_available,
         )
         from .crawler import crawl_url
 
-        if not serper_available():
-            logger.warning("Serper not available for supplementary search")
+        if not search_available():
+            logger.warning("No search provider available for supplementary search")
             return []
 
         sources = []
@@ -559,9 +559,9 @@ class ResearchService:
                     )
                 )
 
-            logger.info(f"Serper search found {len(sources)} sources for: {query[:50]}")
+            logger.info(f"Search found {len(sources)} sources for: {query[:50]}")
         except Exception as e:
-            logger.warning(f"Serper search failed: {e}")
+            logger.warning(f"Search failed: {e}")
 
         return sources
 

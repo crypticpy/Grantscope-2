@@ -1,0 +1,14 @@
+# =============================================================================
+# SearXNG Rate Limiter Configuration for Foresight
+# =============================================================================
+# Relaxed limits since this is a private instance used only by the
+# Foresight backend. No public traffic to rate-limit.
+# =============================================================================
+
+[botdetection.ip_limit]
+# Disable IP-based rate limiting for internal use
+link_token = false
+
+[botdetection.ip_lists]
+# No blocked IPs for internal instance
+pass_searxng_org = false

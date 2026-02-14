@@ -56,7 +56,23 @@ from .tech_blog_fetcher import (
     TechBlogFetchResult,
 )
 
+from .searxng_fetcher import (
+    search_web as searxng_search_web,
+    search_news as searxng_search_news,
+    search_all as searxng_search_all,
+    is_available as searxng_available,
+    health_check as searxng_health_check,
+    SearXNGResult,
+)
+
 __all__ = [
+    # SearXNG Fetcher
+    "searxng_search_web",
+    "searxng_search_news",
+    "searxng_search_all",
+    "searxng_available",
+    "searxng_health_check",
+    "SearXNGResult",
     # RSS Fetcher
     "fetch_rss_sources",
     "fetch_single_feed",

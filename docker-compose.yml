@@ -1,0 +1,127 @@
+# =============================================================================
+# Foresight — Docker Compose
+# =============================================================================
+# Local development and Azure Container Apps deployment configuration.
+#
+# Services:
+#   - foresight-web:    FastAPI backend (web server)
+#   - foresight-worker: Background job processor (same image, worker mode)
+#   - searxng:          Self-hosted meta-search engine (zero-cost search)
+#
+# Usage:
+#   docker compose up -d                    # Start all services
+#   docker compose up -d foresight-web      # Start web only (uses .env)
+#   docker compose logs -f foresight-web    # Tail web logs
+#   docker compose down                     # Stop everything
+#
+# Environment:
+#   Copy backend/.env.example to backend/.env and fill in required values.
+#   At minimum you need: SUPABASE_URL, SUPABASE_KEY, AZURE_OPENAI_* vars.
+#   SearXNG requires no API keys — it's fully self-hosted.
+#
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Foresight Web Server
+  # ---------------------------------------------------------------------------
+  foresight-web:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: foresight-web
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8000}:8000"
+    env_file:
+      - backend/.env
+    environment:
+      - FORESIGHT_PROCESS_TYPE=web
+      - PORT=8000
+      # Point to SearXNG sidecar for self-hosted search
+      - SEARXNG_BASE_URL=http://searxng:8080
+      # Use SearXNG as primary search provider (auto | searxng | serper | tavily)
+      - SEARCH_PROVIDER=${SEARCH_PROVIDER:-auto}
+    depends_on:
+      searxng:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    networks:
+      - foresight-net
+
+  # ---------------------------------------------------------------------------
+  # Foresight Background Worker
+  # ---------------------------------------------------------------------------
+  foresight-worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: foresight-worker
+    restart: unless-stopped
+    env_file:
+      - backend/.env
+    environment:
+      - FORESIGHT_PROCESS_TYPE=worker
+      # Worker also needs search access for discovery runs
+      - SEARXNG_BASE_URL=http://searxng:8080
+      - SEARCH_PROVIDER=${SEARCH_PROVIDER:-auto}
+    depends_on:
+      searxng:
+        condition: service_healthy
+    networks:
+      - foresight-net
+
+  # ---------------------------------------------------------------------------
+  # SearXNG — Self-Hosted Meta-Search Engine
+  # ---------------------------------------------------------------------------
+  # Aggregates results from Google, Bing, DuckDuckGo, Brave, and others.
+  # No API keys required. Replaces Serper/Tavily for zero-cost search.
+  #
+  # Web UI (optional): http://localhost:8888
+  # JSON API:          http://searxng:8080/search?q=query&format=json
+  # ---------------------------------------------------------------------------
+  searxng:
+    image: searxng/searxng:latest
+    container_name: foresight-searxng
+    restart: unless-stopped
+    ports:
+      - "${SEARXNG_PORT:-8888}:8080"
+    volumes:
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
+      - ./searxng/limiter.toml:/etc/searxng/limiter.toml:ro
+      - searxng-data:/etc/searxng
+    environment:
+      - SEARXNG_BASE_URL=http://localhost:${SEARXNG_PORT:-8888}/
+      - SEARXNG_SECRET=${SEARXNG_SECRET:-foresight-searxng-secret-change-me}
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    networks:
+      - foresight-net
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  searxng-data:
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  foresight-net:
+    driver: bridge

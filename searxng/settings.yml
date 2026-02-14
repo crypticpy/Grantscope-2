@@ -1,0 +1,168 @@
+# =============================================================================
+# SearXNG Settings for Foresight
+# =============================================================================
+# Optimized for API-first usage by the Foresight backend.
+# JSON format is enabled so the backend can query programmatically.
+# Rate limiting is relaxed since this is a private instance.
+# =============================================================================
+
+general:
+  # Debug mode — set to true for troubleshooting
+  debug: false
+  # Instance name shown in UI
+  instance_name: "Foresight Search"
+  # Allow access without authentication
+  privacypolicy_url: false
+  donation_url: false
+  contact_url: false
+  enable_metrics: false
+
+search:
+  # Enable JSON format for API access (critical for Foresight integration)
+  formats:
+    - html
+    - json
+
+  # Safe search: 0=off, 1=moderate, 2=strict
+  safe_search: 0
+
+  # Default language (empty = auto-detect)
+  default_lang: "en"
+
+  # Number of results per page
+  # The backend requests specific counts, but this is the default for UI
+  autocomplete: "google"
+
+  # Default categories for search
+  default_categories:
+    - general
+    - news
+
+server:
+  # Bind address — 0.0.0.0 required for Docker networking
+  bind_address: "0.0.0.0"
+  # Port inside container
+  port: 8080
+  # Secret key — overridden by SEARXNG_SECRET env var
+  secret_key: "foresight-searxng-default-key"
+  # Request limiter — relaxed for internal use
+  limiter: false
+  # Public URL
+  base_url: false
+  # Image proxy for privacy
+  image_proxy: false
+  # HTTP protocol version
+  method: "GET"
+
+ui:
+  # Minimal UI since we primarily use JSON API
+  static_use_hash: true
+  default_theme: simple
+  theme_args:
+    simple_style: auto
+  # Results on page
+  results_on_new_tab: false
+
+# =============================================================================
+# Search Engines Configuration
+# =============================================================================
+# Prioritize engines that don't require API keys and provide good coverage.
+# Disabled engines that are unreliable or require authentication.
+# =============================================================================
+
+engines:
+  # ----- General Web Search -----
+  - name: google
+    engine: google
+    shortcut: g
+    disabled: false
+
+  - name: bing
+    engine: bing
+    shortcut: b
+    disabled: false
+
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: ddg
+    disabled: false
+
+  - name: brave
+    engine: brave
+    shortcut: br
+    disabled: false
+
+  - name: startpage
+    engine: startpage
+    shortcut: sp
+    disabled: false
+
+  # ----- News -----
+  - name: google news
+    engine: google_news
+    shortcut: gn
+    disabled: false
+
+  - name: bing news
+    engine: bing_news
+    shortcut: bn
+    disabled: false
+
+  - name: duckduckgo news
+    engine: duckduckgo
+    shortcut: ddgn
+    categories: news
+    disabled: false
+
+  # ----- Science & Academic -----
+  - name: google scholar
+    engine: google_scholar
+    shortcut: gs
+    disabled: false
+
+  - name: arxiv
+    engine: arxiv
+    shortcut: ar
+    disabled: false
+
+  - name: semantic scholar
+    engine: semantic_scholar
+    shortcut: ss
+    disabled: false
+
+  # ----- IT / Tech -----
+  - name: github
+    engine: github
+    shortcut: gh
+    disabled: false
+
+  - name: stackoverflow
+    engine: stackoverflow
+    shortcut: so
+    disabled: false
+
+  # ----- General Knowledge -----
+  - name: wikipedia
+    engine: wikipedia
+    shortcut: wp
+    disabled: false
+
+  - name: wikidata
+    engine: wikidata
+    shortcut: wd
+    disabled: false
+
+outgoing:
+  # Request timeout for search engines
+  request_timeout: 10.0
+  # Max concurrent requests to search engines
+  max_request_timeout: 15.0
+  # Use HTTPS for outgoing requests
+  useragent_suffix: ""
+  # Pool connections for better performance
+  pool_connections: 100
+  pool_maxsize: 20
+  # Enable if behind a proxy
+  # proxies:
+  #   https: socks5h://proxy:port
+  #   http: socks5h://proxy:port

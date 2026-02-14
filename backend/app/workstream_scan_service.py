@@ -50,10 +50,10 @@ from .source_fetchers import (
     convert_to_raw_source as convert_academic_to_raw,
     convert_government_to_raw_source,
 )
-from .source_fetchers.serper_fetcher import (
+from .search_provider import (
     search_all as serper_search_all,
     is_available as serper_available,
-    SerperResult,
+    SearchResult,
 )
 from .content_enricher import enrich_sources
 
@@ -705,7 +705,7 @@ Example: ["query 1", "query 2", ...]"""
             logger.info(f"Smart date filter: has_cards={has_cards} → {filter_label}")
 
             try:
-                serper_results: List[SerperResult] = await serper_search_all(
+                serper_results: List[SearchResult] = await serper_search_all(
                     all_queries,
                     num_results_per_query=10,
                     date_filter=date_filter,

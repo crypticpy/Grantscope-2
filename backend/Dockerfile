@@ -1,8 +1,10 @@
 # =============================================================================
 # Foresight API - Production Dockerfile
 # =============================================================================
-# Hardened container image for Railway deployment
-# Security: Non-root user, minimal attack surface, health checks
+# Hardened container image for Railway / Azure Container Apps deployment.
+# Security: Non-root user, minimal attack surface, health checks.
+# Supports web server and background worker via FORESIGHT_PROCESS_TYPE env var.
+# Pair with docker-compose.yml for full stack including SearXNG search.
 # =============================================================================
 
 FROM python:3.11-slim
