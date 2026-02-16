@@ -71,6 +71,25 @@ dmypy.json
 # Auto Claude data directory
 .auto-claude/
 
+# External project folders
+Amanda/
+ThirdSpaces/
+
+# Planning docs
+CHAT_UX_PLAN.md
+SYSTEM_EVOLUTION_PLAN.md
+
+# Claude context layer
+.claude/context-layer/
+
+# Troubleshooting scripts & reports
+backend/audit_signals.py
+backend/enrich_profiles_runner.py
+code_bugs_report.json
+
+# Supabase CLI temp files
+supabase/.temp/
+
 # Git worktrees (for parallel feature development)
 .worktrees/
 test-users.txt
