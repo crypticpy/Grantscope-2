@@ -31,7 +31,6 @@ import {
   Heart,
   FolderOpen,
 } from "lucide-react";
-import { supabase } from "../App";
 import { useAuthContext } from "../hooks/useAuthContext";
 import { PillarBadge } from "../components/PillarBadge";
 import { HorizonBadge } from "../components/HorizonBadge";
@@ -689,16 +688,14 @@ const AnalyticsV2: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.access_token) {
+      const token = localStorage.getItem("gs2_token");
+      if (!token) {
         throw new Error("Not authenticated");
       }
 
       const [system, personal] = await Promise.all([
-        fetchSystemStats(session.access_token),
-        fetchPersonalStats(session.access_token),
+        fetchSystemStats(token),
+        fetchPersonalStats(token),
       ]);
 
       setSystemStats(system);

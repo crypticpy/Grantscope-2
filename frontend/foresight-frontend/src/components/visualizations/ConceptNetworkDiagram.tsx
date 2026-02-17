@@ -15,7 +15,7 @@
  * - Auto-layout for node positioning
  */
 
-import React, { useMemo, useCallback, memo } from "react";
+import { useMemo, useCallback, memo } from "react";
 import {
   ReactFlow,
   Node,
@@ -71,7 +71,7 @@ export interface ConceptNetworkDiagramProps {
 }
 
 /** Node data structure for React Flow */
-interface CardNodeData {
+interface CardNodeData extends Record<string, unknown> {
   id: string;
   name: string;
   slug: string;
@@ -449,7 +449,7 @@ function ErrorState({
 // Minimap Color Function
 // ============================================================================
 
-function minimapNodeColor(node: Node<CardNodeData>): string {
+function minimapNodeColor(node: Node): string {
   if (node.data?.isSource) return "#3b82f6";
   const horizon = node.data?.horizon;
   if (horizon === "H1") return "#22c55e";

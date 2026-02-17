@@ -442,11 +442,15 @@ function WorkstreamCard({
     if (stageIds.length === 0) return "";
     const nums = stageIds.map(Number).sort((a, b) => a - b);
     // Check if consecutive range
+    const first = nums[0];
+    const last = nums[nums.length - 1];
     if (
       nums.length > 2 &&
-      nums[nums.length - 1] - nums[0] === nums.length - 1
+      first !== undefined &&
+      last !== undefined &&
+      last - first === nums.length - 1
     ) {
-      return `${nums[0]}-${nums[nums.length - 1]}`;
+      return `${first}-${last}`;
     }
     return nums.join(", ");
   };
@@ -694,10 +698,7 @@ const Workstreams: React.FC = () => {
     const wsList = workstreamsRef.current;
     if (wsList.length === 0) return;
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    const token = session?.access_token;
+    const token = localStorage.getItem("gs2_token");
     if (!token) return;
 
     const statuses: Record<string, WorkstreamScanStatusResponse> = {};

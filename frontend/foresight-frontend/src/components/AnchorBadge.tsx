@@ -7,7 +7,6 @@
  * - Tooltip showing full description
  */
 
-import React from 'react';
 import {
   Scale,
   DollarSign,
@@ -16,11 +15,11 @@ import {
   ShieldCheck,
   Users,
   type LucideIcon,
-} from 'lucide-react';
-import { Tooltip } from './ui/Tooltip';
-import { cn } from '../lib/utils';
-import { getSizeClasses, getIconSize } from '../lib/badge-utils';
-import { getAnchorByName, type Anchor } from '../data/taxonomy';
+} from "lucide-react";
+import { Tooltip } from "./ui/Tooltip";
+import { cn } from "../lib/utils";
+import { getSizeClasses, getIconSize } from "../lib/badge-utils";
+import { getAnchorByName, type Anchor } from "../data/taxonomy";
 
 // Icon mapping for anchors
 const anchorIcons: Record<string, LucideIcon> = {
@@ -33,36 +32,39 @@ const anchorIcons: Record<string, LucideIcon> = {
 };
 
 // Color mapping for anchors
-const anchorColors: Record<string, { bg: string; text: string; border: string }> = {
+const anchorColors: Record<
+  string,
+  { bg: string; text: string; border: string }
+> = {
   Equity: {
-    bg: 'bg-violet-100',
-    text: 'text-violet-700',
-    border: 'border-violet-300',
+    bg: "bg-violet-100",
+    text: "text-violet-700",
+    border: "border-violet-300",
   },
   Affordability: {
-    bg: 'bg-emerald-100',
-    text: 'text-emerald-700',
-    border: 'border-emerald-300',
+    bg: "bg-emerald-100",
+    text: "text-emerald-700",
+    border: "border-emerald-300",
   },
   Innovation: {
-    bg: 'bg-yellow-100',
-    text: 'text-yellow-700',
-    border: 'border-yellow-300',
+    bg: "bg-yellow-100",
+    text: "text-yellow-700",
+    border: "border-yellow-300",
   },
-  'Sustainability & Resiliency': {
-    bg: 'bg-green-100',
-    text: 'text-green-700',
-    border: 'border-green-300',
+  "Sustainability & Resiliency": {
+    bg: "bg-green-100",
+    text: "text-green-700",
+    border: "border-green-300",
   },
-  'Proactive Prevention': {
-    bg: 'bg-blue-100',
-    text: 'text-blue-700',
-    border: 'border-blue-300',
+  "Proactive Prevention": {
+    bg: "bg-blue-100",
+    text: "text-blue-700",
+    border: "border-blue-300",
   },
-  'Community Trust & Relationships': {
-    bg: 'bg-rose-100',
-    text: 'text-rose-700',
-    border: 'border-rose-300',
+  "Community Trust & Relationships": {
+    bg: "bg-rose-100",
+    text: "text-rose-700",
+    border: "border-rose-300",
   },
 };
 
@@ -70,7 +72,7 @@ export interface AnchorBadgeProps {
   /** Anchor name */
   anchor: string;
   /** Size variant */
-  size?: 'sm' | 'md' | 'lg';
+  size?: "sm" | "md" | "lg";
   /** Whether to show the icon */
   showIcon?: boolean;
   /** Whether to show abbreviated name */
@@ -86,16 +88,15 @@ export interface AnchorBadgeProps {
  */
 function getAbbreviatedName(name: string): string {
   const abbreviations: Record<string, string> = {
-    Equity: 'Equity',
-    Affordability: 'Afford.',
-    Innovation: 'Innov.',
-    'Sustainability & Resiliency': 'Sustain.',
-    'Proactive Prevention': 'Prevent.',
-    'Community Trust & Relationships': 'Trust',
+    Equity: "Equity",
+    Affordability: "Afford.",
+    Innovation: "Innov.",
+    "Sustainability & Resiliency": "Sustain.",
+    "Proactive Prevention": "Prevent.",
+    "Community Trust & Relationships": "Trust",
   };
   return abbreviations[name] || name;
 }
-
 
 /**
  * Tooltip content component for anchor
@@ -103,9 +104,9 @@ function getAbbreviatedName(name: string): string {
 function AnchorTooltipContent({ anchor }: { anchor: Anchor }) {
   const Icon = anchorIcons[anchor.icon];
   const colors = anchorColors[anchor.name] || {
-    bg: 'bg-gray-100',
-    text: 'text-gray-700',
-    border: 'border-gray-300',
+    bg: "bg-gray-100",
+    text: "text-gray-700",
+    border: "border-gray-300",
   };
 
   return (
@@ -113,8 +114,8 @@ function AnchorTooltipContent({ anchor }: { anchor: Anchor }) {
       {/* Header */}
       <div className="flex items-center gap-2">
         {Icon && (
-          <div className={cn('p-1.5 rounded-md', colors.bg)}>
-            <Icon className={cn('h-4 w-4', colors.text)} />
+          <div className={cn("p-1.5 rounded-md", colors.bg)}>
+            <Icon className={cn("h-4 w-4", colors.text)} />
           </div>
         )}
         <div className="font-semibold text-gray-900 dark:text-gray-100">
@@ -135,7 +136,7 @@ function AnchorTooltipContent({ anchor }: { anchor: Anchor }) {
  */
 export function AnchorBadge({
   anchor,
-  size = 'md',
+  size = "md",
   showIcon = true,
   abbreviated = false,
   className,
@@ -147,10 +148,10 @@ export function AnchorBadge({
     return (
       <span
         className={cn(
-          'inline-flex items-center rounded font-medium border',
-          'bg-gray-100 text-gray-600 border-gray-300',
+          "inline-flex items-center rounded font-medium border",
+          "bg-gray-100 text-gray-600 border-gray-300",
           getSizeClasses(size, { includeGap: true }),
-          className
+          className,
         )}
       >
         {anchor}
@@ -159,9 +160,9 @@ export function AnchorBadge({
   }
 
   const colors = anchorColors[anchor] || {
-    bg: 'bg-gray-100',
-    text: 'text-gray-700',
-    border: 'border-gray-300',
+    bg: "bg-gray-100",
+    text: "text-gray-700",
+    border: "border-gray-300",
   };
   const Icon = showIcon ? anchorIcons[anchorData.icon] : null;
   const iconSize = getIconSize(size);
@@ -170,13 +171,13 @@ export function AnchorBadge({
   const badge = (
     <span
       className={cn(
-        'inline-flex items-center rounded font-medium border cursor-default',
+        "inline-flex items-center rounded font-medium border cursor-default",
         colors.bg,
         colors.text,
         colors.border,
         getSizeClasses(size, { includeGap: true }),
-        !disableTooltip && 'cursor-pointer',
-        className
+        !disableTooltip && "cursor-pointer",
+        className,
       )}
       role="status"
       aria-label={`Strategic anchor: ${anchor}`}
@@ -209,7 +210,7 @@ export interface AnchorBadgeGroupProps {
   /** Array of anchor names */
   anchors: string[];
   /** Size variant */
-  size?: 'sm' | 'md' | 'lg';
+  size?: "sm" | "md" | "lg";
   /** Whether to show icons */
   showIcon?: boolean;
   /** Whether to abbreviate names */
@@ -222,7 +223,7 @@ export interface AnchorBadgeGroupProps {
 
 export function AnchorBadgeGroup({
   anchors,
-  size = 'sm',
+  size = "sm",
   showIcon = true,
   abbreviated = true,
   maxVisible = 2,
@@ -232,7 +233,7 @@ export function AnchorBadgeGroup({
   const remainingCount = anchors.length - maxVisible;
 
   return (
-    <div className={cn('inline-flex items-center gap-1 flex-wrap', className)}>
+    <div className={cn("inline-flex items-center gap-1 flex-wrap", className)}>
       {visibleAnchors.map((anchor) => (
         <AnchorBadge
           key={anchor}
@@ -261,9 +262,9 @@ export function AnchorBadgeGroup({
         >
           <span
             className={cn(
-              'inline-flex items-center rounded font-medium cursor-pointer',
-              'bg-gray-100 text-gray-600 border border-gray-300',
-              getSizeClasses(size, { includeGap: true })
+              "inline-flex items-center rounded font-medium cursor-pointer",
+              "bg-gray-100 text-gray-600 border border-gray-300",
+              getSizeClasses(size, { includeGap: true }),
             )}
           >
             +{remainingCount}
@@ -302,9 +303,9 @@ export function AnchorIcon({
 
   const Icon = anchorIcons[anchorData.icon];
   const colors = anchorColors[anchor] || {
-    bg: 'bg-gray-100',
-    text: 'text-gray-700',
-    border: 'border-gray-300',
+    bg: "bg-gray-100",
+    text: "text-gray-700",
+    border: "border-gray-300",
   };
 
   if (!Icon) {
@@ -314,10 +315,10 @@ export function AnchorIcon({
   const icon = (
     <span
       className={cn(
-        'inline-flex items-center justify-center rounded p-1',
+        "inline-flex items-center justify-center rounded p-1",
         colors.bg,
-        !disableTooltip && 'cursor-pointer',
-        className
+        !disableTooltip && "cursor-pointer",
+        className,
       )}
       role="status"
       aria-label={anchor}

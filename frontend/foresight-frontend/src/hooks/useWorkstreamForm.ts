@@ -91,11 +91,9 @@ export function useWorkstreamForm({
   // ============================================================================
 
   // Helper to get auth token
-  const getAuthToken = useCallback(async () => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    return session?.access_token;
+  const getAuthToken = useCallback(async (): Promise<string | undefined> => {
+    const token = localStorage.getItem("gs2_token");
+    return token ?? undefined;
   }, []);
 
   // Preview sub-hook
@@ -342,15 +340,13 @@ export function useWorkstreamForm({
         onSuccess();
       } else {
         // CREATE mode: use backend API so auto-populate and auto-scan queueing runs
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
+        const token = localStorage.getItem("gs2_token");
 
         const response = await fetch(`${API_BASE_URL}/api/v1/me/workstreams`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${session?.access_token}`,
+            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(payload),
         });

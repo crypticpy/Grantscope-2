@@ -66,6 +66,10 @@ RUN pip install --no-cache-dir --upgrade pip \
 # Note: Using backend/ prefix because Docker context is repo root
 COPY --chown=appuser:appgroup backend/app/ ./app/
 
+# Copy Alembic migration files (for running migrations from container)
+COPY --chown=appuser:appgroup backend/alembic.ini ./alembic.ini
+COPY --chown=appuser:appgroup backend/alembic/ ./alembic/
+
 # Copy branding assets for PDF exports (City of Austin logo, etc.)
 COPY --chown=appuser:appgroup branding/ ./branding/
 

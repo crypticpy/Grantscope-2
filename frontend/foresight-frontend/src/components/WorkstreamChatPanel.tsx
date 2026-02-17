@@ -15,7 +15,7 @@
  * @module components/WorkstreamChatPanel
  */
 
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 import { X } from "lucide-react";
 import { cn } from "../lib/utils";
 import { ChatPanel } from "./Chat/ChatPanel";

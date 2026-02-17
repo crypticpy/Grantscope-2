@@ -139,8 +139,9 @@ export const DeepResearchPanel: React.FC<DeepResearchPanelProps> = ({
       task.result_summary?.report_preview,
   );
 
-  // Get the latest report
-  const latestReport = deepResearchTasks[0];
+  // Get the latest report - guaranteed to exist after the length check guard below
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+  const latestReport = deepResearchTasks[0]!;
   const previousReports = deepResearchTasks.slice(1);
 
   /**

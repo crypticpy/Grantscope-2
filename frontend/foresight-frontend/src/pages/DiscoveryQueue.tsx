@@ -771,10 +771,7 @@ const DiscoveryQueue: React.FC = () => {
       setError(null);
 
       // Get auth token
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const token = session?.access_token;
+      const token = localStorage.getItem("gs2_token");
 
       if (!token) {
         throw new Error("Not authenticated");
@@ -844,7 +841,8 @@ const DiscoveryQueue: React.FC = () => {
       // Find the most recent action that's still within the undo window (iterate backwards)
       let lastValidIndex = -1;
       for (let i = prev.length - 1; i >= 0; i--) {
-        if (now - prev[i].timestamp < UNDO_TIMEOUT_MS) {
+        const action = prev[i];
+        if (action && now - action.timestamp < UNDO_TIMEOUT_MS) {
           lastValidIndex = i;
           break;
         }
@@ -853,7 +851,7 @@ const DiscoveryQueue: React.FC = () => {
       if (lastValidIndex === -1) return [];
 
       // Get the action to undo
-      undoneAction = prev[lastValidIndex];
+      undoneAction = prev[lastValidIndex] ?? null;
 
       // Return stack without the undone action
       return prev.slice(0, lastValidIndex);
@@ -889,8 +887,9 @@ const DiscoveryQueue: React.FC = () => {
     const now = Date.now();
     // Find the most recent action within the undo window
     for (let i = undoStack.length - 1; i >= 0; i--) {
-      if (now - undoStack[i].timestamp < UNDO_TIMEOUT_MS) {
-        return undoStack[i];
+      const action = undoStack[i];
+      if (action && now - action.timestamp < UNDO_TIMEOUT_MS) {
+        return action;
       }
     }
     return null;
@@ -969,10 +968,7 @@ const DiscoveryQueue: React.FC = () => {
         setActionLoading(cardId);
         setOpenDropdown(null);
 
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        const token = session?.access_token;
+        const token = localStorage.getItem("gs2_token");
 
         if (!token) throw new Error("Not authenticated");
 
@@ -1028,10 +1024,7 @@ const DiscoveryQueue: React.FC = () => {
         setActionLoading(cardId);
         setOpenDropdown(null);
 
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        const token = session?.access_token;
+        const token = localStorage.getItem("gs2_token");
 
         if (!token) throw new Error("Not authenticated");
 
@@ -1138,10 +1131,7 @@ const DiscoveryQueue: React.FC = () => {
       try {
         setActionLoading("bulk");
 
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        const token = session?.access_token;
+        const token = localStorage.getItem("gs2_token");
 
         if (!token) throw new Error("Not authenticated");
 
@@ -1216,7 +1206,7 @@ const DiscoveryQueue: React.FC = () => {
   // Get the currently focused card (if any)
   const focusedCardId =
     focusedCardIndex >= 0 && focusedCardIndex < filteredCards.length
-      ? filteredCards[focusedCardIndex].id
+      ? (filteredCards[focusedCardIndex]?.id ?? null)
       : null;
 
   /**

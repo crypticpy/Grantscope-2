@@ -14,7 +14,7 @@
  * - Responsive on tablet/desktop
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -41,7 +41,6 @@ import {
 
 import { cn } from "../../lib/utils";
 import { parseStageNumber } from "../../lib/stage-utils";
-import { supabase } from "../../App";
 import { useAuthContext } from "../../hooks/useAuthContext";
 
 // Badge components for card metadata
@@ -670,7 +669,7 @@ export function TrendComparisonView({
     if (!idsParam) return null;
 
     const ids = idsParam.split(",").filter(Boolean);
-    if (ids.length !== 2) return null;
+    if (ids.length !== 2 || !ids[0] || !ids[1]) return null;
 
     return [ids[0], ids[1]];
   }, [propCardIds, searchParams]);
@@ -683,10 +682,7 @@ export function TrendComparisonView({
     setError(null);
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const token = session?.access_token;
+      const token = localStorage.getItem("gs2_token");
 
       if (!token) {
         throw new Error("Not authenticated");

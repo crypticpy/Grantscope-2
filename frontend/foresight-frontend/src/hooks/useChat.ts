@@ -489,7 +489,8 @@ export function useChat(options: UseChatOptions): UseChatReturn {
           .then((data) => {
             if (data.facts.length > 0) {
               setFunFact(
-                data.facts[Math.floor(Math.random() * data.facts.length)],
+                data.facts[Math.floor(Math.random() * data.facts.length)] ??
+                  null,
               );
             }
           })
@@ -522,7 +523,8 @@ export function useChat(options: UseChatOptions): UseChatReturn {
             .then((data) => {
               if (data.facts.length > 0) {
                 setFunFact(
-                  data.facts[Math.floor(Math.random() * data.facts.length)],
+                  data.facts[Math.floor(Math.random() * data.facts.length)] ??
+                    null,
                 );
               }
             })
@@ -537,7 +539,8 @@ export function useChat(options: UseChatOptions): UseChatReturn {
             .then((data) => {
               if (data.facts.length > 0) {
                 setFunFact(
-                  data.facts[Math.floor(Math.random() * data.facts.length)],
+                  data.facts[Math.floor(Math.random() * data.facts.length)] ??
+                    null,
                 );
               }
             })

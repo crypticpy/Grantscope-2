@@ -17,7 +17,6 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { Globe, Search, Shield, Star, Trophy, AlertCircle } from "lucide-react";
-import { supabase } from "../../App";
 import { API_BASE_URL } from "../../lib/config";
 
 // ============================================================================
@@ -251,13 +250,11 @@ const TopDomainsLeaderboard: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.access_token) {
+      const token = localStorage.getItem("gs2_token");
+      if (!token) {
         throw new Error("Not authenticated");
       }
-      const result = await fetchTopDomains(session.access_token, 20);
+      const result = await fetchTopDomains(token, 20);
       setDomains(result);
       setTotal(result.length);
     } catch (err) {

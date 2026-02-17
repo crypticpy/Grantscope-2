@@ -479,8 +479,7 @@ const Discover: React.FC = () => {
 
       // Semantic search
       if (useSemanticSearch && debouncedFilters.searchTerm.trim()) {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const token = sessionData?.session?.access_token;
+        const token = localStorage.getItem("gs2_token");
 
         if (token) {
           const searchRequest: AdvancedSearchRequest = {

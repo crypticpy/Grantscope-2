@@ -8,7 +8,6 @@
  * @module CardDetail
  */
 
-import React from "react";
 import { ChatPanel } from "../Chat/ChatPanel";
 
 /**

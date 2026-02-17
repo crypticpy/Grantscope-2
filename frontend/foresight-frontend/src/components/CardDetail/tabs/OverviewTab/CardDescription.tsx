@@ -15,7 +15,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import { MarkdownReport } from "../../MarkdownReport";
 import { DescriptionHistory } from "./DescriptionHistory";
 import { fetchCardSnapshots } from "../../../../lib/discovery-api";
-import { supabase } from "../../../../App";
 
 /**
  * Props for the CardDescription component
@@ -67,12 +66,10 @@ export const CardDescription: React.FC<CardDescriptionProps> = ({
   const loadSnapshotCount = useCallback(async () => {
     if (!cardId) return;
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (session?.access_token) {
+      const token = localStorage.getItem("gs2_token");
+      if (token) {
         const result = await fetchCardSnapshots(
-          session.access_token,
+          token,
           cardId,
           "description",
         );

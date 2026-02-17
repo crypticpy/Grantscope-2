@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy } from "react";
+import { useState, useEffect, useCallback, lazy } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -7,7 +7,7 @@ import {
   useParams,
   useLocation,
 } from "react-router-dom";
-import { createClient, User } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
 import Header from "./components/Header";
 import { AuthContextProvider } from "./hooks/useAuthContext";
@@ -51,29 +51,51 @@ const GuideSignals = lazy(() => import("./pages/GuideSignals"));
 const GuideDiscover = lazy(() => import("./pages/GuideDiscover"));
 const GuideWorkstreams = lazy(() => import("./pages/GuideWorkstreams"));
 
-// Supabase configuration
+// ---------------------------------------------------------------------------
+// Supabase client -- kept for data-access queries only (tables, rpc, etc.)
+// Authentication is handled via our own JWT endpoints.
+// ---------------------------------------------------------------------------
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error(
-    "Missing Supabase environment variables. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.",
-  );
-}
 
 export const supabase =
   supabaseUrl && supabaseAnonKey
     ? createClient(supabaseUrl, supabaseAnonKey)
     : (null as unknown as ReturnType<typeof createClient>);
 
+// ---------------------------------------------------------------------------
+// Custom user type (replaces Supabase User)
+// ---------------------------------------------------------------------------
+export interface GS2User {
+  id: string;
+  email: string;
+  display_name: string;
+  department: string;
+  role: string;
+  created_at?: string;
+}
+
 export interface AuthContextType {
-  user: User | null;
+  user: GS2User | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
-// AuthContext is provided by AuthContextProvider from hooks/useAuthContext
+// ---------------------------------------------------------------------------
+// Auth helpers
+// ---------------------------------------------------------------------------
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const TOKEN_KEY = "gs2_token";
+const USER_KEY = "gs2_user";
+
+/**
+ * Read the stored JWT from localStorage.
+ * Exported so API client files can call it directly.
+ */
+export function getStoredToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
 
 function CardRedirect() {
   const { slug } = useParams<{ slug: string }>();
@@ -88,38 +110,80 @@ function CardRedirect() {
 }
 
 function App() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<GS2User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Validate an existing token on mount
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
+    const token = localStorage.getItem(TOKEN_KEY);
+    const storedUser = localStorage.getItem(USER_KEY);
+
+    if (!token) {
       setLoading(false);
-    });
+      return;
+    }
 
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
+    // Optimistically restore user from localStorage while we validate
+    if (storedUser) {
+      try {
+        setUser(JSON.parse(storedUser));
+      } catch {
+        // ignore parse errors
+      }
+    }
 
-    return () => subscription.unsubscribe();
+    // Validate the token against the backend
+    fetch(`${API_URL}/api/v1/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => {
+        if (!res.ok) {
+          // Token expired or invalid -- clear
+          localStorage.removeItem(TOKEN_KEY);
+          localStorage.removeItem(USER_KEY);
+          setUser(null);
+          return null;
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (data) {
+          setUser(data);
+          localStorage.setItem(USER_KEY, JSON.stringify(data));
+        }
+      })
+      .catch(() => {
+        // Network error on validation -- keep the optimistic user
+        // so the app doesn't flash to login on transient failures
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, []);
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+  const signIn = useCallback(async (email: string, password: string) => {
+    const res = await fetch(`${API_URL}/api/v1/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
     });
-    if (error) throw error;
-  };
 
-  const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
-  };
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.detail || "Invalid email or password");
+    }
+
+    const data = await res.json();
+    localStorage.setItem(TOKEN_KEY, data.access_token);
+    localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+    setUser(data.user);
+  }, []);
+
+  const signOut = useCallback(async () => {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    setUser(null);
+  }, []);
 
   const authValue: AuthContextType = {
     user,

@@ -62,7 +62,7 @@ export const metricDefinitions: Record<string, MetricDefinition> = {
 export const parseStageNumber = (stageId: string): number | null => {
   if (!stageId) return null;
   const match = stageId.match(/^(\d+)/);
-  return match ? parseInt(match[1], 10) : null;
+  return match?.[1] ? parseInt(match[1], 10) : null;
 };
 
 /**

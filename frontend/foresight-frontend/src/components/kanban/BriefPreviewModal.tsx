@@ -560,6 +560,7 @@ export const BriefPreviewModal = memo(function BriefPreviewModal({
       }, 100);
       return () => clearTimeout(timer);
     }
+    return undefined;
   }, [isOpen]);
 
   // Handle escape key to close
@@ -583,6 +584,7 @@ export const BriefPreviewModal = memo(function BriefPreviewModal({
         document.body.style.overflow = originalOverflow;
       };
     }
+    return undefined;
   }, [isOpen]);
 
   // Focus trap within modal
@@ -603,10 +605,10 @@ export const BriefPreviewModal = memo(function BriefPreviewModal({
 
       if (e.shiftKey && document.activeElement === firstElement) {
         e.preventDefault();
-        lastElement.focus();
+        lastElement?.focus();
       } else if (!e.shiftKey && document.activeElement === lastElement) {
         e.preventDefault();
-        firstElement.focus();
+        firstElement?.focus();
       }
     };
 

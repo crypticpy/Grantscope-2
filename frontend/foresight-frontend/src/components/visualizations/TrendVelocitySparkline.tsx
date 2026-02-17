@@ -6,11 +6,11 @@
  * Used inline in card detail views and card list items.
  */
 
-import React, { useMemo } from 'react';
-import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';
-import { cn } from '../../lib/utils';
-import type { ScoreHistory } from '../../lib/discovery-api';
-import { subDays, isAfter, parseISO, format } from 'date-fns';
+import { useMemo } from "react";
+import { LineChart, Line, ResponsiveContainer, Tooltip } from "recharts";
+import { cn } from "../../lib/utils";
+import type { ScoreHistory } from "../../lib/discovery-api";
+import { subDays, isAfter, parseISO, format } from "date-fns";
 
 export interface TrendVelocitySparklineProps {
   /** Historical score data to visualize */
@@ -36,7 +36,13 @@ export interface TrendVelocitySparklineProps {
 /**
  * Custom tooltip for sparkline hover
  */
-function SparklineTooltip({ active, payload }: { active?: boolean; payload?: { value: number; payload: { recorded_at: string } }[] }) {
+function SparklineTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: { value: number; payload: { recorded_at: string } }[];
+}) {
   if (!active || !payload || payload.length === 0) {
     return null;
   }
@@ -49,7 +55,7 @@ function SparklineTooltip({ active, payload }: { active?: boolean; payload?: { v
       <div className="font-medium">{value?.toFixed(0)}</div>
       {date && (
         <div className="text-gray-400 text-[9px]">
-          {format(parseISO(date), 'MMM d')}
+          {format(parseISO(date), "MMM d")}
         </div>
       )}
     </div>
@@ -61,7 +67,7 @@ function SparklineTooltip({ active, payload }: { active?: boolean; payload?: { v
  */
 function prepareChartData(
   data: ScoreHistory[],
-  daysToShow: number
+  daysToShow: number,
 ): { recorded_at: string; velocity_score: number }[] {
   const cutoffDate = subDays(new Date(), daysToShow);
 
@@ -71,26 +77,34 @@ function prepareChartData(
       const recordDate = parseISO(item.recorded_at);
       return isAfter(recordDate, cutoffDate);
     })
-    .filter((item) => item.velocity_score !== null && item.velocity_score !== undefined)
+    .filter(
+      (item) =>
+        item.velocity_score !== null && item.velocity_score !== undefined,
+    )
     .map((item) => ({
       recorded_at: item.recorded_at,
       velocity_score: item.velocity_score as number,
     }))
-    .sort((a, b) => parseISO(a.recorded_at).getTime() - parseISO(b.recorded_at).getTime());
+    .sort(
+      (a, b) =>
+        parseISO(a.recorded_at).getTime() - parseISO(b.recorded_at).getTime(),
+    );
 }
 
 /**
  * Calculate trend direction for accessibility
  */
-function getTrendDirection(data: { velocity_score: number }[]): 'up' | 'down' | 'stable' {
-  if (data.length < 2) return 'stable';
+function getTrendDirection(
+  data: { velocity_score: number }[],
+): "up" | "down" | "stable" {
+  if (data.length < 2) return "stable";
 
-  const first = data[0].velocity_score;
-  const last = data[data.length - 1].velocity_score;
+  const first = data[0]!.velocity_score;
+  const last = data[data.length - 1]!.velocity_score;
   const diff = last - first;
 
-  if (Math.abs(diff) < 5) return 'stable';
-  return diff > 0 ? 'up' : 'down';
+  if (Math.abs(diff) < 5) return "stable";
+  return diff > 0 ? "up" : "down";
 }
 
 /**
@@ -103,7 +117,7 @@ export function TrendVelocitySparkline({
   data,
   width = 80,
   height = 24,
-  strokeColor = '#22c55e', // green-500
+  strokeColor = "#22c55e", // green-500
   strokeWidth = 2,
   showTooltip = true,
   className,
@@ -113,13 +127,13 @@ export function TrendVelocitySparkline({
   // Prepare chart data - filter to last 30 days and sort
   const chartData = useMemo(
     () => prepareChartData(data, daysToShow),
-    [data, daysToShow]
+    [data, daysToShow],
   );
 
   // Calculate trend for accessibility
   const trendDirection = useMemo(
     () => getTrendDirection(chartData),
-    [chartData]
+    [chartData],
   );
 
   // Handle insufficient data
@@ -127,8 +141,8 @@ export function TrendVelocitySparkline({
     return (
       <div
         className={cn(
-          'inline-flex items-center justify-center text-[10px] text-gray-400',
-          className
+          "inline-flex items-center justify-center text-[10px] text-gray-400",
+          className,
         )}
         style={{ width, height }}
         role="img"
@@ -139,17 +153,12 @@ export function TrendVelocitySparkline({
     );
   }
 
-  // Calculate domain for Y axis (with padding)
-  const velocityValues = chartData.map((d) => d.velocity_score);
-  const _minValue = Math.max(0, Math.min(...velocityValues) - 5);
-  const _maxValue = Math.min(100, Math.max(...velocityValues) + 5);
-
   return (
     <div
-      className={cn('inline-flex items-center', className)}
+      className={cn("inline-flex items-center", className)}
       style={{ width, height }}
       role="img"
-      aria-label={`Velocity trend over ${daysToShow} days: ${trendDirection === 'up' ? 'increasing' : trendDirection === 'down' ? 'decreasing' : 'stable'}. Current value: ${chartData[chartData.length - 1]?.velocity_score?.toFixed(0) ?? 'unknown'}`}
+      aria-label={`Velocity trend over ${daysToShow} days: ${trendDirection === "up" ? "increasing" : trendDirection === "down" ? "decreasing" : "stable"}. Current value: ${chartData[chartData.length - 1]?.velocity_score?.toFixed(0) ?? "unknown"}`}
     >
       <ResponsiveContainer width="100%" height="100%">
         <LineChart
@@ -160,7 +169,7 @@ export function TrendVelocitySparkline({
             <Tooltip
               content={<SparklineTooltip />}
               cursor={false}
-              wrapperStyle={{ outline: 'none' }}
+              wrapperStyle={{ outline: "none" }}
             />
           )}
           <Line
@@ -186,7 +195,7 @@ export function TrendVelocitySparkline({
 export function TrendVelocitySparklineCompact({
   data,
   className,
-}: Pick<TrendVelocitySparklineProps, 'data' | 'className'>) {
+}: Pick<TrendVelocitySparklineProps, "data" | "className">) {
   return (
     <TrendVelocitySparkline
       data={data}
@@ -207,12 +216,12 @@ export function TrendVelocitySparklineSkeleton({
   width = 80,
   height = 24,
   className,
-}: Pick<TrendVelocitySparklineProps, 'width' | 'height' | 'className'>) {
+}: Pick<TrendVelocitySparklineProps, "width" | "height" | "className">) {
   return (
     <div
       className={cn(
-        'inline-flex items-center justify-center animate-pulse',
-        className
+        "inline-flex items-center justify-center animate-pulse",
+        className,
       )}
       style={{ width, height }}
       role="status"
@@ -220,7 +229,7 @@ export function TrendVelocitySparklineSkeleton({
     >
       <div
         className="bg-gray-200 dark:bg-gray-700 rounded"
-        style={{ width: '100%', height: '50%' }}
+        style={{ width: "100%", height: "50%" }}
       />
     </div>
   );

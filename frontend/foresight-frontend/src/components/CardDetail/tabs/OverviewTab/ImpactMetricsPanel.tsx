@@ -167,6 +167,7 @@ export const ImpactMetricsPanel: React.FC<ImpactMetricsPanelProps> = ({
         {metrics.map((metric) => {
           const definition = metricDefinitions[metric.key];
           const colors = getScoreColorClasses(metric.score);
+          if (!definition) return null;
 
           return (
             <div key={metric.key} className="flex items-center justify-between">

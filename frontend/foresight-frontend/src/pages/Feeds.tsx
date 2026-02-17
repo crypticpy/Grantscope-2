@@ -29,7 +29,6 @@ import {
   PauseCircle,
   Filter,
 } from "lucide-react";
-import { supabase } from "../App";
 import { useAuthContext } from "../hooks/useAuthContext";
 import { LoadingButton } from "../components/ui/LoadingButton";
 import type {
@@ -96,7 +95,7 @@ function getCategoryColor(category: string): string {
     tech: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300",
     general: "bg-gray-100 text-gray-800 dark:bg-gray-700/50 dark:text-gray-300",
   };
-  return colors[category] || colors.general;
+  return colors[category] || colors.general || "";
 }
 
 function getStatusIcon(status: string) {
@@ -491,7 +490,7 @@ const FeedItemsSection: React.FC<{
 // ============================================================================
 
 const Feeds: React.FC = () => {
-  // Verify auth context is available (token retrieved via supabase.auth.getSession)
+  // Verify auth context is available (token retrieved via localStorage)
   useAuthContext();
 
   // Feed data state
@@ -514,11 +513,9 @@ const Feeds: React.FC = () => {
 
   // Get auth token
   const getToken = useCallback(async (): Promise<string> => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (!session?.access_token) throw new Error("Not authenticated");
-    return session.access_token;
+    const token = localStorage.getItem("gs2_token");
+    if (!token) throw new Error("Not authenticated");
+    return token;
   }, []);
 
   // Load feeds

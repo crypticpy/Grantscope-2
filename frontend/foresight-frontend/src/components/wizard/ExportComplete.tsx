@@ -24,7 +24,6 @@ import {
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { exportWizardPdf, type GrantContext } from "../../lib/wizard-api";
-import { supabase } from "../../App";
 
 // =============================================================================
 // Types
@@ -41,10 +40,8 @@ interface ExportCompleteProps {
 // =============================================================================
 
 async function getToken(): Promise<string | null> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  return session?.access_token || null;
+  const token = localStorage.getItem("gs2_token");
+  return token || null;
 }
 
 /**

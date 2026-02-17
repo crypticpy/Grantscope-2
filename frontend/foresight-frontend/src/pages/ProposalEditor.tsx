@@ -26,7 +26,6 @@ import {
   XCircle,
   FileText,
 } from "lucide-react";
-import { supabase } from "../App";
 import { cn } from "../lib/utils";
 import {
   getProposal,
@@ -80,10 +79,8 @@ const STATUS_LABELS: Record<ProposalStatus, string> = {
  * Retrieves the current Supabase session access token.
  */
 async function getToken(): Promise<string | null> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  return session?.access_token || null;
+  const token = localStorage.getItem("gs2_token");
+  return token || null;
 }
 
 // =============================================================================

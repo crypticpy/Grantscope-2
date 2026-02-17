@@ -91,15 +91,13 @@ const Settings: React.FC = () => {
 
   const loadNotificationPreferences = async () => {
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.access_token) return;
+      const token = localStorage.getItem("gs2_token");
+      if (!token) return;
       const response = await fetch(
         `${API_BASE_URL}/api/v1/me/notification-preferences`,
         {
           headers: {
-            Authorization: `Bearer ${session?.access_token}`,
+            Authorization: `Bearer ${token}`,
           },
         },
       );
@@ -122,10 +120,8 @@ const Settings: React.FC = () => {
     setNotifLoading(true);
     setNotifMessage("");
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.access_token) throw new Error("Not authenticated");
+      const token = localStorage.getItem("gs2_token");
+      if (!token) throw new Error("Not authenticated");
       const payload = {
         ...notifPrefs,
         notification_email: useAccountEmail
@@ -138,7 +134,7 @@ const Settings: React.FC = () => {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${session?.access_token}`,
+            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(payload),
         },

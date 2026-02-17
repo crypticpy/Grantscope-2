@@ -11,7 +11,6 @@
  * Types are imported from types/workstream.ts.
  */
 
-import React from "react";
 import {
   Plus,
   Loader2,

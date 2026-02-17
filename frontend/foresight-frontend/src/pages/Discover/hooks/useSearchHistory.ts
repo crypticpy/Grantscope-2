@@ -5,7 +5,6 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { supabase } from '../../../App';
 import { useDebouncedCallback } from '../../../hooks/useDebounce';
 import {
   getSearchHistory,
@@ -62,8 +61,7 @@ export function useSearchHistory(userId: string | undefined): UseSearchHistoryRe
 
     setHistoryLoading(true);
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
+      const token = localStorage.getItem("gs2_token");
 
       if (token) {
         const response = await getSearchHistory(token, 20);
@@ -89,8 +87,7 @@ export function useSearchHistory(userId: string | undefined): UseSearchHistoryRe
       if (!hasQuery && !hasFilters) return;
 
       try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const token = sessionData?.session?.access_token;
+        const token = localStorage.getItem("gs2_token");
 
         if (token) {
           const entry: SearchHistoryCreate = {
@@ -127,8 +124,7 @@ export function useSearchHistory(userId: string | undefined): UseSearchHistoryRe
 
     setDeletingHistoryId(entryId);
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
+      const token = localStorage.getItem("gs2_token");
 
       if (token) {
         await deleteSearchHistoryEntry(token, entryId);
@@ -146,8 +142,7 @@ export function useSearchHistory(userId: string | undefined): UseSearchHistoryRe
    */
   const clearHistory = useCallback(async () => {
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
+      const token = localStorage.getItem("gs2_token");
 
       if (token) {
         await clearSearchHistory(token);

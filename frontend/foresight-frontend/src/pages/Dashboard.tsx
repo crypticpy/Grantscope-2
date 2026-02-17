@@ -189,11 +189,9 @@ const Dashboard: React.FC = () => {
 
   const loadPendingCount = async () => {
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (session?.access_token) {
-        const count = await fetchPendingCount(session.access_token);
+      const token = localStorage.getItem("gs2_token");
+      if (token) {
+        const count = await fetchPendingCount(token);
         setPendingReviewCount(count);
       }
     } catch (err) {

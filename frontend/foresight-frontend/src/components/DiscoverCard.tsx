@@ -14,7 +14,7 @@
  * - Responsive design
  */
 
-import React, { memo } from "react";
+import { memo } from "react";
 import { Link } from "react-router-dom";
 import {
   Eye,
@@ -63,7 +63,7 @@ export interface DiscoverCardData {
  */
 const parseStageNumber = (stageId: string): number | null => {
   const match = stageId.match(/^(\d+)/);
-  return match ? parseInt(match[1], 10) : null;
+  return match?.[1] ? parseInt(match[1], 10) : null;
 };
 
 /**

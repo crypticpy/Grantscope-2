@@ -24,7 +24,6 @@ import React, {
 } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { Loader2, XCircle } from "lucide-react";
-import { supabase } from "../App";
 import { WizardStepProgress } from "../components/wizard/WizardStepProgress";
 import {
   getWizardSession,
@@ -72,10 +71,8 @@ const STEP_LABELS = [
  * Retrieves the current Supabase session access token.
  */
 async function getToken(): Promise<string | null> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  return session?.access_token || null;
+  const token = localStorage.getItem("gs2_token");
+  return token || null;
 }
 
 // =============================================================================
@@ -103,7 +100,7 @@ const GrantWizard: React.FC = () => {
 
   // URL query params
   const cardId = searchParams.get("card_id");
-  const _workstreamId = searchParams.get("workstream_id");
+  // workstream_id available via searchParams.get("workstream_id") when needed
   const querySessionId = searchParams.get("session_id");
 
   // ---------------------------------------------------------------------------
@@ -231,12 +228,6 @@ const GrantWizard: React.FC = () => {
   // ---------------------------------------------------------------------------
   // Step Navigation
   // ---------------------------------------------------------------------------
-
-  const _goToStep = useCallback((step: number) => {
-    if (step >= 0 && step < STEP_LABELS.length) {
-      setCurrentStep(step);
-    }
-  }, []);
 
   const goNext = useCallback(() => {
     setCurrentStep((prev) => Math.min(prev + 1, STEP_LABELS.length - 1));

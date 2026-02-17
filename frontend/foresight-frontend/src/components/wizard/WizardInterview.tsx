@@ -268,7 +268,7 @@ const WizardInterview: React.FC<WizardInterviewProps> = ({
   conversationId,
   grantContext,
   onComplete,
-  onBack,
+  onBack: _onBack,
 }) => {
   const interview = useWizardInterview({ sessionId, conversationId });
   const {

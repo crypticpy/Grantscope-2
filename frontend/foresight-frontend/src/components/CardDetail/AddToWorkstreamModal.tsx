@@ -12,7 +12,8 @@
  * - Keyboard navigation (Escape to close)
  */
 
-import React, { useState, useEffect, useCallback, memo } from "react";
+import { useState, useEffect, useCallback, memo } from "react";
+import { supabase } from "../../App";
 import {
   X,
   Loader2,
@@ -23,7 +24,6 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "../../lib/utils";
-import { supabase } from "../../App";
 import { addCardToWorkstream } from "../../lib/workstream-api";
 
 // =============================================================================

@@ -8,7 +8,7 @@
  * @module components/Chat/ChatHistoryPopover
  */
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Clock, Plus, Loader2, MessageSquare } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { fetchConversations, type Conversation } from "../../lib/chat-api";

@@ -9,7 +9,7 @@
  * - Stage progression comparison
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { TrendComparisonView } from "../TrendComparisonView";
@@ -95,18 +95,13 @@ vi.mock("../../../hooks/useAuthContext", () => ({
   useAuthContext: () => ({ user: mockUser }),
 }));
 
-// Mock supabase
-vi.mock("../../../App", () => ({
-  supabase: {
-    auth: {
-      getSession: vi.fn(() =>
-        Promise.resolve({
-          data: { session: { access_token: "mock-token" } },
-        }),
-      ),
-    },
-  },
-}));
+// Mock localStorage token
+beforeEach(() => {
+  localStorage.setItem("gs2_token", "mock-token");
+});
+afterEach(() => {
+  localStorage.removeItem("gs2_token");
+});
 
 // Mock API calls
 const mockCompareCards = vi.fn();

@@ -7,7 +7,6 @@
  * - Optional percentage display
  */
 
-import React from "react";
 import { Brain, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
 import { Tooltip } from "./ui/Tooltip";
 import { cn } from "../lib/utils";

@@ -8,7 +8,6 @@
 import { useState } from "react";
 import { Loader2, Sparkles, ChevronRight, CheckCircle2 } from "lucide-react";
 import { cn } from "../../../lib/utils";
-import { supabase } from "../../../App";
 import { API_BASE_URL } from "../../../lib/config";
 
 interface ReadinessScore {
@@ -86,10 +85,8 @@ export function StepFocus({
     setAssessmentError(null);
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.access_token) {
+      const token = localStorage.getItem("gs2_token");
+      if (!token) {
         setAssessmentError("Not authenticated. Please log in and try again.");
         return;
       }
@@ -100,7 +97,7 @@ export function StepFocus({
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
+            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({ responses }),
         },

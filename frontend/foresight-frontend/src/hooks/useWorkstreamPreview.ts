@@ -7,7 +7,6 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { supabase } from "../App";
 import { fetchFilterPreview } from "../types/workstream";
 import type { FilterPreviewResult, FormData } from "../types/workstream";
 
@@ -23,13 +22,11 @@ export function useWorkstreamPreview(formData: FormData, hasFilters: boolean) {
     }
     setPreviewLoading(true);
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.access_token) return;
+      const token = localStorage.getItem("gs2_token");
+      if (!token) return;
 
       // Fetch preview of matching opportunities based on current filters
-      const result = await fetchFilterPreview(session.access_token, {
+      const result = await fetchFilterPreview(token, {
         pillar_ids: formData.pillar_ids,
         goal_ids: formData.goal_ids,
         stage_ids: formData.stage_ids,

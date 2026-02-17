@@ -9,9 +9,17 @@
  * Column count is responsive based on container width.
  */
 
-import React, { useRef, useCallback, useState, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
-import { cn } from '../lib/utils';
+import React, {
+  useRef,
+  useCallback,
+  useState,
+  useEffect,
+  useMemo,
+  forwardRef,
+  useImperativeHandle,
+} from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { cn } from "../lib/utils";
 
 // ============================================================================
 // Types
@@ -65,9 +73,15 @@ export interface VirtualizedGridHandle {
   /** Set the scroll offset */
   setScrollOffset: (offset: number) => void;
   /** Scroll to a specific row index */
-  scrollToIndex: (index: number, options?: { align?: 'start' | 'center' | 'end' | 'auto' }) => void;
+  scrollToIndex: (
+    index: number,
+    options?: { align?: "start" | "center" | "end" | "auto" },
+  ) => void;
   /** Scroll to a specific item index (calculates row automatically) */
-  scrollToItemIndex: (itemIndex: number, options?: { align?: 'start' | 'center' | 'end' | 'auto' }) => void;
+  scrollToItemIndex: (
+    itemIndex: number,
+    options?: { align?: "start" | "center" | "end" | "auto" },
+  ) => void;
 }
 
 // ============================================================================
@@ -123,16 +137,16 @@ function useContainerWidth(ref: React.RefObject<HTMLElement | null>): number {
  */
 function useColumnCount(
   containerWidth: number,
-  columns: Required<VirtualizedGridProps<unknown>['columns']>
+  columns: { sm: number; md: number; lg: number },
 ): number {
   return useMemo(() => {
     if (containerWidth >= BREAKPOINTS.lg) {
-      return columns.lg ?? columns.md ?? columns.sm ?? 1;
+      return columns.lg;
     }
     if (containerWidth >= BREAKPOINTS.md) {
-      return columns.md ?? columns.sm ?? 1;
+      return columns.md;
     }
-    return columns.sm ?? 1;
+    return columns.sm;
   }, [containerWidth, columns.sm, columns.md, columns.lg]);
 }
 
@@ -156,17 +170,20 @@ function VirtualizedGridInner<T>(
     onScroll,
     initialScrollOffset,
   }: VirtualizedGridProps<T>,
-  ref: React.ForwardedRef<VirtualizedGridHandle>
+  ref: React.ForwardedRef<VirtualizedGridHandle>,
 ): React.ReactElement {
   const containerRef = useRef<HTMLDivElement>(null);
   const containerWidth = useContainerWidth(containerRef);
 
   // Ensure columns has all values (with defaults)
-  const normalizedColumns = useMemo(() => ({
-    sm: columns.sm ?? 1,
-    md: columns.md ?? 2,
-    lg: columns.lg ?? 3,
-  }), [columns.sm, columns.md, columns.lg]);
+  const normalizedColumns = useMemo(
+    () => ({
+      sm: columns.sm ?? 1,
+      md: columns.md ?? 2,
+      lg: columns.lg ?? 3,
+    }),
+    [columns.sm, columns.md, columns.lg],
+  );
 
   const columnCount = useColumnCount(containerWidth, normalizedColumns);
 
@@ -183,7 +200,7 @@ function VirtualizedGridInner<T>(
       const endIndex = Math.min(startIndex + columnCount, items.length);
       return items.slice(startIndex, endIndex);
     },
-    [items, columnCount]
+    [items, columnCount],
   );
 
   // Initialize virtualizer
@@ -195,21 +212,31 @@ function VirtualizedGridInner<T>(
   });
 
   // Expose imperative handle for scroll control
-  useImperativeHandle(ref, () => ({
-    getScrollOffset: () => containerRef.current?.scrollTop ?? 0,
-    setScrollOffset: (offset: number) => {
-      if (containerRef.current) {
-        containerRef.current.scrollTop = offset;
-      }
-    },
-    scrollToIndex: (index: number, options?: { align?: 'start' | 'center' | 'end' | 'auto' }) => {
-      virtualizer.scrollToIndex(index, options);
-    },
-    scrollToItemIndex: (itemIndex: number, options?: { align?: 'start' | 'center' | 'end' | 'auto' }) => {
-      const rowIndex = Math.floor(itemIndex / columnCount);
-      virtualizer.scrollToIndex(rowIndex, options);
-    },
-  }), [virtualizer, columnCount]);
+  useImperativeHandle(
+    ref,
+    () => ({
+      getScrollOffset: () => containerRef.current?.scrollTop ?? 0,
+      setScrollOffset: (offset: number) => {
+        if (containerRef.current) {
+          containerRef.current.scrollTop = offset;
+        }
+      },
+      scrollToIndex: (
+        index: number,
+        options?: { align?: "start" | "center" | "end" | "auto" },
+      ) => {
+        virtualizer.scrollToIndex(index, options);
+      },
+      scrollToItemIndex: (
+        itemIndex: number,
+        options?: { align?: "start" | "center" | "end" | "auto" },
+      ) => {
+        const rowIndex = Math.floor(itemIndex / columnCount);
+        virtualizer.scrollToIndex(rowIndex, options);
+      },
+    }),
+    [virtualizer, columnCount],
+  );
 
   // Track if initial scroll has been applied
   const hasAppliedInitialScroll = useRef(false);
@@ -236,8 +263,8 @@ function VirtualizedGridInner<T>(
       onScroll(container.scrollTop);
     };
 
-    container.addEventListener('scroll', handleScroll, { passive: true });
-    return () => container.removeEventListener('scroll', handleScroll);
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    return () => container.removeEventListener("scroll", handleScroll);
   }, [onScroll]);
 
   // Handle loading state
@@ -255,8 +282,8 @@ function VirtualizedGridInner<T>(
     return (
       <div
         ref={containerRef}
-        className={cn('h-full w-full overflow-auto', className)}
-        style={{ minHeight: '400px' }}
+        className={cn("h-full w-full overflow-auto", className)}
+        style={{ minHeight: "400px" }}
       />
     );
   }
@@ -266,23 +293,23 @@ function VirtualizedGridInner<T>(
   return (
     <div
       ref={containerRef}
-      className={cn('h-full w-full overflow-auto', className)}
+      className={cn("h-full w-full overflow-auto", className)}
     >
       {/* Total height container for scroll height calculation */}
       <div
         style={{
           height: `${virtualizer.getTotalSize()}px`,
-          width: '100%',
-          position: 'relative',
+          width: "100%",
+          position: "relative",
         }}
       >
         {/* Virtual rows container - positioned at the start of visible rows */}
         <div
           style={{
-            position: 'absolute',
+            position: "absolute",
             top: 0,
             left: 0,
-            width: '100%',
+            width: "100%",
             transform: `translateY(${virtualRows[0]?.start ?? 0}px)`,
           }}
         >
@@ -297,14 +324,15 @@ function VirtualizedGridInner<T>(
                 data-index={virtualRow.index}
                 ref={virtualizer.measureElement}
                 style={{
-                  display: 'grid',
+                  display: "grid",
                   gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
                   gap: `${gap}px`,
                   paddingBottom: isLastRow ? 0 : `${gap}px`,
                 }}
               >
                 {rowItems.map((item, indexInRow) => {
-                  const globalIndex = virtualRow.index * columnCount + indexInRow;
+                  const globalIndex =
+                    virtualRow.index * columnCount + indexInRow;
                   return (
                     <div key={getItemKey(item, globalIndex)}>
                       {renderItem(item, globalIndex)}
@@ -312,11 +340,11 @@ function VirtualizedGridInner<T>(
                   );
                 })}
                 {/* Fill empty cells in partial last row to maintain grid alignment */}
-                {isLastRow && itemsInRow < columnCount &&
-                  Array.from({ length: columnCount - itemsInRow }).map((_, i) => (
-                    <div key={`empty-${i}`} aria-hidden="true" />
-                  ))
-                }
+                {isLastRow &&
+                  itemsInRow < columnCount &&
+                  Array.from({ length: columnCount - itemsInRow }).map(
+                    (_, i) => <div key={`empty-${i}`} aria-hidden="true" />,
+                  )}
               </div>
             );
           })}
@@ -335,7 +363,9 @@ function VirtualizedGridInner<T>(
  * Uses a cast to maintain generic type parameter with forwardRef.
  */
 export const VirtualizedGrid = forwardRef(VirtualizedGridInner) as <T>(
-  props: VirtualizedGridProps<T> & { ref?: React.ForwardedRef<VirtualizedGridHandle> }
+  props: VirtualizedGridProps<T> & {
+    ref?: React.ForwardedRef<VirtualizedGridHandle>;
+  },
 ) => React.ReactElement;
 
 // ============================================================================
@@ -348,10 +378,10 @@ export const VirtualizedGrid = forwardRef(VirtualizedGridInner) as <T>(
 export function scrollToItemIndex(
   virtualizer: ReturnType<typeof useVirtualizer>,
   itemIndex: number,
-  columnCount: number
+  columnCount: number,
 ): void {
   const rowIndex = Math.floor(itemIndex / columnCount);
-  virtualizer.scrollToIndex(rowIndex, { align: 'start' });
+  virtualizer.scrollToIndex(rowIndex, { align: "start" });
 }
 
 export default VirtualizedGrid;

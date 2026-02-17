@@ -79,9 +79,16 @@ function getHorizonColorClasses(horizonCode: string): {
  * Get direction indicator for stage transition
  */
 function getDirectionIndicator(
-  oldStage: number,
+  oldStage: number | null,
   newStage: number,
 ): { icon: string; label: string; color: string } {
+  if (oldStage === null) {
+    return {
+      icon: "\u2605", // Star - initial assignment
+      label: "Initial",
+      color: "text-blue-600 dark:text-blue-400",
+    };
+  }
   if (newStage > oldStage) {
     return {
       icon: "\u2191", // Up arrow
@@ -106,7 +113,7 @@ function getDirectionIndicator(
  * Stage node component for timeline
  */
 interface StageNodeProps {
-  stage: number;
+  stage: number | null;
   horizonCode: string;
   isActive?: boolean;
   size?: "sm" | "md";
@@ -118,7 +125,7 @@ function StageNode({
   isActive = false,
   size = "md",
 }: StageNodeProps) {
-  const stageData = getStageByNumber(stage);
+  const stageData = stage !== null ? getStageByNumber(stage) : undefined;
   const colors = getHorizonColorClasses(horizonCode);
 
   const sizeClasses = size === "sm" ? "w-6 h-6 text-xs" : "w-8 h-8 text-sm";
@@ -166,7 +173,7 @@ function StageNode({
  * Transition arrow component
  */
 interface TransitionArrowProps {
-  oldStage: number;
+  oldStage: number | null;
   newStage: number;
   compact?: boolean;
 }
@@ -215,7 +222,10 @@ function TransitionItem({
   isLast,
   compact = false,
 }: TransitionItemProps) {
-  const oldStageData = getStageByNumber(transition.old_stage_id);
+  const oldStageData =
+    transition.old_stage_id !== null
+      ? getStageByNumber(transition.old_stage_id)
+      : undefined;
   const newStageData = getStageByNumber(transition.new_stage_id);
   const direction = getDirectionIndicator(
     transition.old_stage_id,
@@ -355,7 +365,6 @@ interface EmptyStateProps {
 function EmptyState({ currentStage }: EmptyStateProps) {
   const stageData = currentStage ? getStageByNumber(currentStage) : null;
   const horizon = stageData?.horizon || "H1";
-  const _colors = getHorizonColorClasses(horizon);
 
   return (
     <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
@@ -467,7 +476,7 @@ export function StageProgressionTimeline({
   const highlightedStages = React.useMemo(() => {
     const stages = new Set<number>();
     stageHistory.forEach((t) => {
-      stages.add(t.old_stage_id);
+      if (t.old_stage_id !== null) stages.add(t.old_stage_id);
       stages.add(t.new_stage_id);
     });
     if (currentStage) stages.add(currentStage);
@@ -477,7 +486,7 @@ export function StageProgressionTimeline({
   // Determine current stage from most recent transition if not provided
   const effectiveCurrentStage =
     currentStage ||
-    (stageHistory.length > 0 ? stageHistory[0].new_stage_id : undefined);
+    (stageHistory.length > 0 ? stageHistory[0]?.new_stage_id : undefined);
 
   // Handle empty state
   if (stageHistory.length === 0) {
@@ -558,7 +567,7 @@ export function StageProgressionTimeline({
               <span>
                 First recorded:{" "}
                 {format(
-                  new Date(stageHistory[stageHistory.length - 1].changed_at),
+                  new Date(stageHistory[stageHistory.length - 1]!.changed_at),
                   "MMM d, yyyy",
                 )}
               </span>

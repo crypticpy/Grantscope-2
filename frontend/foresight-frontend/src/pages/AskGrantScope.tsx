@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
+import { supabase } from "../App";
 import {
   Plus,
   Trash2,
@@ -24,7 +25,6 @@ import {
   Loader2,
 } from "lucide-react";
 import { cn } from "../lib/utils";
-import { supabase } from "../App";
 import { ChatPanel } from "../components/Chat/ChatPanel";
 import {
   fetchConversations,

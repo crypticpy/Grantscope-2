@@ -692,7 +692,7 @@ export function getAnchorByName(name: string): Anchor | undefined {
   const fuzzy = anchors.find(
     (a) =>
       a.name.toLowerCase().includes(lowerName) ||
-      lowerName.includes(a.name.toLowerCase().split(" ")[0]),
+      lowerName.includes(a.name.toLowerCase().split(" ")[0] ?? ""),
   );
   if (fuzzy) return fuzzy;
 

@@ -37,7 +37,7 @@ import {
   type RelatedCard,
 } from "../../../lib/discovery-api";
 import type { Card, Source, TimelineEvent, Note, ResearchTask } from "../types";
-import type { User } from "@supabase/supabase-js";
+import type { GS2User } from "../../../App";
 
 /**
  * Return type for the useCardData hook
@@ -107,7 +107,7 @@ export interface UseCardDataReturn {
  */
 export function useCardData(
   slug: string | undefined,
-  user: User | null,
+  user: GS2User | null,
 ): UseCardDataReturn {
   // Core card data state
   const [card, setCard] = useState<Card | null>(null);
@@ -138,10 +138,8 @@ export function useCardData(
    * Get the current authentication token for API requests
    */
   const getAuthToken = useCallback(async (): Promise<string | undefined> => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    return session?.access_token;
+    const token = localStorage.getItem("gs2_token");
+    return token ?? undefined;
   }, []);
 
   /**

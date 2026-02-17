@@ -8,8 +8,6 @@
  * @module lib/chat-api
  */
 
-import { supabase } from "../App";
-
 import { API_BASE_URL } from "./config";
 
 // ============================================================================
@@ -110,15 +108,12 @@ export interface ChatMention {
 // ============================================================================
 
 /**
- * Retrieves the current auth token from Supabase session.
+ * Retrieves the current auth token from localStorage.
  *
  * @returns The access token string, or null if not authenticated
  */
 async function getAuthToken(): Promise<string | null> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  return session?.access_token ?? null;
+  return localStorage.getItem("gs2_token");
 }
 
 // ============================================================================

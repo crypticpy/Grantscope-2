@@ -388,16 +388,16 @@ vi.mock("../../../App", () => {
   return {
     supabase: {
       from: mockFrom,
-      auth: {
-        getSession: vi.fn(() =>
-          Promise.resolve({
-            data: { session: { access_token: "test-token" } },
-            error: null,
-          }),
-        ),
-      },
     },
   };
+});
+
+// Mock localStorage token
+beforeEach(() => {
+  localStorage.setItem("gs2_token", "test-token");
+});
+afterEach(() => {
+  localStorage.removeItem("gs2_token");
 });
 
 // Mock useAuthContext

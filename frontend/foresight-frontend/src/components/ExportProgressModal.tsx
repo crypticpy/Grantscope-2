@@ -91,7 +91,10 @@ const COA_COLORS = {
 const STATUS_CONFIG: Record<
   ExportStatus,
   {
-    icon: React.ComponentType<{ className?: string }>;
+    icon: React.ComponentType<{
+      className?: string;
+      style?: React.CSSProperties;
+    }>;
     title: string;
     description: string;
     color: string;
@@ -194,6 +197,7 @@ export const ExportProgressModal: React.FC<ExportProgressModalProps> = ({
       document.addEventListener("keydown", handleKeyDown);
       return () => document.removeEventListener("keydown", handleKeyDown);
     }
+    return undefined;
   }, [isOpen, onClose, status]);
 
   // Focus management

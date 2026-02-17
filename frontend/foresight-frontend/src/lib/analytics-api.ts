@@ -214,8 +214,8 @@ export function timePeriodToDates(period: "7d" | "30d" | "90d" | "1y"): {
   }
 
   return {
-    start_date: startDate.toISOString().split("T")[0],
-    end_date: endDate.toISOString().split("T")[0],
+    start_date: startDate.toISOString().split("T")[0] ?? "",
+    end_date: endDate.toISOString().split("T")[0] ?? "",
   };
 }
 

@@ -7,7 +7,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from "react";
-import { Search, ArrowLeft, Clock, DollarSign, Loader2 } from "lucide-react";
+import { Search, ArrowLeft, Clock, DollarSign } from "lucide-react";
 import { supabase } from "../../App";
 import { useDebounce } from "../../hooks/useDebounce";
 import { getDeadlineUrgency } from "../../data/taxonomy";

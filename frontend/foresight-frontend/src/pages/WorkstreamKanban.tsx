@@ -565,10 +565,8 @@ const WorkstreamKanban: React.FC = () => {
    * Get the authentication token from Supabase session.
    */
   const getAuthToken = useCallback(async (): Promise<string | null> => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    return session?.access_token || null;
+    const token = localStorage.getItem("gs2_token");
+    return token || null;
   }, []);
 
   // ============================================================================

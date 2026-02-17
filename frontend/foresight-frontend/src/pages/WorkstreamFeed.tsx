@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useEffect } from "react";
-import { Link, useParams, useNavigate } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   Edit,
@@ -143,7 +143,7 @@ function StageRangeDisplay({ stageIds }: { stageIds: string[] }) {
 
   // Check if consecutive
   const isConsecutive = stageNumbers.every(
-    (n, i) => i === 0 || n === stageNumbers[i - 1] + 1,
+    (n, i) => i === 0 || n === (stageNumbers[i - 1] ?? 0) + 1,
   );
 
   if (isConsecutive) {
@@ -292,7 +292,6 @@ function CardItem({
 
 const WorkstreamFeed: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const _navigate = useNavigate();
   const { user } = useAuthContext();
 
   // State
@@ -516,10 +515,8 @@ const WorkstreamFeed: React.FC = () => {
       setShowExportMenu(false);
 
       // Get the session token
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.access_token) {
+      const token = localStorage.getItem("gs2_token");
+      if (!token) {
         throw new Error("Authentication required");
       }
 
@@ -530,7 +527,7 @@ const WorkstreamFeed: React.FC = () => {
       const response = await fetch(exportUrl, {
         method: "GET",
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${token}`,
         },
       });
 
@@ -546,7 +543,7 @@ const WorkstreamFeed: React.FC = () => {
       let filename = `${workstream.name.replace(/[^a-zA-Z0-9-_]/g, "_")}.${format}`;
       if (contentDisposition) {
         const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
-        if (filenameMatch) {
+        if (filenameMatch?.[1]) {
           filename = filenameMatch[1];
         }
       }

@@ -15,7 +15,7 @@
  * - Dark mode support
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from "react";
 import {
   FileText,
   Presentation,
@@ -30,14 +30,14 @@ import {
   FileSearch,
   History,
   Loader2,
-} from 'lucide-react';
-import { cn } from '../../lib/utils';
+} from "lucide-react";
+import { cn } from "../../lib/utils";
 
 // =============================================================================
 // Types
 // =============================================================================
 
-export type AssetType = 'brief' | 'research' | 'pdf_export' | 'pptx_export';
+export type AssetType = "brief" | "research" | "pdf_export" | "pptx_export";
 
 export interface Asset {
   /** Unique identifier */
@@ -59,7 +59,7 @@ export interface Asset {
   /** AI model used (if applicable) */
   ai_model?: string;
   /** Status of the asset */
-  status?: 'ready' | 'generating' | 'failed';
+  status?: "ready" | "generating" | "failed";
   /** URL to download (if available) */
   download_url?: string;
   /** Additional metadata */
@@ -93,18 +93,21 @@ export interface AssetsTabProps {
 
 // City of Austin brand colors
 const COA_COLORS = {
-  logoBlue: '#44499C',
-  logoGreen: '#009F4D',
-  fadedWhite: '#f7f6f5',
-  lightBlue: '#dcf2fd',
-  lightGreen: '#dff0e3',
-  darkGray: '#636262',
+  logoBlue: "#44499C",
+  logoGreen: "#009F4D",
+  fadedWhite: "#f7f6f5",
+  lightBlue: "#dcf2fd",
+  lightGreen: "#dff0e3",
+  darkGray: "#636262",
 };
 
 const ASSET_TYPE_CONFIG: Record<
   AssetType,
   {
-    icon: React.ComponentType<{ className?: string }>;
+    icon: React.ComponentType<{
+      className?: string;
+      style?: React.CSSProperties;
+    }>;
     label: string;
     color: string;
     bgColor: string;
@@ -112,27 +115,27 @@ const ASSET_TYPE_CONFIG: Record<
 > = {
   brief: {
     icon: FileText,
-    label: 'Executive Brief',
+    label: "Executive Brief",
     color: COA_COLORS.logoBlue,
     bgColor: COA_COLORS.lightBlue,
   },
   research: {
     icon: FileSearch,
-    label: 'Deep Research',
+    label: "Deep Research",
     color: COA_COLORS.logoGreen,
     bgColor: COA_COLORS.lightGreen,
   },
   pdf_export: {
     icon: FileText,
-    label: 'PDF Export',
-    color: '#DC2626',
-    bgColor: '#FEE2E2',
+    label: "PDF Export",
+    color: "#DC2626",
+    bgColor: "#FEE2E2",
   },
   pptx_export: {
     icon: Presentation,
-    label: 'PowerPoint',
-    color: '#EA580C',
-    bgColor: '#FFEDD5',
+    label: "PowerPoint",
+    color: "#EA580C",
+    bgColor: "#FFEDD5",
   },
 };
 
@@ -143,52 +146,33 @@ const ASSET_TYPE_CONFIG: Record<
 function formatDate(dateString: string): string {
   try {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
     });
   } catch {
-    return 'Unknown';
+    return "Unknown";
   }
 }
 
 function formatTime(dateString: string): string {
   try {
     const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
+    return date.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
     });
   } catch {
-    return '';
+    return "";
   }
 }
 
 function formatFileSize(bytes?: number): string {
-  if (!bytes) return '';
+  if (!bytes) return "";
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function _getRelativeTime(dateString: string): string {
-  try {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return formatDate(dateString);
-  } catch {
-    return '';
-  }
 }
 
 // =============================================================================
@@ -208,16 +192,16 @@ const AssetCard: React.FC<AssetCardProps> = ({
 }) => {
   const config = ASSET_TYPE_CONFIG[asset.type];
   const Icon = config.icon;
-  const isGenerating = asset.status === 'generating';
+  const isGenerating = asset.status === "generating";
 
   return (
     <div
       className={cn(
-        'group relative p-4 rounded-lg border transition-all duration-200',
-        'bg-white dark:bg-dark-surface',
-        'border-gray-200 dark:border-gray-700',
-        'hover:border-gray-300 dark:hover:border-gray-600',
-        'hover:shadow-md'
+        "group relative p-4 rounded-lg border transition-all duration-200",
+        "bg-white dark:bg-dark-surface",
+        "border-gray-200 dark:border-gray-700",
+        "hover:border-gray-300 dark:hover:border-gray-600",
+        "hover:shadow-md",
       )}
     >
       <div className="flex items-start gap-4">
@@ -278,7 +262,7 @@ const AssetCard: React.FC<AssetCardProps> = ({
                   <ExternalLink className="h-4 w-4 text-gray-500" />
                 </button>
               )}
-              {onDownload && asset.status === 'ready' && (
+              {onDownload && asset.status === "ready" && (
                 <button
                   onClick={() => onDownload(asset)}
                   className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
@@ -300,9 +284,7 @@ const AssetCard: React.FC<AssetCardProps> = ({
               <Clock className="h-3 w-3" />
               {formatTime(asset.created_at)}
             </span>
-            {asset.file_size && (
-              <span>{formatFileSize(asset.file_size)}</span>
-            )}
+            {asset.file_size && <span>{formatFileSize(asset.file_size)}</span>}
             {asset.download_count !== undefined && asset.download_count > 0 && (
               <span className="inline-flex items-center gap-1">
                 <Download className="h-3 w-3" />
@@ -317,7 +299,7 @@ const AssetCard: React.FC<AssetCardProps> = ({
               Generating...
             </div>
           )}
-          {asset.status === 'failed' && (
+          {asset.status === "failed" && (
             <div className="mt-2 text-xs text-red-600 dark:text-red-400">
               Generation failed
             </div>
@@ -343,8 +325,8 @@ export const AssetsTab: React.FC<AssetsTabProps> = ({
   onViewDetails,
   onRefresh,
 }) => {
-  const [filterType, setFilterType] = useState<AssetType | 'all'>('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState<AssetType | "all">("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
 
   // Filter assets
@@ -352,7 +334,7 @@ export const AssetsTab: React.FC<AssetsTabProps> = ({
     let result = [...assets];
 
     // Type filter
-    if (filterType !== 'all') {
+    if (filterType !== "all") {
       result = result.filter((a) => a.type === filterType);
     }
 
@@ -362,14 +344,14 @@ export const AssetsTab: React.FC<AssetsTabProps> = ({
       result = result.filter(
         (a) =>
           a.title.toLowerCase().includes(query) ||
-          a.type.toLowerCase().includes(query)
+          a.type.toLowerCase().includes(query),
       );
     }
 
     // Sort by date (newest first)
     result.sort(
       (a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     );
 
     return result;
@@ -390,7 +372,7 @@ export const AssetsTab: React.FC<AssetsTabProps> = ({
     return groups;
   }, [filteredAssets]);
 
-  const handleFilterChange = useCallback((type: AssetType | 'all') => {
+  const handleFilterChange = useCallback((type: AssetType | "all") => {
     setFilterType(type);
     setShowFilters(false);
   }, []);
@@ -462,12 +444,12 @@ export const AssetsTab: React.FC<AssetsTabProps> = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className={cn(
-              'w-full pl-9 pr-4 py-2 text-sm rounded-lg',
-              'border border-gray-200 dark:border-gray-700',
-              'bg-white dark:bg-dark-surface',
-              'text-gray-900 dark:text-white',
-              'placeholder-gray-500 dark:placeholder-gray-400',
-              'focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+              "w-full pl-9 pr-4 py-2 text-sm rounded-lg",
+              "border border-gray-200 dark:border-gray-700",
+              "bg-white dark:bg-dark-surface",
+              "text-gray-900 dark:text-white",
+              "placeholder-gray-500 dark:placeholder-gray-400",
+              "focus:ring-2 focus:ring-blue-500 focus:border-transparent",
             )}
           />
         </div>
@@ -477,20 +459,22 @@ export const AssetsTab: React.FC<AssetsTabProps> = ({
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={cn(
-              'inline-flex items-center gap-2 px-3 py-2 text-sm rounded-lg',
-              'border border-gray-200 dark:border-gray-700',
-              'bg-white dark:bg-dark-surface',
-              'text-gray-700 dark:text-gray-300',
-              'hover:bg-gray-50 dark:hover:bg-gray-700',
-              'transition-colors'
+              "inline-flex items-center gap-2 px-3 py-2 text-sm rounded-lg",
+              "border border-gray-200 dark:border-gray-700",
+              "bg-white dark:bg-dark-surface",
+              "text-gray-700 dark:text-gray-300",
+              "hover:bg-gray-50 dark:hover:bg-gray-700",
+              "transition-colors",
             )}
           >
             <Filter className="h-4 w-4" />
-            {filterType === 'all' ? 'All Types' : ASSET_TYPE_CONFIG[filterType].label}
+            {filterType === "all"
+              ? "All Types"
+              : ASSET_TYPE_CONFIG[filterType].label}
             <ChevronDown
               className={cn(
-                'h-4 w-4 transition-transform',
-                showFilters && 'rotate-180'
+                "h-4 w-4 transition-transform",
+                showFilters && "rotate-180",
               )}
             />
           </button>
@@ -498,11 +482,11 @@ export const AssetsTab: React.FC<AssetsTabProps> = ({
           {showFilters && (
             <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-dark-surface rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-10">
               <button
-                onClick={() => handleFilterChange('all')}
+                onClick={() => handleFilterChange("all")}
                 className={cn(
-                  'w-full px-4 py-2 text-sm text-left',
-                  'hover:bg-gray-100 dark:hover:bg-gray-700',
-                  filterType === 'all' && 'bg-gray-100 dark:bg-gray-700'
+                  "w-full px-4 py-2 text-sm text-left",
+                  "hover:bg-gray-100 dark:hover:bg-gray-700",
+                  filterType === "all" && "bg-gray-100 dark:bg-gray-700",
                 )}
               >
                 All Types
@@ -512,12 +496,15 @@ export const AssetsTab: React.FC<AssetsTabProps> = ({
                   key={type}
                   onClick={() => handleFilterChange(type as AssetType)}
                   className={cn(
-                    'w-full px-4 py-2 text-sm text-left flex items-center gap-2',
-                    'hover:bg-gray-100 dark:hover:bg-gray-700',
-                    filterType === type && 'bg-gray-100 dark:bg-gray-700'
+                    "w-full px-4 py-2 text-sm text-left flex items-center gap-2",
+                    "hover:bg-gray-100 dark:hover:bg-gray-700",
+                    filterType === type && "bg-gray-100 dark:bg-gray-700",
                   )}
                 >
-                  <config.icon className="h-4 w-4" style={{ color: config.color }} />
+                  <config.icon
+                    className="h-4 w-4"
+                    style={{ color: config.color }}
+                  />
                   {config.label}
                 </button>
               ))}
@@ -530,12 +517,12 @@ export const AssetsTab: React.FC<AssetsTabProps> = ({
           <button
             onClick={onRefresh}
             className={cn(
-              'p-2 rounded-lg',
-              'border border-gray-200 dark:border-gray-700',
-              'bg-white dark:bg-dark-surface',
-              'text-gray-500 dark:text-gray-400',
-              'hover:bg-gray-50 dark:hover:bg-gray-700',
-              'transition-colors'
+              "p-2 rounded-lg",
+              "border border-gray-200 dark:border-gray-700",
+              "bg-white dark:bg-dark-surface",
+              "text-gray-500 dark:text-gray-400",
+              "hover:bg-gray-50 dark:hover:bg-gray-700",
+              "transition-colors",
             )}
             title="Refresh"
           >
@@ -546,8 +533,9 @@ export const AssetsTab: React.FC<AssetsTabProps> = ({
 
       {/* Results count */}
       <p className="text-sm text-gray-500 dark:text-gray-400">
-        {filteredAssets.length} asset{filteredAssets.length !== 1 ? 's' : ''}
-        {filterType !== 'all' && ` • Filtered by ${ASSET_TYPE_CONFIG[filterType].label}`}
+        {filteredAssets.length} asset{filteredAssets.length !== 1 ? "s" : ""}
+        {filterType !== "all" &&
+          ` • Filtered by ${ASSET_TYPE_CONFIG[filterType].label}`}
       </p>
 
       {/* Asset list grouped by date */}

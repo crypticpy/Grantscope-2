@@ -21,7 +21,6 @@ import {
   BookOpen,
   Heart,
 } from "lucide-react";
-import { supabase } from "../App";
 import { useAuthContext } from "../hooks/useAuthContext";
 import { useDebouncedValue } from "../hooks/useDebounce";
 import { PillarBadge } from "../components/PillarBadge";
@@ -93,10 +92,7 @@ type GroupBy = "none" | "pillar" | "horizon" | "workstream";
 async function fetchMySignals(
   params: Record<string, string>,
 ): Promise<MySignalsResponse> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  const token = session?.access_token;
+  const token = localStorage.getItem("gs2_token");
   if (!token) {
     throw new Error("You must be signed in to view your opportunities.");
   }
@@ -114,10 +110,7 @@ async function fetchMySignals(
 }
 
 async function togglePin(cardId: string, pin: boolean): Promise<void> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  const token = session?.access_token;
+  const token = localStorage.getItem("gs2_token");
   if (!token) throw new Error("Not authenticated");
   const response = await fetch(
     `${API_BASE_URL}/api/v1/me/signals/${cardId}/pin`,

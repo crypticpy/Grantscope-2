@@ -13,7 +13,7 @@
  * - Dark mode support
  */
 
-import React, { memo, useMemo } from "react";
+import { memo, useMemo } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import {
   SortableContext,

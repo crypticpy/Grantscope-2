@@ -25,7 +25,6 @@ import {
   SavedSearch,
   SavedSearchQueryConfig,
 } from "../lib/discovery-api";
-import { supabase } from "../App";
 
 // ============================================================================
 // Types
@@ -60,10 +59,8 @@ export function SearchSidebar({
 
   // Get auth token helper
   const getAuthToken = useCallback(async (): Promise<string | null> => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    return session?.access_token || null;
+    const token = localStorage.getItem("gs2_token");
+    return token || null;
   }, []);
 
   // Load saved searches

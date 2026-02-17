@@ -13,7 +13,7 @@
  * - Callback for filter changes
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo } from "react";
 import {
   Filter,
   X,
@@ -28,10 +28,15 @@ import {
   Car,
   Shield,
   type LucideIcon,
-} from 'lucide-react';
-import { format, subDays, subMonths, startOfMonth, parseISO } from 'date-fns';
-import { cn } from '../../lib/utils';
-import { pillars, stages, horizons, type MaturityStage } from '../../data/taxonomy';
+} from "lucide-react";
+import { format, subDays, subMonths, startOfMonth, parseISO } from "date-fns";
+import { cn } from "../../lib/utils";
+import {
+  pillars,
+  stages,
+  horizons,
+  type MaturityStage,
+} from "../../data/taxonomy";
 
 // ============================================================================
 // Type Definitions
@@ -52,15 +57,15 @@ export interface AnalyticsFiltersState {
 }
 
 export type TimeRangePreset =
-  | '7d'
-  | '30d'
-  | '90d'
-  | '6m'
-  | '1y'
-  | 'mtd'
-  | 'ytd'
-  | 'all'
-  | 'custom';
+  | "7d"
+  | "30d"
+  | "90d"
+  | "6m"
+  | "1y"
+  | "mtd"
+  | "ytd"
+  | "all"
+  | "custom";
 
 export interface AnalyticsFiltersProps {
   /** Current filter state */
@@ -79,16 +84,20 @@ export interface AnalyticsFiltersProps {
 // Constants
 // ============================================================================
 
-const TIME_RANGE_OPTIONS: { value: TimeRangePreset; label: string; shortLabel: string }[] = [
-  { value: '7d', label: 'Last 7 days', shortLabel: '7D' },
-  { value: '30d', label: 'Last 30 days', shortLabel: '30D' },
-  { value: '90d', label: 'Last 90 days', shortLabel: '90D' },
-  { value: '6m', label: 'Last 6 months', shortLabel: '6M' },
-  { value: '1y', label: 'Last year', shortLabel: '1Y' },
-  { value: 'mtd', label: 'Month to date', shortLabel: 'MTD' },
-  { value: 'ytd', label: 'Year to date', shortLabel: 'YTD' },
-  { value: 'all', label: 'All time', shortLabel: 'All' },
-  { value: 'custom', label: 'Custom range', shortLabel: 'Custom' },
+const TIME_RANGE_OPTIONS: {
+  value: TimeRangePreset;
+  label: string;
+  shortLabel: string;
+}[] = [
+  { value: "7d", label: "Last 7 days", shortLabel: "7D" },
+  { value: "30d", label: "Last 30 days", shortLabel: "30D" },
+  { value: "90d", label: "Last 90 days", shortLabel: "90D" },
+  { value: "6m", label: "Last 6 months", shortLabel: "6M" },
+  { value: "1y", label: "Last year", shortLabel: "1Y" },
+  { value: "mtd", label: "Month to date", shortLabel: "MTD" },
+  { value: "ytd", label: "Year to date", shortLabel: "YTD" },
+  { value: "all", label: "All time", shortLabel: "All" },
+  { value: "custom", label: "Custom range", shortLabel: "Custom" },
 ];
 
 const PILLAR_ICONS: Record<string, LucideIcon> = {
@@ -107,28 +116,33 @@ const PILLAR_ICONS: Record<string, LucideIcon> = {
 /**
  * Get computed date range from preset
  */
-export function getDateRangeFromPreset(preset: TimeRangePreset): { start: string; end: string } | null {
+export function getDateRangeFromPreset(
+  preset: TimeRangePreset,
+): { start: string; end: string } | null {
   const now = new Date();
-  const endDate = format(now, 'yyyy-MM-dd');
+  const endDate = format(now, "yyyy-MM-dd");
 
   switch (preset) {
-    case '7d':
-      return { start: format(subDays(now, 7), 'yyyy-MM-dd'), end: endDate };
-    case '30d':
-      return { start: format(subDays(now, 30), 'yyyy-MM-dd'), end: endDate };
-    case '90d':
-      return { start: format(subDays(now, 90), 'yyyy-MM-dd'), end: endDate };
-    case '6m':
-      return { start: format(subMonths(now, 6), 'yyyy-MM-dd'), end: endDate };
-    case '1y':
-      return { start: format(subMonths(now, 12), 'yyyy-MM-dd'), end: endDate };
-    case 'mtd':
-      return { start: format(startOfMonth(now), 'yyyy-MM-dd'), end: endDate };
-    case 'ytd':
-      return { start: format(new Date(now.getFullYear(), 0, 1), 'yyyy-MM-dd'), end: endDate };
-    case 'all':
+    case "7d":
+      return { start: format(subDays(now, 7), "yyyy-MM-dd"), end: endDate };
+    case "30d":
+      return { start: format(subDays(now, 30), "yyyy-MM-dd"), end: endDate };
+    case "90d":
+      return { start: format(subDays(now, 90), "yyyy-MM-dd"), end: endDate };
+    case "6m":
+      return { start: format(subMonths(now, 6), "yyyy-MM-dd"), end: endDate };
+    case "1y":
+      return { start: format(subMonths(now, 12), "yyyy-MM-dd"), end: endDate };
+    case "mtd":
+      return { start: format(startOfMonth(now), "yyyy-MM-dd"), end: endDate };
+    case "ytd":
+      return {
+        start: format(new Date(now.getFullYear(), 0, 1), "yyyy-MM-dd"),
+        end: endDate,
+      };
+    case "all":
       return null;
-    case 'custom':
+    case "custom":
       return null;
     default:
       return null;
@@ -138,28 +152,75 @@ export function getDateRangeFromPreset(preset: TimeRangePreset): { start: string
 /**
  * Get pillar color classes
  */
-function getPillarColorClasses(pillarCode: string): { bg: string; text: string; border: string } {
-  const colorMap: Record<string, { bg: string; text: string; border: string }> = {
-    CH: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-800 dark:text-green-200', border: 'border-green-400' },
-    EW: { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-800 dark:text-blue-200', border: 'border-blue-400' },
-    HG: { bg: 'bg-indigo-100 dark:bg-indigo-900/30', text: 'text-indigo-800 dark:text-indigo-200', border: 'border-indigo-400' },
-    HH: { bg: 'bg-pink-100 dark:bg-pink-900/30', text: 'text-pink-800 dark:text-pink-200', border: 'border-pink-400' },
-    MC: { bg: 'bg-amber-100 dark:bg-amber-900/30', text: 'text-amber-800 dark:text-amber-200', border: 'border-amber-400' },
-    PS: { bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-800 dark:text-red-200', border: 'border-red-400' },
-  };
-  return colorMap[pillarCode] || { bg: 'bg-gray-100', text: 'text-gray-800', border: 'border-gray-400' };
+function getPillarColorClasses(pillarCode: string): {
+  bg: string;
+  text: string;
+  border: string;
+} {
+  const colorMap: Record<string, { bg: string; text: string; border: string }> =
+    {
+      CH: {
+        bg: "bg-green-100 dark:bg-green-900/30",
+        text: "text-green-800 dark:text-green-200",
+        border: "border-green-400",
+      },
+      EW: {
+        bg: "bg-blue-100 dark:bg-blue-900/30",
+        text: "text-blue-800 dark:text-blue-200",
+        border: "border-blue-400",
+      },
+      HG: {
+        bg: "bg-indigo-100 dark:bg-indigo-900/30",
+        text: "text-indigo-800 dark:text-indigo-200",
+        border: "border-indigo-400",
+      },
+      HH: {
+        bg: "bg-pink-100 dark:bg-pink-900/30",
+        text: "text-pink-800 dark:text-pink-200",
+        border: "border-pink-400",
+      },
+      MC: {
+        bg: "bg-amber-100 dark:bg-amber-900/30",
+        text: "text-amber-800 dark:text-amber-200",
+        border: "border-amber-400",
+      },
+      PS: {
+        bg: "bg-red-100 dark:bg-red-900/30",
+        text: "text-red-800 dark:text-red-200",
+        border: "border-red-400",
+      },
+    };
+  return (
+    colorMap[pillarCode] || {
+      bg: "bg-gray-100",
+      text: "text-gray-800",
+      border: "border-gray-400",
+    }
+  );
 }
 
 /**
  * Get stage/horizon color classes
  */
-function getHorizonColorClasses(horizonCode: string): { bg: string; text: string } {
+function getHorizonColorClasses(horizonCode: string): {
+  bg: string;
+  text: string;
+} {
   const colorMap: Record<string, { bg: string; text: string }> = {
-    H1: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-800 dark:text-green-200' },
-    H2: { bg: 'bg-amber-100 dark:bg-amber-900/30', text: 'text-amber-800 dark:text-amber-200' },
-    H3: { bg: 'bg-purple-100 dark:bg-purple-900/30', text: 'text-purple-800 dark:text-purple-200' },
+    H1: {
+      bg: "bg-green-100 dark:bg-green-900/30",
+      text: "text-green-800 dark:text-green-200",
+    },
+    H2: {
+      bg: "bg-amber-100 dark:bg-amber-900/30",
+      text: "text-amber-800 dark:text-amber-200",
+    },
+    H3: {
+      bg: "bg-purple-100 dark:bg-purple-900/30",
+      text: "text-purple-800 dark:text-purple-200",
+    },
   };
-  return colorMap[horizonCode] || { bg: 'bg-gray-100', text: 'text-gray-800' };
+  return colorMap[horizonCode] || { bg: "bg-gray-100", text: "text-gray-800" };
 }
 
 // ============================================================================
@@ -169,7 +230,7 @@ function getHorizonColorClasses(horizonCode: string): { bg: string; text: string
 export const DEFAULT_ANALYTICS_FILTERS: AnalyticsFiltersState = {
   selectedPillars: [],
   selectedStages: [],
-  timeRange: '30d',
+  timeRange: "30d",
   customDateRange: { start: null, end: null },
 };
 
@@ -182,7 +243,7 @@ interface DropdownProps {
   children: React.ReactNode;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  align?: 'left' | 'right';
+  align?: "left" | "right";
   className?: string;
 }
 
@@ -191,11 +252,11 @@ const Dropdown: React.FC<DropdownProps> = ({
   children,
   isOpen,
   onOpenChange,
-  align = 'left',
+  align = "left",
   className,
 }) => {
   return (
-    <div className={cn('relative', className)}>
+    <div className={cn("relative", className)}>
       <div onClick={() => onOpenChange(!isOpen)}>{trigger}</div>
       {isOpen && (
         <>
@@ -206,8 +267,8 @@ const Dropdown: React.FC<DropdownProps> = ({
           />
           <div
             className={cn(
-              'absolute z-20 mt-2 w-64 bg-white dark:bg-dark-surface rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-2 max-h-80 overflow-y-auto',
-              align === 'left' ? 'left-0' : 'right-0'
+              "absolute z-20 mt-2 w-64 bg-white dark:bg-dark-surface rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-2 max-h-80 overflow-y-auto",
+              align === "left" ? "left-0" : "right-0",
             )}
           >
             {children}
@@ -246,13 +307,13 @@ const PillarFilterDropdown: React.FC<PillarFilterDropdownProps> = ({
         <button
           disabled={disabled}
           className={cn(
-            'inline-flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors',
-            'text-sm font-medium',
+            "inline-flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors",
+            "text-sm font-medium",
             hasSelection
-              ? 'bg-brand-blue/10 border-brand-blue text-brand-blue'
-              : 'bg-white dark:bg-dark-surface border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300',
-            'hover:bg-gray-50 dark:hover:bg-gray-700',
-            disabled && 'opacity-50 cursor-not-allowed'
+              ? "bg-brand-blue/10 border-brand-blue text-brand-blue"
+              : "bg-white dark:bg-dark-surface border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300",
+            "hover:bg-gray-50 dark:hover:bg-gray-700",
+            disabled && "opacity-50 cursor-not-allowed",
           )}
         >
           <Filter className="h-4 w-4" />
@@ -262,7 +323,12 @@ const PillarFilterDropdown: React.FC<PillarFilterDropdownProps> = ({
               {selectedPillars.length}
             </span>
           )}
-          <ChevronDown className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')} />
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 transition-transform",
+              isOpen && "rotate-180",
+            )}
+          />
         </button>
       }
     >
@@ -298,27 +364,37 @@ const PillarFilterDropdown: React.FC<PillarFilterDropdownProps> = ({
               onTogglePillar(pillar.code);
             }}
             className={cn(
-              'w-full flex items-center gap-3 px-3 py-2 text-left transition-colors',
-              'hover:bg-gray-50 dark:hover:bg-gray-700/50',
-              isSelected && colors.bg
+              "w-full flex items-center gap-3 px-3 py-2 text-left transition-colors",
+              "hover:bg-gray-50 dark:hover:bg-gray-700/50",
+              isSelected && colors.bg,
             )}
           >
             <span
               className={cn(
-                'flex items-center justify-center w-6 h-6 rounded border',
+                "flex items-center justify-center w-6 h-6 rounded border",
                 isSelected
                   ? cn(colors.bg, colors.border, colors.text)
-                  : 'border-gray-300 dark:border-gray-600'
+                  : "border-gray-300 dark:border-gray-600",
               )}
             >
               {isSelected && <Check className="h-4 w-4" />}
             </span>
             <div className="flex items-center gap-2 flex-1 min-w-0">
               {Icon && (
-                <Icon className={cn('h-4 w-4 shrink-0', isSelected ? colors.text : 'text-gray-400')} />
+                <Icon
+                  className={cn(
+                    "h-4 w-4 shrink-0",
+                    isSelected ? colors.text : "text-gray-400",
+                  )}
+                />
               )}
               <div className="min-w-0">
-                <div className={cn('text-sm font-medium truncate', isSelected ? colors.text : 'text-gray-900 dark:text-white')}>
+                <div
+                  className={cn(
+                    "text-sm font-medium truncate",
+                    isSelected ? colors.text : "text-gray-900 dark:text-white",
+                  )}
+                >
                   {pillar.code}
                 </div>
                 <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
@@ -357,7 +433,7 @@ const StageFilterDropdown: React.FC<StageFilterDropdownProps> = ({
   const stagesByHorizon = useMemo(() => {
     const grouped: Record<string, MaturityStage[]> = { H3: [], H2: [], H1: [] };
     stages.forEach((stage) => {
-      grouped[stage.horizon].push(stage);
+      grouped[stage.horizon]?.push(stage);
     });
     return grouped;
   }, []);
@@ -370,13 +446,13 @@ const StageFilterDropdown: React.FC<StageFilterDropdownProps> = ({
         <button
           disabled={disabled}
           className={cn(
-            'inline-flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors',
-            'text-sm font-medium',
+            "inline-flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors",
+            "text-sm font-medium",
             hasSelection
-              ? 'bg-brand-blue/10 border-brand-blue text-brand-blue'
-              : 'bg-white dark:bg-dark-surface border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300',
-            'hover:bg-gray-50 dark:hover:bg-gray-700',
-            disabled && 'opacity-50 cursor-not-allowed'
+              ? "bg-brand-blue/10 border-brand-blue text-brand-blue"
+              : "bg-white dark:bg-dark-surface border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300",
+            "hover:bg-gray-50 dark:hover:bg-gray-700",
+            disabled && "opacity-50 cursor-not-allowed",
           )}
         >
           <span>Stages</span>
@@ -385,7 +461,12 @@ const StageFilterDropdown: React.FC<StageFilterDropdownProps> = ({
               {selectedStages.length}
             </span>
           )}
-          <ChevronDown className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')} />
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 transition-transform",
+              isOpen && "rotate-180",
+            )}
+          />
         </button>
       }
     >
@@ -408,16 +489,16 @@ const StageFilterDropdown: React.FC<StageFilterDropdownProps> = ({
       </div>
 
       {/* Stages grouped by horizon */}
-      {(['H3', 'H2', 'H1'] as const).map((horizonCode) => {
+      {(["H3", "H2", "H1"] as const).map((horizonCode) => {
         const horizon = horizons.find((h) => h.code === horizonCode);
-        const horizonStages = stagesByHorizon[horizonCode];
+        const horizonStages = stagesByHorizon[horizonCode] ?? [];
         const colors = getHorizonColorClasses(horizonCode);
 
         if (horizonStages.length === 0) return null;
 
         return (
           <div key={horizonCode} className="mb-2">
-            <div className={cn('px-3 py-1 text-xs font-medium', colors.text)}>
+            <div className={cn("px-3 py-1 text-xs font-medium", colors.text)}>
               {horizon?.name} ({horizon?.timeframe})
             </div>
             {horizonStages.map((stage) => {
@@ -431,22 +512,29 @@ const StageFilterDropdown: React.FC<StageFilterDropdownProps> = ({
                     onToggleStage(stage.stage);
                   }}
                   className={cn(
-                    'w-full flex items-center gap-3 px-3 py-1.5 text-left transition-colors',
-                    'hover:bg-gray-50 dark:hover:bg-gray-700/50',
-                    isSelected && colors.bg
+                    "w-full flex items-center gap-3 px-3 py-1.5 text-left transition-colors",
+                    "hover:bg-gray-50 dark:hover:bg-gray-700/50",
+                    isSelected && colors.bg,
                   )}
                 >
                   <span
                     className={cn(
-                      'flex items-center justify-center w-5 h-5 rounded text-xs font-semibold border',
+                      "flex items-center justify-center w-5 h-5 rounded text-xs font-semibold border",
                       isSelected
-                        ? cn(colors.bg, colors.text, 'border-current')
-                        : 'border-gray-300 dark:border-gray-600 text-gray-500'
+                        ? cn(colors.bg, colors.text, "border-current")
+                        : "border-gray-300 dark:border-gray-600 text-gray-500",
                     )}
                   >
                     {isSelected ? <Check className="h-3 w-3" /> : stage.stage}
                   </span>
-                  <span className={cn('text-sm', isSelected ? colors.text : 'text-gray-700 dark:text-gray-300')}>
+                  <span
+                    className={cn(
+                      "text-sm",
+                      isSelected
+                        ? colors.text
+                        : "text-gray-700 dark:text-gray-300",
+                    )}
+                  >
                     {stage.name}
                   </span>
                 </button>
@@ -479,13 +567,17 @@ const TimeRangeFilter: React.FC<TimeRangeFilterProps> = ({
   disabled,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [showCustomInputs, setShowCustomInputs] = useState(timeRange === 'custom');
+  const [showCustomInputs, setShowCustomInputs] = useState(
+    timeRange === "custom",
+  );
 
-  const currentOption = TIME_RANGE_OPTIONS.find((opt) => opt.value === timeRange);
+  const currentOption = TIME_RANGE_OPTIONS.find(
+    (opt) => opt.value === timeRange,
+  );
 
   const handleTimeRangeSelect = (value: TimeRangePreset) => {
     onTimeRangeChange(value);
-    if (value === 'custom') {
+    if (value === "custom") {
       setShowCustomInputs(true);
     } else {
       setShowCustomInputs(false);
@@ -494,16 +586,20 @@ const TimeRangeFilter: React.FC<TimeRangeFilterProps> = ({
   };
 
   const displayLabel = useMemo(() => {
-    if (timeRange === 'custom' && customDateRange.start && customDateRange.end) {
+    if (
+      timeRange === "custom" &&
+      customDateRange.start &&
+      customDateRange.end
+    ) {
       try {
-        const startStr = format(parseISO(customDateRange.start), 'MMM d');
-        const endStr = format(parseISO(customDateRange.end), 'MMM d, yyyy');
+        const startStr = format(parseISO(customDateRange.start), "MMM d");
+        const endStr = format(parseISO(customDateRange.end), "MMM d, yyyy");
         return `${startStr} - ${endStr}`;
       } catch {
-        return 'Custom range';
+        return "Custom range";
       }
     }
-    return currentOption?.label || 'Select range';
+    return currentOption?.label || "Select range";
   }, [timeRange, customDateRange, currentOption]);
 
   return (
@@ -515,16 +611,21 @@ const TimeRangeFilter: React.FC<TimeRangeFilterProps> = ({
         <button
           disabled={disabled}
           className={cn(
-            'inline-flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors',
-            'text-sm font-medium',
-            'bg-white dark:bg-dark-surface border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300',
-            'hover:bg-gray-50 dark:hover:bg-gray-700',
-            disabled && 'opacity-50 cursor-not-allowed'
+            "inline-flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors",
+            "text-sm font-medium",
+            "bg-white dark:bg-dark-surface border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300",
+            "hover:bg-gray-50 dark:hover:bg-gray-700",
+            disabled && "opacity-50 cursor-not-allowed",
           )}
         >
           <Calendar className="h-4 w-4" />
           <span className="max-w-[150px] truncate">{displayLabel}</span>
-          <ChevronDown className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')} />
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 transition-transform",
+              isOpen && "rotate-180",
+            )}
+          />
         </button>
       }
     >
@@ -538,9 +639,9 @@ const TimeRangeFilter: React.FC<TimeRangeFilterProps> = ({
               handleTimeRangeSelect(option.value);
             }}
             className={cn(
-              'w-full flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors',
-              'hover:bg-gray-50 dark:hover:bg-gray-700/50',
-              timeRange === option.value && 'bg-brand-blue/10 text-brand-blue'
+              "w-full flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors",
+              "hover:bg-gray-50 dark:hover:bg-gray-700/50",
+              timeRange === option.value && "bg-brand-blue/10 text-brand-blue",
             )}
           >
             <span>{option.label}</span>
@@ -559,15 +660,20 @@ const TimeRangeFilter: React.FC<TimeRangeFilterProps> = ({
               </label>
               <input
                 type="date"
-                value={customDateRange.start || ''}
-                onChange={(e) => onCustomDateChange(e.target.value || null, customDateRange.end)}
+                value={customDateRange.start || ""}
+                onChange={(e) =>
+                  onCustomDateChange(
+                    e.target.value || null,
+                    customDateRange.end,
+                  )
+                }
                 onClick={(e) => e.stopPropagation()}
                 className={cn(
-                  'w-full px-2.5 py-1.5 rounded-md border text-sm',
-                  'border-gray-300 dark:border-gray-600',
-                  'bg-white dark:bg-gray-700',
-                  'text-gray-900 dark:text-white',
-                  'focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent'
+                  "w-full px-2.5 py-1.5 rounded-md border text-sm",
+                  "border-gray-300 dark:border-gray-600",
+                  "bg-white dark:bg-gray-700",
+                  "text-gray-900 dark:text-white",
+                  "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent",
                 )}
               />
             </div>
@@ -577,15 +683,20 @@ const TimeRangeFilter: React.FC<TimeRangeFilterProps> = ({
               </label>
               <input
                 type="date"
-                value={customDateRange.end || ''}
-                onChange={(e) => onCustomDateChange(customDateRange.start, e.target.value || null)}
+                value={customDateRange.end || ""}
+                onChange={(e) =>
+                  onCustomDateChange(
+                    customDateRange.start,
+                    e.target.value || null,
+                  )
+                }
                 onClick={(e) => e.stopPropagation()}
                 className={cn(
-                  'w-full px-2.5 py-1.5 rounded-md border text-sm',
-                  'border-gray-300 dark:border-gray-600',
-                  'bg-white dark:bg-gray-700',
-                  'text-gray-900 dark:text-white',
-                  'focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent'
+                  "w-full px-2.5 py-1.5 rounded-md border text-sm",
+                  "border-gray-300 dark:border-gray-600",
+                  "bg-white dark:bg-gray-700",
+                  "text-gray-900 dark:text-white",
+                  "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent",
                 )}
               />
             </div>
@@ -622,7 +733,8 @@ const ActiveFilters: React.FC<ActiveFiltersProps> = ({
   onRemoveStage,
   onClearAll,
 }) => {
-  const hasActiveFilters = filters.selectedPillars.length > 0 || filters.selectedStages.length > 0;
+  const hasActiveFilters =
+    filters.selectedPillars.length > 0 || filters.selectedStages.length > 0;
 
   if (!hasActiveFilters) return null;
 
@@ -640,10 +752,10 @@ const ActiveFilters: React.FC<ActiveFiltersProps> = ({
             key={pillarCode}
             onClick={() => onRemovePillar(pillarCode)}
             className={cn(
-              'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-colors',
+              "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-colors",
               colors.bg,
               colors.text,
-              'hover:opacity-80'
+              "hover:opacity-80",
             )}
           >
             {pillar?.code || pillarCode}
@@ -655,20 +767,22 @@ const ActiveFilters: React.FC<ActiveFiltersProps> = ({
       {/* Stage chips */}
       {filters.selectedStages.map((stageNum) => {
         const stage = stages.find((s) => s.stage === stageNum);
-        const colors = stage ? getHorizonColorClasses(stage.horizon) : { bg: 'bg-gray-100', text: 'text-gray-800' };
+        const colors = stage
+          ? getHorizonColorClasses(stage.horizon)
+          : { bg: "bg-gray-100", text: "text-gray-800" };
 
         return (
           <button
             key={stageNum}
             onClick={() => onRemoveStage(stageNum)}
             className={cn(
-              'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-colors',
+              "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-colors",
               colors.bg,
               colors.text,
-              'hover:opacity-80'
+              "hover:opacity-80",
             )}
           >
-            S{stageNum}: {stage?.name || 'Unknown'}
+            S{stageNum}: {stage?.name || "Unknown"}
             <X className="h-3 w-3" />
           </button>
         );
@@ -705,7 +819,7 @@ export const AnalyticsFilters: React.FC<AnalyticsFiltersProps> = ({
         : [...filters.selectedPillars, pillarCode];
       onFiltersChange({ ...filters, selectedPillars: newSelection });
     },
-    [filters, onFiltersChange]
+    [filters, onFiltersChange],
   );
 
   const handleClearPillars = useCallback(() => {
@@ -719,7 +833,7 @@ export const AnalyticsFilters: React.FC<AnalyticsFiltersProps> = ({
         : [...filters.selectedStages, stageNum];
       onFiltersChange({ ...filters, selectedStages: newSelection });
     },
-    [filters, onFiltersChange]
+    [filters, onFiltersChange],
   );
 
   const handleClearStages = useCallback(() => {
@@ -731,10 +845,13 @@ export const AnalyticsFilters: React.FC<AnalyticsFiltersProps> = ({
       onFiltersChange({
         ...filters,
         timeRange: range,
-        customDateRange: range !== 'custom' ? { start: null, end: null } : filters.customDateRange,
+        customDateRange:
+          range !== "custom"
+            ? { start: null, end: null }
+            : filters.customDateRange,
       });
     },
-    [filters, onFiltersChange]
+    [filters, onFiltersChange],
   );
 
   const handleCustomDateChange = useCallback(
@@ -744,17 +861,19 @@ export const AnalyticsFilters: React.FC<AnalyticsFiltersProps> = ({
         customDateRange: { start, end },
       });
     },
-    [filters, onFiltersChange]
+    [filters, onFiltersChange],
   );
 
   const handleRemovePillar = useCallback(
     (pillarCode: string) => {
       onFiltersChange({
         ...filters,
-        selectedPillars: filters.selectedPillars.filter((p) => p !== pillarCode),
+        selectedPillars: filters.selectedPillars.filter(
+          (p) => p !== pillarCode,
+        ),
       });
     },
-    [filters, onFiltersChange]
+    [filters, onFiltersChange],
   );
 
   const handleRemoveStage = useCallback(
@@ -764,7 +883,7 @@ export const AnalyticsFilters: React.FC<AnalyticsFiltersProps> = ({
         selectedStages: filters.selectedStages.filter((s) => s !== stageNum),
       });
     },
-    [filters, onFiltersChange]
+    [filters, onFiltersChange],
   );
 
   const handleClearAll = useCallback(() => {
@@ -776,11 +895,11 @@ export const AnalyticsFilters: React.FC<AnalyticsFiltersProps> = ({
   }, [filters, onFiltersChange]);
 
   return (
-    <div className={cn('', className)}>
+    <div className={cn("", className)}>
       <div
         className={cn(
-          'flex flex-wrap items-center gap-2',
-          compact ? 'gap-2' : 'gap-3'
+          "flex flex-wrap items-center gap-2",
+          compact ? "gap-2" : "gap-3",
         )}
       >
         {/* Pillar filter */}

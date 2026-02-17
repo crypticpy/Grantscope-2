@@ -28,7 +28,6 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { supabase } from "../../App";
 import {
   processGrantUrl,
   processGrantFile,
@@ -64,10 +63,8 @@ type TabId = "url" | "upload";
  * Retrieves the current Supabase session access token.
  */
 async function getToken(): Promise<string | null> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  return session?.access_token || null;
+  const token = localStorage.getItem("gs2_token");
+  return token || null;
 }
 
 /**

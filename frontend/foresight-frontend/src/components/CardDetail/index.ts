@@ -38,8 +38,8 @@
  * Main CardDetail component that orchestrates all sub-components.
  * This is the primary component for displaying card/trend details.
  */
-export { CardDetail } from './CardDetail';
-export type { CardDetailProps } from './CardDetail';
+export { CardDetail } from "./CardDetail";
+export type { CardDetailProps } from "./CardDetail";
 
 // =============================================================================
 // Component Exports
@@ -48,32 +48,33 @@ export type { CardDetailProps } from './CardDetail';
 /**
  * Header component with title, badges, summary, and back navigation
  */
-export { CardDetailHeader } from './CardDetailHeader';
-export type { CardDetailHeaderProps } from './CardDetailHeader';
+export { CardDetailHeader } from "./CardDetailHeader";
+export type { CardDetailHeaderProps } from "./CardDetailHeader";
 
 /**
  * Action buttons for card interactions (Compare, Update, Deep Research, Export, Follow)
  */
-export { CardActionButtons } from './CardActionButtons';
-export type { CardActionButtonsProps } from './CardActionButtons';
+export { CardActionButtons } from "./CardActionButtons";
+export type { CardActionButtonsProps } from "./CardActionButtons";
 
 /**
  * Export dropdown menu for downloading card in various formats
  */
-export { ExportDropdown } from './ExportDropdown';
-export type { ExportDropdownProps, ExportFormat } from './ExportDropdown';
+export { ExportDropdown } from "./ExportDropdown";
+export type { ExportDropdownProps } from "./ExportDropdown";
+export type { ExportFormat as ExportDropdownFormat } from "./ExportDropdown";
 
 /**
  * Research status banner for showing in-progress, completed, or error states
  */
-export { ResearchStatusBanner } from './ResearchStatusBanner';
-export type { ResearchStatusBannerProps } from './ResearchStatusBanner';
+export { ResearchStatusBanner } from "./ResearchStatusBanner";
+export type { ResearchStatusBannerProps } from "./ResearchStatusBanner";
 
 /**
  * Tab navigation component for switching between card detail sections
  */
-export { CardDetailTabs, DEFAULT_TABS } from './CardDetailTabs';
-export type { CardDetailTabsProps, TabDefinition } from './CardDetailTabs';
+export { CardDetailTabs, DEFAULT_TABS } from "./CardDetailTabs";
+export type { CardDetailTabsProps, TabDefinition } from "./CardDetailTabs";
 
 // =============================================================================
 // Tab Component Exports
@@ -83,13 +84,13 @@ export type { CardDetailTabsProps, TabDefinition } from './CardDetailTabs';
  * Tab content components for different card detail sections.
  * Includes: OverviewTab components, SourcesTab, TimelineTab, NotesTab
  */
-export * from './tabs';
+export * from "./tabs";
 
 /**
  * Assets tab for viewing generated content history
  */
-export { AssetsTab } from './AssetsTab';
-export type { AssetsTabProps, Asset, AssetType } from './AssetsTab';
+export { AssetsTab } from "./AssetsTab";
+export type { AssetsTabProps, Asset, AssetType } from "./AssetsTab";
 
 // =============================================================================
 // Type Exports
@@ -100,7 +101,7 @@ export type { AssetsTabProps, Asset, AssetType } from './AssetsTab';
  * Includes: Card, ResearchTask, Source, TimelineEvent, Note, CardDetailTab,
  *           ScoreColorClasses, MetricDefinition, MetricKey
  */
-export * from './types';
+export * from "./types";
 
 // =============================================================================
 // Utility Exports
@@ -120,7 +121,7 @@ export {
   getScoreColorClasses,
   /** Format date string as relative time (e.g., "2h ago") */
   formatRelativeTime,
-} from './utils';
+} from "./utils";
 
 // =============================================================================
 // Custom Hooks Exports
@@ -141,4 +142,4 @@ export {
   type ResearchTaskType,
   type ExportFormat,
   type ExportOptions,
-} from './hooks';
+} from "./hooks";

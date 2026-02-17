@@ -20,7 +20,6 @@ import {
   Copy,
   Sparkles,
 } from "lucide-react";
-import { supabase } from "../App";
 import { useAuthContext } from "../hooks/useAuthContext";
 import {
   fetchDiscoveryRuns,
@@ -121,7 +120,7 @@ const ProgressIndicator: React.FC<{
     );
   }
 
-  const { current_stage, message, stages, stats } = progress;
+  const { message, stages, stats } = progress;
 
   return (
     <div className="space-y-3">
@@ -138,7 +137,6 @@ const ProgressIndicator: React.FC<{
         {DISCOVERY_STAGES.map((stage, idx) => {
           const status = stages?.[stage.id] || "pending";
           const Icon = stage.icon;
-          const _isActive = stage.id === current_stage;
 
           return (
             <div key={stage.id} className="flex items-center">
@@ -523,11 +521,9 @@ const DiscoveryHistory: React.FC = () => {
   useEffect(() => {
     const loadConfig = async () => {
       try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        if (session?.access_token) {
-          const config = await fetchDiscoveryConfig(session.access_token);
+        const token = localStorage.getItem("gs2_token");
+        if (token) {
+          const config = await fetchDiscoveryConfig(token);
           setDiscoveryConfig(config);
         }
       } catch (err) {
@@ -550,14 +546,12 @@ const DiscoveryHistory: React.FC = () => {
         }
         setError(null);
 
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        if (!session?.access_token) {
+        const token = localStorage.getItem("gs2_token");
+        if (!token) {
           throw new Error("Not authenticated");
         }
 
-        const data = await fetchDiscoveryRuns(session.access_token, 20);
+        const data = await fetchDiscoveryRuns(token, 20);
         setRuns(data);
       } catch (err) {
         console.error("Failed to load discovery runs:", err);
@@ -591,14 +585,12 @@ const DiscoveryHistory: React.FC = () => {
       setTriggerLoading(true);
       setError(null);
 
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.access_token) {
+      const token = localStorage.getItem("gs2_token");
+      if (!token) {
         throw new Error("Not authenticated");
       }
 
-      await triggerDiscoveryRun(session.access_token);
+      await triggerDiscoveryRun(token);
       await loadRuns(false);
     } catch (err) {
       console.error("Failed to trigger discovery run:", err);
@@ -614,14 +606,12 @@ const DiscoveryHistory: React.FC = () => {
     try {
       setCancellingId(runId);
 
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.access_token) {
+      const token = localStorage.getItem("gs2_token");
+      if (!token) {
         throw new Error("Not authenticated");
       }
 
-      await cancelDiscoveryRun(session.access_token, runId);
+      await cancelDiscoveryRun(token, runId);
       await loadRuns(false);
     } catch (err) {
       console.error("Failed to cancel run:", err);

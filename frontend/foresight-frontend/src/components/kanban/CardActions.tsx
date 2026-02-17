@@ -138,10 +138,10 @@ const NotesModal = memo(function NotesModal({
 
       if (e.shiftKey && document.activeElement === firstElement) {
         e.preventDefault();
-        lastElement.focus();
+        lastElement?.focus();
       } else if (!e.shiftKey && document.activeElement === lastElement) {
         e.preventDefault();
-        firstElement.focus();
+        firstElement?.focus();
       }
     };
 
@@ -435,6 +435,7 @@ export const CardActions = memo(function CardActions({
       return () =>
         document.removeEventListener("mousedown", handleClickOutside);
     }
+    return undefined;
   }, [isOpen]);
 
   // Handle keyboard navigation

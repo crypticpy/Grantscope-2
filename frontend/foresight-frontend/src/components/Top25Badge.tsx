@@ -6,20 +6,24 @@
  * - Tooltip showing list of aligned Top 25 priorities
  */
 
-import React from 'react';
-import { Star, Flag, Award, Target } from 'lucide-react';
-import { Tooltip } from './ui/Tooltip';
-import { cn } from '../lib/utils';
-import { getTop25ByTitle, getPillarByCode, type Top25Priority } from '../data/taxonomy';
-import { getIconSize, type BadgeSize } from '../lib/badge-utils';
+import React from "react";
+import { Star, Flag, Award, Target } from "lucide-react";
+import { Tooltip } from "./ui/Tooltip";
+import { cn } from "../lib/utils";
+import {
+  getTop25ByTitle,
+  getPillarByCode,
+  type Top25Priority,
+} from "../data/taxonomy";
+import { getIconSize, type BadgeSize } from "../lib/badge-utils";
 
 export interface Top25BadgeProps {
   /** Array of Top 25 priority titles that this card is relevant to */
   priorities: string[];
   /** Size variant */
-  size?: 'sm' | 'md' | 'lg';
+  size?: "sm" | "md" | "lg";
   /** Icon variant */
-  icon?: 'star' | 'flag' | 'award' | 'target';
+  icon?: "star" | "flag" | "award" | "target";
   /** Whether to show the count */
   showCount?: boolean;
   /** Additional className */
@@ -47,9 +51,9 @@ function getTop25SizeClasses(size: BadgeSize): {
   text: string;
 } {
   const sizeMap: Record<BadgeSize, { container: string; text: string }> = {
-    sm: { container: 'p-0.5', text: 'text-[10px]' },
-    md: { container: 'p-1', text: 'text-xs' },
-    lg: { container: 'p-1.5', text: 'text-sm' },
+    sm: { container: "p-0.5", text: "text-[10px]" },
+    md: { container: "p-1", text: "text-xs" },
+    lg: { container: "p-1.5", text: "text-sm" },
   };
   return sizeMap[size];
 }
@@ -62,14 +66,14 @@ function getPillarColorClasses(pillarCode: string): {
   text: string;
 } {
   const colorMap: Record<string, { bg: string; text: string }> = {
-    CH: { bg: 'bg-green-100', text: 'text-green-700' },
-    EW: { bg: 'bg-blue-100', text: 'text-blue-700' },
-    HG: { bg: 'bg-indigo-100', text: 'text-indigo-700' },
-    HH: { bg: 'bg-pink-100', text: 'text-pink-700' },
-    MC: { bg: 'bg-amber-100', text: 'text-amber-700' },
-    PS: { bg: 'bg-red-100', text: 'text-red-700' },
+    CH: { bg: "bg-green-100", text: "text-green-700" },
+    EW: { bg: "bg-blue-100", text: "text-blue-700" },
+    HG: { bg: "bg-indigo-100", text: "text-indigo-700" },
+    HH: { bg: "bg-pink-100", text: "text-pink-700" },
+    MC: { bg: "bg-amber-100", text: "text-amber-700" },
+    PS: { bg: "bg-red-100", text: "text-red-700" },
   };
-  return colorMap[pillarCode] || { bg: 'bg-gray-100', text: 'text-gray-700' };
+  return colorMap[pillarCode] || { bg: "bg-gray-100", text: "text-gray-700" };
 }
 
 /**
@@ -87,10 +91,10 @@ function Top25TooltipContent({ priorities }: { priorities: string[] }) {
       if (!acc[priority.pillarCode]) {
         acc[priority.pillarCode] = [];
       }
-      acc[priority.pillarCode].push(priority);
+      acc[priority.pillarCode]!.push(priority);
       return acc;
     },
-    {} as Record<string, Top25Priority[]>
+    {} as Record<string, Top25Priority[]>,
   );
 
   return (
@@ -105,7 +109,8 @@ function Top25TooltipContent({ priorities }: { priorities: string[] }) {
             Top 25 Priorities
           </div>
           <div className="text-xs text-gray-500 dark:text-gray-400">
-            {priorities.length} aligned {priorities.length === 1 ? 'priority' : 'priorities'}
+            {priorities.length} aligned{" "}
+            {priorities.length === 1 ? "priority" : "priorities"}
           </div>
         </div>
       </div>
@@ -121,9 +126,9 @@ function Top25TooltipContent({ priorities }: { priorities: string[] }) {
               <div className="flex items-center gap-1.5 mb-1">
                 <span
                   className={cn(
-                    'px-1.5 py-0.5 rounded text-[10px] font-semibold',
+                    "px-1.5 py-0.5 rounded text-[10px] font-semibold",
                     colors.bg,
-                    colors.text
+                    colors.text,
                   )}
                 >
                   {pillarCode}
@@ -178,8 +183,8 @@ function Top25TooltipContent({ priorities }: { priorities: string[] }) {
  */
 export function Top25Badge({
   priorities,
-  size = 'md',
-  icon = 'star',
+  size = "md",
+  icon = "star",
   showCount = false,
   className,
   disableTooltip = false,
@@ -196,21 +201,19 @@ export function Top25Badge({
   const badge = (
     <span
       className={cn(
-        'inline-flex items-center gap-0.5 rounded-full cursor-default',
-        'bg-amber-100 text-amber-600 border border-amber-300',
+        "inline-flex items-center gap-0.5 rounded-full cursor-default",
+        "bg-amber-100 text-amber-600 border border-amber-300",
         sizeClasses.container,
-        !disableTooltip && 'cursor-pointer hover:bg-amber-200 transition-colors',
-        className
+        !disableTooltip &&
+          "cursor-pointer hover:bg-amber-200 transition-colors",
+        className,
       )}
       role="status"
-      aria-label={`Relevant to ${priorities.length} Top 25 ${priorities.length === 1 ? 'priority' : 'priorities'}`}
+      aria-label={`Relevant to ${priorities.length} Top 25 ${priorities.length === 1 ? "priority" : "priorities"}`}
     >
-      <Icon
-        className="fill-amber-400"
-        size={iconSize}
-      />
+      <Icon className="fill-amber-400" size={iconSize} />
       {showCount && priorities.length > 1 && (
-        <span className={cn('font-medium', sizeClasses.text)}>
+        <span className={cn("font-medium", sizeClasses.text)}>
           {priorities.length}
         </span>
       )}
@@ -254,16 +257,17 @@ export function Top25ExpandedBadge({
   return (
     <div
       className={cn(
-        'inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md',
-        'bg-amber-50 border border-amber-200',
-        className
+        "inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md",
+        "bg-amber-50 border border-amber-200",
+        className,
       )}
     >
       <Star className="h-4 w-4 text-amber-600 fill-amber-400 shrink-0" />
       <div className="text-sm">
         <span className="font-medium text-amber-800">Top 25</span>
         <span className="text-amber-600 ml-1">
-          ({priorities.length} {priorities.length === 1 ? 'priority' : 'priorities'})
+          ({priorities.length}{" "}
+          {priorities.length === 1 ? "priority" : "priorities"})
         </span>
       </div>
     </div>
@@ -299,7 +303,7 @@ export function Top25List({
   const remainingCount = priorities.length - maxVisible;
 
   return (
-    <div className={cn('space-y-2', className)}>
+    <div className={cn("space-y-2", className)}>
       <div className="flex items-center gap-2">
         <Star className="h-4 w-4 text-amber-600 fill-amber-400" />
         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -311,7 +315,7 @@ export function Top25List({
           const priority = getTop25ByTitle(title);
           const colors = priority
             ? getPillarColorClasses(priority.pillarCode)
-            : { bg: 'bg-gray-100', text: 'text-gray-700' };
+            : { bg: "bg-gray-100", text: "text-gray-700" };
 
           return (
             <li
@@ -321,9 +325,9 @@ export function Top25List({
               {priority && (
                 <span
                   className={cn(
-                    'px-1 py-0.5 rounded text-[10px] font-medium shrink-0 mt-0.5',
+                    "px-1 py-0.5 rounded text-[10px] font-medium shrink-0 mt-0.5",
                     colors.bg,
-                    colors.text
+                    colors.text,
                   )}
                 >
                   {priority.pillarCode}

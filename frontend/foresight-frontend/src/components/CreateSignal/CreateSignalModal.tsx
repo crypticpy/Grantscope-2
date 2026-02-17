@@ -42,7 +42,6 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { cn } from "../../lib/utils";
-import { supabase } from "../../App";
 import {
   createCardFromTopic,
   suggestKeywords,
@@ -54,6 +53,8 @@ import {
   SourcePreferencesStep,
   type SourcePreferences,
 } from "./SourcePreferencesStep";
+import { useAuthContext } from "../../hooks/useAuthContext";
+import { supabase } from "../../App";
 import { API_BASE_URL } from "../../lib/config";
 
 // =============================================================================
@@ -275,6 +276,7 @@ export function CreateSignalModal({
   workstreamId,
   onSuccess,
 }: CreateSignalModalProps) {
+  const { user } = useAuthContext();
   const [state, setState] = useState<WizardState>(() =>
     createInitialState(workstreamId),
   );
@@ -316,15 +318,12 @@ export function CreateSignalModal({
 
     async function loadWorkstreams() {
       try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        if (!session) return;
+        if (!user) return;
 
         const { data } = await supabase
           .from("workstreams")
           .select("id, name")
-          .eq("user_id", session.user.id)
+          .eq("user_id", user.id)
           .order("name");
 
         if (data) {
@@ -450,18 +449,13 @@ export function CreateSignalModal({
     setError(null);
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.access_token) {
+      const token = localStorage.getItem("gs2_token");
+      if (!token) {
         setError("Please sign in to use this feature.");
         return;
       }
 
-      const result = await suggestKeywords(
-        state.topic.trim(),
-        session.access_token,
-      );
+      const result = await suggestKeywords(state.topic.trim(), token);
       updateState({ keywords: result.suggestions || [] });
     } catch (err) {
       setError(
@@ -506,10 +500,8 @@ export function CreateSignalModal({
     setError(null);
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.access_token) {
+      const token = localStorage.getItem("gs2_token");
+      if (!token) {
         setError("Please sign in to create opportunities.");
         return;
       }
@@ -526,7 +518,7 @@ export function CreateSignalModal({
             topic: string;
             workstream_id?: string;
           },
-          session.access_token,
+          token,
         );
         setCreatedCard(result);
         onSuccess?.();
@@ -550,7 +542,7 @@ export function CreateSignalModal({
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              Authorization: `Bearer ${session.access_token}`,
+              Authorization: `Bearer ${token}`,
             },
             body: JSON.stringify(payload),
           },

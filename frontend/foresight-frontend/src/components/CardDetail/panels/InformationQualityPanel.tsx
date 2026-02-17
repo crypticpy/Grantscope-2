@@ -31,7 +31,6 @@ import {
 import { Tooltip } from "../../ui/Tooltip";
 import { QualityBadge } from "../../QualityBadge";
 import { cn } from "../../../lib/utils";
-import { supabase } from "../../../App";
 import {
   getCardQuality,
   recalculateCardQuality,
@@ -206,15 +205,13 @@ export const InformationQualityPanel: React.FC<
   const fetchQuality = useCallback(async () => {
     try {
       setError(null);
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) {
+      const token = localStorage.getItem("gs2_token");
+      if (!token) {
         setError("Not authenticated");
         setLoading(false);
         return;
       }
-      const data = await getCardQuality(cardId, session.access_token);
+      const data = await getCardQuality(cardId, token);
       setQuality(data);
     } catch (err) {
       setError(
@@ -237,14 +234,12 @@ export const InformationQualityPanel: React.FC<
     try {
       setRecalculating(true);
       setError(null);
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) {
+      const token = localStorage.getItem("gs2_token");
+      if (!token) {
         setError("Not authenticated");
         return;
       }
-      const data = await recalculateCardQuality(cardId, session.access_token);
+      const data = await recalculateCardQuality(cardId, token);
       setQuality(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to recalculate");

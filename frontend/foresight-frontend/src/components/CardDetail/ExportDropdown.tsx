@@ -137,6 +137,7 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
         document.removeEventListener("mousedown", handleClickOutside);
       };
     }
+    return undefined;
   }, [isOpen]);
 
   /**
@@ -155,6 +156,7 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
         document.removeEventListener("keydown", handleKeyDown);
       };
     }
+    return undefined;
   }, [isOpen]);
 
   /**

@@ -28,6 +28,7 @@ export interface InsightItem {
   insight: string;
   pillar_id?: string;
   card_id?: string;
+  card_slug?: string;
   velocity_score?: number;
 }
 

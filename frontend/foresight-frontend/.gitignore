@@ -29,3 +29,5 @@ playwright/.cache/
 test-results/
 .vercel
 *.backup.tsx
+
+.env

@@ -10,10 +10,12 @@ import os
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from starlette.middleware.gzip import GZipMiddleware
 
+from app.auth import authenticate_user, create_access_token, get_current_user
 from app.security import setup_security
 from app.scheduler import start_scheduler, shutdown_scheduler
 
@@ -41,6 +43,14 @@ from app.routers.admin import router as admin_router
 from app.routers.feeds import router as feeds_router
 from app.routers.proposals import router as proposals_router
 from app.routers.wizard import router as wizard_router
+
+# New feature routers (SQLAlchemy-based)
+from app.routers.checklist import router as checklist_router
+from app.routers.budget import router as budget_router
+from app.routers.attachments import router as attachments_router
+from app.routers.exports import router as exports_router
+from app.routers.collaboration import router as collaboration_router
+from app.routers.applications import router as applications_router
 
 load_dotenv()
 
@@ -151,6 +161,44 @@ async def lifespan(_app: FastAPI):
 
 
 # ---------------------------------------------------------------------------
+# Auth request / response models
+# ---------------------------------------------------------------------------
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+# ---------------------------------------------------------------------------
+# Inline auth routes (added directly to the app, no separate router file)
+# ---------------------------------------------------------------------------
+
+
+def _register_auth_routes(application: FastAPI) -> None:
+    """Register ``/api/v1/auth/*`` endpoints on *application*."""
+
+    @application.post("/api/v1/auth/login")
+    async def login(body: LoginRequest):
+        user = authenticate_user(body.email, body.password)
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password",
+            )
+        token = create_access_token(user)
+        return {
+            "access_token": token,
+            "token_type": "bearer",
+            "user": user,
+        }
+
+    @application.get("/api/v1/auth/me")
+    async def auth_me(request: Request, user=Depends(get_current_user)):
+        return user
+
+
+# ---------------------------------------------------------------------------
 # App factory
 # ---------------------------------------------------------------------------
 
@@ -179,6 +227,9 @@ def create_app() -> FastAPI:
     # Security headers, rate limiting, request-size limits
     setup_security(application, allowed_origins)
 
+    # --- Inline auth endpoints ---
+    _register_auth_routes(application)
+
     # --- Routers ---
     application.include_router(health_router)
     application.include_router(users_router)
@@ -204,6 +255,14 @@ def create_app() -> FastAPI:
     application.include_router(feeds_router)
     application.include_router(proposals_router)
     application.include_router(wizard_router)
+
+    # New feature routers (SQLAlchemy-based)
+    application.include_router(checklist_router)
+    application.include_router(budget_router)
+    application.include_router(attachments_router)
+    application.include_router(exports_router)
+    application.include_router(collaboration_router)
+    application.include_router(applications_router)
 
     return application
 

@@ -15,7 +15,6 @@ import {
   type CardSnapshot,
 } from "../../../../lib/discovery-api";
 import { MarkdownReport } from "../../MarkdownReport";
-import { supabase } from "../../../../App";
 
 interface DescriptionHistoryProps {
   cardId: string;
@@ -86,10 +85,8 @@ export const DescriptionHistory: React.FC<DescriptionHistoryProps> = ({
   const [restoring, setRestoring] = useState<string | null>(null);
 
   const getToken = useCallback(async () => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    return session?.access_token || "";
+    const token = localStorage.getItem("gs2_token");
+    return token || "";
   }, []);
 
   const loadSnapshots = useCallback(async () => {

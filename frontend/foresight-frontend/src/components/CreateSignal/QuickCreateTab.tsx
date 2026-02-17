@@ -22,8 +22,9 @@
 import { useState, useCallback, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Loader2, Sparkles, CheckCircle, X, AlertTriangle } from "lucide-react";
-import { supabase } from "../../App";
 import { cn } from "../../lib/utils";
+import { useAuthContext } from "../../hooks/useAuthContext";
+import { supabase } from "../../App";
 import {
   createCardFromTopic,
   suggestKeywords,
@@ -60,6 +61,7 @@ export function QuickCreateTab({
   workstreamId,
   onCreated,
 }: QuickCreateTabProps) {
+  const { user } = useAuthContext();
   // Form state
   const [topic, setTopic] = useState("");
   const [selectedWorkstreamId, setSelectedWorkstreamId] = useState(
@@ -84,15 +86,12 @@ export function QuickCreateTab({
   useEffect(() => {
     async function loadWorkstreams() {
       try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        if (!session) return;
+        if (!user) return;
 
         const { data } = await supabase
           .from("workstreams")
           .select("id, name")
-          .eq("created_by", session.user.id)
+          .eq("created_by", user.id)
           .order("name");
 
         if (data) {
@@ -118,15 +117,13 @@ export function QuickCreateTab({
     setError(null);
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.access_token) {
+      const token = localStorage.getItem("gs2_token");
+      if (!token) {
         setError("Please sign in to use this feature.");
         return;
       }
 
-      const result = await suggestKeywords(topic.trim(), session.access_token);
+      const result = await suggestKeywords(topic.trim(), token);
       setKeywords(result.suggestions || []);
     } catch (err) {
       setError(
@@ -156,10 +153,8 @@ export function QuickCreateTab({
     setError(null);
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.access_token) {
+      const token = localStorage.getItem("gs2_token");
+      if (!token) {
         setError("Please sign in to create opportunities.");
         return;
       }
@@ -169,7 +164,7 @@ export function QuickCreateTab({
           topic: topic.trim(),
           workstream_id: selectedWorkstreamId || undefined,
         },
-        session.access_token,
+        token,
       );
 
       setCreatedCard(result);

@@ -162,11 +162,9 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = "" }) => {
   const [assetsError, setAssetsError] = useState<string | null>(null);
 
   // Get auth token for API requests
-  const getAuthToken = useCallback(async () => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    return session?.access_token;
+  const getAuthToken = useCallback(async (): Promise<string | undefined> => {
+    const token = localStorage.getItem("gs2_token");
+    return token ?? undefined;
   }, []);
 
   // Load card detail from database
@@ -438,7 +436,7 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = "" }) => {
 
   // Handle related card click
   const handleRelatedCardClick = useCallback(
-    (cardId: string, cardSlug: string) => {
+    (_cardId: string, cardSlug: string) => {
       if (cardSlug) navigate(`/signals/${cardSlug}`);
     },
     [navigate],
@@ -675,7 +673,7 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = "" }) => {
             <DeepResearchPanel
               researchTasks={researchHistory}
               onRequestResearch={handleDeepResearch}
-              canRequestResearch={canDeepResearch}
+              canRequestResearch={canDeepResearch ?? undefined}
             />
             {/* Only show update history if there are non-deep-research tasks */}
             {researchHistory.some((t) => t.task_type !== "deep_research") && (

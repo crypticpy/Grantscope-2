@@ -122,7 +122,8 @@ export const CardDetailTabs: React.FC<CardDetailTabsProps> = ({
           event.preventDefault();
           const prevIndex =
             currentIndex === 0 ? tabCount - 1 : currentIndex - 1;
-          onTabChange(tabs[prevIndex].id);
+          const prevTab = tabs[prevIndex];
+          if (prevTab) onTabChange(prevTab.id);
           // Focus the previous tab button
           const buttons =
             tabListRef.current?.querySelectorAll('button[role="tab"]');
@@ -133,7 +134,8 @@ export const CardDetailTabs: React.FC<CardDetailTabsProps> = ({
           event.preventDefault();
           const nextIndex =
             currentIndex === tabCount - 1 ? 0 : currentIndex + 1;
-          onTabChange(tabs[nextIndex].id);
+          const nextTab = tabs[nextIndex];
+          if (nextTab) onTabChange(nextTab.id);
           // Focus the next tab button
           const buttons =
             tabListRef.current?.querySelectorAll('button[role="tab"]');
@@ -142,7 +144,8 @@ export const CardDetailTabs: React.FC<CardDetailTabsProps> = ({
         }
         case "Home": {
           event.preventDefault();
-          onTabChange(tabs[0].id);
+          const firstTab = tabs[0];
+          if (firstTab) onTabChange(firstTab.id);
           const buttons =
             tabListRef.current?.querySelectorAll('button[role="tab"]');
           (buttons?.[0] as HTMLButtonElement)?.focus();
@@ -150,7 +153,8 @@ export const CardDetailTabs: React.FC<CardDetailTabsProps> = ({
         }
         case "End": {
           event.preventDefault();
-          onTabChange(tabs[tabCount - 1].id);
+          const lastTab = tabs[tabCount - 1];
+          if (lastTab) onTabChange(lastTab.id);
           const buttons =
             tabListRef.current?.querySelectorAll('button[role="tab"]');
           (buttons?.[tabCount - 1] as HTMLButtonElement)?.focus();
