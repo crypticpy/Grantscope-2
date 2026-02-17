@@ -15,7 +15,6 @@ import {
   ExternalLink,
   FileText,
 } from "lucide-react";
-import { supabase } from "../App";
 import { useAuthContext } from "../hooks/useAuthContext";
 import { PillarBadge } from "../components/PillarBadge";
 import { HorizonBadge } from "../components/HorizonBadge";
@@ -25,7 +24,6 @@ import { QualityBadge } from "../components/QualityBadge";
 import { VelocityBadge, type VelocityTrend } from "../components/VelocityBadge";
 import { PatternInsightsSection } from "../components/PatternInsightsSection";
 import { AskGrantScopeBar } from "../components/Chat/AskGrantScopeBar";
-import { fetchPendingCount } from "../lib/discovery-api";
 import { parseStageNumber } from "../lib/stage-utils";
 import { logger } from "../lib/logger";
 import { getDeadlineUrgency } from "../data/taxonomy";
@@ -51,34 +49,15 @@ interface FollowingCard {
   cards: Card;
 }
 
-/**
- * Explicit type for rows returned by the Supabase join query
- * `card_follows.select("id, priority, cards (*)")`.
- *
- * `cards` may be `null` when the related card has been deleted or the
- * join yields no match, so consumers must guard before accessing fields.
- */
-interface SupabaseFollowRow {
-  id: string;
-  priority: string;
-  cards: Card | null;
-}
+const API_URL = import.meta.env.VITE_API_URL || "";
 
-/**
- * TypeScript interface for the get_dashboard_stats RPC response.
- * This interface ensures type safety when calling the Supabase RPC function
- * that consolidates dashboard statistics into a single database call.
- */
-interface DashboardStatsResponse {
-  total_cards: number;
-  new_this_week: number;
-  following: number;
-  workstreams: number;
-}
-
-/** Extract a numeric count from a Supabase head-only response, defaulting to 0 on error. */
-function safeCount(r: { error: unknown; count: number | null }): number {
-  return r.error ? 0 : (r.count ?? 0);
+/** Fetch the consolidated dashboard payload from the backend. */
+async function fetchDashboardData(token: string) {
+  const res = await fetch(`${API_URL}/api/v1/me/dashboard`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Dashboard API ${res.status}`);
+  return res.json();
 }
 
 /**
@@ -184,189 +163,51 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     loadDashboardData();
-    loadPendingCount();
   }, []);
-
-  const loadPendingCount = async () => {
-    try {
-      const token = localStorage.getItem("gs2_token");
-      if (token) {
-        const count = await fetchPendingCount(token);
-        setPendingReviewCount(count);
-      }
-    } catch (err) {
-      // Silently fail - non-critical
-      logger.debug("Could not fetch pending count:", err);
-    }
-  };
 
   const loadDashboardData = async () => {
     try {
-      const now = new Date();
-      const oneWeekFromNow = new Date();
-      oneWeekFromNow.setDate(oneWeekFromNow.getDate() + 7);
-      const todayISO = now.toISOString().split("T")[0];
-      const oneWeekFromNowISO = oneWeekFromNow.toISOString().split("T")[0];
-
-      const [
-        recentCardsResult,
-        followingCardsResult,
-        statsResult,
-        deadlinesThisWeekResult,
-        pipelineValueResult,
-        upcomingDeadlinesResult,
-        qualityHighResult,
-        qualityModResult,
-        qualityLowResult,
-      ] = await Promise.all([
-        // Recent cards
-        supabase
-          .from("cards")
-          .select("*")
-          .eq("status", "active")
-          .order("created_at", { ascending: false })
-          .limit(6),
-
-        // Following cards (join)
-        supabase
-          .from("card_follows")
-          .select(`id, priority, cards (*)`)
-          .eq("user_id", user?.id),
-
-        // Dashboard stats via RPC
-        supabase.rpc("get_dashboard_stats", { p_user_id: user?.id }),
-
-        // Deadlines this week — cards with deadline between today and 7 days from now
-        supabase
-          .from("cards")
-          .select("id", { count: "exact", head: true })
-          .eq("status", "active")
-          .gte("deadline", todayISO)
-          .lte("deadline", oneWeekFromNowISO),
-
-        // Pipeline value — fetch funding_amount_min and funding_amount_max for cards in user's workstreams
-        supabase
-          .from("cards")
-          .select("funding_amount_min, funding_amount_max")
-          .eq("status", "active")
-          .not("funding_amount_min", "is", null),
-
-        // Upcoming deadlines — nearest 5 cards with deadlines in the future
-        supabase
-          .from("cards")
-          .select("*")
-          .eq("status", "active")
-          .gte("deadline", todayISO)
-          .order("deadline", { ascending: true })
-          .limit(5),
-
-        // Quality distribution buckets (high ≥75 / moderate 50-74 / low <50)
-        supabase
-          .from("cards")
-          .select("id", { count: "exact", head: true })
-          .eq("status", "active")
-          .gte("signal_quality_score", 75),
-        supabase
-          .from("cards")
-          .select("id", { count: "exact", head: true })
-          .eq("status", "active")
-          .gte("signal_quality_score", 50)
-          .lt("signal_quality_score", 75),
-        supabase
-          .from("cards")
-          .select("id", { count: "exact", head: true })
-          .eq("status", "active")
-          .or("signal_quality_score.lt.50,signal_quality_score.is.null"),
-      ]);
-
-      // Log errors for debugging (non-blocking)
-      if (recentCardsResult.error) {
-        console.error("Error loading recent cards:", recentCardsResult.error);
-      }
-      if (followingCardsResult.error) {
-        console.error(
-          "Error loading following cards:",
-          followingCardsResult.error,
-        );
-      }
-      if (statsResult.error) {
-        console.error("Error loading dashboard stats:", statsResult.error);
+      const token = localStorage.getItem("gs2_token");
+      if (!token) {
+        setLoading(false);
+        return;
       }
 
-      // --- Recent cards ---
-      setRecentCards(
-        recentCardsResult.error ? [] : (recentCardsResult.data ?? []),
-      );
+      const data = await fetchDashboardData(token);
 
-      // --- Following cards ---
-      // Supabase infers `cards (*)` as `any[]`, but the actual runtime shape
-      // is a single Card object (or null when the join has no match).
-      // We cast through `unknown` to our explicit SupabaseFollowRow type,
-      // then filter out rows where the related card was deleted.
-      const rawFollowing: SupabaseFollowRow[] = followingCardsResult.error
-        ? []
-        : ((followingCardsResult.data ?? []) as unknown as SupabaseFollowRow[]);
+      setRecentCards(data.recent_cards ?? []);
 
-      const transformedFollowing: FollowingCard[] = rawFollowing
-        .filter(
-          (row): row is SupabaseFollowRow & { cards: Card } =>
-            row.cards !== null,
-        )
-        .map((row) => ({
-          id: row.id,
-          priority: row.priority,
-          cards: row.cards,
-        }));
+      // Backend returns following cards as flat card dicts with follow_id/follow_priority
+      const transformedFollowing: FollowingCard[] = (
+        data.following_cards ?? []
+      ).map((c: Card & { follow_id?: string; follow_priority?: string }) => ({
+        id: c.follow_id ?? c.id,
+        priority: c.follow_priority ?? "medium",
+        cards: c,
+      }));
       setFollowingCards(transformedFollowing);
 
-      // --- Upcoming deadline cards ---
-      setUpcomingDeadlineCards(
-        upcomingDeadlinesResult.error
-          ? []
-          : (upcomingDeadlinesResult.data ?? []),
-      );
+      setUpcomingDeadlineCards(data.upcoming_deadlines ?? []);
 
-      // --- Pipeline value ---
-      let pipelineTotal = 0;
-      if (!pipelineValueResult.error && pipelineValueResult.data) {
-        for (const row of pipelineValueResult.data) {
-          const min =
-            (row as { funding_amount_min: number | null }).funding_amount_min ??
-            0;
-          const max =
-            (row as { funding_amount_max: number | null }).funding_amount_max ??
-            0;
-          // Use average of min/max if both available, otherwise whichever is set
-          if (min && max) {
-            pipelineTotal += (min + max) / 2;
-          } else {
-            pipelineTotal += min || max;
-          }
-        }
-      }
-
-      // --- Stats ---
-      const statsData: DashboardStatsResponse | null = statsResult.error
-        ? null
-        : statsResult.data;
-
+      const s = data.stats ?? {};
       setStats({
-        totalCards: statsData?.total_cards ?? 0,
-        newThisWeek: statsData?.new_this_week ?? 0,
-        following: statsData?.following ?? 0,
-        workstreams: statsData?.workstreams ?? 0,
-        deadlinesThisWeek: safeCount(deadlinesThisWeekResult),
-        pipelineValue: Math.round(pipelineTotal),
+        totalCards: s.total_cards ?? 0,
+        newThisWeek: s.new_this_week ?? 0,
+        following: s.following ?? 0,
+        workstreams: s.workstreams ?? 0,
+        deadlinesThisWeek: s.deadlines_this_week ?? 0,
+        pipelineValue: Math.round(s.pipeline_value ?? 0),
       });
+      setPendingReviewCount(s.pending_review ?? 0);
 
-      // --- Quality distribution ---
+      const q = data.quality_distribution ?? {};
       setQualityDistribution({
-        high: safeCount(qualityHighResult),
-        moderate: safeCount(qualityModResult),
-        low: safeCount(qualityLowResult),
+        high: q.high ?? 0,
+        moderate: q.moderate ?? 0,
+        low: q.low ?? 0,
       });
     } catch (error) {
-      console.error("Error loading dashboard data:", error);
+      logger.warn("Error loading dashboard data:", error);
     } finally {
       setLoading(false);
     }

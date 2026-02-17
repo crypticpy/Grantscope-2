@@ -51,6 +51,7 @@ from app.routers.attachments import router as attachments_router
 from app.routers.exports import router as exports_router
 from app.routers.collaboration import router as collaboration_router
 from app.routers.applications import router as applications_router
+from app.routers.dashboard import router as dashboard_router
 
 load_dotenv()
 
@@ -263,6 +264,7 @@ def create_app() -> FastAPI:
     application.include_router(exports_router)
     application.include_router(collaboration_router)
     application.include_router(applications_router)
+    application.include_router(dashboard_router)
 
     return application
 
