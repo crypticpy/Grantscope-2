@@ -27,6 +27,13 @@ import {
   Eye,
   Archive,
   Presentation,
+  Compass,
+  ClipboardCheck,
+  FileEdit,
+  Send,
+  Trophy,
+  XCircle,
+  Clock,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
@@ -78,6 +85,14 @@ const COLUMN_ICONS: Record<KanbanStatus, LucideIcon> = {
   brief: FileText,
   watching: Eye,
   archived: Archive,
+  // Grant pipeline icons
+  discovered: Compass,
+  evaluating: ClipboardCheck,
+  applying: FileEdit,
+  submitted: Send,
+  awarded: Trophy,
+  declined: XCircle,
+  expired: Clock,
 };
 
 /**
@@ -118,6 +133,42 @@ const COLUMN_COLORS: Record<
     text: "text-gray-500 dark:text-gray-400",
     border: "border-gray-200 dark:border-gray-700",
   },
+  // Grant pipeline colors
+  discovered: {
+    bg: "bg-indigo-50 dark:bg-indigo-900/20",
+    text: "text-indigo-600 dark:text-indigo-400",
+    border: "border-indigo-200 dark:border-indigo-800",
+  },
+  evaluating: {
+    bg: "bg-orange-50 dark:bg-orange-900/20",
+    text: "text-orange-600 dark:text-orange-400",
+    border: "border-orange-200 dark:border-orange-800",
+  },
+  applying: {
+    bg: "bg-teal-50 dark:bg-teal-900/20",
+    text: "text-teal-600 dark:text-teal-400",
+    border: "border-teal-200 dark:border-teal-800",
+  },
+  submitted: {
+    bg: "bg-sky-50 dark:bg-sky-900/20",
+    text: "text-sky-600 dark:text-sky-400",
+    border: "border-sky-200 dark:border-sky-800",
+  },
+  awarded: {
+    bg: "bg-emerald-50 dark:bg-emerald-900/20",
+    text: "text-emerald-600 dark:text-emerald-400",
+    border: "border-emerald-200 dark:border-emerald-800",
+  },
+  declined: {
+    bg: "bg-red-50 dark:bg-red-900/20",
+    text: "text-red-500 dark:text-red-400",
+    border: "border-red-200 dark:border-red-800",
+  },
+  expired: {
+    bg: "bg-slate-50 dark:bg-slate-900/20",
+    text: "text-slate-500 dark:text-slate-400",
+    border: "border-slate-200 dark:border-slate-800",
+  },
 };
 
 // =============================================================================
@@ -146,7 +197,7 @@ function EmptyColumnState({ columnId, hint }: EmptyColumnStateProps) {
       )}
     >
       <p className="text-sm text-gray-500 dark:text-gray-400">
-        No signals in this column
+        No opportunities in this column
       </p>
       <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
         {hint || "Drag cards here to move them"}
@@ -275,7 +326,7 @@ export const KanbanColumn = memo(function KanbanColumn({
                       </p>
                     )}
                     <p className="text-xs text-gray-500 mt-1 italic">
-                      Use signal menu to trigger
+                      Use card menu to trigger
                     </p>
                   </div>
                 }
@@ -288,7 +339,7 @@ export const KanbanColumn = memo(function KanbanColumn({
                     colors.text,
                     "opacity-60",
                   )}
-                  aria-label={`${columnDef.primaryAction.label} available in signal menu`}
+                  aria-label={`${columnDef.primaryAction.label} available in card menu`}
                 >
                   <columnDef.primaryAction.icon className="h-3.5 w-3.5" />
                 </div>

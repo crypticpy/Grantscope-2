@@ -25,10 +25,11 @@ from app.models.workstream import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1", tags=["workstreams"])
+router = APIRouter(prefix="/api/v1", tags=["workstreams & programs"])
 
 
 @router.get("/me/workstreams")
+@router.get("/me/programs")
 async def get_user_workstreams(current_user: dict = Depends(get_current_user)):
     """Get user's workstreams"""
     response = (
@@ -42,6 +43,7 @@ async def get_user_workstreams(current_user: dict = Depends(get_current_user)):
 
 
 @router.post("/me/workstreams", response_model=WorkstreamCreateResponse)
+@router.post("/me/programs", response_model=WorkstreamCreateResponse)
 async def create_workstream(
     workstream_data: WorkstreamCreate, current_user: dict = Depends(get_current_user)
 ):
@@ -146,6 +148,7 @@ async def create_workstream(
 
 
 @router.patch("/me/workstreams/{workstream_id}", response_model=Workstream)
+@router.patch("/me/programs/{workstream_id}", response_model=Workstream)
 async def update_workstream(
     workstream_id: str,
     workstream_data: WorkstreamUpdate,
@@ -207,6 +210,7 @@ async def update_workstream(
 
 
 @router.delete("/me/workstreams/{workstream_id}")
+@router.delete("/me/programs/{workstream_id}")
 async def delete_workstream(
     workstream_id: str, current_user: dict = Depends(get_current_user)
 ):
@@ -247,6 +251,7 @@ async def delete_workstream(
 
 
 @router.get("/me/workstreams/{workstream_id}/feed")
+@router.get("/me/programs/{workstream_id}/feed")
 async def get_workstream_feed(
     workstream_id: str,
     current_user: dict = Depends(get_current_user),
@@ -342,6 +347,10 @@ async def get_workstream_feed(
 
 @router.post(
     "/me/workstreams/{workstream_id}/auto-populate",
+    response_model=AutoPopulateResponse,
+)
+@router.post(
+    "/me/programs/{workstream_id}/auto-populate",
     response_model=AutoPopulateResponse,
 )
 async def auto_populate_workstream(
@@ -510,6 +519,7 @@ async def auto_populate_workstream(
 
 
 @router.post("/me/workstreams/{workstream_id}/auto-scan")
+@router.post("/me/programs/{workstream_id}/auto-scan")
 async def toggle_workstream_auto_scan(
     workstream_id: str,
     enable: bool = True,

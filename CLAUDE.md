@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Foresight is an AI-powered strategic horizon scanning system for the City of Austin. It automates discovery, analysis, and tracking of emerging trends, technologies, and issues that could impact municipal operations, aligned with Austin's strategic framework and CMO's Top 25 Priorities.
+GrantScope2 is an AI-powered strategic horizon scanning system for the City of Austin. It automates discovery, analysis, and tracking of emerging trends, technologies, and issues that could impact municipal operations, aligned with Austin's strategic framework and CMO's Top 25 Priorities.
 
 ## Tech Stack
 
@@ -147,5 +147,5 @@ Backend tests use pytest with async support. Frontend uses Vitest for unit tests
 
 Test user credentials for local development:
 
-- Email: `test@foresight.austintexas.gov`
+- Email: `test@grantscope.austintexas.gov`
 - Password: `TestPassword123!`

@@ -19,7 +19,7 @@ import { fetchConversations, type Conversation } from "../../lib/chat-api";
 
 export interface ChatHistoryPopoverProps {
   /** The scope context for fetching conversations */
-  scope: "signal" | "workstream" | "global";
+  scope: "signal" | "workstream" | "global" | "wizard";
   /** ID of the scoped entity (card_id or workstream_id), if not global */
   scopeId?: string;
   /** Currently active conversation ID, used to highlight the active item */

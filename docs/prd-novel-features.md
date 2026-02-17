@@ -2,7 +2,7 @@
 
 **Version:** 1.0
 **Date:** February 2026
-**Product:** Foresight -- AI-Powered Strategic Horizon Scanning System
+**Product:** GrantScope2 -- AI-Powered Strategic Horizon Scanning System
 **Owner:** City of Austin Innovation Office
 **Status:** Draft for Review
 
@@ -14,7 +14,7 @@
 2. [Strategic Context](#2-strategic-context)
 3. [Feature 1: Cross-Signal Pattern Detection](#3-feature-1-cross-signal-pattern-detection)
 4. [Feature 2: Signal Velocity & Trajectory Tracking](#4-feature-2-signal-velocity--trajectory-tracking)
-5. [Feature 3: Natural Language Querying ("Ask Foresight")](#5-feature-3-natural-language-querying-ask-foresight)
+5. [Feature 3: Natural Language Querying ("Ask GrantScope2")](#5-feature-3-natural-language-querying-ask-grantscope2)
 6. [Feature 4: Peer City Intelligence](#6-feature-4-peer-city-intelligence)
 7. [Feature 5: Proactive Email Digests](#7-feature-5-proactive-email-digests)
 8. [Feature 6: Grant & Funding Matcher](#8-feature-6-grant--funding-matcher)
@@ -28,11 +28,11 @@
 
 ## 1. Executive Summary
 
-Foresight already automates signal discovery and classification. This PRD defines the next generation of features that transform Foresight from a signal aggregation tool into an **intelligence platform** -- one that finds patterns humans miss, tracks how the landscape shifts over time, and answers strategic questions on demand.
+GrantScope2 already automates signal discovery and classification. This PRD defines the next generation of features that transform GrantScope2 from a signal aggregation tool into an **intelligence platform** -- one that finds patterns humans miss, tracks how the landscape shifts over time, and answers strategic questions on demand.
 
-These eight features collectively represent the capabilities that differentiate Foresight from traditional consulting engagements (Gartner, McKinsey, Deloitte) and static trend report subscriptions. Where a $500K/year consulting engagement delivers quarterly slide decks with generic industry analysis, Foresight delivers continuous, Austin-specific, cross-domain intelligence that improves with every interaction.
+These eight features collectively represent the capabilities that differentiate GrantScope2 from traditional consulting engagements (Gartner, McKinsey, Deloitte) and static trend report subscriptions. Where a $500K/year consulting engagement delivers quarterly slide decks with generic industry analysis, GrantScope2 delivers continuous, Austin-specific, cross-domain intelligence that improves with every interaction.
 
-**Priority 1 (Build Now):** Cross-Signal Pattern Detection, Signal Velocity Tracking, Ask Foresight, Peer City Intelligence, Proactive Email Digests
+**Priority 1 (Build Now):** Cross-Signal Pattern Detection, Signal Velocity Tracking, Ask GrantScope2, Peer City Intelligence, Proactive Email Digests
 
 **Priority 2 (Next Phase):** Grant & Funding Matcher, Austin-Specific Impact Analysis, Signal Decay Detection
 
@@ -48,19 +48,19 @@ Traditional horizon scanning suffers from three structural limitations:
 2. **Point-in-time snapshots.** A quarterly report captures one moment. By the time it reaches a council member, the landscape has shifted.
 3. **Passive consumption.** Staff receive reports but cannot interrogate the underlying data. Follow-up questions require another engagement.
 
-Foresight's novel features address all three limitations by making intelligence continuous, cross-domain, and interactive.
+GrantScope2's novel features address all three limitations by making intelligence continuous, cross-domain, and interactive.
 
 ### 2.2 Competitive Positioning
 
-| Capability                     | Gartner/McKinsey        | Static Trend Tools | Foresight (Current) | Foresight (This PRD)         |
-| ------------------------------ | ----------------------- | ------------------ | ------------------- | ---------------------------- |
-| Signal discovery               | Manual                  | Automated          | Automated           | Automated                    |
-| Cross-domain pattern detection | Rare, analyst-dependent | None               | None                | **AI-driven, nightly**       |
-| Velocity tracking              | Annual benchmarks       | None               | None                | **Continuous, per-signal**   |
-| Natural language Q&A           | Analyst on retainer     | None               | None                | **Self-service, instant**    |
-| Peer city benchmarking         | Custom research         | None               | None                | **Automated, continuous**    |
-| Austin specificity             | Custom engagement       | None               | Partial             | **Deep contextual analysis** |
-| Cost                           | $300-500K/year          | $20-50K/year       | Internal            | Internal                     |
+| Capability                     | Gartner/McKinsey        | Static Trend Tools | GrantScope2 (Current) | GrantScope2 (This PRD)       |
+| ------------------------------ | ----------------------- | ------------------ | --------------------- | ---------------------------- |
+| Signal discovery               | Manual                  | Automated          | Automated             | Automated                    |
+| Cross-domain pattern detection | Rare, analyst-dependent | None               | None                  | **AI-driven, nightly**       |
+| Velocity tracking              | Annual benchmarks       | None               | None                  | **Continuous, per-signal**   |
+| Natural language Q&A           | Analyst on retainer     | None               | None                  | **Self-service, instant**    |
+| Peer city benchmarking         | Custom research         | None               | None                  | **Automated, continuous**    |
+| Austin specificity             | Custom engagement       | None               | Partial               | **Deep contextual analysis** |
+| Cost                           | $300-500K/year          | $20-50K/year       | Internal              | Internal                     |
 
 ---
 
@@ -74,7 +74,7 @@ An AI system that analyzes all active signals across strategic pillars to identi
 
 ### 3.2 Why It Matters
 
-Cross-domain pattern detection is where Foresight delivers value that no consulting engagement can match at scale. A human analyst might connect two domains they personally understand, but systematically scanning all six pillars for emergent intersections requires either a large team or AI. This is Foresight's single most defensible differentiator.
+Cross-domain pattern detection is where GrantScope2 delivers value that no consulting engagement can match at scale. A human analyst might connect two domains they personally understand, but systematically scanning all six pillars for emergent intersections requires either a large team or AI. This is GrantScope2's single most defensible differentiator.
 
 **Versus Gartner/McKinsey:** Consulting engagements are scoped to one domain. Cross-domain insights require separate engagements, separate analysts, and manual synthesis -- if they happen at all.
 
@@ -153,7 +153,7 @@ Tracks how each signal evolves over time and computes a trajectory indicator -- 
 
 Static classification is the single biggest weakness of traditional horizon scanning. A signal classified as "Horizon 3 -- long-term" in January might accelerate to "Horizon 1 -- immediate" by June due to a federal policy change or technology breakthrough. Without velocity tracking, stale classifications create a false sense of timeline.
 
-**Versus Gartner/McKinsey:** Consulting reports are snapshots. Between reports, signals can dramatically shift. Gartner's Hype Cycle updates annually; Foresight updates continuously.
+**Versus Gartner/McKinsey:** Consulting reports are snapshots. Between reports, signals can dramatically shift. Gartner's Hype Cycle updates annually; GrantScope2 updates continuously.
 
 ### 4.3 User Stories
 
@@ -210,11 +210,11 @@ ALTER TABLE cards ADD COLUMN horizon_recommendation TEXT;
 
 ---
 
-## 5. Feature 3: Natural Language Querying ("Ask Foresight")
+## 5. Feature 3: Natural Language Querying ("Ask GrantScope2")
 
 ### 5.1 What It Does
 
-Allows any city employee to ask questions about trends, signals, and strategic topics in plain English and receive synthesized, sourced answers drawn from Foresight's signal database. This is not keyword search -- it is a RAG (Retrieval-Augmented Generation) pipeline that finds relevant signals via vector search and then uses an LLM to compose a coherent, cited answer.
+Allows any city employee to ask questions about trends, signals, and strategic topics in plain English and receive synthesized, sourced answers drawn from GrantScope2's signal database. This is not keyword search -- it is a RAG (Retrieval-Augmented Generation) pipeline that finds relevant signals via vector search and then uses an LLM to compose a coherent, cited answer.
 
 **Example queries:**
 
@@ -225,15 +225,15 @@ Allows any city employee to ask questions about trends, signals, and strategic t
 
 ### 5.2 Why It Matters
 
-This feature transforms Foresight from a system you browse into a system you converse with. It dramatically lowers the barrier to entry: a council member who would never navigate a signal dashboard can type a question and get an answer. It also captures demand signals -- questions asked reveal what leadership cares about, which can inform future discovery priorities.
+This feature transforms GrantScope2 from a system you browse into a system you converse with. It dramatically lowers the barrier to entry: a council member who would never navigate a signal dashboard can type a question and get an answer. It also captures demand signals -- questions asked reveal what leadership cares about, which can inform future discovery priorities.
 
-**Versus Gartner/McKinsey:** Getting an answer from a consulting firm requires scheduling a call, waiting for research, and paying for analyst time. Ask Foresight delivers answers in seconds, 24/7, drawing from the same continuously-updated signal database.
+**Versus Gartner/McKinsey:** Getting an answer from a consulting firm requires scheduling a call, waiting for research, and paying for analyst time. Ask GrantScope2 delivers answers in seconds, 24/7, drawing from the same continuously-updated signal database.
 
 ### 5.3 User Stories
 
 - As a **council briefing preparer**, I want to ask a question in plain English and get a sourced answer so that I can quickly build briefing materials.
 - As a **department head**, I want to ask "What should I know about [topic]?" and get a synthesis rather than a list of links so that I can make informed decisions quickly.
-- As a **new user**, I want to explore Foresight by asking questions so that I do not need training on the interface.
+- As a **new user**, I want to explore GrantScope2 by asking questions so that I do not need training on the interface.
 - As an **innovation analyst**, I want to see what questions other users are asking so that I can identify emerging areas of interest across departments.
 
 ### 5.4 Technical Approach
@@ -275,7 +275,7 @@ CREATE TABLE queries (
 
 **Frontend integration:**
 
-- Header search bar triggers Ask Foresight with a dedicated dropdown/modal for answers.
+- Header search bar triggers Ask GrantScope2 with a dedicated dropdown/modal for answers.
 - Dedicated `/ask` page with full conversation history and suggested questions.
 - Answer cards are clickable to navigate to the underlying signal.
 
@@ -305,7 +305,7 @@ Denver, Seattle, Portland, Nashville, Charlotte, San Antonio, San Jose, Columbus
 
 City leaders constantly ask: "What are other cities doing?" This question currently requires manual research or expensive consulting engagements. Automated peer city monitoring provides continuous competitive intelligence and helps Austin learn from others' successes and failures.
 
-**Versus Gartner/McKinsey:** Peer benchmarking is a standard consulting deliverable, typically costing $50-100K per engagement and delivering a single point-in-time comparison. Foresight delivers continuous benchmarking as a built-in capability.
+**Versus Gartner/McKinsey:** Peer benchmarking is a standard consulting deliverable, typically costing $50-100K per engagement and delivering a single point-in-time comparison. GrantScope2 delivers continuous benchmarking as a built-in capability.
 
 ### 6.3 User Stories
 
@@ -376,9 +376,9 @@ Sends personalized, periodic email digests to users based on their workstream su
 
 ### 7.2 Why It Matters
 
-Most city employees will not log into Foresight daily. Proactive delivery of relevant intelligence via email meets users where they already work. This is the difference between a tool that waits to be consulted and a system that actively informs decision-making.
+Most city employees will not log into GrantScope2 daily. Proactive delivery of relevant intelligence via email meets users where they already work. This is the difference between a tool that waits to be consulted and a system that actively informs decision-making.
 
-**Versus Gartner/McKinsey:** Consulting firms send generic newsletters to all subscribers. Foresight digests are personalized to each user's specific workstreams and followed signals -- every recipient gets a different email.
+**Versus Gartner/McKinsey:** Consulting firms send generic newsletters to all subscribers. GrantScope2 digests are personalized to each user's specific workstreams and followed signals -- every recipient gets a different email.
 
 ### 7.3 User Stories
 
@@ -400,7 +400,7 @@ Most city employees will not log into Foresight daily. Proactive delivery of rel
    - Query velocity changes for followed signals.
    - Query new AI insights involving user's pillars.
    - Query peer city activity for user's topics.
-3. **Template rendering.** Render digest content using an HTML email template. Include: summary stats (X new signals, Y velocity changes), top items with brief summaries, and deep links back to Foresight for full details.
+3. **Template rendering.** Render digest content using an HTML email template. Include: summary stats (X new signals, Y velocity changes), top items with brief summaries, and deep links back to GrantScope2 for full details.
 4. **Email delivery.** Use a transactional email service (SendGrid, Resend, or Supabase's built-in email). Queue emails through the worker to avoid rate limits.
 5. **Settings UI.** New section on the Settings/Profile page for email preferences: frequency selector, custom email field, content type toggles.
 
@@ -438,7 +438,7 @@ Matches active signals and workstreams to available federal, state, and foundati
 
 ### 8.2 Why It Matters
 
-Cities leave billions in available grant funding on the table because they lack the capacity to systematically match their strategic priorities to funding opportunities. Grant matching transforms Foresight from an intelligence tool into an action enabler -- not just "here is what is happening" but "here is how to fund a response."
+Cities leave billions in available grant funding on the table because they lack the capacity to systematically match their strategic priorities to funding opportunities. Grant matching transforms GrantScope2 from an intelligence tool into an action enabler -- not just "here is what is happening" but "here is how to fund a response."
 
 **Versus Gartner/McKinsey:** Traditional consulting identifies trends but does not connect them to funding mechanisms. Grant matching is typically a separate, expensive service.
 
@@ -481,7 +481,7 @@ For each signal, auto-generates a contextual analysis specific to Austin's uniqu
 
 Generic trend reports are the primary complaint about consulting engagements. "Smart city trends" is not useful; "What smart city trends mean for Austin given our 3% annual population growth, 300+ days of sun, and $5.2B annual budget" is useful. Localization is the difference between information and intelligence.
 
-**Versus Gartner/McKinsey:** Consulting firms produce templated reports and add a thin customization layer. Foresight can weave Austin-specific data into every analysis because the contextual dataset is persistent and continuously updated.
+**Versus Gartner/McKinsey:** Consulting firms produce templated reports and add a thin customization layer. GrantScope2 can weave Austin-specific data into every analysis because the contextual dataset is persistent and continuously updated.
 
 ### 9.3 User Stories
 
@@ -520,7 +520,7 @@ Identifies signals that are losing momentum -- the inverse of velocity tracking.
 
 Knowing what to stop watching is as valuable as knowing what to start watching. Organizations waste significant resources pursuing trends that have peaked. Decay detection prevents "zombie signals" -- topics that persist in the system because no one actively removes them, consuming attention and creating noise.
 
-**Versus Gartner/McKinsey:** The Gartner Hype Cycle tracks this at a macro level, updated annually. Foresight tracks decay at the individual signal level, updated continuously, with Austin-specific context about whether the technology is actually viable for municipal use cases.
+**Versus Gartner/McKinsey:** The Gartner Hype Cycle tracks this at a macro level, updated annually. GrantScope2 tracks decay at the individual signal level, updated continuously, with Austin-specific context about whether the technology is actually viable for municipal use cases.
 
 ### 10.3 User Stories
 
@@ -567,23 +567,23 @@ Knowing what to stop watching is as valuable as knowing what to start watching. 
 
 ### Phase 2: User-Facing Intelligence (Weeks 5-8)
 
-| Week | Feature            | Deliverable                                                                 |
-| ---- | ------------------ | --------------------------------------------------------------------------- |
-| 5-6  | Ask Foresight (F3) | RAG pipeline, `/ask` endpoint with SSE streaming, header search integration |
-| 6-7  | Ask Foresight (F3) | Query history, satisfaction tracking, suggested follow-ups                  |
-| 7-8  | Email Digests (F5) | Preferences UI, digest generation job, email template, delivery pipeline    |
+| Week | Feature              | Deliverable                                                                 |
+| ---- | -------------------- | --------------------------------------------------------------------------- |
+| 5-6  | Ask GrantScope2 (F3) | RAG pipeline, `/ask` endpoint with SSE streaming, header search integration |
+| 6-7  | Ask GrantScope2 (F3) | Query history, satisfaction tracking, suggested follow-ups                  |
+| 7-8  | Email Digests (F5)   | Preferences UI, digest generation job, email template, delivery pipeline    |
 
-**Rationale:** Ask Foresight is high visibility and immediately demonstrates value to leadership. Email digests drive recurring engagement.
+**Rationale:** Ask GrantScope2 is high visibility and immediately demonstrates value to leadership. Email digests drive recurring engagement.
 
 ### Phase 3: Competitive Intelligence (Weeks 9-12)
 
-| Week  | Feature                     | Deliverable                                                                               |
-| ----- | --------------------------- | ----------------------------------------------------------------------------------------- |
-| 9-10  | Peer City Intelligence (F4) | `PeerCityFetcher`, city configuration for 15+ cities, source integration                  |
-| 10-11 | Peer City Intelligence (F4) | Peer adoption scoring, city tags on cards, competitive benchmarking view                  |
-| 11-12 | Integration                 | Connect peer city data to velocity tracking, include in digests, surface in Ask Foresight |
+| Week  | Feature                     | Deliverable                                                                                 |
+| ----- | --------------------------- | ------------------------------------------------------------------------------------------- |
+| 9-10  | Peer City Intelligence (F4) | `PeerCityFetcher`, city configuration for 15+ cities, source integration                    |
+| 10-11 | Peer City Intelligence (F4) | Peer adoption scoring, city tags on cards, competitive benchmarking view                    |
+| 11-12 | Integration                 | Connect peer city data to velocity tracking, include in digests, surface in Ask GrantScope2 |
 
-**Rationale:** Peer city intelligence has the most complex data pipeline and benefits from Velocity and Ask Foresight already being in place.
+**Rationale:** Peer city intelligence has the most complex data pipeline and benefits from Velocity and Ask GrantScope2 already being in place.
 
 ### Phase 4: Next-Generation (Weeks 13-20)
 
@@ -603,8 +603,8 @@ Knowing what to stop watching is as valuable as knowing what to start watching. 
 | ------------------------------------------- | ----------------------------------- | ---------------------------------------------------------------- |
 | Cross-signal insights generated per week    | 5-15                                | Count of new `insights` records                                  |
 | Insight dismissal rate                      | <40%                                | Dismissed / total insights shown                                 |
-| Ask Foresight queries per week              | 50+ (after 3 months)                | Count of `queries` records                                       |
-| Ask Foresight satisfaction score            | >3.5/5.0                            | Average rating on answers                                        |
+| Ask GrantScope2 queries per week            | 50+ (after 3 months)                | Count of `queries` records                                       |
+| Ask GrantScope2 satisfaction score          | >3.5/5.0                            | Average rating on answers                                        |
 | Digest open rate                            | >50%                                | Email analytics                                                  |
 | Peer cities monitored                       | 15+                                 | Active `peer_city_config` records                                |
 | Velocity-driven reclassifications per month | 5-20                                | Cards with horizon changes attributed to velocity recommendation |
@@ -612,35 +612,35 @@ Knowing what to stop watching is as valuable as knowing what to start watching. 
 
 ### Qualitative
 
-- Staff cite Foresight insights in council briefings and strategic planning documents.
+- Staff cite GrantScope2 insights in council briefings and strategic planning documents.
 - Department heads use peer city data to justify or de-prioritize initiatives.
-- "Ask Foresight" becomes the default first step when someone has a strategic question.
+- "Ask GrantScope2" becomes the default first step when someone has a strategic question.
 - Leadership references velocity and trajectory data in budget discussions.
 
 ### Cost Displacement
 
-- Target: Foresight replaces or reduces the need for at least one external consulting engagement per year ($100-250K savings).
-- Measurement: Track instances where Foresight-generated intelligence would have previously required a consulting RFP.
+- Target: GrantScope2 replaces or reduces the need for at least one external consulting engagement per year ($100-250K savings).
+- Measurement: Track instances where GrantScope2-generated intelligence would have previously required a consulting RFP.
 
 ---
 
 ## 13. Risks & Mitigations
 
-| Risk                                                         | Likelihood | Impact | Mitigation                                                                                                                                                                                        |
-| ------------------------------------------------------------ | ---------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Cross-signal insights are low quality or obvious**         | Medium     | High   | Human review period for first 30 days; tune clustering thresholds and LLM prompts based on feedback; implement dismissal tracking to identify weak patterns                                       |
-| **Peer city RSS feeds are unreliable or inconsistent**       | High       | Medium | Fall back to Serper/Tavily search for cities without stable feeds; build monitoring for feed health; start with 10 cities, expand as feed reliability is confirmed                                |
-| **Ask Foresight hallucinates or cites non-existent signals** | Medium     | High   | RAG pipeline strictly limits LLM context to retrieved signals; answer includes only linked, verifiable signal names; add explicit "I don't have enough data" responses for low-similarity queries |
-| **Email delivery issues (spam filters, bounce rates)**       | Medium     | Medium | Use established transactional email service with proper SPF/DKIM; allow users to whitelist; provide in-app digest fallback                                                                        |
-| **Grant data staleness (expired grants shown as active)**    | Medium     | Medium | Weekly grant data refresh; deadline-based auto-expiry; last-refreshed timestamp visible to users                                                                                                  |
-| **LLM API costs scale with usage**                           | Medium     | Low    | Cache Ask Foresight answers for similar questions (embedding similarity > 0.95); batch nightly jobs efficiently; set per-user daily query limits                                                  |
-| **Velocity tracking produces noisy trajectory changes**      | Medium     | Medium | Require 3+ consecutive periods before changing trajectory label; use smoothed rolling averages rather than raw deltas; allow user override                                                        |
+| Risk                                                           | Likelihood | Impact | Mitigation                                                                                                                                                                                        |
+| -------------------------------------------------------------- | ---------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Cross-signal insights are low quality or obvious**           | Medium     | High   | Human review period for first 30 days; tune clustering thresholds and LLM prompts based on feedback; implement dismissal tracking to identify weak patterns                                       |
+| **Peer city RSS feeds are unreliable or inconsistent**         | High       | Medium | Fall back to Serper/Tavily search for cities without stable feeds; build monitoring for feed health; start with 10 cities, expand as feed reliability is confirmed                                |
+| **Ask GrantScope2 hallucinates or cites non-existent signals** | Medium     | High   | RAG pipeline strictly limits LLM context to retrieved signals; answer includes only linked, verifiable signal names; add explicit "I don't have enough data" responses for low-similarity queries |
+| **Email delivery issues (spam filters, bounce rates)**         | Medium     | Medium | Use established transactional email service with proper SPF/DKIM; allow users to whitelist; provide in-app digest fallback                                                                        |
+| **Grant data staleness (expired grants shown as active)**      | Medium     | Medium | Weekly grant data refresh; deadline-based auto-expiry; last-refreshed timestamp visible to users                                                                                                  |
+| **LLM API costs scale with usage**                             | Medium     | Low    | Cache Ask GrantScope2 answers for similar questions (embedding similarity > 0.95); batch nightly jobs efficiently; set per-user daily query limits                                                |
+| **Velocity tracking produces noisy trajectory changes**        | Medium     | Medium | Require 3+ consecutive periods before changing trajectory label; use smoothed rolling averages rather than raw deltas; allow user override                                                        |
 
 ---
 
 ## Appendix A: Glossary
 
-- **Signal:** An atomic unit of strategic intelligence in Foresight, represented as a "card" in the system. Synonymous with "card" in the codebase.
+- **Signal:** An atomic unit of strategic intelligence in GrantScope2, represented as a "card" in the system. Synonymous with "card" in the codebase.
 - **Pillar:** One of six strategic domains: Community Health (CH), Mobility (MC), Housing (HS), Economic (EC), Environmental (ES), Cultural (CE).
 - **Horizon:** Time classification for a signal. H1 = immediate (0-12 months), H2 = emerging (1-3 years), H3 = long-term (3+ years).
 - **Trajectory:** The direction and rate of change for a signal's momentum: accelerating, stable, or declining.

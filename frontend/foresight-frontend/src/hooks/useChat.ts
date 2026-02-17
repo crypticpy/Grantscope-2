@@ -27,7 +27,7 @@ import {
 
 export interface UseChatOptions {
   /** The scope context for this chat session */
-  scope: "signal" | "workstream" | "global";
+  scope: "signal" | "workstream" | "global" | "wizard";
   /** ID of the scoped entity (card_id or workstream_id), if not global */
   scopeId?: string;
   /** Resume an existing conversation by ID */
@@ -76,11 +76,52 @@ export interface UseChatReturn {
 }
 
 // ============================================================================
+// Default Suggested Questions
+// ============================================================================
+
+/**
+ * Returns grant-focused default suggested questions based on chat scope.
+ * Used as a fallback when the server doesn't return suggestions.
+ */
+function getDefaultSuggestedQuestions(scope: string): string[] {
+  switch (scope) {
+    case "global":
+      return [
+        "What grants are approaching their deadlines?",
+        "Which programs have the highest alignment scores?",
+        "Summarize the latest federal grant opportunities",
+        "What's the total value of my grant pipeline?",
+      ];
+    case "workstream":
+      return [
+        "What are the top opportunities in this program?",
+        "Which grants here have the nearest deadlines?",
+        "Summarize the funding landscape for this program",
+        "What eligibility requirements should I focus on?",
+      ];
+    case "signal":
+      return [
+        "What are the key eligibility requirements?",
+        "How does this opportunity align with our strategic goals?",
+        "What similar grants have been awarded recently?",
+        "Summarize the application timeline and process",
+      ];
+    default:
+      return [
+        "What grants are approaching their deadlines?",
+        "Which programs have the highest alignment scores?",
+        "Summarize the latest federal grant opportunities",
+        "What's the total value of my grant pipeline?",
+      ];
+  }
+}
+
+// ============================================================================
 // Session Storage Helpers
 // ============================================================================
 
 function storageKey(scope: string, scopeId?: string): string {
-  return `foresight:chat:${scope}:${scopeId || "global"}`;
+  return `grantscope:chat:${scope}:${scopeId || "global"}`;
 }
 
 function persistConversationId(
@@ -391,9 +432,16 @@ export function useChat(options: UseChatOptions): UseChatReturn {
     try {
       const suggestions = await fetchSuggestions(scope, scopeId);
       if (!isMountedRef.current) return;
-      setSuggestedQuestions(suggestions);
+      setSuggestedQuestions(
+        suggestions.length > 0
+          ? suggestions
+          : getDefaultSuggestedQuestions(scope),
+      );
     } catch {
-      // Suggestions are non-critical, fail silently
+      // Suggestions are non-critical — fall back to defaults
+      if (isMountedRef.current) {
+        setSuggestedQuestions(getDefaultSuggestedQuestions(scope));
+      }
     }
   }, [scope, scopeId]);
 
@@ -435,6 +483,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
     async function restore() {
       // User explicitly requested a fresh chat
       if (forceNew) {
+        setSuggestedQuestions(getDefaultSuggestedQuestions(scope));
         loadSuggestions();
         fetchChatStats()
           .then((data) => {
@@ -467,6 +516,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
           await loadConversation(conversations[0].id);
         } else {
           // No prior conversations — show suggestions
+          setSuggestedQuestions(getDefaultSuggestedQuestions(scope));
           loadSuggestions();
           fetchChatStats()
             .then((data) => {
@@ -481,6 +531,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
       } catch {
         // Failed to fetch — fall back to empty state with suggestions
         if (!cancelled && isMountedRef.current) {
+          setSuggestedQuestions(getDefaultSuggestedQuestions(scope));
           loadSuggestions();
           fetchChatStats()
             .then((data) => {

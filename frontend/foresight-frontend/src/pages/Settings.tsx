@@ -160,7 +160,7 @@ const Settings: React.FC = () => {
           Settings
         </h1>
         <p className="mt-2 text-gray-600 dark:text-gray-400">
-          Manage your account preferences and Foresight configuration.
+          Manage your account preferences and GrantScope2 configuration.
         </p>
       </div>
 
@@ -435,7 +435,7 @@ const Settings: React.FC = () => {
                       }
                       className="h-4 w-4 text-brand-blue focus:ring-brand-blue border-gray-300 dark:border-gray-600 rounded"
                     />
-                    New signals in my workstreams
+                    New opportunities in my workstreams
                   </label>
                   <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
                     <input
@@ -449,7 +449,7 @@ const Settings: React.FC = () => {
                       }
                       className="h-4 w-4 text-brand-blue focus:ring-brand-blue border-gray-300 dark:border-gray-600 rounded"
                     />
-                    Velocity changes on followed signals
+                    Velocity changes on followed opportunities
                   </label>
                   <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
                     <input
@@ -463,7 +463,7 @@ const Settings: React.FC = () => {
                       }
                       className="h-4 w-4 text-brand-blue focus:ring-brand-blue border-gray-300 dark:border-gray-600 rounded"
                     />
-                    Cross-signal pattern alerts
+                    Cross-opportunity pattern alerts
                   </label>
                   <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
                     <input
@@ -571,7 +571,7 @@ const Settings: React.FC = () => {
                   Version:
                 </span>
                 <span className="text-gray-900 dark:text-white">
-                  Foresight v1.0.0
+                  GrantScope2 v1.0.0
                 </span>
               </div>
               <div className="flex justify-between">
@@ -587,7 +587,7 @@ const Settings: React.FC = () => {
                   Support:
                 </span>
                 <span className="text-gray-900 dark:text-white">
-                  contact-foresight@austintexas.gov
+                  contact-grantscope@austintexas.gov
                 </span>
               </div>
             </div>
@@ -613,8 +613,8 @@ const Settings: React.FC = () => {
                 Sign Out
               </LoadingButton>
               <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-                Sign out of your Foresight account. You'll need to sign in again
-                to access the system.
+                Sign out of your GrantScope2 account. You'll need to sign in
+                again to access the system.
               </p>
             </div>
           </div>

@@ -1,5 +1,5 @@
 """
-Source Quality Index (SQI) calculation service for Foresight.
+Source Quality Index (SQI) calculation service for GrantScope.
 
 Computes a composite quality score (0-100) for each card based on the
 credibility, diversity, and freshness of its underlying sources.  The SQI

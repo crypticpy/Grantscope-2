@@ -1,5 +1,5 @@
 """
-Embedding-based content deduplication for Foresight sources.
+Embedding-based content deduplication for GrantScope sources.
 
 Provides a two-tier deduplication check for incoming sources:
 

@@ -1,4 +1,4 @@
-"""Core domain models for Foresight API.
+"""Core domain models for GrantScope API.
 
 Foundational models representing the primary entities in the system:
 cards, user profiles, and related lookup types.
@@ -37,6 +37,24 @@ class Card(BaseModel):
     velocity_score: Optional[int] = None
     risk_score: Optional[int] = None
     opportunity_score: Optional[int] = None
+    # Grant-specific fields
+    grant_type: Optional[str] = None
+    funding_amount_min: Optional[float] = None
+    funding_amount_max: Optional[float] = None
+    deadline: Optional[datetime] = None
+    grantor: Optional[str] = None
+    cfda_number: Optional[str] = None
+    grants_gov_id: Optional[str] = None
+    sam_opportunity_id: Optional[str] = None
+    eligibility_text: Optional[str] = None
+    match_requirement: Optional[str] = None
+    category_id: Optional[str] = None
+    source_url: Optional[str] = None
+    alignment_score: Optional[int] = None
+    readiness_score: Optional[int] = None
+    competition_score: Optional[int] = None
+    urgency_score: Optional[int] = None
+    probability_score: Optional[int] = None
     signal_quality_score: Optional[int] = None
     status: str = "active"
     created_at: datetime
@@ -59,6 +77,24 @@ class CardCreate(BaseModel):
     stage_id: Optional[str] = None
     horizon: Optional[str] = Field(
         None, pattern=r"^H[123]$", description="Horizon (H1, H2, H3)"
+    )
+    # Grant-specific fields
+    grant_type: Optional[str] = Field(
+        None, description="Grant type (federal, state, foundation, local, other)"
+    )
+    funding_amount_min: Optional[float] = Field(
+        None, ge=0, description="Minimum funding amount"
+    )
+    funding_amount_max: Optional[float] = Field(
+        None, ge=0, description="Maximum funding amount"
+    )
+    deadline: Optional[datetime] = Field(None, description="Application deadline")
+    grantor: Optional[str] = Field(
+        None, max_length=500, description="Granting organization"
+    )
+    category_id: Optional[str] = Field(None, description="Grant category code")
+    source_url: Optional[str] = Field(
+        None, max_length=2000, description="Source URL for the opportunity"
     )
 
     @validator("name")

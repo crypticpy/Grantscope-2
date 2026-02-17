@@ -7,17 +7,12 @@ and peer city list for comparative benchmarking.
 
 from typing import List, Dict
 
+from app.taxonomy import PILLAR_NAMES
+
 # ---------------------------------------------------------------------------
-# Strategic pillar reference (matches PILLAR_NAMES in signal_agent_service)
+# Strategic pillar reference (canonical source: taxonomy.py)
 # ---------------------------------------------------------------------------
-STRATEGIC_PILLARS = {
-    "CH": "Community Health & Sustainability",
-    "EW": "Economic & Workforce Development",
-    "HG": "High-Performing Government",
-    "HH": "Homelessness & Housing",
-    "MC": "Mobility & Critical Infrastructure",
-    "PS": "Public Safety",
-}
+STRATEGIC_PILLARS = PILLAR_NAMES
 
 # ---------------------------------------------------------------------------
 # CMO Top 25 Priorities

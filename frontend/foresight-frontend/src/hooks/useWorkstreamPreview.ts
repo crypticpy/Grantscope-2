@@ -28,16 +28,18 @@ export function useWorkstreamPreview(formData: FormData, hasFilters: boolean) {
       } = await supabase.auth.getSession();
       if (!session?.access_token) return;
 
+      // Fetch preview of matching opportunities based on current filters
       const result = await fetchFilterPreview(session.access_token, {
         pillar_ids: formData.pillar_ids,
         goal_ids: formData.goal_ids,
         stage_ids: formData.stage_ids,
         horizon: formData.horizon,
         keywords: formData.keywords,
+        category_ids: formData.category_ids,
       });
       setPreview(result);
     } catch (error) {
-      console.error("Failed to fetch filter preview:", error);
+      console.error("Failed to fetch opportunity preview:", error);
       setPreview(null);
     } finally {
       setPreviewLoading(false);
@@ -49,9 +51,10 @@ export function useWorkstreamPreview(formData: FormData, hasFilters: boolean) {
     formData.stage_ids,
     formData.horizon,
     formData.keywords,
+    formData.category_ids,
   ]);
 
-  // Auto-debounced fetch when filters change (for live preview)
+  // Auto-debounced fetch when filters change (for live preview of matching opportunities)
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (!hasFilters) {

@@ -2,7 +2,7 @@
  * Domain Reputation Types
  *
  * TypeScript interfaces for the domain reputation system that tracks source
- * credibility across the Foresight platform. Maps to the `domain_reputation`
+ * credibility across the GrantScope platform. Maps to the `domain_reputation`
  * database table and its associated API endpoints.
  *
  * The domain reputation system combines three inputs:

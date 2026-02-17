@@ -14,6 +14,11 @@ export {
   type Top25Priority,
   type SteepCategory,
   type TriageScore,
+  type GrantCategory,
+  type GrantLifecycleStage,
+  type DeadlineUrgency,
+  type PipelineStatus,
+  type Department,
 
   // Data
   pillars,
@@ -24,6 +29,10 @@ export {
   top25Priorities,
   steepCategories,
   triageScores,
+  grantCategories,
+  grantLifecycleStages,
+  deadlineUrgencyTiers,
+  pipelineStatuses,
 
   // Lookup Maps
   pillarMap,
@@ -31,6 +40,8 @@ export {
   stageMap,
   horizonMap,
   anchorMap,
+  grantCategoryMap,
+  pipelineStatusMap,
 
   // Helper Functions
   getPillarByCode,
@@ -45,4 +56,7 @@ export {
   getSteepByCode,
   getTriageScore,
   getHorizonForStage,
-} from './taxonomy';
+  getGrantCategoryByCode,
+  getDeadlineUrgency,
+  getPipelineStatusById,
+} from "./taxonomy";

@@ -51,7 +51,7 @@ _VALID_DB_TYPES = {
 # Classification Prompt
 # ============================================================================
 
-CONNECTION_CLASSIFY_PROMPT = """Classify the relationship between these two municipal foresight signals.
+CONNECTION_CLASSIFY_PROMPT = """Classify the relationship between these two municipal intelligence signals.
 
 Signal A: {card_a_name}
 Summary A: {card_a_summary}

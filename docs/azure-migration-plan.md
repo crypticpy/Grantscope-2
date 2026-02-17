@@ -1,6 +1,6 @@
-# Foresight: Azure Infrastructure Migration Plan
+# GrantScope2: Azure Infrastructure Migration Plan
 
-**Project:** Foresight — AI-Powered Strategic Horizon Scanning System
+**Project:** GrantScope2 — AI-Powered Strategic Horizon Scanning System
 **Owner:** City of Austin, Office of Innovation
 **Date:** February 2026
 **Status:** Draft
@@ -141,13 +141,13 @@
    - Both share the same image, different entrypoints.
 
 2. **Provision Azure Container Apps Environment:**
-   - Create resource group `rg-foresight-prod`.
+   - Create resource group `rg-grantscope-prod`.
    - Create Container Apps Environment with VNet integration.
    - Configure environment variables and secrets from Key Vault.
 
 3. **Deploy containers:**
    - Push images to Azure Container Registry (ACR).
-   - Create two Container Apps: `foresight-api` (ingress enabled, port 8000) and `foresight-worker` (no ingress, internal only).
+   - Create two Container Apps: `grantscope-api` (ingress enabled, port 8000) and `grantscope-worker` (no ingress, internal only).
    - Configure scaling rules (min 1 replica for API, 0-1 for worker).
 
 4. **Networking and DNS:**
@@ -183,12 +183,12 @@
    # Export from Supabase
    pg_dump --no-owner --no-acl \
      -h db.<project>.supabase.co -U postgres -d postgres \
-     > foresight_dump.sql
+     > grantscope_dump.sql
 
    # Import to Azure PostgreSQL
    psql -h <azure-host>.postgres.database.azure.com \
-     -U foresight_admin -d foresight \
-     < foresight_dump.sql
+     -U grantscope_admin -d grantscope \
+     < grantscope_dump.sql
    ```
 
 3. **Migrate RLS policies:**
@@ -220,7 +220,7 @@
 1. **Register application in Entra ID:**
    - Create app registration in the city's Azure AD tenant.
    - Configure redirect URIs for the frontend.
-   - Define API scopes (`Foresight.Read`, `Foresight.Write`, `Foresight.Admin`).
+   - Define API scopes (`GrantScope.Read`, `GrantScope.Write`, `GrantScope.Admin`).
 
 2. **Update backend JWT validation:**
    - Replace Supabase JWT verification with Entra ID token validation.

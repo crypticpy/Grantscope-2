@@ -15,10 +15,7 @@ from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, Field, validator
 
-
-# Valid pillar codes for classification validation
-# Must match PILLAR_DEFINITIONS in query_generator.py
-VALID_PILLAR_CODES = {"CH", "EW", "HG", "HH", "MC", "PS"}
+from app.taxonomy import VALID_PILLAR_CODES
 
 
 class ValidationSubmission(BaseModel):

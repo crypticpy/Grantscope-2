@@ -1,9 +1,10 @@
 """
-Query generator for discovery system.
+Query generator for grant discovery system.
 
 Generates search queries from Pillars and Top 25 Priorities for automated
-horizon scanning. Queries are tailored for municipal government context
-with horizon-specific modifiers.
+grant opportunity discovery. Queries are tailored for finding federal, state,
+and foundation grant opportunities relevant to city government, with
+grant-type-specific modifiers.
 
 Usage:
     generator = QueryGenerator()
@@ -11,10 +12,12 @@ Usage:
 """
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 from enum import Enum
+
+from app.taxonomy import PILLAR_DEFINITIONS
 
 logger = logging.getLogger(__name__)
 
@@ -41,162 +44,6 @@ class HorizonTarget(Enum):
     H1 = "H1"  # Mainstream - 0-3 years
     H2 = "H2"  # Transitional - 3-7 years
     H3 = "H3"  # Transformative - 7-15+ years
-
-
-# ============================================================================
-# Pillar Definitions
-# ============================================================================
-
-PILLAR_DEFINITIONS: Dict[str, Dict[str, Any]] = {
-    "CH": {
-        "name": "Community Health & Sustainability",
-        "description": "Public health, parks, climate, preparedness, and animal services",
-        "focus_areas": [
-            "public health technology",
-            "parks and recreation innovation",
-            "climate change mitigation",
-            "emergency preparedness systems",
-            "environmental monitoring",
-            "community wellness programs",
-            "urban green infrastructure",
-            "air quality management",
-            "water conservation technology",
-            "renewable energy municipal",
-        ],
-        "search_terms": [
-            "municipal public health technology",
-            "smart parks city government",
-            "climate resilience cities",
-            "emergency management innovation",
-            "urban sustainability technology",
-            "city environmental monitoring",
-            "community health platforms",
-        ],
-    },
-    "EW": {
-        "name": "Economic & Workforce Development",
-        "description": "Economic mobility, small business support, and creative economy",
-        "focus_areas": [
-            "workforce development technology",
-            "small business support platforms",
-            "economic development tools",
-            "job training automation",
-            "creative economy platforms",
-            "entrepreneurship ecosystems",
-            "digital skills training",
-            "gig economy regulation",
-            "local business analytics",
-            "economic impact measurement",
-        ],
-        "search_terms": [
-            "municipal workforce development",
-            "small business city programs",
-            "economic development technology cities",
-            "job training government programs",
-            "creative economy city initiatives",
-            "entrepreneur support municipal",
-        ],
-    },
-    "HG": {
-        "name": "High-Performing Government",
-        "description": "Fiscal integrity, technology, workforce, and community engagement",
-        "focus_areas": [
-            "government technology modernization",
-            "civic engagement platforms",
-            "municipal process automation",
-            "government AI applications",
-            "public sector analytics",
-            "digital government services",
-            "transparency technology",
-            "citizen feedback systems",
-            "government workforce tools",
-            "municipal data platforms",
-        ],
-        "search_terms": [
-            "government technology innovation",
-            "civic tech municipal",
-            "city automation solutions",
-            "public sector AI",
-            "digital government transformation",
-            "municipal data analytics",
-            "government efficiency technology",
-        ],
-    },
-    "HH": {
-        "name": "Homelessness & Housing",
-        "description": "Complete communities, affordable housing, and homelessness reduction",
-        "focus_areas": [
-            "affordable housing technology",
-            "homelessness prevention systems",
-            "housing management platforms",
-            "tenant services technology",
-            "housing construction innovation",
-            "supportive housing models",
-            "housing voucher systems",
-            "property management automation",
-            "housing market analytics",
-            "community development tools",
-        ],
-        "search_terms": [
-            "affordable housing technology cities",
-            "homelessness solutions municipal",
-            "housing management city government",
-            "tenant support technology",
-            "housing innovation government",
-            "supportive housing technology",
-        ],
-    },
-    "MC": {
-        "name": "Mobility & Critical Infrastructure",
-        "description": "Transportation, transit, utilities, and facility management",
-        "focus_areas": [
-            "autonomous vehicles municipal",
-            "smart traffic systems",
-            "public transit technology",
-            "electric vehicle infrastructure",
-            "smart grid technology",
-            "water infrastructure monitoring",
-            "facility management automation",
-            "micromobility regulation",
-            "transportation demand management",
-            "infrastructure maintenance AI",
-        ],
-        "search_terms": [
-            "smart city transportation",
-            "municipal transit technology",
-            "autonomous vehicles cities",
-            "EV infrastructure municipal",
-            "smart infrastructure city",
-            "utility technology government",
-            "facility management cities",
-        ],
-    },
-    "PS": {
-        "name": "Public Safety",
-        "description": "Community relationships, fair delivery, and disaster preparedness",
-        "focus_areas": [
-            "public safety technology",
-            "emergency response systems",
-            "crime prevention technology",
-            "community policing tools",
-            "disaster preparedness systems",
-            "fire service technology",
-            "EMS innovation",
-            "911 systems modernization",
-            "mental health crisis response",
-            "violence prevention programs",
-        ],
-        "search_terms": [
-            "public safety technology cities",
-            "emergency response innovation",
-            "crime prevention municipal",
-            "community safety technology",
-            "disaster preparedness city",
-            "fire service innovation",
-            "EMS technology government",
-        ],
-    },
-}
 
 
 # ============================================================================
@@ -281,88 +128,88 @@ TOP_25_PRIORITIES: List[Dict[str, str]] = [
 
 HORIZON_MODIFIERS: Dict[str, Dict[str, Any]] = {
     "H1": {
-        "name": "Mainstream",
-        "timeframe": "0-3 years",
-        "description": "Current system, confirms baseline",
+        "name": "Active Grants",
+        "timeframe": "Open now or opening soon",
+        "description": "Currently open or recently announced grant opportunities",
         "search_modifiers": [
-            "implementation",
-            "deployment",
-            "rollout",
-            "adoption",
-            "case study",
-            "results",
-            "lessons learned",
+            "grant announcement",
+            "NOFO",
+            "notice of funding opportunity",
+            "RFP",
+            "request for proposals",
+            "open for applications",
+            "funding available",
         ],
         "time_qualifiers": [
-            "2024",
             "2025",
-            "currently deployed",
-            "in production",
-            "operational",
+            "2026",
+            "FY2025",
+            "FY2026",
+            "now accepting",
         ],
         "signal_keywords": [
-            "cities across the country",
-            "widespread adoption",
-            "industry standard",
-            "best practices",
-            "proven approach",
+            "applications due",
+            "deadline",
+            "apply now",
+            "funding announcement",
+            "grant awarded",
         ],
     },
     "H2": {
-        "name": "Transitional",
-        "timeframe": "3-7 years",
-        "description": "Emerging alternatives, pilots",
+        "name": "Upcoming Grants",
+        "timeframe": "Expected within 1-2 years",
+        "description": "Anticipated or recurring grant programs opening soon",
         "search_modifiers": [
-            "pilot program",
-            "pilot project",
-            "testing",
-            "trial",
-            "early adoption",
-            "proof of concept",
-            "demonstration",
+            "grant program",
+            "funding opportunity",
+            "federal grant",
+            "state grant",
+            "grant application",
+            "competitive grant",
+            "formula grant",
         ],
         "time_qualifiers": [
-            "pilot",
-            "testing",
-            "evaluating",
-            "considering",
-            "planning",
+            "upcoming",
+            "anticipated",
+            "expected",
+            "annual",
+            "recurring",
         ],
         "signal_keywords": [
-            "city announces pilot",
-            "testing new approach",
-            "innovative program",
-            "first to implement",
-            "early results",
+            "expected to open",
+            "annual funding cycle",
+            "recurring grant",
+            "new program",
+            "reauthorized",
         ],
     },
     "H3": {
-        "name": "Transformative",
-        "timeframe": "7-15+ years",
-        "description": "Weak signals, novel possibilities",
+        "name": "Emerging Funding",
+        "timeframe": "New or proposed programs",
+        "description": "New legislation, proposed programs, and emerging funding sources",
         "search_modifiers": [
-            "emerging technology",
-            "research",
-            "breakthrough",
-            "future of",
-            "next generation",
-            "revolutionary",
-            "transformative",
+            "new grant program",
+            "proposed funding",
+            "legislation grants",
+            "appropriations",
+            "new federal funding",
+            "bipartisan infrastructure",
+            "Inflation Reduction Act",
         ],
         "time_qualifiers": [
-            "research",
-            "concept",
-            "prototype",
-            "startup",
-            "venture capital",
-            "patent",
+            "proposed",
+            "new program",
+            "legislation",
+            "appropriation",
+            "authorization",
+            "pilot program",
         ],
         "signal_keywords": [
-            "could transform",
-            "potential to disrupt",
-            "researchers develop",
-            "startup raises",
-            "breakthrough in",
+            "new funding stream",
+            "proposed legislation",
+            "budget request",
+            "new appropriations",
+            "pilot grant program",
         ],
     },
 }
@@ -372,24 +219,24 @@ HORIZON_MODIFIERS: Dict[str, Dict[str, Any]] = {
 # Municipal Keywords
 # ============================================================================
 
-MUNICIPAL_KEYWORDS: List[str] = [
-    "municipal",
+GRANT_KEYWORDS: List[str] = [
+    "grant",
+    "grants",
+    "funding opportunity",
+    "NOFO",
+    "notice of funding",
+    "RFP",
+    "grant application",
+    "federal grant",
+    "state grant",
+    "foundation grant",
+    "competitive grant",
+    "formula grant",
     "city government",
     "local government",
-    "city of",
-    "public sector",
-    "government agency",
-    "urban",
-    "metropolitan",
-    "county government",
-    "city council",
-    "city manager",
-    "civic",
-    "public administration",
-    "government services",
-    "taxpayer",
-    "constituent",
-    "citizen services",
+    "municipal",
+    "grant program",
+    "funding announcement",
 ]
 
 
@@ -400,194 +247,194 @@ MUNICIPAL_KEYWORDS: List[str] = [
 PRIORITY_SEARCH_TEMPLATES: Dict[str, Dict[str, Any]] = {
     "top25-01": {  # First ACME Strategic Plan
         "topics": [
-            "strategic planning technology",
-            "municipal strategic plan software",
-            "government strategic alignment",
+            "federal grants strategic planning local government",
+            "grants.gov strategic plan implementation city",
+            "EDA planning grants municipal government",
         ],
         "horizon_focus": "H1",
     },
     "top25-02": {  # Airline Use & Lease Agreement
         "topics": [
-            "airport lease management",
-            "airline agreement technology",
-            "airport revenue management",
+            "FAA airport improvement program grants",
+            "federal aviation grants municipal airport",
+            "airport infrastructure grants city government",
         ],
         "horizon_focus": "H1",
     },
     "top25-03": {  # Shared Services Implementation
         "topics": [
-            "shared services government",
-            "municipal shared services",
-            "government consolidation technology",
+            "federal grants shared services government",
+            "grants government consolidation efficiency",
+            "intergovernmental cooperation grants city",
         ],
         "horizon_focus": "H2",
     },
     "top25-04": {  # 2026 Bond Program Development
         "topics": [
-            "municipal bond management",
-            "government bond issuance technology",
-            "capital improvement planning",
+            "federal grants capital improvement city government",
+            "infrastructure grants municipal bond programs",
+            "HUD capital grants local government",
         ],
         "horizon_focus": "H1",
     },
     "top25-05": {  # Climate Revolving Fund
         "topics": [
-            "climate finance municipal",
-            "green revolving fund",
-            "sustainability financing government",
+            "EPA climate grants municipal government",
+            "DOE clean energy grants city",
+            "Inflation Reduction Act grants local government climate",
         ],
         "horizon_focus": "H2",
     },
     "top25-06": {  # Expedited Site Plan Review
         "topics": [
-            "automated plan review",
-            "permit automation",
-            "development review AI",
+            "HUD planning grants development review",
+            "federal grants permitting modernization city",
+            "technology grants development services municipal",
         ],
         "horizon_focus": "H2",
     },
     "top25-07": {  # Development Code Streamlining
         "topics": [
-            "zoning code modernization",
-            "development code automation",
-            "land use regulation technology",
+            "HUD zoning reform grants city government",
+            "federal grants land use planning municipal",
+            "planning capacity building grants local government",
         ],
         "horizon_focus": "H2",
     },
     "top25-08": {  # Economic Development Roadmap
         "topics": [
-            "economic development strategy",
-            "municipal economic planning",
-            "business attraction technology",
+            "EDA economic development grants city government",
+            "SBA grants economic development municipal",
+            "CDBG economic development funding local government",
         ],
         "horizon_focus": "H2",
     },
     "top25-09": {  # AE Resiliency Plan
         "topics": [
-            "utility resiliency",
-            "grid resilience",
-            "energy infrastructure security",
+            "DOE grid resilience grants municipal utility",
+            "FEMA resilience grants energy infrastructure",
+            "Inflation Reduction Act energy grants city utility",
         ],
         "horizon_focus": "H2",
     },
     "top25-10": {  # Human Rights Framework
         "topics": [
-            "human rights technology",
-            "equity measurement tools",
-            "civil rights compliance",
+            "DOJ civil rights grants local government",
+            "federal equity grants city government",
+            "HHS grants human rights municipal",
         ],
         "horizon_focus": "H1",
     },
     "top25-11": {  # Facility Condition Assessment
         "topics": [
-            "facility assessment technology",
-            "building condition monitoring",
-            "asset management AI",
+            "federal facility improvement grants city government",
+            "DOE building efficiency grants municipal",
+            "GSA facility grants local government",
         ],
         "horizon_focus": "H2",
     },
     "top25-12": {  # Fire Labor Agreement
         "topics": [
-            "fire department technology",
-            "first responder scheduling",
-            "public safety workforce",
+            "FEMA SAFER grants fire department staffing",
+            "FEMA Assistance to Firefighters grants",
+            "federal fire department grants city government",
         ],
         "horizon_focus": "H1",
     },
     "top25-13": {  # Rapid Rehousing Program
         "topics": [
-            "rapid rehousing technology",
-            "housing placement systems",
-            "homelessness management platform",
+            "HUD rapid rehousing grants city government",
+            "Emergency Solutions Grants homeless assistance",
+            "continuum of care grants rapid rehousing",
         ],
         "horizon_focus": "H2",
     },
     "top25-14": {  # 10-Year Housing Blueprint
         "topics": [
-            "housing strategy technology",
-            "affordable housing planning",
-            "housing market analytics",
+            "HUD housing planning grants city government",
+            "HOME Investment Partnerships grants municipal",
+            "affordable housing grants local government NOFO",
         ],
         "horizon_focus": "H2",
     },
     "top25-15": {  # AHFC 5-Year Strategic Plan
         "topics": [
-            "housing authority technology",
-            "public housing modernization",
-            "housing finance innovation",
+            "HUD public housing grants housing authority",
+            "HUD capital fund grants housing",
+            "housing authority grants modernization federal",
         ],
         "horizon_focus": "H2",
     },
     "top25-16": {  # Compensation Recalibration
         "topics": [
-            "public sector compensation",
-            "government pay equity",
-            "workforce compensation analytics",
+            "federal workforce grants local government",
+            "DOL grants government workforce development",
+            "grants public sector workforce city",
         ],
         "horizon_focus": "H1",
     },
     "top25-17": {  # Alternative Parks Funding
         "topics": [
-            "parks funding innovation",
-            "recreation revenue technology",
-            "public space financing",
+            "Land and Water Conservation Fund grants city",
+            "NPS park grants municipal government",
+            "federal recreation grants city parks",
         ],
         "horizon_focus": "H2",
     },
     "top25-18": {  # Imagine Austin Update
         "topics": [
-            "comprehensive plan technology",
-            "urban planning software",
-            "community visioning tools",
+            "HUD comprehensive planning grants city",
+            "EDA planning grants local government",
+            "federal grants community planning municipal",
         ],
         "horizon_focus": "H2",
     },
     "top25-19": {  # Comprehensive Crime Reduction
         "topics": [
-            "crime reduction technology",
-            "public safety analytics",
-            "violence intervention systems",
+            "DOJ Byrne JAG grants crime reduction city",
+            "BJA community violence intervention grants",
+            "federal crime reduction grants local government",
         ],
         "horizon_focus": "H2",
     },
     "top25-20": {  # Police OCM Plan
         "topics": [
-            "police modernization",
-            "law enforcement technology",
-            "public safety reform",
+            "COPS Office grants police department city",
+            "DOJ law enforcement grants municipal",
+            "federal police modernization grants city government",
         ],
         "horizon_focus": "H2",
     },
     "top25-21": {  # Light Rail Interlocal Agreement
         "topics": [
-            "light rail technology",
-            "transit expansion",
-            "rail transit innovation",
+            "FTA Capital Investment Grants light rail",
+            "FTA New Starts grants transit city",
+            "federal transit grants rail municipal",
         ],
         "horizon_focus": "H2",
     },
     "top25-22": {  # Citywide Technology Strategic Plan
         "topics": [
-            "government IT strategy",
-            "municipal technology modernization",
-            "digital government transformation",
+            "NTIA digital equity grants city government",
+            "federal technology grants municipal government",
+            "DHS cybersecurity grants city IT modernization",
         ],
         "horizon_focus": "H2",
     },
     "top25-23": {  # IT Organizational Alignment
         "topics": [
-            "government IT organization",
-            "public sector IT management",
-            "technology governance municipal",
+            "federal IT modernization grants local government",
+            "technology grants government operations city",
+            "NSF grants smart city technology municipal",
         ],
         "horizon_focus": "H1",
     },
     "top25-24": {  # Austin FIRST EMS Mental Health
         "topics": [
-            "mental health crisis response",
-            "EMS mental health",
-            "co-responder programs",
-            "crisis intervention technology",
+            "SAMHSA mental health grants crisis response city",
+            "HHS grants mental health EMS co-responder",
+            "federal crisis intervention grants local government",
+            "SAMHSA community mental health grants municipal",
         ],
         "horizon_focus": "H2",
     },
@@ -601,12 +448,12 @@ PRIORITY_SEARCH_TEMPLATES: Dict[str, Dict[str, Any]] = {
 
 class QueryGenerator:
     """
-    Generates search queries for discovery system.
+    Generates search queries for grant discovery system.
 
-    Creates municipal-focused queries from:
-    - Pillar definitions and focus areas
-    - Top 25 Priorities with specific search topics
-    - Horizon-specific modifiers for temporal targeting
+    Creates grant-focused queries from:
+    - Pillar definitions with federal/state grant programs and agencies
+    - Top 25 Priorities with grant-specific search topics
+    - Grant-type modifiers (active NOFOs, upcoming, emerging funding)
 
     Example:
         generator = QueryGenerator()
@@ -617,7 +464,7 @@ class QueryGenerator:
             max_queries=50
         )
 
-        # Generate queries for all horizons
+        # Generate queries for all grant types
         queries = generator.generate_queries(
             horizons=['H1', 'H2', 'H3'],
             max_queries=100
@@ -628,7 +475,7 @@ class QueryGenerator:
         self.pillars = PILLAR_DEFINITIONS
         self.priorities = TOP_25_PRIORITIES
         self.horizon_modifiers = HORIZON_MODIFIERS
-        self.municipal_keywords = MUNICIPAL_KEYWORDS
+        self.grant_keywords = GRANT_KEYWORDS
         self.priority_templates = PRIORITY_SEARCH_TEMPLATES
 
     def generate_queries(
@@ -799,8 +646,8 @@ class QueryGenerator:
         else:
             # Fallback: generate generic query from priority title
             title = priority["title"]
-            for horizon in ["H2", "H3"]:  # Priorities usually focus on emerging
-                query_text = f"{title} municipal government technology innovation"
+            for horizon in ["H1", "H2"]:  # Search active and upcoming grants
+                query_text = f"{title} federal grants city government funding"
                 modified_query = self._add_horizon_modifiers(query_text, horizon)
                 queries.append(
                     QueryConfig(
@@ -816,14 +663,14 @@ class QueryGenerator:
 
     def _add_horizon_modifiers(self, base_query: str, horizon: str) -> str:
         """
-        Add horizon-specific modifiers to a base query.
+        Add grant-type-specific modifiers to a base query.
 
         Args:
             base_query: Base search query
-            horizon: Target horizon (H1, H2, H3)
+            horizon: Grant type target (H1=active, H2=upcoming, H3=emerging)
 
         Returns:
-            Modified query string with horizon context
+            Modified query string with grant discovery context
         """
         horizon_config = self.horizon_modifiers.get(
             horizon, self.horizon_modifiers["H2"]
@@ -840,14 +687,14 @@ class QueryGenerator:
         # Construct modified query
         current_year = datetime.now(timezone.utc).year
         if horizon == "H1":
-            # H1: Focus on current implementations
-            return f"{base_query} {modifier} city government {current_year} {current_year + 1}"
+            # H1: Currently open grant opportunities
+            return f"{base_query} {modifier} {current_year} {time_qual}"
         elif horizon == "H2":
-            # H2: Focus on pilots and emerging
-            return f"{base_query} {modifier} municipal {time_qual}"
+            # H2: Upcoming and recurring grant programs
+            return f"{base_query} {modifier} {time_qual}"
         else:
-            # H3: Focus on research and future
-            return f"{base_query} {modifier} future city government"
+            # H3: New and proposed funding programs
+            return f"{base_query} {modifier} city government"
 
     def get_pillar_info(self, pillar_code: str) -> Optional[Dict[str, Any]]:
         """Get information about a specific pillar."""
@@ -874,14 +721,14 @@ def generate_discovery_queries(
     pillars: Optional[List[str]] = None, max_queries: int = 100
 ) -> List[QueryConfig]:
     """
-    Convenience function to generate discovery queries.
+    Convenience function to generate grant discovery queries.
 
     Args:
         pillars: Optional list of pillar codes to filter
         max_queries: Maximum number of queries
 
     Returns:
-        List of QueryConfig objects
+        List of QueryConfig objects for grant opportunity search
     """
     generator = QueryGenerator()
     return generator.generate_queries(pillars_filter=pillars, max_queries=max_queries)

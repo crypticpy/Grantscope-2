@@ -315,7 +315,7 @@ function CardHeader({ card, label, onCardClick }: CardHeaderProps) {
           <button
             onClick={() => onCardClick(card.id)}
             className="text-brand-blue hover:text-brand-dark-blue transition-colors"
-            title="View signal details"
+            title="View opportunity details"
           >
             <ExternalLink className="h-4 w-4" />
           </button>
@@ -807,12 +807,12 @@ export function TrendComparisonView({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <CardHeader
           card={card1.card}
-          label="Signal A"
+          label="Opportunity A"
           onCardClick={onCardClick}
         />
         <CardHeader
           card={card2.card}
-          label="Signal B"
+          label="Opportunity B"
           onCardClick={onCardClick}
         />
       </div>

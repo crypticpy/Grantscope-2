@@ -23,12 +23,21 @@ import { API_BASE_URL } from "./config";
  * - archived: Completed or dismissed cards
  */
 export type KanbanStatus =
+  // Legacy statuses
   | "inbox"
   | "screening"
   | "research"
   | "brief"
   | "watching"
-  | "archived";
+  | "archived"
+  // Grant pipeline statuses
+  | "discovered"
+  | "evaluating"
+  | "applying"
+  | "submitted"
+  | "awarded"
+  | "declined"
+  | "expired";
 
 /**
  * Detailed card information embedded within workstream cards.
@@ -98,6 +107,14 @@ export interface GroupedWorkstreamCards {
   brief: WorkstreamCard[];
   watching: WorkstreamCard[];
   archived: WorkstreamCard[];
+  // Grant pipeline statuses
+  discovered: WorkstreamCard[];
+  evaluating: WorkstreamCard[];
+  applying: WorkstreamCard[];
+  submitted: WorkstreamCard[];
+  awarded: WorkstreamCard[];
+  declined: WorkstreamCard[];
+  expired: WorkstreamCard[];
 }
 
 /**
@@ -360,6 +377,14 @@ function createEmptyGroupedCards(): GroupedWorkstreamCards {
     brief: [],
     watching: [],
     archived: [],
+    // Grant pipeline statuses
+    discovered: [],
+    evaluating: [],
+    applying: [],
+    submitted: [],
+    awarded: [],
+    declined: [],
+    expired: [],
   };
 }
 
@@ -425,6 +450,14 @@ export async function fetchWorkstreamCards(
     brief: response.brief || [],
     watching: response.watching || [],
     archived: response.archived || [],
+    // Grant pipeline statuses
+    discovered: response.discovered || [],
+    evaluating: response.evaluating || [],
+    applying: response.applying || [],
+    submitted: response.submitted || [],
+    awarded: response.awarded || [],
+    declined: response.declined || [],
+    expired: response.expired || [],
   };
 }
 

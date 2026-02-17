@@ -261,7 +261,7 @@ export function useCardData(
       setRelatedCardsError(
         error instanceof Error
           ? error.message
-          : "Failed to load related signals",
+          : "Failed to load related opportunities",
       );
     } finally {
       setRelatedCardsLoading(false);

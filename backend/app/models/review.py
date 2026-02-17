@@ -1,4 +1,4 @@
-"""Review models for Foresight API.
+"""Review models for GrantScope API.
 
 Models for card review workflows including individual review,
 bulk review operations, and card dismissal.

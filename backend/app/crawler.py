@@ -1,5 +1,5 @@
 """
-Unified crawling interface for Foresight content extraction.
+Unified crawling interface for GrantScope content extraction.
 
 Supports three extraction backends:
 - **trafilatura** (default): Lightweight, Railway-compatible. Uses httpx for fetching

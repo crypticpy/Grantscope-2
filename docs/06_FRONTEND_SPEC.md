@@ -1,10 +1,11 @@
-# Foresight: Frontend Specification
+# GrantScope2: Frontend Specification
 
 ## Overview
 
 React SPA with TypeScript. Clean, professional UI focused on information density without overwhelming users.
 
 **Key Principles:**
+
 - Cards are the primary UI element
 - Minimal clicks to core actions
 - Information hierarchy: summary → detail → sources
@@ -35,6 +36,7 @@ React SPA with TypeScript. Clean, professional UI focused on information density
 User's personalized home view.
 
 **Sections:**
+
 1. **Greeting & Summary Stats**
    - "Good morning, Jane"
    - Cards you follow: 24
@@ -55,9 +57,10 @@ User's personalized home view.
    - "Solid State Batteries: Stage 3 → 4"
 
 **Wireframe:**
+
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  [Logo] Foresight          [Search]    [👤 Jane Smith] │
+│  [Logo] GrantScope2          [Search]    [👤 Jane Smith] │
 ├─────────────────────────────────────────────────────────┤
 │                                                         │
 │  Good morning, Jane                                     │
@@ -88,12 +91,14 @@ User's personalized home view.
 Browse all cards with filtering.
 
 **Features:**
+
 - Filter sidebar (pillars, horizons, stages)
 - Sort dropdown (recent, velocity, followers)
 - Search bar
 - Infinite scroll card list
 
 **Filters:**
+
 ```
 Pillars (multi-select):
   ☑ CH - Community Health
@@ -116,9 +121,10 @@ Time:
 ```
 
 **Wireframe:**
+
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  [Logo] Foresight    [🔍 Search cards...]  [👤 Jane]   │
+│  [Logo] GrantScope2    [🔍 Search cards...]  [👤 Jane]   │
 ├─────────────────────────────────────────────────────────┤
 │ ┌──────────┐  ┌────────────────────────────────────────┐│
 │ │ FILTERS  │  │ Sort: [Recent ▾]      Showing 142 cards││
@@ -151,18 +157,21 @@ Time:
 Full card view with tabs.
 
 **Tabs:**
+
 1. **Overview** - Summary, classification, scoring
 2. **Timeline** - Evolution history
 3. **Sources** - All linked articles
 4. **Analysis** - Implications analyses
 
 **Actions:**
+
 - Follow / Unfollow (with workstream selector)
 - Add Note
 - Run Implications Analysis
 - Share (copy link)
 
 **Wireframe:**
+
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  ← Back to Discovery                                    │
@@ -207,6 +216,7 @@ Full card view with tabs.
 ```
 
 **Timeline Tab:**
+
 ```
 │  TIMELINE                                               │
 │                                                         │
@@ -225,6 +235,7 @@ Full card view with tabs.
 ```
 
 **Sources Tab:**
+
 ```
 │  SOURCES (47)                          [Sort: Recent ▾] │
 │                                                         │
@@ -250,6 +261,7 @@ Full card view with tabs.
 Visual tree of implications with scoring.
 
 **Wireframe:**
+
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  Analysis: Solid State Batteries                        │
@@ -299,6 +311,7 @@ Visual tree of implications with scoring.
 Manage personal workstreams.
 
 **Features:**
+
 - List of workstreams with card counts
 - Create new workstream
 - Edit workstream filters
@@ -383,15 +396,15 @@ interface AppState {
   // Auth
   user: User | null;
   setUser: (user: User | null) => void;
-  
+
   // UI
   sidebarOpen: boolean;
   toggleSidebar: () => void;
-  
+
   // Filters (persisted)
   discoveryFilters: DiscoveryFilters;
   setDiscoveryFilters: (filters: Partial<DiscoveryFilters>) => void;
-  
+
   // Cache
   followedCardIds: Set<string>;
   addFollowedCard: (id: string) => void;
@@ -406,6 +419,7 @@ React Query handles server state (cards, workstreams, etc.).
 ## Real-time Updates
 
 Using Supabase Realtime for:
+
 - New cards appearing in feed
 - Source count updates on followed cards
 - Stage change notifications
@@ -413,13 +427,14 @@ Using Supabase Realtime for:
 ```tsx
 // Subscribe to card updates
 supabase
-  .channel('card-updates')
-  .on('postgres_changes', 
-    { event: 'UPDATE', schema: 'public', table: 'cards' },
+  .channel("card-updates")
+  .on(
+    "postgres_changes",
+    { event: "UPDATE", schema: "public", table: "cards" },
     (payload) => {
       // Invalidate react-query cache for this card
-      queryClient.invalidateQueries(['card', payload.new.id]);
-    }
+      queryClient.invalidateQueries(["card", payload.new.id]);
+    },
   )
   .subscribe();
 ```
@@ -437,6 +452,7 @@ xl: 1280px  /* Large desktop */
 ```
 
 **Mobile adaptations:**
+
 - Filter sidebar becomes modal/drawer
 - Card grid becomes single column
 - Timeline becomes vertical only
@@ -453,7 +469,7 @@ colors: {
   'h1': { DEFAULT: '#10B981', light: '#D1FAE5' }, // Green
   'h2': { DEFAULT: '#F59E0B', light: '#FEF3C7' }, // Amber
   'h3': { DEFAULT: '#8B5CF6', light: '#EDE9FE' }, // Purple
-  
+
   // Pillars
   'pillar-ch': '#10B981', // Community Health - Green
   'pillar-ew': '#3B82F6', // Economic - Blue
@@ -461,7 +477,7 @@ colors: {
   'pillar-hh': '#EC4899', // Housing - Pink
   'pillar-mc': '#F59E0B', // Mobility - Amber
   'pillar-ps': '#EF4444', // Public Safety - Red
-  
+
   // Implications
   'likely-negative': '#EF4444',
   'unlikely-positive': '#10B981',
@@ -482,5 +498,5 @@ colors: {
 
 ---
 
-*Document Version: 1.0*
-*Last Updated: December 2024*
+_Document Version: 1.0_
+_Last Updated: December 2024_

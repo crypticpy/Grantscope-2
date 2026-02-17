@@ -7,7 +7,16 @@
  */
 
 import type { LucideIcon } from "lucide-react";
-import { RefreshCw, Search, FileDown, Presentation, Bell } from "lucide-react";
+import {
+  RefreshCw,
+  Search,
+  FileDown,
+  Presentation,
+  Bell,
+  ClipboardCheck,
+  FileEdit,
+  FileText,
+} from "lucide-react";
 import type { EmbeddedCard } from "../../types/card";
 
 export type { EmbeddedCard };
@@ -21,12 +30,21 @@ export type { EmbeddedCard };
  * Maps to the workflow stages a research card can progress through.
  */
 export type KanbanStatus =
+  // Legacy statuses
   | "inbox"
   | "screening"
   | "research"
   | "brief"
   | "watching"
-  | "archived";
+  | "archived"
+  // Grant pipeline statuses
+  | "discovered"
+  | "evaluating"
+  | "applying"
+  | "submitted"
+  | "awarded"
+  | "declined"
+  | "expired";
 
 /**
  * Describes how a card was added to a workstream.
@@ -101,7 +119,12 @@ export type ActionHandler =
   | "viewDetails"
   | "addNotes"
   | "remove"
-  | "generateBrief";
+  | "generateBrief"
+  | "evaluateGrant"
+  | "startApplication"
+  | "submitApplication"
+  | "trackDeadline"
+  | "prepareProposal";
 
 /**
  * Defines an action available on cards within a specific column.
@@ -165,9 +188,9 @@ export const KANBAN_COLUMNS: KanbanColumnDefinition[] = [
   {
     id: "inbox",
     title: "Inbox",
-    description: "New signals matching your filters",
+    description: "New opportunities matching your filters",
     emptyStateHint:
-      "Signals matching your filters will appear here automatically",
+      "Opportunities matching your filters will appear here automatically",
     // No primary action - inbox is for triage
   },
   {
@@ -182,7 +205,7 @@ export const KANBAN_COLUMNS: KanbanColumnDefinition[] = [
       handler: "quickUpdate",
       availability: "column-specific",
     },
-    emptyStateHint: "Drag signals here to evaluate their relevance",
+    emptyStateHint: "Drag opportunities here to evaluate their relevance",
   },
   {
     id: "research",
@@ -196,7 +219,7 @@ export const KANBAN_COLUMNS: KanbanColumnDefinition[] = [
       handler: "deepDive",
       availability: "column-specific",
     },
-    emptyStateHint: "Signals here are being actively researched",
+    emptyStateHint: "Opportunities here are being actively researched",
   },
   {
     id: "brief",
@@ -228,7 +251,7 @@ export const KANBAN_COLUMNS: KanbanColumnDefinition[] = [
         availability: "column-specific",
       },
     ],
-    emptyStateHint: "Signals ready for leadership briefings",
+    emptyStateHint: "Opportunities ready for leadership briefings",
   },
   {
     id: "watching",
@@ -242,14 +265,86 @@ export const KANBAN_COLUMNS: KanbanColumnDefinition[] = [
       handler: "checkUpdates",
       availability: "column-specific",
     },
-    emptyStateHint: "Signals here will be monitored for new developments",
+    emptyStateHint: "Opportunities here will be monitored for new developments",
   },
   {
     id: "archived",
     title: "Archived",
     description: "No longer active",
-    emptyStateHint: "Completed or dismissed signals",
+    emptyStateHint: "Completed or dismissed opportunities",
     // No primary action - archived cards are dormant
+  },
+  // =========================================================================
+  // Grant Pipeline Columns
+  // =========================================================================
+  {
+    id: "discovered",
+    title: "Discovered",
+    description: "New grant opportunities found",
+    emptyStateHint:
+      "Grant opportunities matching your criteria will appear here",
+  },
+  {
+    id: "evaluating",
+    title: "Evaluating",
+    description: "Assessing fit and eligibility",
+    primaryAction: {
+      id: "evaluate-grant",
+      label: "Evaluate",
+      icon: ClipboardCheck,
+      description: "Run AI alignment assessment",
+      handler: "evaluateGrant",
+      availability: "column-specific",
+    },
+    emptyStateHint: "Drag opportunities here to evaluate their fit",
+  },
+  {
+    id: "applying",
+    title: "Applying",
+    description: "Preparing grant application",
+    primaryAction: {
+      id: "start-application",
+      label: "Draft Proposal",
+      icon: FileEdit,
+      description: "Start AI-assisted proposal draft",
+      handler: "startApplication",
+      availability: "column-specific",
+    },
+    secondaryActions: [
+      {
+        id: "prepare-proposal",
+        label: "Prepare Proposal",
+        icon: FileText,
+        description: "Draft a grant proposal with AI assistance",
+        handler: "prepareProposal",
+        availability: "column-specific",
+      },
+    ],
+    emptyStateHint: "Opportunities being actively pursued",
+  },
+  {
+    id: "submitted",
+    title: "Submitted",
+    description: "Applications submitted, awaiting decision",
+    emptyStateHint: "Submitted applications awaiting decisions",
+  },
+  {
+    id: "awarded",
+    title: "Awarded",
+    description: "Grants successfully awarded",
+    emptyStateHint: "Congratulations! Awarded grants appear here",
+  },
+  {
+    id: "declined",
+    title: "Declined",
+    description: "Applications not selected",
+    emptyStateHint: "Applications that were not selected",
+  },
+  {
+    id: "expired",
+    title: "Expired",
+    description: "Deadline passed without application",
+    emptyStateHint: "Opportunities that expired before action was taken",
   },
 ];
 
@@ -347,6 +442,20 @@ export type OnGenerateBriefCallback = (
 ) => void;
 
 /**
+ * Callback signature for evaluating a grant opportunity.
+ *
+ * @param cardId - The ID of the card to evaluate
+ */
+export type OnEvaluateGrantCallback = (cardId: string) => Promise<void>;
+
+/**
+ * Callback signature for starting a grant application.
+ *
+ * @param cardId - The ID of the card to start application for
+ */
+export type OnStartApplicationCallback = (cardId: string) => Promise<void>;
+
+/**
  * Combined card action callbacks for the kanban board.
  *
  * IMPORTANT: All `cardId` parameters in these callbacks refer to the
@@ -374,4 +483,10 @@ export interface CardActionCallbacks {
   onGenerateBrief?: OnGenerateBriefCallback;
   /** Callback for approving a card's review status */
   onApproveReview?: (cardId: string) => void;
+  /** Callback for evaluating a grant opportunity (evaluating column) */
+  onEvaluateGrant?: OnEvaluateGrantCallback;
+  /** Callback for starting a grant application (applying column) */
+  onStartApplication?: OnStartApplicationCallback;
+  /** Callback for preparing a proposal (applying column) */
+  onPrepareProposal?: (cardId: string, cardUuid: string) => void;
 }

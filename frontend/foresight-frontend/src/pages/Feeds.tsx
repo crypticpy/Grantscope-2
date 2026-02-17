@@ -646,7 +646,7 @@ const Feeds: React.FC = () => {
                 RSS Feeds
               </h1>
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                Monitor curated RSS feeds for emerging signals
+                Monitor curated RSS feeds for emerging opportunities
               </p>
             </div>
           </div>
@@ -755,8 +755,8 @@ const Feeds: React.FC = () => {
             No feeds configured
           </h3>
           <p className="text-gray-500 dark:text-gray-400 mb-6 max-w-md mx-auto">
-            Add RSS feeds to automatically monitor for emerging signals and
-            trends relevant to Austin's strategic priorities.
+            Add RSS feeds to automatically monitor for emerging opportunities
+            and trends relevant to Austin's strategic priorities.
           </p>
           <LoadingButton variant="primary" size="md" onClick={handleAddFeed}>
             <Plus className="w-4 h-4 mr-2" />

@@ -1,5 +1,5 @@
 """
-Signal Velocity Tracking Service for Foresight Application.
+Signal Velocity Tracking Service for GrantScope2 Application.
 
 Calculates velocity trends for all active cards based on the rate of new
 source additions over rolling time windows. Trends indicate whether a

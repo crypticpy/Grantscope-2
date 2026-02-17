@@ -1,5 +1,5 @@
 """
-Source-level quality scoring for Foresight.
+Source-level quality scoring for GrantScope.
 
 Computes a composite quality score (0-100) for each individual source based
 on five dimensions: content richness, relevance, domain reputation, source

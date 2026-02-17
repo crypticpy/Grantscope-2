@@ -160,7 +160,7 @@ export function QuickCreateTab({
         data: { session },
       } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        setError("Please sign in to create signals.");
+        setError("Please sign in to create opportunities.");
         return;
       }
 
@@ -175,7 +175,9 @@ export function QuickCreateTab({
       setCreatedCard(result);
       onCreated?.(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create signal.");
+      setError(
+        err instanceof Error ? err.message : "Failed to create opportunity.",
+      );
     } finally {
       setIsCreating(false);
     }
@@ -411,7 +413,7 @@ export function QuickCreateTab({
             Creating Signal...
           </>
         ) : (
-          "Create Signal"
+          "Create Opportunity"
         )}
       </button>
     </div>

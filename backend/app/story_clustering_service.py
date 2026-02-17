@@ -1,5 +1,5 @@
 """
-Story clustering service for Foresight.
+Story clustering service for GrantScope.
 
 Groups sources that report on the same underlying event or story using
 semantic similarity of their vector embeddings. This enables two key
@@ -410,8 +410,7 @@ def get_cluster_count(
     # unique cluster because it hasn't been compared yet.  This avoids
     # artificially deflating the corroboration count before clustering
     # has run.
-    unclustered_count = sum(bool(r.get("story_cluster_id") is None)
-                        for r in rows)
+    unclustered_count = sum(bool(r.get("story_cluster_id") is None) for r in rows)
 
     return len(cluster_ids) + unclustered_count
 

@@ -7,6 +7,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.deps import supabase, get_current_user, _safe_error, limiter
+from app.taxonomy import PILLAR_NAMES, GRANT_CATEGORIES, DEPARTMENT_LIST
 from app.openai_provider import (
     azure_openai_client,
     get_chat_deployment,
@@ -18,7 +19,13 @@ from app.models.card_creation import (
     ManualCardCreateRequest,
     KeywordSuggestionResponse,
 )
-from app.models.ai_helpers import SuggestDescriptionRequest, SuggestDescriptionResponse
+from app.models.ai_helpers import (
+    SuggestDescriptionRequest,
+    SuggestDescriptionResponse,
+    ReadinessAssessmentRequest,
+    ReadinessAssessmentResponse,
+    ReadinessScoreBreakdown,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["ai_helpers"])
@@ -252,19 +259,7 @@ async def suggest_description(
         # Build user prompt with available context
         parts = [f"Workstream name: {body.name}"]
         if body.pillar_ids:
-            pillar_labels = {
-                "CH": "Community Health",
-                "MC": "Mobility & Connectivity",
-                "HS": "Housing & Shelter",
-                "EC": "Economic Opportunity",
-                "ES": "Environmental Sustainability",
-                "CE": "Cultural & Educational Vitality",
-                "EW": "Environmental & Water",
-                "HG": "Housing & Growth",
-                "HH": "Health & Human Services",
-                "PS": "Public Safety",
-            }
-            names = [pillar_labels.get(p, p) for p in body.pillar_ids]
+            names = [PILLAR_NAMES.get(p, p) for p in body.pillar_ids]
             parts.append(f"Strategic pillars: {', '.join(names)}")
         if body.keywords:
             parts.append(f"Keywords: {', '.join(body.keywords)}")
@@ -294,7 +289,9 @@ async def suggest_description(
             max_tokens=150,
         )
 
-        description = (response.choices[0].message.content or "").strip() or f"Tracks emerging signals related to {body.name}."
+        description = (
+            response.choices[0].message.content or ""
+        ).strip() or f"Tracks emerging signals related to {body.name}."
 
         return SuggestDescriptionResponse(description=description)
     except Exception as e:
@@ -303,3 +300,243 @@ async def suggest_description(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("description suggestion", e),
         ) from e
+
+
+# ============================================================================
+# Grant Readiness Assessment
+# ============================================================================
+
+_READINESS_SYSTEM_PROMPT = """\
+You are a grant readiness assessment specialist for municipal government.
+
+Evaluate a department's readiness to pursue and manage grant funding based on \
+their self-assessment responses. Score each factor on a 0-100 scale where:
+- 0-25: Not ready (critical gaps)
+- 26-50: Low readiness (significant improvements needed)
+- 51-75: Moderate readiness (some gaps to address)
+- 76-90: High readiness (minor improvements)
+- 91-100: Very high readiness (application-ready)
+
+Respond ONLY with valid JSON matching this schema (no markdown fences):
+{
+  "overall_score": <int 0-100>,
+  "readiness_level": "<low|moderate|high|very_high>",
+  "summary": "<2-3 sentence summary>",
+  "scores": [
+    {
+      "factor": "<factor name>",
+      "score": <int 0-100>,
+      "assessment": "<1-2 sentence assessment>",
+      "recommendations": ["<specific action>", ...]
+    }
+  ],
+  "strengths": ["<strength>", ...],
+  "gaps": ["<gap>", ...],
+  "recommendations": ["<action>", ...],
+  "suggested_grant_types": ["<grant type>", ...],
+  "estimated_preparation_weeks": <int or null>
+}
+"""
+
+
+def _build_readiness_prompt(body: ReadinessAssessmentRequest) -> str:
+    """Build the user prompt for the readiness assessment."""
+    dept_label = body.department_id or "Not specified"
+    if body.department_id and body.department_id in DEPARTMENT_LIST:
+        dept_info = DEPARTMENT_LIST[body.department_id]
+        dept_label = f"{body.department_id} - {dept_info['name']}"
+
+    # Resolve category names
+    cat_names = []
+    for code in body.grant_categories:
+        if code in GRANT_CATEGORIES:
+            cat_names.append(GRANT_CATEGORIES[code]["name"])
+        else:
+            cat_names.append(code)
+    categories_str = ", ".join(cat_names) if cat_names else "Not specified"
+
+    # Budget range
+    if body.budget_range_min is not None and body.budget_range_max is not None:
+        budget_str = f"${body.budget_range_min:,.0f} - ${body.budget_range_max:,.0f}"
+    elif body.budget_range_min is not None:
+        budget_str = f"${body.budget_range_min:,.0f}+"
+    elif body.budget_range_max is not None:
+        budget_str = f"Up to ${body.budget_range_max:,.0f}"
+    else:
+        budget_str = "Not specified"
+
+    parts = [
+        f"Department: {dept_label}",
+        f"Program: {body.program_description}",
+        f"Grant Categories of Interest: {categories_str}",
+        f"Budget Range: {budget_str}",
+        "",
+        "Self-Assessment Responses:",
+        f"- Staff Capacity: {body.staff_capacity or 'Not provided'}",
+        f"- Past Grant History: {body.past_grants or 'Not provided'}",
+        f"- Matching Fund Availability: {body.matching_funds or 'Not provided'}",
+        f"- Financial Systems: {body.financial_systems or 'Not provided'}",
+        f"- Reporting Capability: {body.reporting_capability or 'Not provided'}",
+        f"- Partnerships: {body.partnerships or 'Not provided'}",
+        "",
+        "Evaluate each of these six factors:",
+        "1. Staff Capacity (0-100): Does the department have dedicated grant staff?",
+        "2. Grant History (0-100): Track record of successful applications?",
+        "3. Financial Systems (0-100): Can they track grant funds separately? Single audits?",
+        "4. Matching Capability (0-100): Can they provide matching funds?",
+        "5. Reporting Infrastructure (0-100): Federal/state reporting compliance ready?",
+        "6. Partnerships (0-100): Relevant community or agency partnerships?",
+        "",
+        "Provide per-factor scores, overall weighted score, strengths, gaps, "
+        "recommended grant types for their readiness level, and estimated "
+        "preparation weeks to be application-ready.",
+    ]
+    return "\n".join(parts)
+
+
+def _fallback_readiness_response() -> ReadinessAssessmentResponse:
+    """Return a generic low-readiness response when AI call fails."""
+    return ReadinessAssessmentResponse(
+        overall_score=25,
+        readiness_level="low",
+        summary=(
+            "Unable to complete a detailed AI assessment at this time. "
+            "Based on limited information, we recommend completing all "
+            "questionnaire fields and trying again for a full evaluation."
+        ),
+        scores=[
+            ReadinessScoreBreakdown(
+                factor="Staff Capacity",
+                score=25,
+                assessment="Insufficient information to assess staff readiness.",
+                recommendations=["Provide details about grant management staffing."],
+            ),
+            ReadinessScoreBreakdown(
+                factor="Grant History",
+                score=25,
+                assessment="Insufficient information to assess grant track record.",
+                recommendations=["Describe any past grant applications or awards."],
+            ),
+            ReadinessScoreBreakdown(
+                factor="Financial Systems",
+                score=25,
+                assessment="Insufficient information to assess financial tracking.",
+                recommendations=["Describe financial tracking and audit capabilities."],
+            ),
+            ReadinessScoreBreakdown(
+                factor="Matching Capability",
+                score=25,
+                assessment="Insufficient information to assess matching fund availability.",
+                recommendations=["Identify potential sources of matching funds."],
+            ),
+            ReadinessScoreBreakdown(
+                factor="Reporting Infrastructure",
+                score=25,
+                assessment="Insufficient information to assess reporting readiness.",
+                recommendations=["Describe federal/state reporting capabilities."],
+            ),
+            ReadinessScoreBreakdown(
+                factor="Partnerships",
+                score=25,
+                assessment="Insufficient information to assess partnership landscape.",
+                recommendations=["List relevant community or agency partnerships."],
+            ),
+        ],
+        strengths=[],
+        gaps=["Incomplete assessment data"],
+        recommendations=[
+            "Complete all self-assessment questionnaire fields",
+            "Retry the assessment for a detailed AI-powered evaluation",
+        ],
+        suggested_grant_types=[],
+        estimated_preparation_weeks=None,
+    )
+
+
+@router.post("/ai/readiness-assessment", response_model=ReadinessAssessmentResponse)
+@limiter.limit("5/minute")
+async def assess_grant_readiness(
+    request: Request,
+    body: ReadinessAssessmentRequest,
+    user=Depends(get_current_user),
+):
+    """AI-powered grant readiness assessment for a department/program.
+
+    Evaluates six readiness factors (staff capacity, grant history, financial
+    systems, matching capability, reporting infrastructure, and partnerships)
+    and returns scored breakdown with actionable recommendations.
+    """
+    try:
+        user_prompt = _build_readiness_prompt(body)
+
+        client = azure_openai_client
+        response = client.chat.completions.create(
+            model=get_chat_mini_deployment(),
+            messages=[
+                {"role": "system", "content": _READINESS_SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.3,
+            max_tokens=1500,
+        )
+
+        raw = (response.choices[0].message.content or "").strip()
+
+        # Strip markdown code fences if present
+        if raw.startswith("```"):
+            lines = raw.split("\n")
+            # Remove first and last lines (``` markers)
+            lines = [ln for ln in lines if not ln.strip().startswith("```")]
+            raw = "\n".join(lines)
+
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            logger.warning("AI readiness response was not valid JSON, using fallback")
+            return _fallback_readiness_response()
+
+        # Parse scores
+        parsed_scores = []
+        for s in data.get("scores", []):
+            parsed_scores.append(
+                ReadinessScoreBreakdown(
+                    factor=s.get("factor", "Unknown"),
+                    score=max(0, min(100, int(s.get("score", 0)))),
+                    assessment=s.get("assessment", ""),
+                    recommendations=s.get("recommendations", []),
+                )
+            )
+
+        # Clamp overall score
+        overall = max(0, min(100, int(data.get("overall_score", 0))))
+
+        # Determine readiness level (validate or derive from score)
+        level = data.get("readiness_level", "")
+        valid_levels = {"low", "moderate", "high", "very_high"}
+        if level not in valid_levels:
+            if overall >= 76:
+                level = "very_high" if overall >= 91 else "high"
+            elif overall >= 51:
+                level = "moderate"
+            else:
+                level = "low"
+
+        return ReadinessAssessmentResponse(
+            overall_score=overall,
+            readiness_level=level,
+            summary=data.get("summary", "Assessment complete."),
+            scores=parsed_scores,
+            strengths=data.get("strengths", []),
+            gaps=data.get("gaps", []),
+            recommendations=data.get("recommendations", []),
+            suggested_grant_types=data.get("suggested_grant_types", []),
+            estimated_preparation_weeks=data.get("estimated_preparation_weeks"),
+        )
+    except json.JSONDecodeError:
+        # Already handled above; this catches any edge case
+        logger.warning("Readiness assessment JSON parse error, returning fallback")
+        return _fallback_readiness_response()
+    except Exception as e:
+        logger.error(f"Readiness assessment failed: {str(e)}")
+        # Return fallback instead of raising 500, per spec
+        return _fallback_readiness_response()

@@ -2,8 +2,8 @@
 Research service using GPT Researcher + AI analysis pipeline.
 
 This service implements a hybrid research approach:
-1. GPT Researcher for source discovery (Tavily Extract scraping)
-2. Serper + crawler for supplementary high-quality sources
+1. GPT Researcher for source discovery (SearXNG retrieval + BeautifulSoup scraping)
+2. SearXNG-based supplementary search + crawler for high-quality sources
 3. Unified crawler module for content backfill when sources lack content
 4. AI Triage for quick relevance filtering (gpt-4o-mini)
 5. AI Analysis for full classification and scoring (gpt-4o)
@@ -19,20 +19,12 @@ Research Types:
 import asyncio
 import logging
 import os
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from typing import Optional, Dict, Any, List, Tuple
 from dataclasses import dataclass
 from gpt_researcher import GPTResearcher
 from supabase import Client
 import openai
-
-# Optional imports for enhanced source fetching
-try:
-    from exa_py import Exa
-
-    EXA_AVAILABLE = True
-except ImportError:
-    EXA_AVAILABLE = False
 
 from .ai_service import AIService, AnalysisResult, TriageResult
 
@@ -103,8 +95,12 @@ def _configure_gpt_researcher_for_azure():
                     else f"GPT Researcher config: {key}={value}"
                 )
 
+    # Configure GPT Researcher to use SearXNG instead of Tavily for search
+    os.environ["RETRIEVER"] = os.getenv("RETRIEVER", "searx")
+    os.environ["SEARX_URL"] = os.getenv("SEARXNG_BASE_URL", "http://searxng:8080")
+
     logger.info(
-        f"GPT Researcher configured for Azure OpenAI: SMART_LLM={gptr_config['SMART_LLM']}, FAST_LLM={gptr_config['FAST_LLM']}"
+        f"GPT Researcher configured for Azure OpenAI: SMART_LLM={gptr_config['SMART_LLM']}, FAST_LLM={gptr_config['FAST_LLM']}, RETRIEVER={os.environ['RETRIEVER']}"
     )
 
 
@@ -219,8 +215,8 @@ class ResearchService:
     Handles research operations using hybrid GPT Researcher + AI analysis pipeline.
 
     Pipeline:
-    1. Discovery: GPT Researcher with Tavily Extract scraping
-    2. Enhancement: Serper + crawler for supplementary sources
+    1. Discovery: GPT Researcher with SearXNG retrieval + BeautifulSoup scraping
+    2. Enhancement: SearXNG search + crawler for supplementary sources
     3. Backfill: Unified crawler module for missing content
     4. Triage: Quick relevance check with gpt-4o-mini
     5. Analysis: Full classification with gpt-4o
@@ -239,15 +235,6 @@ class ResearchService:
         self.supabase = supabase
         self.openai_client = openai_client
         self.ai_service = AIService(openai_client)
-
-        # Initialize Exa if available
-        self.exa = None
-        if EXA_AVAILABLE and os.getenv("EXA_API_KEY"):
-            try:
-                self.exa = Exa(os.getenv("EXA_API_KEY"))
-                logger.info("Exa AI initialized for enhanced search")
-            except Exception as e:
-                logger.warning(f"Exa initialization failed: {e}")
 
     # ========================================================================
     # Card Snapshots — version history before overwrites
@@ -377,7 +364,7 @@ class ResearchService:
         ).execute()
 
     # ========================================================================
-    # Step 1: Discovery (GPT Researcher + Serper Enhancement)
+    # Step 1: Discovery (GPT Researcher + Supplementary Search)
     # ========================================================================
 
     async def _discover_sources(
@@ -387,7 +374,7 @@ class ResearchService:
         existing_source_urls: Optional[List[str]] = None,
     ) -> Tuple[List[RawSource], str, float]:
         """
-        Use GPT Researcher to discover sources, enhanced with Serper + crawler.
+        Use GPT Researcher to discover sources, enhanced with supplementary search + crawler.
 
         Args:
             query: Research query (customized for municipal focus)
@@ -396,9 +383,8 @@ class ResearchService:
         Returns:
             Tuple of (sources, report_text, cost)
         """
-        # Use Tavily Extract for page scraping — leverages existing Tavily
-        # subscription for cleaner content extraction than BeautifulSoup.
-        os.environ["SCRAPER"] = "tavily_extract"
+        # Use BeautifulSoup for page scraping — no external API needed.
+        os.environ["SCRAPER"] = "bs"
 
         researcher = GPTResearcher(
             query=query,
@@ -494,108 +480,34 @@ class ResearchService:
 
         logger.info(f"GPT Researcher found {len(sources)} sources")
 
-        # Supplement with Serper search for additional high-quality sources (primary supplement)
+        # Supplement with SearXNG search for additional high-quality sources
         try:
-            serper_sources = await self._search_with_serper(query, num_results=10)
-            for src in serper_sources:
+            supplementary_sources = await self._search_supplementary(
+                query, num_results=10
+            )
+            for src in supplementary_sources:
                 if src.url not in seen_urls:
                     seen_urls.add(src.url)
                     sources.append(src)
-            if serper_sources:
-                logger.info(f"Serper added {len(serper_sources)} additional sources")
+            if supplementary_sources:
+                logger.info(
+                    f"Supplementary search added {len(supplementary_sources)} additional sources"
+                )
         except Exception as e:
             logger.warning(
-                f"Serper search failed (continuing with GPT Researcher sources): {e}"
-            )
-
-        # Exa neural search as FALLBACK — only when Tavily+Serper didn't find enough
-        MIN_SOURCES_BEFORE_EXA = 10
-        if len(sources) < MIN_SOURCES_BEFORE_EXA:
-            logger.info(
-                f"Only {len(sources)} sources from Tavily+Serper (need {MIN_SOURCES_BEFORE_EXA}), falling back to Exa"
-            )
-            try:
-                exa_sources = await self._search_with_exa(query, num_results=10)
-                exa_added = 0
-                for src in exa_sources:
-                    if src.url not in seen_urls:
-                        seen_urls.add(src.url)
-                        sources.append(src)
-                        exa_added += 1
-                if exa_added:
-                    logger.info(f"Exa fallback added {exa_added} additional sources")
-            except Exception as e:
-                logger.warning(f"Exa fallback search failed: {e}")
-        else:
-            logger.info(
-                f"Tavily+Serper found {len(sources)} sources, skipping Exa (cost savings)"
+                f"Supplementary search failed (continuing with GPT Researcher sources): {e}"
             )
 
         return sources, report, costs
 
-    async def _search_with_exa(
-        self, query: str, num_results: int = 10
-    ) -> List[RawSource]:
-        """
-        Search with Exa AI neural search for high-quality sources with content.
-
-        Args:
-            query: Search query
-            num_results: Max number of results
-
-        Returns:
-            List of RawSource with content included
-        """
-        if not self.exa:
-            return []
-
-        try:
-            # Calculate date range (last 180 days for broader coverage)
-            start_date = (datetime.now(timezone.utc) - timedelta(days=180)).strftime(
-                "%Y-%m-%d"
-            )
-
-            # Exa search with content retrieval
-            results = self.exa.search_and_contents(
-                query,
-                num_results=num_results,
-                start_published_date=start_date,
-                type="neural",
-                text=True,
-                highlights=True,
-            )
-
-            sources = []
-            for result in results.results:
-                # Combine text and highlights for content
-                content = result.text or ""
-                if result.highlights:
-                    content = "\n\n".join(result.highlights) + "\n\n" + content
-
-                sources.append(
-                    RawSource(
-                        url=result.url,
-                        title=result.title or "Untitled",
-                        content=content[:10000],  # Limit content size
-                        source_name=result.author or "",
-                        relevance=result.score if hasattr(result, "score") else 0.8,
-                    )
-                )
-
-            return sources
-
-        except Exception as e:
-            logger.warning(f"Exa search error: {e}")
-            return []
-
-    async def _search_with_serper(
+    async def _search_supplementary(
         self, query: str, num_results: int = 5
     ) -> List[RawSource]:
         """
-        Search with Serper + crawler for supplementary sources.
+        Search with SearXNG + crawler for supplementary sources.
 
-        Uses Serper for web + news search and the unified crawler module
-        for full-text extraction.
+        Uses the search_provider module (routes to SearXNG) for web + news
+        search and the unified crawler module for full-text extraction.
 
         Args:
             query: Search query
@@ -1399,7 +1311,7 @@ class ResearchService:
 
         Pipeline:
         1. Build municipal-focused query
-        2. Discover sources with GPT Researcher + Serper
+        2. Discover sources with GPT Researcher + supplementary search
         3. Backfill missing content via unified crawler
         4. Triage for relevance
         5. Analyze relevant sources
@@ -1426,7 +1338,7 @@ class ResearchService:
             name=card["name"], summary=card.get("summary", "")
         )
 
-        # Step 2: Discover sources (GPT Researcher + Serper)
+        # Step 2: Discover sources (GPT Researcher + supplementary search)
         sources, report, cost = await self._discover_sources(
             query=query, report_type="research_report"
         )
@@ -1556,9 +1468,9 @@ class ResearchService:
         """
         Execute comprehensive deep research for a card.
 
-        Pipeline with Serper/trafilatura enhancement:
+        Pipeline with supplementary search enhancement:
         1. Build comprehensive query
-        2. Discover sources (GPT Researcher + Serper)
+        2. Discover sources (GPT Researcher + supplementary search)
         3. Backfill missing content via unified crawler
         4. Triage for relevance
         5. Analyze relevant sources
@@ -1641,7 +1553,7 @@ class ResearchService:
         except Exception as e:
             logger.warning(f"Failed to fetch existing sources: {e}")
 
-        # Step 2: Discover sources (GPT Researcher + Serper - detailed report for more depth)
+        # Step 2: Discover sources (GPT Researcher + supplementary search - detailed report for more depth)
         sources, report, cost = await self._discover_sources(
             query=query,
             report_type="detailed_report",
@@ -1657,7 +1569,9 @@ class ResearchService:
                 peer_query = (
                     f'"{card["name"]}" ({" OR ".join(peer_cities)}) city implementation'
                 )
-                peer_sources = await self._search_with_serper(peer_query, max_results=5)
+                peer_sources = await self._search_supplementary(
+                    peer_query, num_results=5
+                )
                 if peer_sources:
                     sources.extend(peer_sources)
                     logger.info(f"Peer city search added {len(peer_sources)} sources")
@@ -1696,8 +1610,8 @@ class ResearchService:
                     combined_query = " OR ".join(
                         f'"{q}"' for q in follow_up_queries[:3]
                     )
-                    round_2_sources = await self._search_with_serper(
-                        combined_query, max_results=10
+                    round_2_sources = await self._search_supplementary(
+                        combined_query, num_results=10
                     )
                     if round_2_sources:
                         round_2_sources = await self._backfill_content(round_2_sources)
@@ -2061,9 +1975,9 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
         """
         Analyze a workstream and find/create relevant cards.
 
-        Pipeline with Serper/crawler enhancement:
+        Pipeline with supplementary search/crawler enhancement:
         1. Build workstream query
-        2. Discover sources (GPT Researcher + Serper)
+        2. Discover sources (GPT Researcher + supplementary search)
         3. Backfill missing content via unified crawler
         4. Triage for relevance
         5. Analyze relevant sources
@@ -2095,7 +2009,7 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
             description=ws.get("description", ""),
         )
 
-        # Step 2: Discover sources (GPT Researcher + Serper)
+        # Step 2: Discover sources (GPT Researcher + supplementary search)
         sources, report, cost = await self._discover_sources(
             query=query, report_type="research_report"
         )

@@ -92,7 +92,7 @@ export function ChatMessageActions({
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `foresight-response.pdf`;
+      a.download = `grantscope-response.pdf`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);

@@ -134,7 +134,7 @@ const STAGE_OPTIONS = [
 
 /** Step labels for the indicator */
 const STEP_LABELS: Record<WizardStep, string> = {
-  1: "Define Signal",
+  1: "Define Opportunity",
   2: "Source Preferences",
   3: "Review & Create",
 };
@@ -510,7 +510,7 @@ export function CreateSignalModal({
         data: { session },
       } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        setError("Please sign in to create signals.");
+        setError("Please sign in to create opportunities.");
         return;
       }
 
@@ -568,7 +568,9 @@ export function CreateSignalModal({
         onSuccess?.();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create signal.");
+      setError(
+        err instanceof Error ? err.message : "Failed to create opportunity.",
+      );
     } finally {
       setIsCreating(false);
     }
@@ -846,7 +848,7 @@ export function CreateSignalModal({
                   <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">
                     {state.mode === "quick"
                       ? "Enter a topic and let AI do the rest"
-                      : "Full control over all signal fields"}
+                      : "Full control over all opportunity fields"}
                   </p>
                 </div>
 

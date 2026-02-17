@@ -25,7 +25,7 @@ class ChatRequest(BaseModel):
     """Request model for the main chat endpoint."""
 
     scope: str = Field(
-        ..., description="Chat scope: 'signal', 'workstream', or 'global'"
+        ..., description="Chat scope: 'signal', 'workstream', 'global', or 'wizard'"
     )
     scope_id: Optional[str] = Field(
         None, description="card_id for signal scope, workstream_id for workstream scope"
@@ -43,7 +43,7 @@ class ChatSuggestRequest(BaseModel):
     """Request model for the suggestion endpoint."""
 
     scope: str = Field(
-        ..., description="Chat scope: 'signal', 'workstream', or 'global'"
+        ..., description="Chat scope: 'signal', 'workstream', 'global', or 'wizard'"
     )
     scope_id: Optional[str] = Field(
         None, description="card_id or workstream_id depending on scope"

@@ -191,7 +191,7 @@ const CardNode = memo(({ data }: NodeProps<Node<CardNodeData>>) => {
         )}
         role="button"
         tabIndex={0}
-        aria-label={`View ${data.name} signal details`}
+        aria-label={`View ${data.name} opportunity details`}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             handleClick();

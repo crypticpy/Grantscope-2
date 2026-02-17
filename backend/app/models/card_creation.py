@@ -15,6 +15,8 @@ Endpoints:
 from typing import Optional, List
 from pydantic import BaseModel, Field, validator
 
+from app.taxonomy import VALID_PILLAR_CODES
+
 
 # ============================================================================
 # Source Preferences Model
@@ -132,12 +134,11 @@ class CreateCardFromTopicRequest(BaseModel):
     def validate_pillar_hints(cls, v):
         """Validate pillar hint codes if provided."""
         if v is not None:
-            valid_codes = {"CH", "EW", "HG", "HH", "MC", "PS"}
             for code in v:
-                if code not in valid_codes:
+                if code not in VALID_PILLAR_CODES:
                     raise ValueError(
                         f'Invalid pillar code "{code}". '
-                        f'Must be one of: {", ".join(sorted(valid_codes))}'
+                        f'Must be one of: {", ".join(sorted(VALID_PILLAR_CODES))}'
                     )
         return v
 
@@ -227,12 +228,11 @@ class ManualCardCreateRequest(BaseModel):
     def validate_pillar_ids(cls, v):
         """Validate pillar codes if provided."""
         if v is not None:
-            valid_codes = {"CH", "EW", "HG", "HH", "MC", "PS"}
             for code in v:
-                if code not in valid_codes:
+                if code not in VALID_PILLAR_CODES:
                     raise ValueError(
                         f'Invalid pillar code "{code}". '
-                        f'Must be one of: {", ".join(sorted(valid_codes))}'
+                        f'Must be one of: {", ".join(sorted(VALID_PILLAR_CODES))}'
                     )
         return v
 

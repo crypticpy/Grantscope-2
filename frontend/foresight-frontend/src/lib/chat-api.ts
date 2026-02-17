@@ -1,7 +1,7 @@
 /**
  * Chat API Client
  *
- * API functions for the Foresight chat system with SSE streaming support.
+ * API functions for the GrantScope chat system with SSE streaming support.
  * Handles sending messages, parsing server-sent events, managing conversations,
  * and fetching suggested questions.
  *
@@ -62,7 +62,7 @@ export interface Conversation {
   /** Unique conversation identifier (UUID) */
   id: string;
   /** The scope context of this conversation */
-  scope: "signal" | "workstream" | "global";
+  scope: "signal" | "workstream" | "global" | "wizard";
   /** ID of the scoped entity (card_id or workstream_id), if not global */
   scope_id?: string;
   /** Auto-generated or user-set title for the conversation */

@@ -1,93 +1,150 @@
 # =============================================================================
-# Foresight — Docker Compose
+# GrantScope2 — Docker Compose
 # =============================================================================
-# Local development and Azure Container Apps deployment configuration.
+# Full local development stack — self-hosted PostgreSQL, PostgREST, GoTrue,
+# SearXNG, and the GrantScope application services.
 #
 # Services:
-#   - foresight-web:    FastAPI backend (web server)
-#   - foresight-worker: Background job processor (same image, worker mode)
-#   - searxng:          Self-hosted meta-search engine (zero-cost search)
+#   - postgres:          PostgreSQL 16 + pgvector (database)
+#   - postgrest:         PostgREST (Supabase-compatible REST API)
+#   - gotrue:            GoTrue (Supabase-compatible auth server)
+#   - gateway:           nginx reverse proxy (mirrors Supabase URL structure)
+#   - searxng:           Self-hosted meta-search engine (zero-cost search)
+#   - grantscope-web:    FastAPI backend (web server)
+#   - grantscope-worker: Background job processor (same image, worker mode)
 #
-# Usage:
-#   docker compose up -d                    # Start all services
-#   docker compose up -d foresight-web      # Start web only (uses .env)
-#   docker compose logs -f foresight-web    # Tail web logs
-#   docker compose down                     # Stop everything
+# Quick Start:
+#   1. cp backend/.env.example backend/.env  (fill in AZURE_OPENAI_* vars)
+#   2. python infra/generate_keys.py         (generates JWT keys for .env)
+#   3. docker compose up -d                  (start infrastructure)
+#   4. ./infra/migrate.sh                    (apply database migrations)
+#   5. docker compose up -d grantscope-web   (start the app)
 #
-# Environment:
-#   Copy backend/.env.example to backend/.env and fill in required values.
-#   At minimum you need: SUPABASE_URL, SUPABASE_KEY, AZURE_OPENAI_* vars.
-#   SearXNG requires no API keys — it's fully self-hosted.
+# Profiles:
+#   docker compose up -d                     # Infrastructure only (default)
+#   docker compose --profile app up -d       # Infrastructure + app services
 #
 # =============================================================================
 
 services:
   # ---------------------------------------------------------------------------
-  # Foresight Web Server
+  # PostgreSQL — Database (pgvector for embeddings)
   # ---------------------------------------------------------------------------
-  foresight-web:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
-    container_name: foresight-web
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: grantscope-postgres
     restart: unless-stopped
     ports:
-      - "${PORT:-8000}:8000"
-    env_file:
-      - backend/.env
+      - "${POSTGRES_PORT:-5432}:5432"
     environment:
-      - FORESIGHT_PROCESS_TYPE=web
-      - PORT=8000
-      # Point to SearXNG sidecar for self-hosted search
-      - SEARXNG_BASE_URL=http://searxng:8080
-      # Use SearXNG as primary search provider (auto | searxng | serper | tavily)
-      - SEARCH_PROVIDER=${SEARCH_PROVIDER:-auto}
-    depends_on:
-      searxng:
-        condition: service_healthy
+      POSTGRES_DB: grantscope
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/init-db.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
-      interval: 30s
-      timeout: 10s
-      start_period: 60s
-      retries: 3
+      test: ["CMD-SHELL", "pg_isready -U postgres -d grantscope"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
     networks:
-      - foresight-net
+      - grantscope-net
 
   # ---------------------------------------------------------------------------
-  # Foresight Background Worker
+  # PostgREST — Supabase-Compatible REST API for PostgreSQL
   # ---------------------------------------------------------------------------
-  foresight-worker:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
-    container_name: foresight-worker
+  # Provides the /rest/v1/* API that supabase-py uses for all CRUD operations.
+  # Connects as the `authenticator` role and switches per-request based on JWT.
+  # ---------------------------------------------------------------------------
+  postgrest:
+    image: postgrest/postgrest:latest
+    container_name: grantscope-postgrest
     restart: unless-stopped
-    env_file:
-      - backend/.env
     environment:
-      - FORESIGHT_PROCESS_TYPE=worker
-      # Worker also needs search access for discovery runs
-      - SEARXNG_BASE_URL=http://searxng:8080
-      - SEARCH_PROVIDER=${SEARCH_PROVIDER:-auto}
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD:-postgres}@postgres:5432/grantscope
+      PGRST_DB_SCHEMAS: public,extensions
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters-long}
+      PGRST_DB_MAX_ROWS: 1000
+      PGRST_DB_EXTRA_SEARCH_PATH: extensions
     depends_on:
-      searxng:
+      postgres:
         condition: service_healthy
     networks:
-      - foresight-net
+      - grantscope-net
+
+  # ---------------------------------------------------------------------------
+  # GoTrue — Supabase-Compatible Authentication Server
+  # ---------------------------------------------------------------------------
+  # Handles user signup, login, JWT issuance, and token refresh.
+  # supabase-py and supabase-js auth calls route here via the gateway.
+  # ---------------------------------------------------------------------------
+  gotrue:
+    image: supabase/gotrue:v2.172.1
+    container_name: grantscope-gotrue
+    restart: unless-stopped
+    environment:
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD:-postgres}@postgres:5432/grantscope?sslmode=disable&search_path=auth
+      GOTRUE_SITE_URL: ${SITE_URL:-http://localhost:5173}
+      GOTRUE_URI_ALLOW_LIST: ""
+      GOTRUE_DISABLE_SIGNUP: "false"
+      GOTRUE_JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters-long}
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+      GOTRUE_SMS_AUTOCONFIRM: "true"
+      GOTRUE_API_HOST: 0.0.0.0
+      PORT: 9999
+      API_EXTERNAL_URL: ${API_EXTERNAL_URL:-http://localhost:3000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - grantscope-net
+
+  # ---------------------------------------------------------------------------
+  # API Gateway — nginx reverse proxy (mirrors Supabase URL structure)
+  # ---------------------------------------------------------------------------
+  # Routes /rest/v1/* to PostgREST and /auth/v1/* to GoTrue.
+  # This allows supabase-py and supabase-js to work without ANY code changes.
+  # Set SUPABASE_URL=http://gateway:8000 in the backend.
+  # ---------------------------------------------------------------------------
+  gateway:
+    image: nginx:alpine
+    container_name: grantscope-gateway
+    restart: unless-stopped
+    ports:
+      - "${GATEWAY_PORT:-3000}:8000"
+    volumes:
+      - ./infra/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - postgrest
+      - gotrue
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
+    networks:
+      - grantscope-net
 
   # ---------------------------------------------------------------------------
   # SearXNG — Self-Hosted Meta-Search Engine
   # ---------------------------------------------------------------------------
   # Aggregates results from Google, Bing, DuckDuckGo, Brave, and others.
-  # No API keys required. Replaces Serper/Tavily for zero-cost search.
+  # No API keys required. Primary search provider (Serper/Tavily are fallbacks).
   #
   # Web UI (optional): http://localhost:8888
   # JSON API:          http://searxng:8080/search?q=query&format=json
   # ---------------------------------------------------------------------------
   searxng:
     image: searxng/searxng:latest
-    container_name: foresight-searxng
+    container_name: grantscope-searxng
     restart: unless-stopped
     ports:
       - "${SEARXNG_PORT:-8888}:8080"
@@ -96,7 +153,7 @@ services:
       - ./searxng/limiter.toml:/etc/searxng/limiter.toml:ro
     environment:
       - SEARXNG_BASE_URL=http://localhost:${SEARXNG_PORT:-8888}/
-      - SEARXNG_SECRET=${SEARXNG_SECRET:-foresight-searxng-secret-change-me}
+      - SEARXNG_SECRET=${SEARXNG_SECRET:-grantscope-searxng-secret-change-me}
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/healthz"]
       interval: 15s
@@ -110,11 +167,86 @@ services:
       - SETGID
       - SETUID
     networks:
-      - foresight-net
+      - grantscope-net
+
+  # ---------------------------------------------------------------------------
+  # GrantScope Web Server
+  # ---------------------------------------------------------------------------
+  grantscope-web:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: grantscope-web
+    restart: unless-stopped
+    profiles:
+      - app
+    ports:
+      - "${PORT:-8000}:8000"
+    env_file:
+      - backend/.env
+    environment:
+      - GRANTSCOPE_PROCESS_TYPE=web
+      - PORT=8000
+      # Self-hosted Supabase (via gateway)
+      - SUPABASE_URL=http://gateway:8000
+      # Point to SearXNG sidecar for self-hosted search
+      - SEARXNG_BASE_URL=http://searxng:8080
+      - SEARX_URL=http://searxng:8080
+      # Use SearXNG as primary search provider (auto | searxng | serper | tavily)
+      - SEARCH_PROVIDER=${SEARCH_PROVIDER:-auto}
+    depends_on:
+      gateway:
+        condition: service_healthy
+      searxng:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    networks:
+      - grantscope-net
+
+  # ---------------------------------------------------------------------------
+  # GrantScope Background Worker
+  # ---------------------------------------------------------------------------
+  grantscope-worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: grantscope-worker
+    restart: unless-stopped
+    profiles:
+      - app
+    env_file:
+      - backend/.env
+    environment:
+      - GRANTSCOPE_PROCESS_TYPE=worker
+      # Self-hosted Supabase (via gateway)
+      - SUPABASE_URL=http://gateway:8000
+      # Worker also needs search access for discovery runs
+      - SEARXNG_BASE_URL=http://searxng:8080
+      - SEARX_URL=http://searxng:8080
+      - SEARCH_PROVIDER=${SEARCH_PROVIDER:-auto}
+    depends_on:
+      gateway:
+        condition: service_healthy
+      searxng:
+        condition: service_healthy
+    networks:
+      - grantscope-net
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  pgdata:
+    driver: local
 
 # =============================================================================
 # Networks
 # =============================================================================
 networks:
-  foresight-net:
+  grantscope-net:
     driver: bridge

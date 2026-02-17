@@ -1,5 +1,5 @@
 """
-Domain reputation service for Foresight.
+Domain reputation service for GrantScope.
 
 Provides domain-level credibility scoring used by the discovery pipeline's
 triage step and the Source Quality Index (SQI) calculation. Each domain in

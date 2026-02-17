@@ -1,14 +1,15 @@
 """
 Workstream Targeted Scan Service.
 
-A lightweight, focused discovery service that scans for content relevant to
-a user's workstream based on its keywords, pillars, and horizon settings.
+A lightweight, focused discovery service that scans for grant opportunities
+relevant to a user's workstream (program) based on its keywords, pillars,
+and grant type settings.
 
 Key differences from broad discovery:
 - Queries generated purely from workstream metadata (no default topic clamping)
 - Lighter resource limits (fewer queries, sources, cards)
 - Discovered cards go to global pool AND auto-added to user's workstream inbox
-- Rate limited to 2 scans per workstream per day
+- Rate limited to 10 scans per workstream per day
 
 Usage:
     from app.workstream_scan_service import WorkstreamScanService, WorkstreamScanConfig
@@ -16,8 +17,8 @@ Usage:
     config = WorkstreamScanConfig(
         workstream_id="uuid",
         user_id="uuid",
-        keywords=["AI traffic signals", "smart parking"],
-        pillar_ids=["MC"],
+        keywords=["HUD housing grants", "CDBG funding"],
+        pillar_ids=["HH"],
         horizon="H2"
     )
     service = WorkstreamScanService(supabase_client, openai_client)
@@ -406,26 +407,26 @@ class WorkstreamScanService:
         self, config: WorkstreamScanConfig
     ) -> List[str]:
         """
-        Generate diverse, time-aware search queries using the LLM.
+        Generate diverse, grant-focused search queries using the LLM.
 
         Context-aware: looks at existing cards in the workstream to avoid
-        re-searching known topics, and uses the last scan date to narrow
-        the time horizon for subsequent scans.
+        re-searching known grant opportunities, and uses the last scan date
+        to narrow the time window for subsequent scans.
         """
         # Build context strings for the prompt
         keywords_str = (
             ", ".join(config.keywords)
             if config.keywords
-            else "general strategic intelligence"
+            else "general grant opportunities city government"
         )
         pillar_names = [PILLAR_NAMES.get(pid, pid) for pid in config.pillar_ids]
-        pillar_str = ", ".join(pillar_names) if pillar_names else "all pillars"
+        pillar_str = ", ".join(pillar_names) if pillar_names else "all categories"
 
         horizon_descriptions = {
-            "H1": "Near-term (0-2 years) — mainstream and currently adopted technologies",
-            "H2": "Mid-term (2-5 years) — emerging and transitional technologies being piloted",
-            "H3": "Long-term (5-10+ years) — transformative and experimental future technologies",
-            "ALL": "All time horizons — near-term through long-term",
+            "H1": "Active grants — currently open NOFOs and RFPs accepting applications",
+            "H2": "Upcoming grants — recurring programs expected to open, anticipated funding",
+            "H3": "Emerging funding — new legislation, proposed programs, new funding sources",
+            "ALL": "All grant types — active, upcoming, and emerging funding opportunities",
         }
         horizon_desc = horizon_descriptions.get(
             config.horizon, horizon_descriptions["ALL"]
@@ -441,7 +442,7 @@ class WorkstreamScanService:
         if existing_names:
             names_sample = existing_names[:15]
             existing_context = f"""
-Signals already tracked (DO NOT search for these — find NEW, DIFFERENT topics):
+Grant opportunities already tracked (DO NOT search for these — find NEW, DIFFERENT opportunities):
 {chr(10).join(f'- {name}' for name in names_sample)}
 {f'... and {str(len(existing_names) - 15)} more' if len(existing_names) > 15 else ''}
 """
@@ -454,46 +455,48 @@ Signals already tracked (DO NOT search for these — find NEW, DIFFERENT topics)
         scan_mode_hint = ""
         if is_seed:
             scan_mode_hint = (
-                "\nThis is a SEED scan — the workstream has no signals yet. "
-                "Cast a WIDE net: find foundational articles, landmark reports, "
-                "key case studies, seminal research, AND recent news. "
-                "Include queries that find historical/archival content, not just recent. "
-                "Do NOT add date terms like '2026' or 'latest' to every query — "
-                "mix timeless queries with current-events queries."
+                "\nThis is a SEED scan — the program has no grant opportunities tracked yet. "
+                "Cast a WIDE net: search for active NOFOs, recently closed grants (to track "
+                "recurring cycles), major federal programs, state programs, and foundation "
+                "grants. Include queries for grants.gov, SAM.gov, and specific agency "
+                "grant pages. Mix broad grant searches with agency-specific queries."
             )
         elif last_scan_date:
             scan_mode_hint = (
                 f"\nThis is a FOLLOW-UP scan (last scan: {last_scan_date}). "
-                f"Focus on finding content published AFTER that date. "
-                f"Look for new developments, breaking news, recently published "
-                f"research, and emerging angles we haven't covered yet."
+                f"Focus on finding grant opportunities announced or updated AFTER that date. "
+                f"Look for new NOFOs, updated deadlines, newly available funding, "
+                f"and recently announced grant programs we haven't covered yet."
             )
         else:
             scan_mode_hint = (
-                "\nThis workstream has signals but no prior scan history. "
-                "Focus on finding recent content (past few weeks) that "
-                "complements what's already tracked."
+                "\nThis program has tracked opportunities but no prior scan history. "
+                "Focus on finding recently announced grants (past few weeks) that "
+                "complement what's already tracked."
             )
 
-        prompt = f"""You are a strategic intelligence research assistant for the City of Austin, Texas.
+        prompt = f"""You are a grant research specialist for the City of Austin, Texas municipal government.
 
-Generate 10-12 diverse Google search queries to discover NEW content about this topic.
+Generate 10-12 diverse Google search queries to discover NEW grant funding opportunities.
 
-Workstream context:
+Program context:
 - Keywords: {keywords_str}
-- Strategic pillars: {pillar_str}
-- Time horizon: {horizon_desc}
+- Focus areas: {pillar_str}
+- Grant type focus: {horizon_desc}
 - Today's date: {today_str}
 {scan_mode_hint}
 {existing_context}
 Requirements:
-- Each query should find DIFFERENT content (vary angles, terminology, geographic scope)
-- Include temporal terms for freshness (e.g., "2026", "latest", "new", "announced")
-- Mix query types: news-oriented, research/academic, case-study, policy/regulation, industry analysis
-- Include municipal/city government context in some queries (but not all — also search private sector, academia)
-- Don't just prepend/append the same modifiers — be creative with phrasing
-- Avoid queries that would return content we already have (see signals list above)
-- Think about adjacent topics, upstream/downstream impacts, and cross-domain connections
+- Each query should find DIFFERENT grant opportunities (vary agencies, programs, funding types)
+- Include grant-specific terms: "NOFO", "RFP", "grant", "funding opportunity", "notice of funding"
+- Search across federal agencies (HUD, DOT, EPA, DOJ, HHS, FEMA, DOE, EDA, USDA, etc.)
+- Include state-level grants (Texas state agencies, TCEQ, TxDOT, TWC, etc.)
+- Include foundation and private grants where relevant
+- Search grants.gov, SAM.gov, and agency-specific grant pages
+- Include fiscal year and deadline-related terms (e.g., "FY2026", "deadline 2026")
+- Don't just prepend/append the same modifiers — target specific grant programs by name
+- Avoid queries that would return opportunities we already track (see list above)
+- Think about related grant programs, matching funds, and cross-agency opportunities
 
 Return ONLY a JSON array of query strings, no other text.
 Example: ["query 1", "query 2", ...]"""
@@ -541,53 +544,65 @@ Example: ["query 1", "query 2", ...]"""
 
     def _generate_queries_static(self, config: WorkstreamScanConfig) -> List[str]:
         """
-        Generate search queries from workstream metadata (static/fallback method).
+        Generate grant search queries from workstream metadata (static/fallback method).
 
         No default topic clamping - queries are purely workstream-driven.
         Used as a fallback when AI-powered query generation fails.
         """
         queries = []
 
-        # Base modifiers for municipal context
-        municipal_modifiers = [
-            "smart city",
-            "municipal government",
-            "city innovation",
-            "public sector",
-            "urban technology",
+        # Base modifiers for grant discovery context
+        grant_modifiers = [
+            "grants city government",
+            "federal grants municipal",
+            "funding opportunity NOFO",
+            "grant program local government",
+            "state grants Texas city",
         ]
 
-        # Horizon-specific modifiers
-        horizon_modifiers = {
-            "H1": ["mainstream", "adopted", "implemented", "current"],
-            "H2": ["emerging", "transitional", "piloting", "2025 2026"],
-            "H3": ["transformative", "future", "experimental", "long-term"],
-            "ALL": ["emerging", "innovation"],
+        # Grant-type-specific modifiers (mapped from horizon)
+        grant_type_modifiers = {
+            "H1": [
+                "NOFO open",
+                "grant application deadline 2026",
+                "accepting applications",
+                "FY2026",
+            ],
+            "H2": ["grant program", "annual funding", "recurring grants", "2025 2026"],
+            "H3": [
+                "new grant program",
+                "proposed funding",
+                "legislation grants",
+                "appropriations",
+            ],
+            "ALL": ["grants funding", "NOFO grant program"],
         }
 
-        horizon_mods = horizon_modifiers.get(config.horizon, horizon_modifiers["ALL"])
+        grant_mods = grant_type_modifiers.get(
+            config.horizon, grant_type_modifiers["ALL"]
+        )
 
         # Generate queries from keywords
         for keyword in config.keywords[:10]:  # Limit keywords
             queries.extend(
                 (
-                    f'"{keyword}" {municipal_modifiers[0]}',
-                    f"{keyword} {horizon_mods[0]} technology",
+                    f'"{keyword}" {grant_modifiers[0]}',
+                    f"{keyword} {grant_mods[0]}",
                 )
             )
             # Keyword with pillar context
             for pillar_id in config.pillar_ids[:2]:  # Limit pillars
                 if pillar_name := PILLAR_NAMES.get(pillar_id, ""):
-                    queries.append(f"{keyword} {pillar_name}")
+                    queries.append(f"{keyword} {pillar_name} grants")
 
-        # Add pillar-specific queries if few keywords
+        # Add pillar-specific grant queries if few keywords
         if len(config.keywords) < 3:
             for pillar_id in config.pillar_ids:
                 if pillar_name := PILLAR_NAMES.get(pillar_id, ""):
                     queries.extend(
                         (
-                            f"{pillar_name} {horizon_mods[0]} technology city",
-                            f"{pillar_name} municipal innovation",
+                            f"{pillar_name} {grant_mods[0]} city government",
+                            f"{pillar_name} federal grants municipal",
                         )
                     )
         # Dedupe and limit

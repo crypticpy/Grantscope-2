@@ -70,6 +70,23 @@ export interface KanbanCardProps {
 // =============================================================================
 
 /**
+ * Format a funding range for display.
+ * Shows amounts in human-readable format (K for thousands, M for millions).
+ */
+function formatFundingRange(min?: number | null, max?: number | null): string {
+  const fmt = (n: number) =>
+    n >= 1000000
+      ? `$${(n / 1000000).toFixed(1)}M`
+      : n >= 1000
+        ? `$${(n / 1000).toFixed(0)}K`
+        : `$${n}`;
+  if (min != null && max != null) return `${fmt(min)} - ${fmt(max)}`;
+  if (max != null) return `Up to ${fmt(max)}`;
+  if (min != null) return `From ${fmt(min)}`;
+  return "";
+}
+
+/**
  * Get color class for the card's left border accent.
  * Based on the card's horizon for visual grouping.
  */
@@ -116,8 +133,8 @@ function AddedFromTooltipContent({
           </span>
         </div>
         <p className="text-xs text-gray-600 dark:text-gray-400">
-          This signal was automatically added because it matched your workstream
-          filters:
+          This opportunity was automatically added because it matched your
+          workstream filters:
         </p>
         <div className="space-y-1 text-xs">
           {pillar && (
@@ -151,7 +168,7 @@ function AddedFromTooltipContent({
           </span>
         </div>
         <p className="text-xs text-gray-600 dark:text-gray-400">
-          You added this signal to your workstream.
+          You added this opportunity to your program.
         </p>
       </div>
     );
@@ -163,11 +180,11 @@ function AddedFromTooltipContent({
       <div className="flex items-center gap-2">
         <Heart className="h-4 w-4 text-pink-500" />
         <span className="font-medium text-gray-900 dark:text-gray-100">
-          From followed signal
+          From followed opportunity
         </span>
       </div>
       <p className="text-xs text-gray-600 dark:text-gray-400">
-        Added because you followed this signal.
+        Added because you followed this opportunity.
       </p>
     </div>
   );
@@ -303,6 +320,8 @@ export const KanbanCard = memo(function KanbanCard({
             onExportBrief={cardActions.onExportBrief}
             onCheckUpdates={cardActions.onCheckUpdates}
             onGenerateBrief={cardActions.onGenerateBrief}
+            onEvaluateGrant={cardActions.onEvaluateGrant}
+            onStartApplication={cardActions.onStartApplication}
           />
         )}
       </div>
@@ -350,6 +369,50 @@ export const KanbanCard = memo(function KanbanCard({
             score={embeddedCard.velocity_score}
           />
         </div>
+
+        {/* Grant Info - show conditionally when grant data is present */}
+        {(embeddedCard.deadline ||
+          embeddedCard.funding_amount_min ||
+          embeddedCard.funding_amount_max ||
+          embeddedCard.grantor) && (
+          <div className="flex items-center gap-2 flex-wrap mb-2 text-xs">
+            {embeddedCard.grantor && (
+              <span className="text-gray-600 dark:text-gray-400 truncate max-w-[140px]">
+                {embeddedCard.grantor}
+              </span>
+            )}
+            {(embeddedCard.funding_amount_min ||
+              embeddedCard.funding_amount_max) && (
+              <span className="text-green-600 dark:text-green-400 font-medium">
+                {formatFundingRange(
+                  embeddedCard.funding_amount_min,
+                  embeddedCard.funding_amount_max,
+                )}
+              </span>
+            )}
+            {embeddedCard.deadline && (
+              <span
+                className={cn(
+                  "font-medium",
+                  (() => {
+                    const deadline = new Date(embeddedCard.deadline);
+                    const daysUntil = Math.ceil(
+                      (deadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+                    );
+                    if (daysUntil < 0)
+                      return "text-gray-400 dark:text-gray-500";
+                    if (daysUntil <= 7) return "text-red-600 dark:text-red-400";
+                    if (daysUntil <= 30)
+                      return "text-orange-600 dark:text-orange-400";
+                    return "text-gray-600 dark:text-gray-400";
+                  })(),
+                )}
+              >
+                Due: {new Date(embeddedCard.deadline).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Needs Review Badge */}
         {showNeedsReview && (

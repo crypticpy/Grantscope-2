@@ -228,8 +228,10 @@ function CardItem({
               ? "text-red-500 hover:text-red-600 hover:bg-red-50"
               : "text-gray-400 hover:text-red-500 hover:bg-gray-50",
           )}
-          title={isFollowed ? "Unfollow signal" : "Follow signal"}
-          aria-label={isFollowed ? "Unfollow signal" : "Follow signal"}
+          title={isFollowed ? "Unfollow opportunity" : "Follow opportunity"}
+          aria-label={
+            isFollowed ? "Unfollow opportunity" : "Follow opportunity"
+          }
         >
           {isFollowed ? (
             <Heart className="h-5 w-5 fill-current" />
@@ -842,7 +844,7 @@ const WorkstreamFeed: React.FC = () => {
             (!workstream.stage_ids || workstream.stage_ids.length === 0) &&
             (!workstream.keywords || workstream.keywords.length === 0) && (
               <p className="text-sm text-gray-500 dark:text-gray-400 italic">
-                No filters configured. Showing all signals.
+                No filters configured. Showing all opportunities.
               </p>
             )}
         </div>
@@ -854,7 +856,7 @@ const WorkstreamFeed: React.FC = () => {
           <div className="flex flex-col items-center gap-4">
             <Loader2 className="h-8 w-8 animate-spin text-brand-blue" />
             <p className="text-gray-600 dark:text-gray-400">
-              Loading signals...
+              Loading opportunities...
             </p>
           </div>
         </div>
@@ -863,11 +865,15 @@ const WorkstreamFeed: React.FC = () => {
         <div className="text-center py-12 bg-white dark:bg-dark-surface rounded-lg shadow">
           <Filter className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" />
           <h3 className="mt-2 text-lg font-medium text-gray-900 dark:text-white">
-            No matching signals
+            No matching opportunities
           </h3>
-          <p className="mt-1 text-gray-500 dark:text-gray-400 max-w-md mx-auto">
-            No intelligence signals currently match this workstream's filters.
-            Try adjusting the filter criteria to broaden your results.
+          <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto">
+            This program&apos;s filters might be too narrow. Try broadening your
+            search terms or removing some filters to see more results.
+          </p>
+          <p className="mt-3 text-xs text-gray-400 dark:text-gray-500 italic max-w-sm mx-auto">
+            GrantScope scans for new grants daily. Check back soon or adjust
+            your program&apos;s focus area to broaden matches.
           </p>
           <div className="mt-6">
             <button
@@ -911,7 +917,7 @@ const WorkstreamFeed: React.FC = () => {
                 Edit Workstream Filters
               </h3>
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Adjust the filters to change which signals match this
+                Adjust the filters to change which opportunities match this
                 workstream.
               </p>
             </div>

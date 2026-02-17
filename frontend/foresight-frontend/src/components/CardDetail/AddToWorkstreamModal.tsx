@@ -140,7 +140,7 @@ export const AddToWorkstreamModal = memo(function AddToWorkstreamModal({
         setError(
           err instanceof Error
             ? err.message
-            : "Failed to add signal to workstream",
+            : "Failed to add opportunity to workstream",
         );
         setIsAdding(null);
       }
@@ -290,7 +290,7 @@ export const AddToWorkstreamModal = memo(function AddToWorkstreamModal({
                 No workstreams yet
               </p>
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                Create your first workstream to organize research signals
+                Create your first workstream to organize grant opportunities
               </p>
             </div>
           )}

@@ -1,4 +1,4 @@
-# Foresight: Data Model & Database Schema
+# GrantScope2: Data Model & Database Schema
 
 ## Entity Relationship Overview
 
@@ -16,7 +16,7 @@
 ┌─────────────┐       ┌─────────────┐             │
 │   CardNote  │       │ CardTimeline│◄────────────┘
 └─────────────┘       └─────────────┘
-                            
+
 ┌─────────────┐       ┌─────────────┐
 │  Analysis   │──────>│ Implication │
 └─────────────┘       └─────────────┘
@@ -58,25 +58,25 @@ The core entity - atomic units of strategic intelligence.
 ```sql
 CREATE TABLE cards (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    
+
     -- Identity
     name TEXT NOT NULL,
     slug TEXT UNIQUE NOT NULL,
     description TEXT,
     summary TEXT,  -- AI-generated current summary
-    
+
     -- Classification
     horizon TEXT CHECK (horizon IN ('H1', 'H2', 'H3')),
     stage INTEGER CHECK (stage BETWEEN 1 AND 8),
     triage_score INTEGER CHECK (triage_score IN (1, 3, 5)),
-    
+
     -- Taxonomy (arrays for multi-select)
     pillars TEXT[] DEFAULT '{}',           -- ['CH', 'MC']
     goals TEXT[] DEFAULT '{}',             -- ['CH.1', 'CH.3']
     steep_categories TEXT[] DEFAULT '{}',  -- ['T', 'E']
     anchors TEXT[] DEFAULT '{}',           -- ['Equity', 'Innovation']
     top25_relevance TEXT[] DEFAULT '{}',   -- Matching Top 25 items
-    
+
     -- Scoring (7 criteria)
     credibility_score NUMERIC(3,2),        -- 1.0 - 5.0
     novelty_score NUMERIC(3,2),
@@ -85,15 +85,15 @@ CREATE TABLE cards (
     relevance_score NUMERIC(3,2),
     time_to_awareness_months INTEGER,
     time_to_prepare_months INTEGER,
-    
+
     -- Computed
     velocity_score NUMERIC(5,2) DEFAULT 0, -- Updated by trigger
     follower_count INTEGER DEFAULT 0,
     source_count INTEGER DEFAULT 0,
-    
+
     -- Embedding for semantic search
     embedding VECTOR(1536),
-    
+
     -- Metadata
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
@@ -102,7 +102,7 @@ CREATE TABLE cards (
 );
 
 -- Indexes
-CREATE INDEX idx_cards_embedding ON cards 
+CREATE INDEX idx_cards_embedding ON cards
     USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 CREATE INDEX idx_cards_pillars ON cards USING GIN (pillars);
 CREATE INDEX idx_cards_horizon ON cards (horizon);
@@ -112,16 +112,16 @@ CREATE INDEX idx_cards_updated ON cards (updated_at DESC);
 
 ### Stage Reference
 
-| Stage | Name | Horizon | Description |
-|-------|------|---------|-------------|
-| 1 | Concept | H3 | Academic/theoretical |
-| 2 | Emerging | H3 | Startups, patents, VC interest |
-| 3 | Prototype | H2 | Working demos |
-| 4 | Pilot | H2 | Real-world testing |
-| 5 | Municipal Pilot | H2 | Government testing |
-| 6 | Early Adoption | H1 | Multiple cities implementing |
-| 7 | Mainstream | H1 | Widespread adoption |
-| 8 | Mature | H1 | Established, commoditized |
+| Stage | Name            | Horizon | Description                    |
+| ----- | --------------- | ------- | ------------------------------ |
+| 1     | Concept         | H3      | Academic/theoretical           |
+| 2     | Emerging        | H3      | Startups, patents, VC interest |
+| 3     | Prototype       | H2      | Working demos                  |
+| 4     | Pilot           | H2      | Real-world testing             |
+| 5     | Municipal Pilot | H2      | Government testing             |
+| 6     | Early Adoption  | H1      | Multiple cities implementing   |
+| 7     | Mainstream      | H1      | Widespread adoption            |
+| 8     | Mature          | H1      | Established, commoditized      |
 
 ### sources
 
@@ -131,32 +131,32 @@ Individual articles, papers, and documents linked to cards.
 CREATE TABLE sources (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     card_id UUID REFERENCES cards(id) ON DELETE CASCADE,
-    
+
     -- Source info
     url TEXT NOT NULL,
     title TEXT NOT NULL,
     publication TEXT,
     author TEXT,
     published_at TIMESTAMPTZ,
-    
+
     -- Processing
     api_source TEXT,  -- 'newsapi', 'arxiv', 'rss', 'manual'
     full_text TEXT,
     ai_summary TEXT,
     key_excerpts TEXT[],
     relevance_to_card NUMERIC(3,2),
-    
+
     -- Embedding
     embedding VECTOR(1536),
-    
+
     -- Metadata
     ingested_at TIMESTAMPTZ DEFAULT NOW(),
-    
+
     UNIQUE(card_id, url)
 );
 
 CREATE INDEX idx_sources_card ON sources (card_id);
-CREATE INDEX idx_sources_embedding ON sources 
+CREATE INDEX idx_sources_embedding ON sources
     USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 ```
 
@@ -168,17 +168,17 @@ Event log tracking card evolution.
 CREATE TABLE card_timeline (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     card_id UUID REFERENCES cards(id) ON DELETE CASCADE,
-    
+
     event_type TEXT NOT NULL,
-    -- 'created', 'stage_change', 'source_added', 
+    -- 'created', 'stage_change', 'source_added',
     -- 'summary_updated', 'analysis_added', 'user_note'
-    
+
     event_description TEXT,
     previous_value JSONB,
     new_value JSONB,
     triggered_by_source_id UUID REFERENCES sources(id),
     triggered_by_user_id UUID REFERENCES users(id),
-    
+
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -193,10 +193,10 @@ User-defined lenses for filtering intelligence.
 CREATE TABLE workstreams (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    
+
     name TEXT NOT NULL,
     description TEXT,
-    
+
     -- Filter criteria
     pillars TEXT[] DEFAULT '{}',
     goals TEXT[] DEFAULT '{}',
@@ -205,11 +205,11 @@ CREATE TABLE workstreams (
     min_stage INTEGER,
     max_stage INTEGER,
     horizons TEXT[] DEFAULT '{}',
-    
+
     -- Settings
     is_default BOOLEAN DEFAULT FALSE,
     notification_enabled BOOLEAN DEFAULT TRUE,
-    
+
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -227,9 +227,9 @@ CREATE TABLE card_follows (
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
     card_id UUID REFERENCES cards(id) ON DELETE CASCADE,
     workstream_id UUID REFERENCES workstreams(id) ON DELETE SET NULL,
-    
+
     followed_at TIMESTAMPTZ DEFAULT NOW(),
-    
+
     UNIQUE(user_id, card_id)
 );
 
@@ -246,10 +246,10 @@ CREATE TABLE card_notes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     card_id UUID REFERENCES cards(id) ON DELETE CASCADE,
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    
+
     content TEXT NOT NULL,
     is_private BOOLEAN DEFAULT FALSE,
-    
+
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -269,12 +269,12 @@ Implications Wheel analysis sessions.
 CREATE TABLE implications_analyses (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     card_id UUID REFERENCES cards(id) ON DELETE CASCADE,
-    
+
     perspective TEXT NOT NULL,  -- 'general', department name, or pillar
     perspective_detail TEXT,    -- Additional context
-    
+
     summary TEXT,  -- AI-generated summary of key findings
-    
+
     created_by UUID REFERENCES users(id),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -291,24 +291,24 @@ CREATE TABLE implications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     analysis_id UUID REFERENCES implications_analyses(id) ON DELETE CASCADE,
     parent_id UUID REFERENCES implications(id) ON DELETE CASCADE,
-    
+
     order_level INTEGER NOT NULL CHECK (order_level BETWEEN 1 AND 3),
     -- 1 = first-order, 2 = second-order, 3 = third-order
-    
+
     content TEXT NOT NULL,
-    
+
     -- Scoring
     likelihood_score INTEGER CHECK (likelihood_score BETWEEN 1 AND 9),
     desirability_score INTEGER CHECK (desirability_score BETWEEN -5 AND 5),
-    
+
     -- Flags
     flag TEXT CHECK (flag IN (
         'likely_strong_negative',
-        'unlikely_strong_positive', 
+        'unlikely_strong_positive',
         'catastrophe',
         'triumph'
     )),
-    
+
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -414,7 +414,7 @@ Optimized view for the discovery feed.
 
 ```sql
 CREATE VIEW v_card_feed AS
-SELECT 
+SELECT
     c.id,
     c.name,
     c.slug,
@@ -427,8 +427,8 @@ SELECT
     c.source_count,
     c.updated_at,
     COALESCE(
-        (SELECT COUNT(*) FROM sources s 
-         WHERE s.card_id = c.id 
+        (SELECT COUNT(*) FROM sources s
+         WHERE s.card_id = c.id
          AND s.ingested_at > NOW() - INTERVAL '24 hours'),
         0
     ) AS new_sources_24h
@@ -443,7 +443,7 @@ User-specific feed based on workstreams.
 
 ```sql
 CREATE VIEW v_user_feed AS
-SELECT 
+SELECT
     cf.id AS card_feed_id,
     cf.*,
     cf.user_id,
@@ -465,10 +465,10 @@ CREATE OR REPLACE FUNCTION update_follower_count()
 RETURNS TRIGGER AS $$
 BEGIN
     IF TG_OP = 'INSERT' THEN
-        UPDATE cards SET follower_count = follower_count + 1 
+        UPDATE cards SET follower_count = follower_count + 1
         WHERE id = NEW.card_id;
     ELSIF TG_OP = 'DELETE' THEN
-        UPDATE cards SET follower_count = follower_count - 1 
+        UPDATE cards SET follower_count = follower_count - 1
         WHERE id = OLD.card_id;
     END IF;
     RETURN NULL;
@@ -487,10 +487,10 @@ CREATE OR REPLACE FUNCTION update_source_count()
 RETURNS TRIGGER AS $$
 BEGIN
     IF TG_OP = 'INSERT' THEN
-        UPDATE cards SET source_count = source_count + 1 
+        UPDATE cards SET source_count = source_count + 1
         WHERE id = NEW.card_id;
     ELSIF TG_OP = 'DELETE' THEN
-        UPDATE cards SET source_count = source_count - 1 
+        UPDATE cards SET source_count = source_count - 1
         WHERE id = OLD.card_id;
     END IF;
     RETURN NULL;
@@ -510,7 +510,7 @@ RETURNS TRIGGER AS $$
 BEGIN
     IF OLD.stage != NEW.stage THEN
         INSERT INTO card_timeline (card_id, event_type, event_description, previous_value, new_value)
-        VALUES (NEW.id, 'stage_change', 
+        VALUES (NEW.id, 'stage_change',
                 'Stage changed from ' || OLD.stage || ' to ' || NEW.stage,
                 jsonb_build_object('stage', OLD.stage),
                 jsonb_build_object('stage', NEW.stage));
@@ -562,5 +562,5 @@ CREATE POLICY notes_write ON card_notes
 
 ---
 
-*Document Version: 1.0*
-*Last Updated: December 2024*
+_Document Version: 1.0_
+_Last Updated: December 2024_

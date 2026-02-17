@@ -16,6 +16,7 @@ import { CardDescription } from "./CardDescription";
 import { CardClassification } from "./CardClassification";
 import { DeepResearchPanel } from "./DeepResearchPanel";
 import { ResearchHistoryPanel } from "./ResearchHistoryPanel";
+import { GrantDetailsPanel } from "./GrantDetailsPanel";
 import { ImpactMetricsPanel } from "./ImpactMetricsPanel";
 import { MaturityScorePanel } from "./MaturityScorePanel";
 import { ActivityStatsPanel } from "./ActivityStatsPanel";
@@ -220,6 +221,9 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
 
       {/* Sidebar Column */}
       <div className="space-y-4 sm:space-y-6">
+        {/* Grant Details Panel */}
+        <GrantDetailsPanel card={card} />
+
         {/* Impact Metrics Panel */}
         <ImpactMetricsPanel
           impactScore={card.impact_score}
@@ -269,6 +273,9 @@ export type { DeepResearchPanelProps } from "./DeepResearchPanel";
 
 export { ResearchHistoryPanel } from "./ResearchHistoryPanel";
 export type { ResearchHistoryPanelProps } from "./ResearchHistoryPanel";
+
+export { GrantDetailsPanel } from "./GrantDetailsPanel";
+export type { GrantDetailsPanelProps } from "./GrantDetailsPanel";
 
 export { ImpactMetricsPanel } from "./ImpactMetricsPanel";
 export type { ImpactMetricsPanelProps } from "./ImpactMetricsPanel";

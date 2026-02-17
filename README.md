@@ -1,4 +1,4 @@
-# Foresight
+# GrantScope2
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
@@ -8,7 +8,7 @@
 
 > **AI-powered strategic horizon scanning system for the City of Austin**
 
-Foresight automates the discovery, analysis, and tracking of emerging trends, technologies, and issues that could impact municipal operations. It aligns with Austin's strategic framework and the CMO's Top 25 Priorities.
+GrantScope2 automates the discovery, analysis, and tracking of emerging trends, technologies, and issues that could impact municipal operations. It aligns with Austin's strategic framework and the CMO's Top 25 Priorities.
 
 ---
 
@@ -112,45 +112,49 @@ pnpm dev
 
 ### Tech Stack
 
-| Layer | Technology |
-|-------|------------|
+| Layer    | Technology                                        |
+| -------- | ------------------------------------------------- |
 | Frontend | React 18, TypeScript, Vite, TailwindCSS, Radix UI |
-| Backend | FastAPI, Python 3.11+, Pydantic |
-| Database | Supabase (PostgreSQL + pgvector) |
-| AI/ML | OpenAI GPT-4, Embeddings, gpt-researcher |
-| Auth | Supabase Auth (JWT) |
+| Backend  | FastAPI, Python 3.11+, Pydantic                   |
+| Database | Supabase (PostgreSQL + pgvector)                  |
+| AI/ML    | OpenAI GPT-4, Embeddings, gpt-researcher          |
+| Auth     | Supabase Auth (JWT)                               |
 
 ---
 
 ## API Reference
 
 ### Authentication
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/v1/me` | GET | Get current user profile |
-| `/api/v1/me` | PATCH | Update user profile |
+
+| Endpoint     | Method | Description              |
+| ------------ | ------ | ------------------------ |
+| `/api/v1/me` | GET    | Get current user profile |
+| `/api/v1/me` | PATCH  | Update user profile      |
 
 ### Cards
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/v1/cards` | GET | List cards with filtering |
-| `/api/v1/cards/{id}` | GET | Get card details |
-| `/api/v1/cards` | POST | Create new card |
-| `/api/v1/cards/search` | POST | Advanced search |
+
+| Endpoint               | Method | Description               |
+| ---------------------- | ------ | ------------------------- |
+| `/api/v1/cards`        | GET    | List cards with filtering |
+| `/api/v1/cards/{id}`   | GET    | Get card details          |
+| `/api/v1/cards`        | POST   | Create new card           |
+| `/api/v1/cards/search` | POST   | Advanced search           |
 
 ### Discovery
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/v1/discovery/trigger` | POST | Trigger discovery run |
-| `/api/v1/discovery/runs` | GET | List discovery runs |
-| `/api/v1/me/discovery/queue` | GET | Get personalized queue |
+
+| Endpoint                     | Method | Description            |
+| ---------------------------- | ------ | ---------------------- |
+| `/api/v1/discovery/trigger`  | POST   | Trigger discovery run  |
+| `/api/v1/discovery/runs`     | GET    | List discovery runs    |
+| `/api/v1/me/discovery/queue` | GET    | Get personalized queue |
 
 ### Workstreams
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/v1/me/workstreams` | GET | List user workstreams |
-| `/api/v1/me/workstreams` | POST | Create workstream |
-| `/api/v1/me/workstreams/{id}/feed` | GET | Get workstream feed |
+
+| Endpoint                           | Method | Description           |
+| ---------------------------------- | ------ | --------------------- |
+| `/api/v1/me/workstreams`           | GET    | List user workstreams |
+| `/api/v1/me/workstreams`           | POST   | Create workstream     |
+| `/api/v1/me/workstreams/{id}/feed` | GET    | Get workstream feed   |
 
 ---
 
@@ -166,14 +170,14 @@ pnpm dev
 
 ### Scoring Metrics
 
-| Metric | Description | Range |
-|--------|-------------|-------|
-| Impact | Potential municipal impact | 0-100 |
-| Relevance | Austin-specific relevance | 0-100 |
-| Velocity | Trending speed | 0-100 |
-| Novelty | Innovation level | 0-100 |
-| Opportunity | Positive potential | 0-100 |
-| Risk | Potential challenges | 0-100 |
+| Metric      | Description                | Range |
+| ----------- | -------------------------- | ----- |
+| Impact      | Potential municipal impact | 0-100 |
+| Relevance   | Austin-specific relevance  | 0-100 |
+| Velocity    | Trending speed             | 0-100 |
+| Novelty     | Innovation level           | 0-100 |
+| Opportunity | Positive potential         | 0-100 |
+| Risk        | Potential challenges       | 0-100 |
 
 ---
 
@@ -181,14 +185,14 @@ pnpm dev
 
 ### Strategic Pillars
 
-| Code | Pillar |
-|------|--------|
-| CH | Community Health |
-| MC | Mobility & Connectivity |
-| HS | Housing & Economic Stability |
-| EC | Economic Development |
-| ES | Environmental Sustainability |
-| CE | Cultural & Entertainment |
+| Code | Pillar                       |
+| ---- | ---------------------------- |
+| CH   | Community Health             |
+| MC   | Mobility & Connectivity      |
+| HS   | Housing & Economic Stability |
+| EC   | Economic Development         |
+| ES   | Environmental Sustainability |
+| CE   | Cultural & Entertainment     |
 
 ### Maturity Stages
 

@@ -159,7 +159,7 @@ async def preview_digest(
         if not result:
             # If no content, generate a sample/empty digest
             return DigestPreviewResponse(
-                subject="Your Foresight Intelligence Digest — Preview",
+                subject="Your GrantScope2 Intelligence Digest — Preview",
                 html_content=(
                     "<html><body><p>No new activity to report for this period. "
                     "Follow more signals or add cards to your workstreams to "

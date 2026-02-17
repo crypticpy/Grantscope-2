@@ -10,12 +10,12 @@
  * @module CardDetail/tabs/OverviewTab/ImpactMetricsPanel
  */
 
-import React from 'react';
-import { Info } from 'lucide-react';
-import { Tooltip } from '../../../../components/ui/Tooltip';
-import { cn } from '../../../../lib/utils';
-import { getScoreColorClasses, metricDefinitions } from '../../utils';
-import type { MetricKey } from '../../types';
+import React from "react";
+import { Info } from "lucide-react";
+import { Tooltip } from "../../../../components/ui/Tooltip";
+import { cn } from "../../../../lib/utils";
+import { getScoreColorClasses, metricDefinitions } from "../../utils";
+import type { MetricKey } from "../../types";
 
 /**
  * Individual metric score configuration
@@ -115,24 +115,24 @@ export const ImpactMetricsPanel: React.FC<ImpactMetricsPanelProps> = ({
   noveltyScore,
   opportunityScore,
   riskScore,
-  className = '',
-  title = 'Impact Metrics',
+  className = "",
+  title = "Impact Metrics",
 }) => {
   // Define metrics array for consistent rendering
   const metrics: MetricScore[] = [
-    { key: 'impact', score: impactScore },
-    { key: 'relevance', score: relevanceScore },
-    { key: 'velocity', score: velocityScore },
-    { key: 'novelty', score: noveltyScore },
-    { key: 'opportunity', score: opportunityScore },
-    { key: 'risk', score: riskScore },
+    { key: "impact", score: impactScore },
+    { key: "relevance", score: relevanceScore },
+    { key: "velocity", score: velocityScore },
+    { key: "novelty", score: noveltyScore },
+    { key: "opportunity", score: opportunityScore },
+    { key: "risk", score: riskScore },
   ];
 
   return (
     <div
       className={cn(
-        'bg-white dark:bg-dark-surface rounded-lg shadow p-4 sm:p-6',
-        className
+        "bg-white dark:bg-dark-surface rounded-lg shadow p-4 sm:p-6",
+        className,
       )}
     >
       {/* Header with title and info tooltip */}
@@ -146,7 +146,7 @@ export const ImpactMetricsPanel: React.FC<ImpactMetricsPanelProps> = ({
               <p className="font-medium">Score Interpretation</p>
               <p className="text-xs text-gray-500">
                 Scores range from 0-100, with higher scores indicating stronger
-                signals.
+                opportunities.
               </p>
             </div>
           }
@@ -169,10 +169,7 @@ export const ImpactMetricsPanel: React.FC<ImpactMetricsPanelProps> = ({
           const colors = getScoreColorClasses(metric.score);
 
           return (
-            <div
-              key={metric.key}
-              className="flex items-center justify-between"
-            >
+            <div key={metric.key} className="flex items-center justify-between">
               {/* Metric label with tooltip */}
               <Tooltip
                 content={
@@ -193,10 +190,10 @@ export const ImpactMetricsPanel: React.FC<ImpactMetricsPanelProps> = ({
               {/* Score badge */}
               <span
                 className={cn(
-                  'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border',
+                  "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border",
                   colors.bg,
                   colors.text,
-                  colors.border
+                  colors.border,
                 )}
               >
                 {metric.score}/100

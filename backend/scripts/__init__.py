@@ -1,5 +1,5 @@
 """
-Backend scripts for Foresight application.
+Backend scripts for GrantScope2 application.
 
 This module contains utility scripts for:
 - Classification validation

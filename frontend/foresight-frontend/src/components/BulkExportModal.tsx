@@ -28,6 +28,7 @@ import {
   Clock,
 } from "lucide-react";
 import { cn } from "../lib/utils";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 import type {
   BulkBriefStatusResponse,
   BulkBriefCardStatus,
@@ -97,6 +98,7 @@ export const BulkExportModal: React.FC<BulkExportModalProps> = ({
   const [showLongExportWarning, setShowLongExportWarning] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const exportStartRef = useRef<number | null>(null);
+  const focusTrapRef = useFocusTrap(isOpen);
 
   // Format time as mm:ss or ss
   const formatTime = useCallback((seconds: number): string => {
@@ -203,6 +205,7 @@ export const BulkExportModal: React.FC<BulkExportModalProps> = ({
 
   return (
     <div
+      ref={focusTrapRef}
       className="fixed inset-0 z-50 flex items-center justify-center"
       role="dialog"
       aria-modal="true"
@@ -315,7 +318,7 @@ export const BulkExportModal: React.FC<BulkExportModalProps> = ({
                   <p className="text-sm text-gray-500 dark:text-gray-400">
                     {allReady
                       ? "All briefs are complete and ready for export."
-                      : "Only signals with completed briefs will be included."}
+                      : "Only opportunities with completed briefs will be included."}
                   </p>
                 </div>
               </div>
@@ -324,7 +327,7 @@ export const BulkExportModal: React.FC<BulkExportModalProps> = ({
               <div className="mb-6">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Signals to Include
+                    Opportunities to Include
                   </h3>
                   <div className="flex items-center gap-1.5 text-xs text-gray-500">
                     <ArrowUpDown className="h-3.5 w-3.5" />

@@ -1,4 +1,4 @@
-# Foresight: API Specification
+# GrantScope2: API Specification
 
 ## Overview
 
@@ -7,6 +7,7 @@ RESTful API built with FastAPI. All endpoints require authentication via Supabas
 **Base URL:** `https://{host}/api/v1`
 
 **Authentication:** Bearer token in Authorization header
+
 ```
 Authorization: Bearer {supabase_jwt}
 ```
@@ -34,6 +35,7 @@ Query Parameters:
 | `limit` | int | Items per page (default: 20, max: 100) |
 
 Response:
+
 ```json
 {
   "cards": [
@@ -65,6 +67,7 @@ GET /cards/{card_id}
 ```
 
 Response:
+
 ```json
 {
   "id": "uuid",
@@ -72,7 +75,7 @@ Response:
   "slug": "solid-state-batteries",
   "description": "Extended description...",
   "summary": "Current AI summary...",
-  
+
   "classification": {
     "horizon": "H2",
     "stage": 4,
@@ -83,7 +86,7 @@ Response:
     "anchors": ["Innovation", "Sustainability & Resiliency"],
     "top25_relevance": ["Climate Revolving Fund"]
   },
-  
+
   "scoring": {
     "credibility": 4.2,
     "novelty": 4.5,
@@ -93,20 +96,20 @@ Response:
     "time_to_awareness_months": 18,
     "time_to_prepare_months": 36
   },
-  
+
   "metrics": {
     "velocity_score": 8.5,
     "follower_count": 12,
     "source_count": 47
   },
-  
+
   "user_context": {
     "is_following": true,
     "followed_at": "2024-11-15T10:00:00Z",
     "workstream_id": "uuid",
     "workstream_name": "Fleet Electrification"
   },
-  
+
   "created_at": "2024-03-15T08:00:00Z",
   "updated_at": "2024-12-20T15:30:00Z"
 }
@@ -125,6 +128,7 @@ Query Parameters:
 | `before` | datetime | Cursor for pagination |
 
 Response:
+
 ```json
 {
   "events": [
@@ -132,8 +136,8 @@ Response:
       "id": "uuid",
       "event_type": "stage_change",
       "event_description": "Stage changed from 3 to 4",
-      "previous_value": {"stage": 3},
-      "new_value": {"stage": 4},
+      "previous_value": { "stage": 3 },
+      "new_value": { "stage": 4 },
       "triggered_by_source": {
         "id": "uuid",
         "title": "Denver announces pilot program"
@@ -159,6 +163,7 @@ Query Parameters:
 | `page` | int | Page number |
 
 Response:
+
 ```json
 {
   "sources": [
@@ -185,6 +190,7 @@ POST /cards/search
 ```
 
 Request:
+
 ```json
 {
   "query": "municipal drone delivery regulations",
@@ -197,6 +203,7 @@ Request:
 ```
 
 Response:
+
 ```json
 {
   "cards": [
@@ -222,13 +229,15 @@ POST /cards/{card_id}/follow
 ```
 
 Request:
+
 ```json
 {
-  "workstream_id": "uuid"  // optional
+  "workstream_id": "uuid" // optional
 }
 ```
 
 Response:
+
 ```json
 {
   "success": true,
@@ -243,6 +252,7 @@ DELETE /cards/{card_id}/follow
 ```
 
 Response:
+
 ```json
 {
   "success": true
@@ -262,6 +272,7 @@ Query Parameters:
 | `has_updates` | bool | Only cards with recent updates |
 
 Response:
+
 ```json
 {
   "cards": [
@@ -288,6 +299,7 @@ POST /cards/{card_id}/notes
 ```
 
 Request:
+
 ```json
 {
   "content": "Discuss with Budget in Q2 planning",
@@ -296,6 +308,7 @@ Request:
 ```
 
 Response:
+
 ```json
 {
   "id": "uuid",
@@ -324,6 +337,7 @@ GET /me/workstreams
 ```
 
 Response:
+
 ```json
 {
   "workstreams": [
@@ -349,6 +363,7 @@ POST /me/workstreams
 ```
 
 Request:
+
 ```json
 {
   "name": "AI in Government Services",
@@ -394,6 +409,7 @@ POST /cards/{card_id}/analysis
 ```
 
 Request:
+
 ```json
 {
   "perspective": "department",
@@ -402,6 +418,7 @@ Request:
 ```
 
 Response:
+
 ```json
 {
   "analysis_id": "uuid",
@@ -415,7 +432,7 @@ Response:
       "order_level": 1
     },
     {
-      "id": "uuid", 
+      "id": "uuid",
       "content": "Supply chain delays push timeline 18 months",
       "order_level": 1
     },
@@ -438,6 +455,7 @@ POST /analysis/{analysis_id}/implications/{implication_id}/expand
 ```
 
 Response:
+
 ```json
 {
   "children": [
@@ -449,7 +467,7 @@ Response:
     },
     {
       "id": "uuid",
-      "parent_id": "uuid", 
+      "parent_id": "uuid",
       "content": "Maintenance team requires retraining",
       "order_level": 2
     }
@@ -464,6 +482,7 @@ PATCH /analysis/{analysis_id}/implications/{implication_id}
 ```
 
 Request:
+
 ```json
 {
   "likelihood_score": 7,
@@ -500,6 +519,7 @@ POST /research
 ```
 
 Request:
+
 ```json
 {
   "query": "AI-powered 311 systems for municipal government",
@@ -508,6 +528,7 @@ Request:
 ```
 
 Response:
+
 ```json
 {
   "task_id": "uuid",
@@ -523,14 +544,15 @@ GET /research/{task_id}
 ```
 
 Response:
+
 ```json
 {
   "task_id": "uuid",
-  "status": "completed",  // queued, processing, completed, failed
+  "status": "completed", // queued, processing, completed, failed
   "query": "AI-powered 311 systems...",
   "cards_created": [
-    {"id": "uuid", "name": "AI 311 Chatbots"},
-    {"id": "uuid", "name": "Predictive Service Routing"}
+    { "id": "uuid", "name": "AI 311 Chatbots" },
+    { "id": "uuid", "name": "Predictive Service Routing" }
   ],
   "sources_processed": 24,
   "completed_at": "2024-12-20T17:45:00Z"
@@ -548,6 +570,7 @@ GET /me
 ```
 
 Response:
+
 ```json
 {
   "id": "uuid",
@@ -580,6 +603,7 @@ GET /taxonomy
 ```
 
 Response:
+
 ```json
 {
   "pillars": [
@@ -587,22 +611,19 @@ Response:
       "code": "CH",
       "name": "Community Health & Sustainability",
       "goals": [
-        {"code": "CH.1", "name": "Equitable public health services"},
-        {"code": "CH.2", "name": "Parks, trails, recreation access"}
+        { "code": "CH.1", "name": "Equitable public health services" },
+        { "code": "CH.2", "name": "Parks, trails, recreation access" }
       ]
     }
   ],
-  "anchors": [
-    {"name": "Equity"},
-    {"name": "Affordability"}
-  ],
+  "anchors": [{ "name": "Equity" }, { "name": "Affordability" }],
   "steep_categories": [
-    {"code": "S", "name": "Social"},
-    {"code": "T", "name": "Technological"}
+    { "code": "S", "name": "Social" },
+    { "code": "T", "name": "Technological" }
   ],
   "stages": [
-    {"number": 1, "name": "Concept", "horizon": "H3"},
-    {"number": 2, "name": "Emerging", "horizon": "H3"}
+    { "number": 1, "name": "Concept", "horizon": "H3" },
+    { "number": 2, "name": "Emerging", "horizon": "H3" }
   ]
 }
 ```
@@ -611,7 +632,7 @@ Response:
 
 ## Admin Endpoints
 
-*Requires admin role*
+_Requires admin role_
 
 ### Trigger Nightly Scan
 
@@ -632,6 +653,7 @@ GET /admin/stats
 ```
 
 Response:
+
 ```json
 {
   "total_cards": 342,
@@ -673,14 +695,14 @@ Common error codes:
 
 ## Rate Limits
 
-| Endpoint Type | Limit |
-|--------------|-------|
-| Read operations | 100/minute |
-| Write operations | 20/minute |
-| Search/AI operations | 10/minute |
-| Research tasks | 5/hour |
+| Endpoint Type        | Limit      |
+| -------------------- | ---------- |
+| Read operations      | 100/minute |
+| Write operations     | 20/minute  |
+| Search/AI operations | 10/minute  |
+| Research tasks       | 5/hour     |
 
 ---
 
-*Document Version: 1.0*
-*Last Updated: December 2024*
+_Document Version: 1.0_
+_Last Updated: December 2024_

@@ -23,6 +23,7 @@ import {
   Presentation,
   ArrowLeftRight,
   Briefcase,
+  PlusCircle,
 } from "lucide-react";
 import { Tooltip } from "../ui/Tooltip";
 import { AddToWorkstreamModal } from "./AddToWorkstreamModal";
@@ -190,13 +191,60 @@ export function CardActionButtons({
       <div
         className={`flex items-center gap-2 sm:gap-3 overflow-x-auto pb-2 lg:pb-0 lg:overflow-visible lg:flex-wrap lg:justify-end -mx-4 px-4 sm:mx-0 sm:px-0 ${className}`}
       >
+        {/* Add to Pipeline button - prominent for grant cards */}
+        {(card.grantor || card.deadline) && (
+          <Tooltip
+            content={
+              <div className="max-w-[200px]">
+                <p className="font-medium">Add to Pipeline</p>
+                <p className="text-xs text-gray-500">
+                  Add this grant opportunity to a workstream pipeline for
+                  tracking
+                </p>
+              </div>
+            }
+            side="bottom"
+          >
+            <button
+              onClick={() => setShowWorkstreamModal(true)}
+              className="inline-flex items-center justify-center min-h-[44px] sm:min-h-0 px-4 py-2 border border-brand-green rounded-md shadow-sm text-sm font-semibold text-white bg-brand-green hover:bg-brand-green/90 transition-colors active:scale-95"
+            >
+              <PlusCircle className="h-4 w-4 mr-2" />
+              Add to Pipeline
+            </button>
+          </Tooltip>
+        )}
+
+        {/* Apply for This Grant button - prominent for grant cards */}
+        {(card.grantor || card.deadline) && (
+          <Tooltip
+            content={
+              <div className="max-w-[200px]">
+                <p className="font-medium">Apply for This Grant</p>
+                <p className="text-xs text-gray-500">
+                  Start a guided grant application with AI assistance
+                </p>
+              </div>
+            }
+            side="bottom"
+          >
+            <button
+              onClick={() => navigate(`/apply?card_id=${card.id}`)}
+              className="inline-flex items-center justify-center min-h-[44px] sm:min-h-0 px-4 py-2 border border-brand-blue rounded-md shadow-sm text-sm font-semibold text-white bg-brand-blue hover:bg-brand-dark-blue transition-colors active:scale-95"
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              Apply
+            </button>
+          </Tooltip>
+        )}
+
         {/* Compare button */}
         <Tooltip
           content={
             <div className="max-w-[200px]">
               <p className="font-medium">Compare Trends</p>
               <p className="text-xs text-gray-500">
-                Select another signal to compare trends side-by-side
+                Select another opportunity to compare trends side-by-side
               </p>
             </div>
           }

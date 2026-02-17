@@ -13,7 +13,7 @@ interface WizardProgressProps {
   totalSteps: number;
 }
 
-const STEP_LABELS = ["Start", "Details", "Focus", "Keywords", "Review"];
+const STEP_LABELS = ["Program", "Interests", "Readiness", "Search", "Launch"];
 
 export function WizardProgress({
   currentStep,

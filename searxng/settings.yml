@@ -1,7 +1,7 @@
 # =============================================================================
-# SearXNG Settings for Foresight
+# SearXNG Settings for GrantScope
 # =============================================================================
-# Optimized for API-first usage by the Foresight backend.
+# Optimized for API-first usage by the GrantScope backend.
 # JSON format is enabled so the backend can query programmatically.
 # Rate limiting is relaxed since this is a private instance.
 # =============================================================================
@@ -10,7 +10,7 @@ general:
   # Debug mode — set to true for troubleshooting
   debug: false
   # Instance name shown in UI
-  instance_name: "Foresight Search"
+  instance_name: "GrantScope Search"
   # Allow access without authentication
   privacypolicy_url: false
   donation_url: false
@@ -18,7 +18,7 @@ general:
   enable_metrics: false
 
 search:
-  # Enable JSON format for API access (critical for Foresight integration)
+  # Enable JSON format for API access (critical for GrantScope integration)
   formats:
     - html
     - json

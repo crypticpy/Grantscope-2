@@ -30,6 +30,10 @@ router = APIRouter(prefix="/api/v1", tags=["workstream-kanban"])
     "/me/workstreams/{workstream_id}/cards",
     response_model=WorkstreamCardsGroupedResponse,
 )
+@router.get(
+    "/me/programs/{workstream_id}/cards",
+    response_model=WorkstreamCardsGroupedResponse,
+)
 async def get_workstream_cards(
     workstream_id: str, current_user: dict = Depends(get_current_user)
 ):
@@ -43,6 +47,13 @@ async def get_workstream_cards(
     - brief: Cards with completed briefs
     - watching: Cards being monitored for updates
     - archived: Archived cards
+    - discovered: New grant opportunity identified by system
+    - evaluating: Under review for fit and feasibility
+    - applying: Actively preparing application
+    - submitted: Application submitted, awaiting decision
+    - awarded: Grant awarded
+    - declined: Application not selected or opportunity passed
+    - expired: Deadline passed without application
 
     Each card includes full card details joined from the cards table.
 
@@ -80,15 +91,8 @@ async def get_workstream_cards(
         .execute()
     )
 
-    # Group cards by status
-    grouped = {
-        "inbox": [],
-        "screening": [],
-        "research": [],
-        "brief": [],
-        "watching": [],
-        "archived": [],
-    }
+    # Group cards by status — dynamically built from the full status set
+    grouped = {status: [] for status in VALID_WORKSTREAM_CARD_STATUSES}
 
     for item in cards_response.data or []:
         card_status = item.get("status", "inbox")
@@ -116,6 +120,10 @@ async def get_workstream_cards(
 
 @router.post(
     "/me/workstreams/{workstream_id}/cards",
+    response_model=WorkstreamCardWithDetails,
+)
+@router.post(
+    "/me/programs/{workstream_id}/cards",
     response_model=WorkstreamCardWithDetails,
 )
 async def add_card_to_workstream(
@@ -230,6 +238,10 @@ async def add_card_to_workstream(
 
 @router.patch(
     "/me/workstreams/{workstream_id}/cards/{card_id}",
+    response_model=WorkstreamCardWithDetails,
+)
+@router.patch(
+    "/me/programs/{workstream_id}/cards/{card_id}",
     response_model=WorkstreamCardWithDetails,
 )
 async def update_workstream_card(
@@ -370,6 +382,7 @@ async def update_workstream_card(
 
 
 @router.delete("/me/workstreams/{workstream_id}/cards/{card_id}")
+@router.delete("/me/programs/{workstream_id}/cards/{card_id}")
 async def remove_card_from_workstream(
     workstream_id: str, card_id: str, current_user: dict = Depends(get_current_user)
 ):
@@ -428,6 +441,10 @@ async def remove_card_from_workstream(
 
 @router.post(
     "/me/workstreams/{workstream_id}/cards/{card_id}/deep-dive",
+    response_model=ResearchTask,
+)
+@router.post(
+    "/me/programs/{workstream_id}/cards/{card_id}/deep-dive",
     response_model=ResearchTask,
 )
 async def trigger_card_deep_dive(
@@ -514,6 +531,10 @@ async def trigger_card_deep_dive(
     "/me/workstreams/{workstream_id}/cards/{card_id}/quick-update",
     response_model=ResearchTask,
 )
+@router.post(
+    "/me/programs/{workstream_id}/cards/{card_id}/quick-update",
+    response_model=ResearchTask,
+)
 async def trigger_card_quick_update(
     workstream_id: str, card_id: str, current_user: dict = Depends(get_current_user)
 ):
@@ -590,6 +611,10 @@ async def trigger_card_quick_update(
     "/me/workstreams/{workstream_id}/cards/{card_id}/check-updates",
     response_model=ResearchTask,
 )
+@router.post(
+    "/me/programs/{workstream_id}/cards/{card_id}/check-updates",
+    response_model=ResearchTask,
+)
 async def trigger_card_check_updates(
     workstream_id: str, card_id: str, current_user: dict = Depends(get_current_user)
 ):
@@ -617,6 +642,10 @@ async def trigger_card_check_updates(
 
 @router.get(
     "/me/workstreams/{workstream_id}/research-status",
+    response_model=WorkstreamResearchStatusResponse,
+)
+@router.get(
+    "/me/programs/{workstream_id}/research-status",
     response_model=WorkstreamResearchStatusResponse,
 )
 async def get_workstream_research_status(

@@ -1,18 +1,18 @@
-# Foresight: Tech Stack & Dependencies
+# GrantScope2: Tech Stack & Dependencies
 
 ## Overview
 
-| Layer | Technology | Rationale |
-|-------|------------|-----------|
-| Frontend | React + TypeScript + Vite | Modern, fast, type-safe |
-| Styling | TailwindCSS | Utility-first, rapid prototyping |
-| Backend | FastAPI (Python 3.11+) | Async, fast, great for AI workloads |
-| Database | Supabase (PostgreSQL) | Managed, pgvector, auth included |
-| Vector Search | pgvector | Built into Supabase, no extra service |
-| LLM | Azure OpenAI / OpenAI | GPT-4o for analysis |
-| Embeddings | text-embedding-ada-002 | Standard, cost-effective |
-| Scheduling | APScheduler | Simple, in-process for pilot |
-| Hosting | HuggingFace Spaces | Free tier, Docker support |
+| Layer         | Technology                | Rationale                             |
+| ------------- | ------------------------- | ------------------------------------- |
+| Frontend      | React + TypeScript + Vite | Modern, fast, type-safe               |
+| Styling       | TailwindCSS               | Utility-first, rapid prototyping      |
+| Backend       | FastAPI (Python 3.11+)    | Async, fast, great for AI workloads   |
+| Database      | Supabase (PostgreSQL)     | Managed, pgvector, auth included      |
+| Vector Search | pgvector                  | Built into Supabase, no extra service |
+| LLM           | Azure OpenAI / OpenAI     | GPT-4o for analysis                   |
+| Embeddings    | text-embedding-ada-002    | Standard, cost-effective              |
+| Scheduling    | APScheduler               | Simple, in-process for pilot          |
+| Hosting       | HuggingFace Spaces        | Free tier, Docker support             |
 
 ---
 
@@ -48,15 +48,15 @@
 
 ### Key Libraries
 
-| Package | Purpose |
-|---------|---------|
-| `react-router-dom` | Client-side routing |
+| Package                 | Purpose                          |
+| ----------------------- | -------------------------------- |
+| `react-router-dom`      | Client-side routing              |
 | `@supabase/supabase-js` | Database client, auth, real-time |
-| `@tanstack/react-query` | Data fetching, caching |
-| `axios` | HTTP client for API calls |
-| `date-fns` | Date formatting |
-| `lucide-react` | Icons |
-| `zustand` | Lightweight state management |
+| `@tanstack/react-query` | Data fetching, caching           |
+| `axios`                 | HTTP client for API calls        |
+| `date-fns`              | Date formatting                  |
+| `lucide-react`          | Icons                            |
+| `zustand`               | Lightweight state management     |
 
 ---
 
@@ -100,17 +100,17 @@ passlib[bcrypt]>=1.7.0
 
 ### Key Libraries
 
-| Package | Purpose |
-|---------|---------|
-| `fastapi` | Web framework |
-| `uvicorn` | ASGI server |
-| `supabase` | Database client |
-| `openai` | LLM API client |
-| `tiktoken` | Token counting |
-| `apscheduler` | Job scheduling |
-| `feedparser` | RSS/Atom parsing |
-| `beautifulsoup4` | HTML parsing |
-| `httpx` | Async HTTP client |
+| Package          | Purpose           |
+| ---------------- | ----------------- |
+| `fastapi`        | Web framework     |
+| `uvicorn`        | ASGI server       |
+| `supabase`       | Database client   |
+| `openai`         | LLM API client    |
+| `tiktoken`       | Token counting    |
+| `apscheduler`    | Job scheduling    |
+| `feedparser`     | RSS/Atom parsing  |
+| `beautifulsoup4` | HTML parsing      |
+| `httpx`          | Async HTTP client |
 
 ---
 
@@ -163,12 +163,12 @@ client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 ### Models Used
 
-| Task | Model | Approx Cost |
-|------|-------|-------------|
-| Card summarization | gpt-4o | $0.005/1K tokens |
-| Implications analysis | gpt-4o | $0.005/1K tokens |
-| Triage/classification | gpt-4o-mini | $0.00015/1K tokens |
-| Embeddings | text-embedding-ada-002 | $0.0001/1K tokens |
+| Task                  | Model                  | Approx Cost        |
+| --------------------- | ---------------------- | ------------------ |
+| Card summarization    | gpt-4o                 | $0.005/1K tokens   |
+| Implications analysis | gpt-4o                 | $0.005/1K tokens   |
+| Triage/classification | gpt-4o-mini            | $0.00015/1K tokens |
+| Embeddings            | text-embedding-ada-002 | $0.0001/1K tokens  |
 
 ---
 
@@ -339,5 +339,5 @@ Port 7860 is the default for HuggingFace Spaces.
 
 ---
 
-*Document Version: 1.0*
-*Last Updated: December 2024*
+_Document Version: 1.0_
+_Last Updated: December 2024_

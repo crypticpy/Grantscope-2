@@ -49,6 +49,8 @@ import {
   ArrowLeftRight,
   ShieldCheck,
   BookOpen,
+  DollarSign,
+  Tag,
 } from "lucide-react";
 import { supabase } from "../../App";
 import { useAuthContext } from "../../hooks/useAuthContext";
@@ -69,6 +71,15 @@ import {
   type AdvancedSearchRequest,
   type SavedSearchQueryConfig,
 } from "../../lib/discovery-api";
+import { grantCategories } from "../../data/taxonomy";
+import { cn } from "../../lib/utils";
+import { InfoTooltip } from "../../components/onboarding/InfoTooltip";
+import {
+  getFilterMode,
+  setFilterMode as persistFilterMode,
+} from "../../lib/onboarding-state";
+import { FILTER_EXPLANATIONS } from "../../lib/onboarding-content";
+import { FeatureIntroBanner } from "../../components/onboarding/FeatureIntroBanner";
 
 // Local imports from modular structure
 import type { Card, Pillar, Stage, SortOption, FilterState } from "./types";
@@ -112,12 +123,12 @@ function getHistoryDescription(config: SavedSearchQueryConfig): string {
   }
 
   if (parts.length === 0 && !config.use_vector_search) {
-    return "All signals";
+    return "All opportunities";
   }
 
   return (
     parts.join(" • ") ||
-    (config.use_vector_search ? "Semantic search" : "All signals")
+    (config.use_vector_search ? "Semantic search" : "All opportunities")
   );
 }
 
@@ -164,6 +175,21 @@ const Discover: React.FC = () => {
   // Quality tier filter: 'all' | 'high' | 'moderate' | 'low'
   const [qualityFilter, setQualityFilter] = useState<string>("all");
 
+  // Grant-specific filters
+  const [selectedGrantType, setSelectedGrantType] = useState<string>("");
+  const [deadlineAfter, setDeadlineAfter] = useState<string>("");
+  const [deadlineBefore, setDeadlineBefore] = useState<string>("");
+  const [fundingMin, setFundingMin] = useState<number | undefined>(undefined);
+  const [fundingMax, setFundingMax] = useState<number | undefined>(undefined);
+  const [selectedGrantCategory, setSelectedGrantCategory] =
+    useState<string>("");
+
+  // Filter mode toggle (Essential vs Advanced)
+  const [filterMode, setFilterModeState] = useState<"essential" | "advanced">(
+    () => getFilterMode(),
+  );
+  // First-use intro banner is handled by FeatureIntroBanner component
+
   // Debounce filter values that change rapidly
   const filterState = useMemo<FilterState>(
     () => ({
@@ -171,8 +197,25 @@ const Discover: React.FC = () => {
       impactMin,
       relevanceMin,
       noveltyMin,
+      grantType: selectedGrantType || undefined,
+      deadlineAfter: deadlineAfter || undefined,
+      deadlineBefore: deadlineBefore || undefined,
+      fundingMin: fundingMin,
+      fundingMax: fundingMax,
+      grantCategory: selectedGrantCategory || undefined,
     }),
-    [searchTerm, impactMin, relevanceMin, noveltyMin],
+    [
+      searchTerm,
+      impactMin,
+      relevanceMin,
+      noveltyMin,
+      selectedGrantType,
+      deadlineAfter,
+      deadlineBefore,
+      fundingMin,
+      fundingMax,
+      selectedGrantCategory,
+    ],
   );
 
   const { debouncedValue: debouncedFilters, isPending: isFilterPending } =
@@ -412,6 +455,18 @@ const Discover: React.FC = () => {
           query = query.gte("novelty_score", debouncedFilters.noveltyMin);
         if (dateFrom) query = query.gte("created_at", dateFrom);
         if (dateTo) query = query.lte("created_at", dateTo);
+        if (debouncedFilters.grantType)
+          query = query.eq("grant_type", debouncedFilters.grantType);
+        if (debouncedFilters.deadlineAfter)
+          query = query.gte("deadline", debouncedFilters.deadlineAfter);
+        if (debouncedFilters.deadlineBefore)
+          query = query.lte("deadline", debouncedFilters.deadlineBefore);
+        if (debouncedFilters.fundingMin != null)
+          query = query.gte("funding_amount_min", debouncedFilters.fundingMin);
+        if (debouncedFilters.fundingMax != null)
+          query = query.lte("funding_amount_max", debouncedFilters.fundingMax);
+        if (debouncedFilters.grantCategory)
+          query = query.eq("category_id", debouncedFilters.grantCategory);
 
         const sortConfig = getSortConfig(sortOption);
         const { data } = await query.order(sortConfig.column, {
@@ -553,6 +608,18 @@ const Discover: React.FC = () => {
         query = query.gte("novelty_score", debouncedFilters.noveltyMin);
       if (dateFrom) query = query.gte("created_at", dateFrom);
       if (dateTo) query = query.lte("created_at", dateTo);
+      if (debouncedFilters.grantType)
+        query = query.eq("grant_type", debouncedFilters.grantType);
+      if (debouncedFilters.deadlineAfter)
+        query = query.gte("deadline", debouncedFilters.deadlineAfter);
+      if (debouncedFilters.deadlineBefore)
+        query = query.lte("deadline", debouncedFilters.deadlineBefore);
+      if (debouncedFilters.fundingMin != null)
+        query = query.gte("funding_amount_min", debouncedFilters.fundingMin);
+      if (debouncedFilters.fundingMax != null)
+        query = query.lte("funding_amount_max", debouncedFilters.fundingMax);
+      if (debouncedFilters.grantCategory)
+        query = query.eq("category_id", debouncedFilters.grantCategory);
 
       const sortConfig = getSortConfig(sortOption);
       const { data } = await query.order(sortConfig.column, {
@@ -584,7 +651,7 @@ const Discover: React.FC = () => {
       } else if (errorMessage.includes("timeout")) {
         setError("Request timeout: Try narrowing your filters.");
       } else {
-        setError(`Failed to load signals: ${errorMessage}`);
+        setError(`Failed to load opportunities: ${errorMessage}`);
       }
     } finally {
       setLoading(false);
@@ -665,6 +732,42 @@ const Discover: React.FC = () => {
     setShowSaveSearchModal(false);
     setSidebarRefreshKey((prev) => prev + 1);
   }, []);
+
+  const handleFilterModeChange = useCallback(
+    (mode: "essential" | "advanced") => {
+      setFilterModeState(mode);
+      persistFilterMode(mode);
+    },
+    [],
+  );
+
+  // Count advanced-only filters that are active (not visible in Essential mode)
+  const advancedFilterCount = useMemo(() => {
+    let count = 0;
+    if (selectedPillar) count++;
+    if (selectedStage) count++;
+    if (selectedHorizon) count++;
+    if (impactMin > 0) count++;
+    if (relevanceMin > 0) count++;
+    if (noveltyMin > 0) count++;
+    if (dateFrom || dateTo) count++;
+    if (useSemanticSearch) count++;
+    if (qualityFilter !== "all") count++;
+    if (selectedGrantCategory) count++;
+    return count;
+  }, [
+    selectedPillar,
+    selectedStage,
+    selectedHorizon,
+    impactMin,
+    relevanceMin,
+    noveltyMin,
+    dateFrom,
+    dateTo,
+    useSemanticSearch,
+    qualityFilter,
+    selectedGrantCategory,
+  ]);
 
   // Comparison mode handlers
   useEffect(() => {
@@ -771,11 +874,11 @@ const Discover: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-brand-dark-blue dark:text-white">
-                Discover Intelligence
+                Discover Grant Opportunities
               </h1>
               <p className="mt-2 text-gray-600 dark:text-gray-400">
-                Explore emerging trends and technologies relevant to
-                Austin&apos;s strategic priorities.
+                Explore grant opportunities relevant to Austin&apos;s strategic
+                priorities.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -844,7 +947,7 @@ const Discover: React.FC = () => {
             }`}
           >
             <Eye className="h-4 w-4 mr-1.5" />
-            All Signals
+            All Opportunities
           </button>
           <button
             onClick={() => setSearchParams({ filter: "new" })}
@@ -873,7 +976,7 @@ const Discover: React.FC = () => {
             className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium transition-colors bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-extended-purple/10 hover:text-extended-purple dark:hover:text-extended-purple"
           >
             <Star className="h-4 w-4 mr-1.5" />
-            My Signals &rarr;
+            My Opportunities &rarr;
           </Link>
 
           {/* Quality Tier Filter */}
@@ -909,401 +1012,883 @@ const Discover: React.FC = () => {
           </div>
         </div>
 
+        {/* First-use intro banner */}
+        <FeatureIntroBanner feature="discover" className="mb-6" />
+
         {/* Filters */}
         <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-6 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-            {/* Search */}
-            <div className="lg:col-span-2">
-              <label
-                htmlFor="search"
-                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-              >
-                Search
-              </label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                <input
-                  type="text"
-                  id="search"
-                  className="pl-10 block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
-                  placeholder={
-                    useSemanticSearch
-                      ? "Semantic search (finds related concepts)..."
-                      : "Search signals..."
-                  }
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-              {/* Semantic Search Toggle */}
-              <div className="mt-2 flex items-center gap-2">
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={useSemanticSearch}
-                  onClick={() => setUseSemanticSearch(!useSemanticSearch)}
-                  className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 ${
-                    useSemanticSearch
-                      ? "bg-extended-purple"
-                      : "bg-gray-200 dark:bg-gray-600"
-                  }`}
-                >
-                  <span
-                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                      useSemanticSearch ? "translate-x-4" : "translate-x-0"
-                    }`}
-                  />
-                </button>
-                <label
-                  className={`flex items-center gap-1.5 text-sm cursor-pointer ${
-                    useSemanticSearch
-                      ? "text-extended-purple font-medium"
-                      : "text-gray-600 dark:text-gray-400"
-                  }`}
-                  onClick={() => setUseSemanticSearch(!useSemanticSearch)}
-                >
-                  <Sparkles
-                    className={`h-4 w-4 ${useSemanticSearch ? "text-extended-purple" : "text-gray-400"}`}
-                  />
-                  Semantic Search
-                </label>
-                {useSemanticSearch && (
-                  <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
-                    (finds conceptually related signals)
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Pillar Filter */}
-            <div>
-              <label
-                htmlFor="pillar"
-                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-              >
-                Strategic Pillar
-              </label>
-              <select
-                id="pillar"
-                className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
-                value={selectedPillar}
-                onChange={(e) => setSelectedPillar(e.target.value)}
-              >
-                <option value="">All Pillars</option>
-                {pillars.map((pillar) => (
-                  <option key={pillar.id} value={pillar.id}>
-                    {pillar.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Stage Filter */}
-            <div>
-              <label
-                htmlFor="stage"
-                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-              >
-                Maturity Stage
-              </label>
-              <select
-                id="stage"
-                className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
-                value={selectedStage}
-                onChange={(e) => setSelectedStage(e.target.value)}
-              >
-                <option value="">All Stages</option>
-                {stages.map((stage) => (
-                  <option key={stage.id} value={stage.id}>
-                    {stage.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Horizon Filter */}
-            <div>
-              <label
-                htmlFor="horizon"
-                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-              >
-                Horizon
-              </label>
-              <select
-                id="horizon"
-                className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
-                value={selectedHorizon}
-                onChange={(e) => setSelectedHorizon(e.target.value)}
-              >
-                <option value="">All Horizons</option>
-                <option value="H1">H1 (0-2 years)</option>
-                <option value="H2">H2 (2-5 years)</option>
-                <option value="H3">H3 (5+ years)</option>
-              </select>
-            </div>
-
-            {/* Sort */}
-            <div>
-              <label
-                htmlFor="sort"
-                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-              >
-                Sort By
-              </label>
-              <select
-                id="sort"
-                className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
-                value={sortOption}
-                onChange={(e) => setSortOption(e.target.value as SortOption)}
-              >
-                <option value="newest">Newest Created</option>
-                <option value="oldest">Oldest First</option>
-                <option value="recently_updated">Recently Updated</option>
-                <option value="least_recently_updated">
-                  Least Recently Updated
-                </option>
-                <option value="signal_quality_score">Quality Score</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Date Range Filters */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
-            <div className="lg:col-span-2 flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-gray-400 flex-shrink-0" />
+          {/* Filter mode toggle + header */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <Filter className="h-4 w-4 text-gray-400" />
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                Date Range:
+                Filters
               </span>
-            </div>
-            <div>
-              <label
-                htmlFor="dateFrom"
-                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-              >
-                Created After
-              </label>
-              <input
-                type="date"
-                id="dateFrom"
-                className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="dateTo"
-                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-              >
-                Created Before
-              </label>
-              <input
-                type="date"
-                id="dateTo"
-                className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-              />
-            </div>
-          </div>
-
-          {/* Score Threshold Sliders */}
-          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
-            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-              Minimum Score Thresholds
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Impact Score Slider */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label
-                    htmlFor="impactMin"
-                    className="text-sm text-gray-600 dark:text-gray-400"
-                  >
-                    Impact
-                  </label>
-                  <span
-                    className={`text-sm font-medium ${impactMin > 0 ? getScoreColorClasses(impactMin) : "text-gray-500 dark:text-gray-400"}`}
-                  >
-                    {impactMin > 0 ? `≥ ${impactMin}` : "Any"}
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  id="impactMin"
-                  min="0"
-                  max="100"
-                  step="5"
-                  value={impactMin}
-                  onChange={(e) => setImpactMin(Number(e.target.value))}
-                  className="w-full h-2 bg-gray-200 dark:bg-gray-600 rounded-lg appearance-none cursor-pointer accent-brand-blue"
-                />
-                <div className="flex justify-between text-xs text-gray-400 mt-1">
-                  <span>0</span>
-                  <span>50</span>
-                  <span>100</span>
-                </div>
-              </div>
-
-              {/* Relevance Score Slider */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label
-                    htmlFor="relevanceMin"
-                    className="text-sm text-gray-600 dark:text-gray-400"
-                  >
-                    Relevance
-                  </label>
-                  <span
-                    className={`text-sm font-medium ${relevanceMin > 0 ? getScoreColorClasses(relevanceMin) : "text-gray-500 dark:text-gray-400"}`}
-                  >
-                    {relevanceMin > 0 ? `≥ ${relevanceMin}` : "Any"}
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  id="relevanceMin"
-                  min="0"
-                  max="100"
-                  step="5"
-                  value={relevanceMin}
-                  onChange={(e) => setRelevanceMin(Number(e.target.value))}
-                  className="w-full h-2 bg-gray-200 dark:bg-gray-600 rounded-lg appearance-none cursor-pointer accent-brand-blue"
-                />
-                <div className="flex justify-between text-xs text-gray-400 mt-1">
-                  <span>0</span>
-                  <span>50</span>
-                  <span>100</span>
-                </div>
-              </div>
-
-              {/* Novelty Score Slider */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label
-                    htmlFor="noveltyMin"
-                    className="text-sm text-gray-600 dark:text-gray-400"
-                  >
-                    Novelty
-                  </label>
-                  <span
-                    className={`text-sm font-medium ${noveltyMin > 0 ? getScoreColorClasses(noveltyMin) : "text-gray-500 dark:text-gray-400"}`}
-                  >
-                    {noveltyMin > 0 ? `≥ ${noveltyMin}` : "Any"}
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  id="noveltyMin"
-                  min="0"
-                  max="100"
-                  step="5"
-                  value={noveltyMin}
-                  onChange={(e) => setNoveltyMin(Number(e.target.value))}
-                  className="w-full h-2 bg-gray-200 dark:bg-gray-600 rounded-lg appearance-none cursor-pointer accent-brand-blue"
-                />
-                <div className="flex justify-between text-xs text-gray-400 mt-1">
-                  <span>0</span>
-                  <span>50</span>
-                  <span>100</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Recent Search History */}
-          {user?.id && searchHistory.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
-              <button
-                onClick={toggleHistoryExpanded}
-                className="w-full flex items-center justify-between text-left"
-              >
-                <div className="flex items-center gap-2">
-                  <History className="h-4 w-4 text-gray-400" />
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Recent Searches ({searchHistory.length})
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {historyLoading && (
-                    <Loader2 className="h-4 w-4 text-gray-400 animate-spin" />
-                  )}
-                  {isHistoryExpanded ? (
-                    <ChevronUp className="h-4 w-4 text-gray-400" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4 text-gray-400" />
-                  )}
-                </div>
-              </button>
-
-              {isHistoryExpanded && (
-                <div className="mt-3 space-y-2 max-h-64 overflow-y-auto">
-                  <div className="flex justify-end mb-2">
-                    <button
-                      onClick={clearHistory}
-                      className="text-xs text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
-                    >
-                      Clear all
-                    </button>
-                  </div>
-
-                  {searchHistory.map((entry) => (
-                    <div
-                      key={entry.id}
-                      onClick={() =>
-                        handleSelectSavedSearch(entry.query_config)
-                      }
-                      className="group flex items-start justify-between gap-2 p-2 rounded-md border border-gray-200 dark:border-gray-600 hover:border-brand-blue hover:bg-brand-light-blue/50 dark:hover:bg-brand-blue/10 cursor-pointer transition-all duration-200"
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          handleSelectSavedSearch(entry.query_config);
-                        }
-                      }}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {entry.query_config.use_vector_search && (
-                            <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[10px] font-medium bg-extended-purple/10 text-extended-purple">
-                              <Sparkles className="h-2.5 w-2.5" />
-                              AI
-                            </span>
-                          )}
-                          <span className="text-sm text-gray-900 dark:text-white truncate">
-                            {getHistoryDescription(entry.query_config)}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-xs text-gray-400">
-                            {formatHistoryTime(entry.executed_at)}
-                          </span>
-                          <span className="text-xs text-gray-400">•</span>
-                          <span className="text-xs text-gray-400">
-                            {entry.result_count} result
-                            {entry.result_count !== 1 ? "s" : ""}
-                          </span>
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={(e) => deleteHistoryEntry(entry.id, e)}
-                        disabled={deletingHistoryId === entry.id}
-                        className="p-1 text-gray-400 hover:text-red-500 rounded opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50 shrink-0"
-                        title="Remove from history"
-                      >
-                        {deletingHistoryId === entry.id ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <X className="h-3.5 w-3.5" />
-                        )}
-                      </button>
-                    </div>
-                  ))}
-                </div>
+              {filterMode === "essential" && advancedFilterCount > 0 && (
+                <button
+                  onClick={() => handleFilterModeChange("advanced")}
+                  className="text-xs text-brand-blue hover:underline"
+                >
+                  {advancedFilterCount} advanced filter
+                  {advancedFilterCount !== 1 ? "s" : ""} active
+                </button>
               )}
             </div>
+            <div className="inline-flex items-center rounded-lg border border-gray-200 dark:border-gray-700 p-0.5 bg-gray-50 dark:bg-dark-surface">
+              <button
+                onClick={() => handleFilterModeChange("essential")}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
+                  filterMode === "essential"
+                    ? "bg-brand-blue text-white shadow-sm"
+                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200",
+                )}
+              >
+                Essential
+              </button>
+              <button
+                onClick={() => handleFilterModeChange("advanced")}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
+                  filterMode === "advanced"
+                    ? "bg-brand-blue text-white shadow-sm"
+                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200",
+                )}
+              >
+                All Filters
+              </button>
+            </div>
+          </div>
+
+          {/* Essential Mode Filters */}
+          {filterMode === "essential" && (
+            <div className="space-y-4">
+              {/* Search bar */}
+              <div>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <input
+                    type="text"
+                    className="pl-10 block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                    placeholder="Search opportunities..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Grant Type chips */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400 w-20 shrink-0">
+                  Grant Type
+                </span>
+                {["All", "Federal", "State", "Foundation", "Local"].map(
+                  (type) => {
+                    const filterValue = type === "All" ? "" : type;
+                    const isActive = selectedGrantType === filterValue;
+                    return (
+                      <button
+                        key={type}
+                        onClick={() => setSelectedGrantType(filterValue)}
+                        className={cn(
+                          "px-3 py-1.5 text-xs font-medium rounded-full border transition-colors",
+                          isActive
+                            ? "bg-brand-blue text-white border-brand-blue"
+                            : "bg-white dark:bg-dark-surface border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-brand-blue hover:text-brand-blue",
+                        )}
+                      >
+                        {type}
+                      </button>
+                    );
+                  },
+                )}
+              </div>
+
+              {/* Deadline preset chips */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400 w-20 shrink-0">
+                  Deadline
+                </span>
+                {[
+                  { label: "All", days: 0 },
+                  { label: "Next 30 days", days: 30 },
+                  { label: "Next 90 days", days: 90 },
+                  { label: "Next 6 months", days: 180 },
+                ].map((preset) => {
+                  let isActive: boolean;
+                  if (preset.days === 0) {
+                    isActive = !deadlineAfter && !deadlineBefore;
+                  } else {
+                    const today = new Date();
+                    const future = new Date();
+                    future.setDate(today.getDate() + preset.days);
+                    const afterVal = today.toISOString().split("T")[0] ?? "";
+                    const beforeVal = future.toISOString().split("T")[0] ?? "";
+                    isActive =
+                      deadlineAfter === afterVal &&
+                      deadlineBefore === beforeVal;
+                  }
+                  return (
+                    <button
+                      key={preset.label}
+                      onClick={() => {
+                        if (preset.days === 0) {
+                          setDeadlineAfter("");
+                          setDeadlineBefore("");
+                        } else {
+                          const today = new Date();
+                          const future = new Date();
+                          future.setDate(today.getDate() + preset.days);
+                          const afterVal =
+                            today.toISOString().split("T")[0] ?? "";
+                          const beforeVal =
+                            future.toISOString().split("T")[0] ?? "";
+                          if (isActive) {
+                            setDeadlineAfter("");
+                            setDeadlineBefore("");
+                          } else {
+                            setDeadlineAfter(afterVal);
+                            setDeadlineBefore(beforeVal);
+                          }
+                        }
+                      }}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-medium rounded-full border transition-colors",
+                        isActive
+                          ? "bg-brand-blue text-white border-brand-blue"
+                          : "bg-white dark:bg-dark-surface border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-brand-blue hover:text-brand-blue",
+                      )}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Funding preset chips */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400 w-20 shrink-0">
+                  Funding
+                </span>
+                {[
+                  {
+                    label: "All",
+                    min: undefined as number | undefined,
+                    max: undefined as number | undefined,
+                  },
+                  { label: "Under $50K", min: 0, max: 50000 },
+                  { label: "$50K - $500K", min: 50000, max: 500000 },
+                  {
+                    label: "$500K+",
+                    min: 500000,
+                    max: undefined as number | undefined,
+                  },
+                ].map((preset) => {
+                  const isActive =
+                    fundingMin === preset.min && fundingMax === preset.max;
+                  return (
+                    <button
+                      key={preset.label}
+                      onClick={() => {
+                        if (isActive) {
+                          setFundingMin(undefined);
+                          setFundingMax(undefined);
+                        } else {
+                          setFundingMin(preset.min);
+                          setFundingMax(preset.max);
+                        }
+                      }}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-medium rounded-full border transition-colors",
+                        isActive
+                          ? "bg-brand-blue text-white border-brand-blue"
+                          : "bg-white dark:bg-dark-surface border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-brand-blue hover:text-brand-blue",
+                      )}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Sort dropdown */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400 w-20 shrink-0">
+                  Sort By
+                </span>
+                <select
+                  className="border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue text-sm"
+                  value={sortOption}
+                  onChange={(e) => setSortOption(e.target.value as SortOption)}
+                >
+                  <option value="newest">Newest Created</option>
+                  <option value="oldest">Oldest First</option>
+                  <option value="recently_updated">Recently Updated</option>
+                  <option value="least_recently_updated">
+                    Least Recently Updated
+                  </option>
+                  <option value="signal_quality_score">Quality Score</option>
+                  <option value="deadline_soonest">Deadline (Soonest)</option>
+                  <option value="funding_highest">Funding (Highest)</option>
+                </select>
+                <InfoTooltip content={FILTER_EXPLANATIONS.sortBy} />
+              </div>
+            </div>
+          )}
+
+          {/* Advanced Mode Filters */}
+          {filterMode === "advanced" && (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+                {/* Search */}
+                <div className="lg:col-span-2">
+                  <label
+                    htmlFor="search"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                  >
+                    Search
+                  </label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                    <input
+                      type="text"
+                      id="search"
+                      className="pl-10 block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                      placeholder={
+                        useSemanticSearch
+                          ? "Semantic search (finds related concepts)..."
+                          : "Search opportunities..."
+                      }
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                  </div>
+                  {/* Semantic Search Toggle */}
+                  <div className="mt-2 flex items-center gap-2">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={useSemanticSearch}
+                      onClick={() => setUseSemanticSearch(!useSemanticSearch)}
+                      className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 ${
+                        useSemanticSearch
+                          ? "bg-extended-purple"
+                          : "bg-gray-200 dark:bg-gray-600"
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          useSemanticSearch ? "translate-x-4" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                    <label
+                      className={`flex items-center gap-1.5 text-sm cursor-pointer ${
+                        useSemanticSearch
+                          ? "text-extended-purple font-medium"
+                          : "text-gray-600 dark:text-gray-400"
+                      }`}
+                      onClick={() => setUseSemanticSearch(!useSemanticSearch)}
+                    >
+                      <Sparkles
+                        className={`h-4 w-4 ${useSemanticSearch ? "text-extended-purple" : "text-gray-400"}`}
+                      />
+                      Semantic Search
+                    </label>
+                    <InfoTooltip content={FILTER_EXPLANATIONS.semanticSearch} />
+                    {useSemanticSearch && (
+                      <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
+                        (finds conceptually related opportunities)
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Pillar Filter */}
+                <div>
+                  <label
+                    htmlFor="pillar"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                  >
+                    Strategic Pillar{" "}
+                    <InfoTooltip
+                      content={FILTER_EXPLANATIONS.strategicPillar}
+                    />
+                  </label>
+                  <select
+                    id="pillar"
+                    className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                    value={selectedPillar}
+                    onChange={(e) => setSelectedPillar(e.target.value)}
+                  >
+                    <option value="">All Pillars</option>
+                    {pillars.map((pillar) => (
+                      <option key={pillar.id} value={pillar.id}>
+                        {pillar.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Stage Filter */}
+                <div>
+                  <label
+                    htmlFor="stage"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                  >
+                    Maturity Stage{" "}
+                    <InfoTooltip content={FILTER_EXPLANATIONS.maturityStage} />
+                  </label>
+                  <select
+                    id="stage"
+                    className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                    value={selectedStage}
+                    onChange={(e) => setSelectedStage(e.target.value)}
+                  >
+                    <option value="">All Stages</option>
+                    {stages.map((stage) => (
+                      <option key={stage.id} value={stage.id}>
+                        {stage.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Horizon Filter */}
+                <div>
+                  <label
+                    htmlFor="horizon"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                  >
+                    Horizon{" "}
+                    <InfoTooltip content={FILTER_EXPLANATIONS.horizon} />
+                  </label>
+                  <select
+                    id="horizon"
+                    className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                    value={selectedHorizon}
+                    onChange={(e) => setSelectedHorizon(e.target.value)}
+                  >
+                    <option value="">All Horizons</option>
+                    <option value="H1">H1 (0-2 years)</option>
+                    <option value="H2">H2 (2-5 years)</option>
+                    <option value="H3">H3 (5+ years)</option>
+                  </select>
+                </div>
+
+                {/* Sort */}
+                <div>
+                  <label
+                    htmlFor="sort"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                  >
+                    Sort By <InfoTooltip content={FILTER_EXPLANATIONS.sortBy} />
+                  </label>
+                  <select
+                    id="sort"
+                    className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                    value={sortOption}
+                    onChange={(e) =>
+                      setSortOption(e.target.value as SortOption)
+                    }
+                  >
+                    <option value="newest">Newest Created</option>
+                    <option value="oldest">Oldest First</option>
+                    <option value="recently_updated">Recently Updated</option>
+                    <option value="least_recently_updated">
+                      Least Recently Updated
+                    </option>
+                    <option value="signal_quality_score">Quality Score</option>
+                    <option value="deadline_soonest">Deadline (Soonest)</option>
+                    <option value="funding_highest">Funding (Highest)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Grant Filters */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+                {/* Grant Type */}
+                <div>
+                  <label
+                    htmlFor="grantType"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                  >
+                    <Tag className="h-3.5 w-3.5 inline mr-1" />
+                    Grant Type{" "}
+                    <InfoTooltip content={FILTER_EXPLANATIONS.grantType} />
+                  </label>
+                  <select
+                    id="grantType"
+                    className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                    value={selectedGrantType}
+                    onChange={(e) => setSelectedGrantType(e.target.value)}
+                  >
+                    <option value="">All Types</option>
+                    <option value="Federal">Federal</option>
+                    <option value="State">State</option>
+                    <option value="Foundation">Foundation</option>
+                    <option value="Local">Local</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                {/* Grant Category */}
+                <div>
+                  <label
+                    htmlFor="grantCategory"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                  >
+                    Grant Category{" "}
+                    <InfoTooltip content={FILTER_EXPLANATIONS.grantCategory} />
+                  </label>
+                  <select
+                    id="grantCategory"
+                    className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                    value={selectedGrantCategory}
+                    onChange={(e) => setSelectedGrantCategory(e.target.value)}
+                  >
+                    <option value="">All Categories</option>
+                    {grantCategories.map((cat) => (
+                      <option key={cat.code} value={cat.code}>
+                        {cat.code} - {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Deadline Range */}
+                <div>
+                  <label
+                    htmlFor="deadlineAfter"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                  >
+                    Deadline After{" "}
+                    <InfoTooltip content={FILTER_EXPLANATIONS.deadlineRange} />
+                  </label>
+                  <input
+                    type="date"
+                    id="deadlineAfter"
+                    className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                    value={deadlineAfter}
+                    onChange={(e) => setDeadlineAfter(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="deadlineBefore"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                  >
+                    Deadline Before
+                  </label>
+                  <input
+                    type="date"
+                    id="deadlineBefore"
+                    className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                    value={deadlineBefore}
+                    onChange={(e) => setDeadlineBefore(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Deadline Preset Chips */}
+              <div className="flex items-center gap-2 mt-3">
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                  Deadline presets:
+                </span>
+                {[
+                  { label: "Next 30 days", days: 30 },
+                  { label: "Next 90 days", days: 90 },
+                  { label: "Next 6 months", days: 180 },
+                ].map((preset) => {
+                  const today = new Date();
+                  const future = new Date();
+                  future.setDate(today.getDate() + preset.days);
+                  const afterVal = today.toISOString().split("T")[0] ?? "";
+                  const beforeVal = future.toISOString().split("T")[0] ?? "";
+                  const isActive =
+                    deadlineAfter === afterVal && deadlineBefore === beforeVal;
+                  return (
+                    <button
+                      key={preset.days}
+                      onClick={() => {
+                        if (isActive) {
+                          setDeadlineAfter("");
+                          setDeadlineBefore("");
+                        } else {
+                          setDeadlineAfter(afterVal);
+                          setDeadlineBefore(beforeVal);
+                        }
+                      }}
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                        isActive
+                          ? "bg-brand-blue text-white"
+                          : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+                {(deadlineAfter || deadlineBefore) && (
+                  <button
+                    onClick={() => {
+                      setDeadlineAfter("");
+                      setDeadlineBefore("");
+                    }}
+                    className="px-2 py-1 text-xs text-gray-500 hover:text-red-500 transition-colors"
+                  >
+                    <X className="h-3 w-3 inline" /> Clear
+                  </button>
+                )}
+              </div>
+
+              {/* Funding Amount Range */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+                <div className="lg:col-span-1 flex items-center gap-2">
+                  <DollarSign className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Funding Range:{" "}
+                    <InfoTooltip content={FILTER_EXPLANATIONS.fundingRange} />
+                  </span>
+                </div>
+                <div>
+                  <label
+                    htmlFor="fundingMin"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                  >
+                    Min Amount ($)
+                  </label>
+                  <input
+                    type="number"
+                    id="fundingMin"
+                    min="0"
+                    step="1000"
+                    className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                    placeholder="e.g. 50000"
+                    value={fundingMin ?? ""}
+                    onChange={(e) =>
+                      setFundingMin(
+                        e.target.value ? Number(e.target.value) : undefined,
+                      )
+                    }
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="fundingMax"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                  >
+                    Max Amount ($)
+                  </label>
+                  <input
+                    type="number"
+                    id="fundingMax"
+                    min="0"
+                    step="1000"
+                    className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                    placeholder="e.g. 500000"
+                    value={fundingMax ?? ""}
+                    onChange={(e) =>
+                      setFundingMax(
+                        e.target.value ? Number(e.target.value) : undefined,
+                      )
+                    }
+                  />
+                </div>
+                <div className="flex items-end">
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { label: "$0-50K", min: 0, max: 50000 },
+                      { label: "$50K-500K", min: 50000, max: 500000 },
+                      { label: "$500K+", min: 500000, max: undefined },
+                    ].map((preset) => {
+                      const isActive =
+                        fundingMin === preset.min && fundingMax === preset.max;
+                      return (
+                        <button
+                          key={preset.label}
+                          onClick={() => {
+                            if (isActive) {
+                              setFundingMin(undefined);
+                              setFundingMax(undefined);
+                            } else {
+                              setFundingMin(preset.min);
+                              setFundingMax(preset.max);
+                            }
+                          }}
+                          className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                            isActive
+                              ? "bg-brand-blue text-white"
+                              : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      );
+                    })}
+                    {(fundingMin != null || fundingMax != null) && (
+                      <button
+                        onClick={() => {
+                          setFundingMin(undefined);
+                          setFundingMax(undefined);
+                        }}
+                        className="px-2 py-1 text-xs text-gray-500 hover:text-red-500 transition-colors"
+                      >
+                        <X className="h-3 w-3 inline" /> Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Date Range Filters */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+                <div className="lg:col-span-2 flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Date Range:
+                  </span>
+                </div>
+                <div>
+                  <label
+                    htmlFor="dateFrom"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                  >
+                    Created After
+                  </label>
+                  <input
+                    type="date"
+                    id="dateFrom"
+                    className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="dateTo"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                  >
+                    Created Before
+                  </label>
+                  <input
+                    type="date"
+                    id="dateTo"
+                    className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Score Threshold Sliders */}
+              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                  Minimum Score Thresholds
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Impact Score Slider */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label
+                        htmlFor="impactMin"
+                        className="text-sm text-gray-600 dark:text-gray-400"
+                      >
+                        Impact{" "}
+                        <InfoTooltip
+                          content={FILTER_EXPLANATIONS.impactScore}
+                        />
+                      </label>
+                      <span
+                        className={`text-sm font-medium ${impactMin > 0 ? getScoreColorClasses(impactMin) : "text-gray-500 dark:text-gray-400"}`}
+                      >
+                        {impactMin > 0 ? `≥ ${impactMin}` : "Any"}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      id="impactMin"
+                      min="0"
+                      max="100"
+                      step="5"
+                      value={impactMin}
+                      onChange={(e) => setImpactMin(Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 dark:bg-gray-600 rounded-lg appearance-none cursor-pointer accent-brand-blue"
+                    />
+                    <div className="flex justify-between text-xs text-gray-400 mt-1">
+                      <span>0</span>
+                      <span>50</span>
+                      <span>100</span>
+                    </div>
+                  </div>
+
+                  {/* Relevance Score Slider */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label
+                        htmlFor="relevanceMin"
+                        className="text-sm text-gray-600 dark:text-gray-400"
+                      >
+                        Relevance{" "}
+                        <InfoTooltip
+                          content={FILTER_EXPLANATIONS.relevanceScore}
+                        />
+                      </label>
+                      <span
+                        className={`text-sm font-medium ${relevanceMin > 0 ? getScoreColorClasses(relevanceMin) : "text-gray-500 dark:text-gray-400"}`}
+                      >
+                        {relevanceMin > 0 ? `≥ ${relevanceMin}` : "Any"}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      id="relevanceMin"
+                      min="0"
+                      max="100"
+                      step="5"
+                      value={relevanceMin}
+                      onChange={(e) => setRelevanceMin(Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 dark:bg-gray-600 rounded-lg appearance-none cursor-pointer accent-brand-blue"
+                    />
+                    <div className="flex justify-between text-xs text-gray-400 mt-1">
+                      <span>0</span>
+                      <span>50</span>
+                      <span>100</span>
+                    </div>
+                  </div>
+
+                  {/* Novelty Score Slider */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label
+                        htmlFor="noveltyMin"
+                        className="text-sm text-gray-600 dark:text-gray-400"
+                      >
+                        Novelty{" "}
+                        <InfoTooltip
+                          content={FILTER_EXPLANATIONS.noveltyScore}
+                        />
+                      </label>
+                      <span
+                        className={`text-sm font-medium ${noveltyMin > 0 ? getScoreColorClasses(noveltyMin) : "text-gray-500 dark:text-gray-400"}`}
+                      >
+                        {noveltyMin > 0 ? `≥ ${noveltyMin}` : "Any"}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      id="noveltyMin"
+                      min="0"
+                      max="100"
+                      step="5"
+                      value={noveltyMin}
+                      onChange={(e) => setNoveltyMin(Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 dark:bg-gray-600 rounded-lg appearance-none cursor-pointer accent-brand-blue"
+                    />
+                    <div className="flex justify-between text-xs text-gray-400 mt-1">
+                      <span>0</span>
+                      <span>50</span>
+                      <span>100</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Recent Search History */}
+              {user?.id && searchHistory.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+                  <button
+                    onClick={toggleHistoryExpanded}
+                    className="w-full flex items-center justify-between text-left"
+                  >
+                    <div className="flex items-center gap-2">
+                      <History className="h-4 w-4 text-gray-400" />
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Recent Searches ({searchHistory.length})
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {historyLoading && (
+                        <Loader2 className="h-4 w-4 text-gray-400 animate-spin" />
+                      )}
+                      {isHistoryExpanded ? (
+                        <ChevronUp className="h-4 w-4 text-gray-400" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4 text-gray-400" />
+                      )}
+                    </div>
+                  </button>
+
+                  {isHistoryExpanded && (
+                    <div className="mt-3 space-y-2 max-h-64 overflow-y-auto">
+                      <div className="flex justify-end mb-2">
+                        <button
+                          onClick={clearHistory}
+                          className="text-xs text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                        >
+                          Clear all
+                        </button>
+                      </div>
+
+                      {searchHistory.map((entry) => (
+                        <div
+                          key={entry.id}
+                          onClick={() =>
+                            handleSelectSavedSearch(entry.query_config)
+                          }
+                          className="group flex items-start justify-between gap-2 p-2 rounded-md border border-gray-200 dark:border-gray-600 hover:border-brand-blue hover:bg-brand-light-blue/50 dark:hover:bg-brand-blue/10 cursor-pointer transition-all duration-200"
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              handleSelectSavedSearch(entry.query_config);
+                            }
+                          }}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {entry.query_config.use_vector_search && (
+                                <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[10px] font-medium bg-extended-purple/10 text-extended-purple">
+                                  <Sparkles className="h-2.5 w-2.5" />
+                                  AI
+                                </span>
+                              )}
+                              <span className="text-sm text-gray-900 dark:text-white truncate">
+                                {getHistoryDescription(entry.query_config)}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-xs text-gray-400">
+                                {formatHistoryTime(entry.executed_at)}
+                              </span>
+                              <span className="text-xs text-gray-400">•</span>
+                              <span className="text-xs text-gray-400">
+                                {entry.result_count} result
+                                {entry.result_count !== 1 ? "s" : ""}
+                              </span>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={(e) => deleteHistoryEntry(entry.id, e)}
+                            disabled={deletingHistoryId === entry.id}
+                            className="p-1 text-gray-400 hover:text-red-500 rounded opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50 shrink-0"
+                            title="Remove from history"
+                          >
+                            {deletingHistoryId === entry.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <X className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
           )}
 
           {/* View Controls and Save Search */}
@@ -1311,7 +1896,8 @@ const Discover: React.FC = () => {
             <div className="flex items-center gap-2">
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 Showing {filteredCards.length}
-                {qualityFilter !== "all" ? ` of ${cards.length}` : ""} signals
+                {qualityFilter !== "all" ? ` of ${cards.length}` : ""}{" "}
+                opportunities
               </p>
               {isFilterPending && (
                 <span className="inline-flex items-center gap-1 text-xs text-brand-blue">
@@ -1370,10 +1956,10 @@ const Discover: React.FC = () => {
                   </p>
                   <p className="text-sm text-gray-600 dark:text-gray-300">
                     {selectedForCompare.length === 0
-                      ? "Click on signals to select them for comparison (max 2)"
+                      ? "Click on opportunities to select them for comparison (max 2)"
                       : selectedForCompare.length === 1
-                        ? `Selected: ${selectedForCompare[0]?.name ?? "signal"} — Click another signal to compare`
-                        : `Ready to compare: ${selectedForCompare[0]?.name ?? "signal"} vs ${selectedForCompare[1]?.name ?? "signal"}`}
+                        ? `Selected: ${selectedForCompare[0]?.name ?? "opportunity"} — Click another opportunity to compare`
+                        : `Ready to compare: ${selectedForCompare[0]?.name ?? "opportunity"} vs ${selectedForCompare[1]?.name ?? "opportunity"}`}
                   </p>
                 </div>
               </div>
@@ -1392,7 +1978,7 @@ const Discover: React.FC = () => {
                   className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-extended-purple text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-extended-purple/90 transition-colors"
                 >
                   <ArrowLeftRight className="h-4 w-4" />
-                  Compare Signals
+                  Compare Opportunities
                 </button>
                 <button
                   onClick={exitCompareMode}
@@ -1481,7 +2067,13 @@ const Discover: React.FC = () => {
               dateTo ||
               impactMin > 0 ||
               relevanceMin > 0 ||
-              noveltyMin > 0 ? (
+              noveltyMin > 0 ||
+              selectedGrantType ||
+              deadlineAfter ||
+              deadlineBefore ||
+              fundingMin != null ||
+              fundingMax != null ||
+              selectedGrantCategory ? (
               <Filter className="mx-auto h-12 w-12 text-gray-400" />
             ) : (
               <Inbox className="mx-auto h-12 w-12 text-gray-400" />
@@ -1489,7 +2081,7 @@ const Discover: React.FC = () => {
 
             <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
               {quickFilter === "new"
-                ? "No New Signals This Week"
+                ? "No New Opportunities This Week"
                 : useSemanticSearch && searchTerm
                   ? "No Semantic Matches Found"
                   : searchTerm ||
@@ -1500,18 +2092,24 @@ const Discover: React.FC = () => {
                       dateTo ||
                       impactMin > 0 ||
                       relevanceMin > 0 ||
-                      noveltyMin > 0
-                    ? "No Signals Match Your Filters"
-                    : "No Signals Available"}
+                      noveltyMin > 0 ||
+                      selectedGrantType ||
+                      deadlineAfter ||
+                      deadlineBefore ||
+                      fundingMin != null ||
+                      fundingMax != null ||
+                      selectedGrantCategory
+                    ? "No Opportunities Match Your Filters"
+                    : "No Opportunities Available"}
             </h3>
 
             <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto">
               {quickFilter === "new"
-                ? "Check back soon for newly discovered intelligence signals."
+                ? "Check back soon for newly discovered grant opportunities."
                 : useSemanticSearch && searchTerm
-                  ? `No signals matched your semantic search for "${searchTerm}". Try different keywords, or switch to standard text search.`
+                  ? `No opportunities matched your semantic search for "${searchTerm}". Try different keywords, or switch to standard text search.`
                   : searchTerm
-                    ? `No signals matched your search for "${searchTerm}". Try different keywords or enable semantic search for broader matches.`
+                    ? `No opportunities matched your search for "${searchTerm}". Try different keywords or enable semantic search for broader matches.`
                     : selectedPillar ||
                         selectedStage ||
                         selectedHorizon ||
@@ -1519,9 +2117,15 @@ const Discover: React.FC = () => {
                         dateTo ||
                         impactMin > 0 ||
                         relevanceMin > 0 ||
-                        noveltyMin > 0
+                        noveltyMin > 0 ||
+                        selectedGrantType ||
+                        deadlineAfter ||
+                        deadlineBefore ||
+                        fundingMin != null ||
+                        fundingMax != null ||
+                        selectedGrantCategory
                       ? "Your current filter combination returned no results. Try removing some filters or adjusting score thresholds."
-                      : "The intelligence library is empty. Signals will appear here as they are discovered."}
+                      : "The grant library is empty. Opportunities will appear here as they are discovered."}
             </p>
 
             <div className="mt-6 flex flex-wrap justify-center gap-3">
@@ -1534,7 +2138,13 @@ const Discover: React.FC = () => {
                 dateTo ||
                 impactMin > 0 ||
                 relevanceMin > 0 ||
-                noveltyMin > 0) &&
+                noveltyMin > 0 ||
+                selectedGrantType ||
+                deadlineAfter ||
+                deadlineBefore ||
+                fundingMin != null ||
+                fundingMax != null ||
+                selectedGrantCategory) &&
                 !quickFilter && (
                   <button
                     onClick={() => {
@@ -1548,6 +2158,12 @@ const Discover: React.FC = () => {
                       setRelevanceMin(0);
                       setNoveltyMin(0);
                       setUseSemanticSearch(false);
+                      setSelectedGrantType("");
+                      setDeadlineAfter("");
+                      setDeadlineBefore("");
+                      setFundingMin(undefined);
+                      setFundingMax(undefined);
+                      setSelectedGrantCategory("");
                     }}
                     className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-dark-surface hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                   >
@@ -1577,7 +2193,7 @@ const Discover: React.FC = () => {
               gap={16}
               overscan={3}
               scrollContainerClassName="h-[calc(100vh-280px)]"
-              ariaLabel="Intelligence signals list"
+              ariaLabel="Grant opportunities list"
             />
           ) : (
             <div className="h-[calc(100vh-400px)] min-h-[500px]">

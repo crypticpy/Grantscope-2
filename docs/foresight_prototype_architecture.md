@@ -1,8 +1,10 @@
-# Foresight System Prototype Architecture
+# GrantScope2 System Prototype Architecture
+
 ## Supabase + HuggingFace + Azure OpenAI
 
 ### Prototype Overview
-A simplified but fully functional version of the Foresight system using cost-effective, developer-friendly tools for rapid prototyping and user testing.
+
+A simplified but fully functional version of the GrantScope2 system using cost-effective, developer-friendly tools for rapid prototyping and user testing.
 
 ### Architecture Components
 
@@ -29,6 +31,7 @@ A simplified but fully functional version of the Foresight system using cost-eff
 ## 1. Supabase Database Schema
 
 ### Users & Authentication
+
 ```sql
 -- Profiles table (extends auth.users)
 CREATE TABLE profiles (
@@ -51,6 +54,7 @@ CREATE TABLE pillar_preferences (
 ```
 
 ### Content & Classification
+
 ```sql
 -- Research articles/topics
 CREATE TABLE research_content (
@@ -62,14 +66,14 @@ CREATE TABLE research_content (
   source_type TEXT, -- 'academic', 'government', 'industry', 'news'
   published_date TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
-  
+
   -- Strategic pillar classification
   equity_score FLOAT DEFAULT 0,
   innovation_score FLOAT DEFAULT 0,
   prevention_score FLOAT DEFAULT 0,
   data_driven_score FLOAT DEFAULT 0,
   adaptive_score FLOAT DEFAULT 0,
-  
+
   -- Relevance and impact
   relevance_score FLOAT DEFAULT 0,
   impact_score FLOAT DEFAULT 0,
@@ -85,6 +89,7 @@ CREATE TABLE content_embeddings (
 ```
 
 ### User Collections & Workstreams
+
 ```sql
 -- User's followed topics (the "cards")
 CREATE TABLE user_cards (
@@ -112,6 +117,7 @@ CREATE TABLE user_workstreams (
 ```
 
 ### Real-time Updates
+
 ```sql
 -- Enable real-time for live dashboard updates
 ALTER PUBLICATION supabase_realtime ADD TABLE research_content;
@@ -121,8 +127,9 @@ ALTER PUBLICATION supabase_realtime ADD TABLE user_cards;
 ## 2. HuggingFace Space Implementation
 
 ### Frontend Structure
+
 ```
-foresight-prototype/
+grantscope-prototype/
 ├── app.py (Gradio interface)
 ├── components/
 │   ├── dashboard.py
@@ -136,6 +143,7 @@ foresight-prototype/
 ```
 
 ### Key Features for Prototype
+
 1. **Daily Dashboard**: Browse new research with pillar filters
 2. **Card Management**: Save topics for continued monitoring
 3. **Workstream Creator**: Define custom research streams
@@ -145,6 +153,7 @@ foresight-prototype/
 ## 3. Azure OpenAI Integration
 
 ### Content Analysis Pipeline
+
 ```python
 class AzureOpenAIClient:
     def __init__(self):
@@ -152,23 +161,23 @@ class AzureOpenAIClient:
             api_key=os.getenv("AZURE_OPENAI_KEY"),
             base_url=os.getenv("AZURE_OPENAI_ENDPOINT")
         )
-    
+
     async def analyze_content(self, text):
         # Strategic pillar classification
         classification = await self.classify_strategic_pillars(text)
-        
+
         # Relevance scoring
         relevance = await self.score_municipal_relevance(text)
-        
+
         # Generate summary
         summary = await self.generate_summary(text)
-        
+
         return {
             'classification': classification,
             'relevance': relevance,
             'summary': summary
         }
-    
+
     async def create_embedding(self, text):
         response = self.client.embeddings.create(
             model="text-embedding-3-large",
@@ -180,6 +189,7 @@ class AzureOpenAIClient:
 ## 4. Prototype Data Sources
 
 ### Simplified Content Sources
+
 ```python
 CONTENT_SOURCES = {
     'technology_news': [
@@ -198,6 +208,7 @@ CONTENT_SOURCES = {
 ```
 
 ### Daily Processing Workflow
+
 1. **6 PM Austin Time**: Trigger content collection
 2. **Clean & Deduplicate**: Remove duplicates and low-quality content
 3. **AI Analysis**: Azure OpenAI classification and summarization
@@ -207,9 +218,10 @@ CONTENT_SOURCES = {
 ## 5. Prototype User Interface
 
 ### Main Dashboard Layout
+
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  🎯 Foresight Dashboard - Austin Strategic Research     │
+│  🎯 GrantScope2 Dashboard - Austin Strategic Research     │
 │  [Sign in with Google] [Profile] [Settings]            │
 ├─────────────────────────────────────────────────────────┤
 │  Filter: [All Pillars ▼] [Last 24h] [Relevance ▼]     │
@@ -229,6 +241,7 @@ CONTENT_SOURCES = {
 ```
 
 ### Card Management Interface
+
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  🃏 My Research Cards (12 active)                       │
@@ -253,24 +266,28 @@ CONTENT_SOURCES = {
 ## 6. Prototype Implementation Plan
 
 ### Week 1-2: Foundation
+
 - [ ] Set up Supabase project with schema
 - [ ] Create HuggingFace Space structure
 - [ ] Implement Google OAuth authentication
 - [ ] Basic dashboard with sample data
 
 ### Week 3-4: Core Features
+
 - [ ] Azure OpenAI integration for content analysis
 - [ ] Strategic pillar classification system
 - [ ] Card collection and management
 - [ ] Real-time updates via Supabase
 
 ### Week 5-6: Intelligence Features
+
 - [ ] Vector search implementation
 - [ ] Workstream management
 - [ ] Content source integration
 - [ ] Mobile-responsive design
 
 ### Week 7-8: Polish & Testing
+
 - [ ] Performance optimization
 - [ ] User experience refinement
 - [ ] Stakeholder testing and feedback
@@ -279,6 +296,7 @@ CONTENT_SOURCES = {
 ## 7. Cost Estimate (Prototype)
 
 **Monthly Costs (Estimated)**:
+
 - **Supabase Pro**: $25/month (for 50K API requests)
 - **Azure OpenAI**: $50-100/month (depending on usage)
 - **HuggingFace Spaces**: Free (public) or $9/month (private)
@@ -291,12 +309,14 @@ CONTENT_SOURCES = {
 ## 8. Prototype Success Metrics
 
 ### Technical KPIs
+
 - **Response Time**: <2 seconds for dashboard loading
 - **Content Processing**: <5 minutes for daily analysis
 - **Search Accuracy**: 85%+ relevance in user testing
 - **Uptime**: 99%+ availability
 
 ### User Experience KPIs
+
 - **Daily Active Users**: 60%+ of invited users
 - **Content Engagement**: 3+ cards added per user per week
 - **Time Savings**: 2+ hours per user per week vs. manual research

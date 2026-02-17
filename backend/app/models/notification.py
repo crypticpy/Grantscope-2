@@ -1,4 +1,4 @@
-"""Notification models for Foresight API.
+"""Notification models for GrantScope API.
 
 Models for notification preferences, digest configuration,
 and digest preview responses.

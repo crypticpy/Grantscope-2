@@ -1,5 +1,5 @@
 """
-Signal Quality Score computation for Foresight cards.
+Signal Quality Score computation for GrantScope cards.
 
 Computes a 0-100 quality score based on data completeness and research depth.
 The score reflects how well-sourced, researched, and validated a card is.
@@ -147,11 +147,7 @@ def compute_signal_quality_score(supabase: Client, card_id: str) -> dict:
         diversity_data = diversity_result.data or []
 
         unique_types = len(
-            {
-                row["source_type"]
-                for row in diversity_data
-                if row.get("source_type")
-            }
+            {row["source_type"] for row in diversity_data if row.get("source_type")}
         )
         unique_domains = len(
             {row["domain"] for row in diversity_data if row.get("domain")}

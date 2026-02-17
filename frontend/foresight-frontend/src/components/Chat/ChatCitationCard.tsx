@@ -203,7 +203,7 @@ export function ChatCitationCard({
           className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-brand-blue dark:text-blue-300 hover:underline"
         >
           <FileText className="h-3 w-3 shrink-0" aria-hidden="true" />
-          <span>View signal</span>
+          <span>View opportunity</span>
         </a>
       )}
     </div>

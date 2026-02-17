@@ -51,6 +51,14 @@ export function useWorkstreamForm({
     is_active: workstream?.is_active ?? true,
     analyze_now: false,
     auto_scan: false,
+    // Grant program fields
+    department_id: workstream?.department_id || "",
+    program_type: workstream?.program_type || "",
+    budget_range_min: workstream?.budget ?? null,
+    budget_range_max: workstream?.budget ?? null,
+    fiscal_year: workstream?.fiscal_year || "",
+    category_ids: workstream?.category_ids || [],
+    grant_types: [],
   });
 
   // UI state
@@ -75,7 +83,8 @@ export function useWorkstreamForm({
     formData.goal_ids.length > 0 ||
     formData.stage_ids.length > 0 ||
     formData.horizon !== "ALL" ||
-    formData.keywords.length > 0;
+    formData.keywords.length > 0 ||
+    formData.category_ids.length > 0;
 
   // ============================================================================
   // Sub-hooks
@@ -262,6 +271,16 @@ export function useWorkstreamForm({
       stage_ids: template.config.stage_ids,
       horizon: template.config.horizon,
       keywords: template.config.keywords,
+      // Apply grant-specific template fields if present
+      ...(template.config.category_ids
+        ? { category_ids: template.config.category_ids }
+        : {}),
+      ...(template.config.program_type
+        ? { program_type: template.config.program_type }
+        : {}),
+      ...(template.config.department_id
+        ? { department_id: template.config.department_id }
+        : {}),
     }));
     setErrors({});
   }, []);
@@ -303,6 +322,12 @@ export function useWorkstreamForm({
         keywords: formData.keywords,
         is_active: formData.is_active,
         ...(formData.auto_scan ? { auto_scan: true } : {}),
+        // Grant program fields
+        department_id: formData.department_id || null,
+        program_type: formData.program_type || null,
+        budget: formData.budget_range_max || null,
+        fiscal_year: formData.fiscal_year || null,
+        category_ids: formData.category_ids,
       };
 
       if (isEditMode && workstream) {

@@ -1,12 +1,14 @@
 """
 Source fetchers for multi-source content ingestion.
 
-This module provides fetchers for 5 diverse content source categories:
+This module provides fetchers for 7 diverse content source categories:
 1. RSS/Atom feeds - Curated feeds from various sources
 2. News outlets - Major news sites (NYT, WSJ, Reuters)
 3. Academic publications - arXiv, research papers
 4. Government sources - .gov domains, policy documents
 5. Tech blogs - TechCrunch, Ars Technica, company blogs
+6. Grants.gov - Federal grant opportunities
+7. SAM.gov - Federal procurement and grant opportunities
 
 Each fetcher returns standardized FetchedArticle objects for downstream
 processing in the AI pipeline.
@@ -54,6 +56,22 @@ from .tech_blog_fetcher import (
     TechBlogFetcher,
     TechBlogArticle,
     TechBlogFetchResult,
+)
+
+from .grants_gov_fetcher import (
+    fetch_grants_gov_opportunities,
+    fetch_and_convert_opportunities as fetch_and_convert_grants_gov,
+    convert_to_raw_source as convert_grants_gov_to_raw_source,
+    GrantsGovOpportunity,
+    GrantsGovFetchResult,
+)
+
+from .sam_gov_fetcher import (
+    fetch_sam_gov_opportunities,
+    fetch_and_convert_opportunities as fetch_and_convert_sam_gov,
+    convert_to_raw_source as convert_sam_gov_to_raw_source,
+    SamGovOpportunity,
+    SamGovFetchResult,
 )
 
 from .searxng_fetcher import (
@@ -107,4 +125,16 @@ __all__ = [
     "TechBlogFetcher",
     "TechBlogArticle",
     "TechBlogFetchResult",
+    # Grants.gov Fetcher
+    "fetch_grants_gov_opportunities",
+    "fetch_and_convert_grants_gov",
+    "convert_grants_gov_to_raw_source",
+    "GrantsGovOpportunity",
+    "GrantsGovFetchResult",
+    # SAM.gov Fetcher
+    "fetch_sam_gov_opportunities",
+    "fetch_and_convert_sam_gov",
+    "convert_sam_gov_to_raw_source",
+    "SamGovOpportunity",
+    "SamGovFetchResult",
 ]

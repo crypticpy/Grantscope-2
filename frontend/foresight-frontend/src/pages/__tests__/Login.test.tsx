@@ -9,10 +9,10 @@
  * - Loading state
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import Login from '../Login';
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import Login from "../Login";
 
 // ============================================================================
 // Mock Setup
@@ -20,7 +20,7 @@ import Login from '../Login';
 
 const mockSignIn = vi.fn();
 
-vi.mock('../../hooks/useAuthContext', () => ({
+vi.mock("../../hooks/useAuthContext", () => ({
   useAuthContext: () => ({
     signIn: mockSignIn,
     signOut: vi.fn(),
@@ -33,191 +33,198 @@ vi.mock('../../hooks/useAuthContext', () => ({
 // Tests
 // ============================================================================
 
-describe('Login', () => {
+describe("Login", () => {
   beforeEach(() => {
     mockSignIn.mockReset();
   });
 
-  describe('Visible Labels', () => {
-    it('renders visible email label above input', () => {
+  describe("Visible Labels", () => {
+    it("renders visible email label above input", () => {
       render(<Login />);
 
-      const emailLabel = screen.getByText('Email address');
+      const emailLabel = screen.getByText("Email address");
       expect(emailLabel).toBeInTheDocument();
       // Label should NOT have sr-only class (should be visible)
-      expect(emailLabel).not.toHaveClass('sr-only');
+      expect(emailLabel).not.toHaveClass("sr-only");
     });
 
-    it('renders visible password label above input', () => {
+    it("renders visible password label above input", () => {
       render(<Login />);
 
-      const passwordLabel = screen.getByText('Password');
+      const passwordLabel = screen.getByText("Password");
       expect(passwordLabel).toBeInTheDocument();
       // Label should NOT have sr-only class (should be visible)
-      expect(passwordLabel).not.toHaveClass('sr-only');
+      expect(passwordLabel).not.toHaveClass("sr-only");
     });
 
-    it('email label has correct styling following WorkstreamForm pattern', () => {
+    it("email label has correct styling following WorkstreamForm pattern", () => {
       render(<Login />);
 
-      const emailLabel = screen.getByText('Email address');
-      expect(emailLabel).toHaveClass('block');
-      expect(emailLabel).toHaveClass('text-sm');
-      expect(emailLabel).toHaveClass('font-medium');
+      const emailLabel = screen.getByText("Email address");
+      expect(emailLabel).toHaveClass("block");
+      expect(emailLabel).toHaveClass("text-sm");
+      expect(emailLabel).toHaveClass("font-medium");
     });
 
-    it('password label has correct styling following WorkstreamForm pattern', () => {
+    it("password label has correct styling following WorkstreamForm pattern", () => {
       render(<Login />);
 
-      const passwordLabel = screen.getByText('Password');
-      expect(passwordLabel).toHaveClass('block');
-      expect(passwordLabel).toHaveClass('text-sm');
-      expect(passwordLabel).toHaveClass('font-medium');
+      const passwordLabel = screen.getByText("Password");
+      expect(passwordLabel).toHaveClass("block");
+      expect(passwordLabel).toHaveClass("text-sm");
+      expect(passwordLabel).toHaveClass("font-medium");
     });
   });
 
-  describe('Label-Input Associations', () => {
-    it('email label is properly associated with email input via htmlFor/id', () => {
+  describe("Label-Input Associations", () => {
+    it("email label is properly associated with email input via htmlFor/id", () => {
       render(<Login />);
 
-      const emailLabel = screen.getByText('Email address');
-      const emailInput = screen.getByLabelText('Email address');
+      const emailLabel = screen.getByText("Email address");
+      const emailInput = screen.getByLabelText("Email address");
 
-      expect(emailLabel).toHaveAttribute('for', 'email-address');
-      expect(emailInput).toHaveAttribute('id', 'email-address');
+      expect(emailLabel).toHaveAttribute("for", "email-address");
+      expect(emailInput).toHaveAttribute("id", "email-address");
     });
 
-    it('password label is properly associated with password input via htmlFor/id', () => {
+    it("password label is properly associated with password input via htmlFor/id", () => {
       render(<Login />);
 
-      const passwordLabel = screen.getByText('Password');
-      const passwordInput = screen.getByLabelText('Password');
+      const passwordLabel = screen.getByText("Password");
+      const passwordInput = screen.getByLabelText("Password");
 
-      expect(passwordLabel).toHaveAttribute('for', 'password');
-      expect(passwordInput).toHaveAttribute('id', 'password');
+      expect(passwordLabel).toHaveAttribute("for", "password");
+      expect(passwordInput).toHaveAttribute("id", "password");
     });
 
-    it('clicking email label focuses email input', async () => {
+    it("clicking email label focuses email input", async () => {
       const user = userEvent.setup();
       render(<Login />);
 
-      const emailLabel = screen.getByText('Email address');
+      const emailLabel = screen.getByText("Email address");
       await user.click(emailLabel);
 
-      const emailInput = screen.getByLabelText('Email address');
+      const emailInput = screen.getByLabelText("Email address");
       expect(emailInput).toHaveFocus();
     });
 
-    it('clicking password label focuses password input', async () => {
+    it("clicking password label focuses password input", async () => {
       const user = userEvent.setup();
       render(<Login />);
 
-      const passwordLabel = screen.getByText('Password');
+      const passwordLabel = screen.getByText("Password");
       await user.click(passwordLabel);
 
-      const passwordInput = screen.getByLabelText('Password');
+      const passwordInput = screen.getByLabelText("Password");
       expect(passwordInput).toHaveFocus();
     });
   });
 
-  describe('Form Rendering', () => {
-    it('renders page title', () => {
+  describe("Form Rendering", () => {
+    it("renders page title", () => {
       render(<Login />);
 
-      expect(screen.getByText('Austin Foresight')).toBeInTheDocument();
+      expect(screen.getByText("GrantScope2")).toBeInTheDocument();
     });
 
-    it('renders subtitle', () => {
+    it("renders subtitle", () => {
       render(<Login />);
 
-      expect(screen.getByText('Strategic Research & Intelligence System')).toBeInTheDocument();
+      expect(
+        screen.getByText("Strategic Research & Intelligence System"),
+      ).toBeInTheDocument();
     });
 
-    it('renders email input with correct type', () => {
+    it("renders email input with correct type", () => {
       render(<Login />);
 
-      const emailInput = screen.getByLabelText('Email address');
-      expect(emailInput).toHaveAttribute('type', 'email');
+      const emailInput = screen.getByLabelText("Email address");
+      expect(emailInput).toHaveAttribute("type", "email");
     });
 
-    it('renders password input with correct type', () => {
+    it("renders password input with correct type", () => {
       render(<Login />);
 
-      const passwordInput = screen.getByLabelText('Password');
-      expect(passwordInput).toHaveAttribute('type', 'password');
+      const passwordInput = screen.getByLabelText("Password");
+      expect(passwordInput).toHaveAttribute("type", "password");
     });
 
-    it('renders sign in button', () => {
+    it("renders sign in button", () => {
       render(<Login />);
 
-      expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Sign in" }),
+      ).toBeInTheDocument();
     });
 
-    it('renders inputs with required attribute', () => {
+    it("renders inputs with required attribute", () => {
       render(<Login />);
 
-      const emailInput = screen.getByLabelText('Email address');
-      const passwordInput = screen.getByLabelText('Password');
+      const emailInput = screen.getByLabelText("Email address");
+      const passwordInput = screen.getByLabelText("Password");
 
       expect(emailInput).toBeRequired();
       expect(passwordInput).toBeRequired();
     });
 
-    it('inputs have rounded-md corners (not stacked style)', () => {
+    it("inputs have rounded-md corners (not stacked style)", () => {
       render(<Login />);
 
-      const emailInput = screen.getByLabelText('Email address');
-      const passwordInput = screen.getByLabelText('Password');
+      const emailInput = screen.getByLabelText("Email address");
+      const passwordInput = screen.getByLabelText("Password");
 
-      expect(emailInput).toHaveClass('rounded-md');
-      expect(passwordInput).toHaveClass('rounded-md');
+      expect(emailInput).toHaveClass("rounded-md");
+      expect(passwordInput).toHaveClass("rounded-md");
     });
   });
 
-  describe('Form Submission', () => {
-    it('calls signIn with email and password on form submit', async () => {
+  describe("Form Submission", () => {
+    it("calls signIn with email and password on form submit", async () => {
       const user = userEvent.setup();
       mockSignIn.mockResolvedValueOnce(undefined);
       render(<Login />);
 
-      const emailInput = screen.getByLabelText('Email address');
-      const passwordInput = screen.getByLabelText('Password');
-      const submitButton = screen.getByRole('button', { name: 'Sign in' });
+      const emailInput = screen.getByLabelText("Email address");
+      const passwordInput = screen.getByLabelText("Password");
+      const submitButton = screen.getByRole("button", { name: "Sign in" });
 
-      await user.type(emailInput, 'test@example.com');
-      await user.type(passwordInput, 'password123');
+      await user.type(emailInput, "test@example.com");
+      await user.type(passwordInput, "password123");
       await user.click(submitButton);
 
       await waitFor(() => {
-        expect(mockSignIn).toHaveBeenCalledWith('test@example.com', 'password123');
+        expect(mockSignIn).toHaveBeenCalledWith(
+          "test@example.com",
+          "password123",
+        );
       });
     });
 
-    it('prevents default form submission', async () => {
+    it("prevents default form submission", async () => {
       const user = userEvent.setup();
       mockSignIn.mockResolvedValueOnce(undefined);
       render(<Login />);
 
-      const emailInput = screen.getByLabelText('Email address');
-      const passwordInput = screen.getByLabelText('Password');
+      const emailInput = screen.getByLabelText("Email address");
+      const passwordInput = screen.getByLabelText("Password");
 
-      await user.type(emailInput, 'test@example.com');
-      await user.type(passwordInput, 'password123');
+      await user.type(emailInput, "test@example.com");
+      await user.type(passwordInput, "password123");
 
-      const form = emailInput.closest('form');
+      const form = emailInput.closest("form");
       expect(form).toBeInTheDocument();
 
       // Submit via button click
-      const submitButton = screen.getByRole('button', { name: 'Sign in' });
+      const submitButton = screen.getByRole("button", { name: "Sign in" });
       await user.click(submitButton);
 
       // If form submission wasn't prevented, page would reload and component would unmount
-      expect(screen.getByLabelText('Email address')).toBeInTheDocument();
+      expect(screen.getByLabelText("Email address")).toBeInTheDocument();
     });
   });
 
-  describe('Loading State', () => {
-    it('disables submit button while loading', async () => {
+  describe("Loading State", () => {
+    it("disables submit button while loading", async () => {
       const user = userEvent.setup();
       // Create a promise that we can control
       let resolveSignIn: () => void;
@@ -228,17 +235,17 @@ describe('Login', () => {
 
       render(<Login />);
 
-      const emailInput = screen.getByLabelText('Email address');
-      const passwordInput = screen.getByLabelText('Password');
-      const submitButton = screen.getByRole('button', { name: 'Sign in' });
+      const emailInput = screen.getByLabelText("Email address");
+      const passwordInput = screen.getByLabelText("Password");
+      const submitButton = screen.getByRole("button", { name: "Sign in" });
 
-      await user.type(emailInput, 'test@example.com');
-      await user.type(passwordInput, 'password123');
+      await user.type(emailInput, "test@example.com");
+      await user.type(passwordInput, "password123");
       await user.click(submitButton);
 
       // Button should be disabled while loading
       await waitFor(() => {
-        expect(screen.getByRole('button')).toBeDisabled();
+        expect(screen.getByRole("button")).toBeDisabled();
       });
 
       // Resolve the promise
@@ -246,11 +253,11 @@ describe('Login', () => {
 
       // Button should be enabled again after loading
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'Sign in' })).toBeEnabled();
+        expect(screen.getByRole("button", { name: "Sign in" })).toBeEnabled();
       });
     });
 
-    it('shows loading spinner while signing in', async () => {
+    it("shows loading spinner while signing in", async () => {
       const user = userEvent.setup();
       let resolveSignIn: () => void;
       const signInPromise = new Promise<void>((resolve) => {
@@ -260,17 +267,17 @@ describe('Login', () => {
 
       render(<Login />);
 
-      const emailInput = screen.getByLabelText('Email address');
-      const passwordInput = screen.getByLabelText('Password');
-      const submitButton = screen.getByRole('button', { name: 'Sign in' });
+      const emailInput = screen.getByLabelText("Email address");
+      const passwordInput = screen.getByLabelText("Password");
+      const submitButton = screen.getByRole("button", { name: "Sign in" });
 
-      await user.type(emailInput, 'test@example.com');
-      await user.type(passwordInput, 'password123');
+      await user.type(emailInput, "test@example.com");
+      await user.type(passwordInput, "password123");
       await user.click(submitButton);
 
       // Should show "Signing in..." text
       await waitFor(() => {
-        expect(screen.getByText('Signing in...')).toBeInTheDocument();
+        expect(screen.getByText("Signing in...")).toBeInTheDocument();
       });
 
       // Resolve the promise
@@ -278,119 +285,123 @@ describe('Login', () => {
 
       // Should show "Sign in" text again
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
+        expect(
+          screen.getByRole("button", { name: "Sign in" }),
+        ).toBeInTheDocument();
       });
     });
   });
 
-  describe('Error Display', () => {
-    it('displays error message when signIn fails', async () => {
+  describe("Error Display", () => {
+    it("displays error message when signIn fails", async () => {
       const user = userEvent.setup();
-      mockSignIn.mockRejectedValueOnce(new Error('Invalid credentials'));
+      mockSignIn.mockRejectedValueOnce(new Error("Invalid credentials"));
 
       render(<Login />);
 
-      const emailInput = screen.getByLabelText('Email address');
-      const passwordInput = screen.getByLabelText('Password');
-      const submitButton = screen.getByRole('button', { name: 'Sign in' });
+      const emailInput = screen.getByLabelText("Email address");
+      const passwordInput = screen.getByLabelText("Password");
+      const submitButton = screen.getByRole("button", { name: "Sign in" });
 
-      await user.type(emailInput, 'test@example.com');
-      await user.type(passwordInput, 'wrongpassword');
+      await user.type(emailInput, "test@example.com");
+      await user.type(passwordInput, "wrongpassword");
       await user.click(submitButton);
 
       await waitFor(() => {
-        expect(screen.getByText('Invalid credentials')).toBeInTheDocument();
+        expect(screen.getByText("Invalid credentials")).toBeInTheDocument();
       });
     });
 
-    it('displays generic error when no message provided', async () => {
+    it("displays generic error when no message provided", async () => {
       const user = userEvent.setup();
       mockSignIn.mockRejectedValueOnce(new Error());
 
       render(<Login />);
 
-      const emailInput = screen.getByLabelText('Email address');
-      const passwordInput = screen.getByLabelText('Password');
-      const submitButton = screen.getByRole('button', { name: 'Sign in' });
+      const emailInput = screen.getByLabelText("Email address");
+      const passwordInput = screen.getByLabelText("Password");
+      const submitButton = screen.getByRole("button", { name: "Sign in" });
 
-      await user.type(emailInput, 'test@example.com');
-      await user.type(passwordInput, 'wrongpassword');
+      await user.type(emailInput, "test@example.com");
+      await user.type(passwordInput, "wrongpassword");
       await user.click(submitButton);
 
       await waitFor(() => {
-        expect(screen.getByText('Failed to sign in')).toBeInTheDocument();
+        expect(screen.getByText("Failed to sign in")).toBeInTheDocument();
       });
     });
 
     it('error alert has role="alert" for accessibility', async () => {
       const user = userEvent.setup();
-      mockSignIn.mockRejectedValueOnce(new Error('Error'));
+      mockSignIn.mockRejectedValueOnce(new Error("Error"));
 
       render(<Login />);
 
-      const emailInput = screen.getByLabelText('Email address');
-      const passwordInput = screen.getByLabelText('Password');
-      const submitButton = screen.getByRole('button', { name: 'Sign in' });
+      const emailInput = screen.getByLabelText("Email address");
+      const passwordInput = screen.getByLabelText("Password");
+      const submitButton = screen.getByRole("button", { name: "Sign in" });
 
-      await user.type(emailInput, 'test@example.com');
-      await user.type(passwordInput, 'wrongpassword');
+      await user.type(emailInput, "test@example.com");
+      await user.type(passwordInput, "wrongpassword");
       await user.click(submitButton);
 
       await waitFor(() => {
-        expect(screen.getByRole('alert')).toBeInTheDocument();
+        expect(screen.getByRole("alert")).toBeInTheDocument();
       });
     });
 
-    it('clears error on new submission attempt', async () => {
+    it("clears error on new submission attempt", async () => {
       const user = userEvent.setup();
       // First call fails, second succeeds
       mockSignIn
-        .mockRejectedValueOnce(new Error('Invalid credentials'))
+        .mockRejectedValueOnce(new Error("Invalid credentials"))
         .mockResolvedValueOnce(undefined);
 
       render(<Login />);
 
-      const emailInput = screen.getByLabelText('Email address');
-      const passwordInput = screen.getByLabelText('Password');
-      const submitButton = screen.getByRole('button', { name: 'Sign in' });
+      const emailInput = screen.getByLabelText("Email address");
+      const passwordInput = screen.getByLabelText("Password");
+      const submitButton = screen.getByRole("button", { name: "Sign in" });
 
       // First submission - should show error
-      await user.type(emailInput, 'test@example.com');
-      await user.type(passwordInput, 'wrongpassword');
+      await user.type(emailInput, "test@example.com");
+      await user.type(passwordInput, "wrongpassword");
       await user.click(submitButton);
 
       await waitFor(() => {
-        expect(screen.getByText('Invalid credentials')).toBeInTheDocument();
+        expect(screen.getByText("Invalid credentials")).toBeInTheDocument();
       });
 
       // Second submission - error should be cleared
       await user.click(submitButton);
 
       await waitFor(() => {
-        expect(screen.queryByText('Invalid credentials')).not.toBeInTheDocument();
+        expect(
+          screen.queryByText("Invalid credentials"),
+        ).not.toBeInTheDocument();
       });
     });
   });
 
-  describe('Input Value Changes', () => {
-    it('updates email value on input', async () => {
+  describe("Input Value Changes", () => {
+    it("updates email value on input", async () => {
       const user = userEvent.setup();
       render(<Login />);
 
-      const emailInput = screen.getByLabelText('Email address');
-      await user.type(emailInput, 'test@example.com');
+      const emailInput = screen.getByLabelText("Email address");
+      await user.type(emailInput, "test@example.com");
 
-      expect(emailInput).toHaveValue('test@example.com');
+      expect(emailInput).toHaveValue("test@example.com");
     });
 
-    it('updates password value on input', async () => {
+    it("updates password value on input", async () => {
       const user = userEvent.setup();
       render(<Login />);
 
-      const passwordInput = screen.getByLabelText('Password');
-      await user.type(passwordInput, 'mypassword');
+      const passwordInput = screen.getByLabelText("Password");
+      await user.type(passwordInput, "mypassword");
 
-      expect(passwordInput).toHaveValue('mypassword');
+      expect(passwordInput).toHaveValue("mypassword");
     });
   });
 });

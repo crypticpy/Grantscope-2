@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Script to apply sample cards to the Foresight database
+Script to apply sample cards to the GrantScope2 database
 Uses Supabase Python client with service key
 """
 
@@ -11,10 +11,11 @@ import random
 
 # Load environment variables
 from dotenv import load_dotenv
-load_dotenv('backend/.env')
 
-supabase_url = os.getenv('SUPABASE_URL')
-supabase_key = os.getenv('SUPABASE_SERVICE_KEY')
+load_dotenv("backend/.env")
+
+supabase_url = os.getenv("SUPABASE_URL")
+supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
 
 if not supabase_url or not supabase_key:
     print("❌ Missing Supabase configuration")
@@ -41,7 +42,10 @@ cards_data = [
         "velocity_score": 80,
         "risk_score": 25,
         "opportunity_score": 90,
-        "top25_relevance": ["Imagine Austin Update", "Citywide Technology Strategic Plan"]
+        "top25_relevance": [
+            "Imagine Austin Update",
+            "Citywide Technology Strategic Plan",
+        ],
     },
     {
         "name": "Urban Air Mobility and Drone Corridor Planning",
@@ -60,7 +64,7 @@ cards_data = [
         "velocity_score": 85,
         "risk_score": 45,
         "opportunity_score": 88,
-        "top25_relevance": ["Airline Use & Lease Agreement (Airport)"]
+        "top25_relevance": ["Airline Use & Lease Agreement (Airport)"],
     },
     {
         "name": "Subsurface Solar Microgrids",
@@ -79,7 +83,7 @@ cards_data = [
         "velocity_score": 70,
         "risk_score": 30,
         "opportunity_score": 85,
-        "top25_relevance": ["AE Resiliency Plan", "Climate Revolving Fund"]
+        "top25_relevance": ["AE Resiliency Plan", "Climate Revolving Fund"],
     },
     {
         "name": "Perovskite Solar Cells for Buildings",
@@ -98,7 +102,7 @@ cards_data = [
         "velocity_score": 75,
         "risk_score": 35,
         "opportunity_score": 90,
-        "top25_relevance": ["Climate Revolving Fund"]
+        "top25_relevance": ["Climate Revolving Fund"],
     },
     {
         "name": "Floating Solar Systems for Reservoirs",
@@ -117,7 +121,7 @@ cards_data = [
         "velocity_score": 65,
         "risk_score": 20,
         "opportunity_score": 80,
-        "top25_relevance": ["Climate Revolving Fund"]
+        "top25_relevance": ["Climate Revolving Fund"],
     },
     {
         "name": "Infrastructure Inspection Robots",
@@ -136,7 +140,7 @@ cards_data = [
         "velocity_score": 75,
         "risk_score": 25,
         "opportunity_score": 88,
-        "top25_relevance": ["Facility Condition Assessment Contract"]
+        "top25_relevance": ["Facility Condition Assessment Contract"],
     },
     {
         "name": "Autonomous Delivery Robots",
@@ -155,7 +159,7 @@ cards_data = [
         "velocity_score": 80,
         "risk_score": 30,
         "opportunity_score": 75,
-        "top25_relevance": []
+        "top25_relevance": [],
     },
     {
         "name": "Datacenter Energy Grid Pressure",
@@ -174,7 +178,7 @@ cards_data = [
         "velocity_score": 90,
         "risk_score": 75,
         "opportunity_score": 65,
-        "top25_relevance": ["AE Resiliency Plan", "Economic Development Roadmap"]
+        "top25_relevance": ["AE Resiliency Plan", "Economic Development Roadmap"],
     },
     {
         "name": "AI-Powered Water Pressure Management",
@@ -193,7 +197,7 @@ cards_data = [
         "velocity_score": 75,
         "risk_score": 20,
         "opportunity_score": 88,
-        "top25_relevance": ["AE Resiliency Plan"]
+        "top25_relevance": ["AE Resiliency Plan"],
     },
     {
         "name": "Demand Response Management Systems",
@@ -212,7 +216,7 @@ cards_data = [
         "velocity_score": 70,
         "risk_score": 20,
         "opportunity_score": 82,
-        "top25_relevance": ["AE Resiliency Plan"]
+        "top25_relevance": ["AE Resiliency Plan"],
     },
     {
         "name": "IoT Smart Waste Management",
@@ -231,7 +235,7 @@ cards_data = [
         "velocity_score": 65,
         "risk_score": 15,
         "opportunity_score": 78,
-        "top25_relevance": []
+        "top25_relevance": [],
     },
     {
         "name": "Vehicle-to-Grid Bidirectional Charging",
@@ -250,7 +254,7 @@ cards_data = [
         "velocity_score": 78,
         "risk_score": 35,
         "opportunity_score": 90,
-        "top25_relevance": ["Climate Revolving Fund", "AE Resiliency Plan"]
+        "top25_relevance": ["Climate Revolving Fund", "AE Resiliency Plan"],
     },
     {
         "name": "AI Adaptive Traffic Signals",
@@ -269,7 +273,7 @@ cards_data = [
         "velocity_score": 75,
         "risk_score": 20,
         "opportunity_score": 85,
-        "top25_relevance": ["Light Rail Interlocal Agreement"]
+        "top25_relevance": ["Light Rail Interlocal Agreement"],
     },
     {
         "name": "Predictive Policing AI Ethics",
@@ -288,7 +292,10 @@ cards_data = [
         "velocity_score": 70,
         "risk_score": 65,
         "opportunity_score": 70,
-        "top25_relevance": ["Comprehensive Crime Reduction Plan", "Human Rights Framework"]
+        "top25_relevance": [
+            "Comprehensive Crime Reduction Plan",
+            "Human Rights Framework",
+        ],
     },
     {
         "name": "Cool Pavement Technologies",
@@ -307,7 +314,7 @@ cards_data = [
         "velocity_score": 65,
         "risk_score": 25,
         "opportunity_score": 82,
-        "top25_relevance": ["Climate Revolving Fund"]
+        "top25_relevance": ["Climate Revolving Fund"],
     },
     {
         "name": "Blockchain Government Transparency",
@@ -326,7 +333,7 @@ cards_data = [
         "velocity_score": 60,
         "risk_score": 40,
         "opportunity_score": 75,
-        "top25_relevance": ["Citywide Technology Strategic Plan"]
+        "top25_relevance": ["Citywide Technology Strategic Plan"],
     },
     {
         "name": "Private 5G for Public Safety",
@@ -345,7 +352,7 @@ cards_data = [
         "velocity_score": 75,
         "risk_score": 25,
         "opportunity_score": 88,
-        "top25_relevance": ["Austin FIRST EMS Mental Health Pilot"]
+        "top25_relevance": ["Austin FIRST EMS Mental Health Pilot"],
     },
     {
         "name": "Digital Participatory Budgeting",
@@ -364,7 +371,7 @@ cards_data = [
         "velocity_score": 60,
         "risk_score": 20,
         "opportunity_score": 82,
-        "top25_relevance": ["2026 Bond Program Development"]
+        "top25_relevance": ["2026 Bond Program Development"],
     },
     {
         "name": "Climate Resilience Bonds",
@@ -383,7 +390,7 @@ cards_data = [
         "velocity_score": 70,
         "risk_score": 25,
         "opportunity_score": 90,
-        "top25_relevance": ["Climate Revolving Fund", "2026 Bond Program Development"]
+        "top25_relevance": ["Climate Revolving Fund", "2026 Bond Program Development"],
     },
     {
         "name": "Municipal Broadband Digital Equity",
@@ -402,82 +409,83 @@ cards_data = [
         "velocity_score": 65,
         "risk_score": 30,
         "opportunity_score": 88,
-        "top25_relevance": ["Citywide Technology Strategic Plan"]
-    }
+        "top25_relevance": ["Citywide Technology Strategic Plan"],
+    },
 ]
 
+
 def main():
-    print("🚀 Applying sample cards to Foresight database...")
+    print("🚀 Applying sample cards to GrantScope2 database...")
 
     # Get a user ID for created_by (use the test user we created earlier)
-    user_result = supabase.table('users').select('id').limit(1).execute()
+    user_result = supabase.table("users").select("id").limit(1).execute()
     if not user_result.data:
         print("⚠️ No users found, creating cards without created_by")
         created_by = None
     else:
-        created_by = user_result.data[0]['id']
+        created_by = user_result.data[0]["id"]
         print(f"✅ Using user ID: {created_by}")
 
     # Check existing cards
-    existing = supabase.table('cards').select('slug').execute()
-    existing_slugs = {c['slug'] for c in existing.data} if existing.data else set()
+    existing = supabase.table("cards").select("slug").execute()
+    existing_slugs = {c["slug"] for c in existing.data} if existing.data else set()
     print(f"📊 Found {len(existing_slugs)} existing cards")
 
     cards_inserted = 0
     cards_skipped = 0
 
     for card in cards_data:
-        if card['slug'] in existing_slugs:
+        if card["slug"] in existing_slugs:
             print(f"⏭️ Skipping existing card: {card['name']}")
             cards_skipped += 1
             continue
 
         # Prepare card data
         card_insert = {
-            'name': card['name'],
-            'slug': card['slug'],
-            'summary': card['summary'],
-            'description': card['description'],
-            'pillar_id': card['pillar_id'],
-            'goal_id': card['goal_id'],
-            'anchor_id': card['anchor_id'],
-            'stage_id': card['stage_id'],
-            'horizon': card['horizon'],
-            'novelty_score': card['novelty_score'],
-            'maturity_score': card['maturity_score'],
-            'impact_score': card['impact_score'],
-            'relevance_score': card['relevance_score'],
-            'velocity_score': card['velocity_score'],
-            'risk_score': card['risk_score'],
-            'opportunity_score': card['opportunity_score'],
-            'status': 'active'
+            "name": card["name"],
+            "slug": card["slug"],
+            "summary": card["summary"],
+            "description": card["description"],
+            "pillar_id": card["pillar_id"],
+            "goal_id": card["goal_id"],
+            "anchor_id": card["anchor_id"],
+            "stage_id": card["stage_id"],
+            "horizon": card["horizon"],
+            "novelty_score": card["novelty_score"],
+            "maturity_score": card["maturity_score"],
+            "impact_score": card["impact_score"],
+            "relevance_score": card["relevance_score"],
+            "velocity_score": card["velocity_score"],
+            "risk_score": card["risk_score"],
+            "opportunity_score": card["opportunity_score"],
+            "status": "active",
         }
 
         if created_by:
-            card_insert['created_by'] = created_by
+            card_insert["created_by"] = created_by
 
         # Note: top25_relevance column doesn't exist in database yet
         # if card.get('top25_relevance'):
         #     card_insert['top25_relevance'] = card['top25_relevance']
 
         try:
-            result = supabase.table('cards').insert(card_insert).execute()
+            result = supabase.table("cards").insert(card_insert).execute()
             if result.data:
                 print(f"✅ Inserted: {card['name']}")
                 cards_inserted += 1
 
                 # Add a timeline event for the card
-                card_id = result.data[0]['id']
+                card_id = result.data[0]["id"]
                 timeline_event = {
-                    'card_id': card_id,
-                    'event_type': 'created',
-                    'title': 'Card created from emerging technology research',
-                    'description': f"Initial card generated from 2025 emerging technology analysis"
+                    "card_id": card_id,
+                    "event_type": "created",
+                    "title": "Card created from emerging technology research",
+                    "description": f"Initial card generated from 2025 emerging technology analysis",
                 }
                 if created_by:
-                    timeline_event['created_by'] = created_by
+                    timeline_event["created_by"] = created_by
 
-                supabase.table('card_timeline').insert(timeline_event).execute()
+                supabase.table("card_timeline").insert(timeline_event).execute()
             else:
                 print(f"❌ Failed to insert: {card['name']}")
         except Exception as e:
@@ -490,5 +498,6 @@ def main():
 
     print("\n✅ Done!")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

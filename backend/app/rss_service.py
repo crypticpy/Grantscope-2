@@ -1,5 +1,5 @@
 """
-RSS Feed Monitoring Service for Foresight.
+RSS Feed Monitoring Service for GrantScope.
 
 Manages RSS feed subscriptions, polls feeds on schedule, triages new articles
 for relevance to municipal intelligence, and matches them to existing signal

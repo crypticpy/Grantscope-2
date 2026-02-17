@@ -1,15 +1,44 @@
 /**
- * StepKeywords - Keywords & AI Suggestions (Step 4)
+ * StepKeywords - Search Configuration (Step 4)
  *
- * Keyword tag input with AI suggestion button and chips.
- * Auto-triggers suggestions when arriving at this step.
+ * Grant search terms, agencies to monitor, and deadline preferences.
+ * Keeps keyword tag input mechanism from original, adds grant context.
  */
 
 import { useEffect, useRef, KeyboardEvent } from "react";
-import { Plus, Loader2, Wand2 } from "lucide-react";
+import { Plus, Loader2, Wand2, X } from "lucide-react";
 import { cn } from "../../../lib/utils";
 import { KeywordTag } from "../KeywordTag";
+import { deadlineUrgencyTiers } from "../../../data/taxonomy";
 import type { FormData } from "../../../types/workstream";
+
+// Suggested federal agencies to monitor
+const FEDERAL_AGENCIES = [
+  {
+    id: "grants-gov",
+    name: "Grants.gov",
+    description: "Federal grant clearinghouse",
+  },
+  {
+    id: "sam-gov",
+    name: "SAM.gov",
+    description: "System for Award Management",
+  },
+  {
+    id: "hud",
+    name: "HUD",
+    description: "Dept. of Housing & Urban Development",
+  },
+  { id: "dot", name: "DOT", description: "Dept. of Transportation" },
+  { id: "epa", name: "EPA", description: "Environmental Protection Agency" },
+  { id: "doj", name: "DOJ", description: "Dept. of Justice" },
+  { id: "doe", name: "DOE", description: "Dept. of Energy" },
+  { id: "fema", name: "FEMA", description: "Federal Emergency Mgmt. Agency" },
+  { id: "hhs", name: "HHS", description: "Dept. of Health & Human Services" },
+  { id: "usda", name: "USDA", description: "Dept. of Agriculture" },
+  { id: "ed", name: "ED", description: "Dept. of Education" },
+  { id: "nsf", name: "NSF", description: "National Science Foundation" },
+];
 
 interface StepKeywordsProps {
   formData: FormData;
@@ -22,6 +51,7 @@ interface StepKeywordsProps {
   onKeywordRemove: (keyword: string) => void;
   onSuggestKeywords: () => void;
   onAddSuggestedKeyword: (keyword: string) => void;
+  onDeadlinePreferenceChange: (preference: string) => void;
 }
 
 export function StepKeywords({
@@ -35,6 +65,7 @@ export function StepKeywords({
   onKeywordRemove,
   onSuggestKeywords,
   onAddSuggestedKeyword,
+  onDeadlinePreferenceChange,
 }: StepKeywordsProps) {
   const hasAutoTriggered = useRef(false);
 
@@ -57,22 +88,32 @@ export function StepKeywords({
       formData.name.trim() ||
       formData.description.trim());
 
+  // Derive deadline_preference from horizon field (reuse existing form field)
+  const deadlinePreference = formData.horizon;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Inline help */}
       <div className="bg-brand-light-blue/30 dark:bg-brand-blue/10 rounded-lg p-4 border border-brand-blue/20">
         <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-          Keywords drive the AI's search queries. Be specific -- "autonomous bus
-          pilots" works better than just "buses". Click "Suggest Related Terms"
-          to get AI-powered recommendations.
+          Configure your grant search terms to find the most relevant
+          opportunities. Add specific keywords, select agencies to monitor, and
+          set your deadline preferences.
         </p>
       </div>
 
-      {/* Keyword Input */}
+      {/* Section 1: Grant Search Terms */}
       <div className="space-y-3">
-        <label className="block text-sm font-medium text-gray-900 dark:text-white">
-          Keywords
-        </label>
+        <div>
+          <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
+            Grant Search Terms
+          </h4>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            Be specific -- "COPS hiring grant 2026" works better than just
+            "police". Use "Suggest Related Terms" to get AI-powered
+            recommendations based on your program setup.
+          </p>
+        </div>
 
         <div className="flex gap-2">
           <input
@@ -80,7 +121,7 @@ export function StepKeywords({
             value={keywordInput}
             onChange={(e) => setKeywordInput(e.target.value)}
             onKeyDown={onKeywordInputKeyDown}
-            placeholder="Type a keyword and press Enter..."
+            placeholder="Type a search term and press Enter..."
             className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-brand-blue bg-white dark:bg-dark-surface-elevated dark:text-white dark:placeholder-gray-400"
             autoFocus
           />
@@ -155,6 +196,129 @@ export function StepKeywords({
             </div>
           </div>
         )}
+      </div>
+
+      {/* Section 2: Agencies to Monitor */}
+      <div className="space-y-3">
+        <div>
+          <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
+            Agencies to Monitor
+          </h4>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            Select federal agencies whose grant programs are most relevant to
+            your department. These will be prioritized in searches.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {FEDERAL_AGENCIES.map((agency) => {
+            // Use keywords to track selected agencies
+            const agencyKeyword = agency.name;
+            const isSelected = formData.keywords.includes(agencyKeyword);
+            return (
+              <button
+                key={agency.id}
+                type="button"
+                onClick={() => {
+                  if (isSelected) {
+                    onKeywordRemove(agencyKeyword);
+                  } else {
+                    onAddSuggestedKeyword(agencyKeyword);
+                  }
+                }}
+                className={cn(
+                  "flex items-center gap-2 p-2 rounded-md border text-left text-xs transition-all duration-200",
+                  isSelected
+                    ? "border-brand-blue bg-brand-light-blue/30 dark:bg-brand-blue/10"
+                    : "border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-dark-surface-hover",
+                )}
+                aria-pressed={isSelected}
+              >
+                {isSelected && (
+                  <X className="h-3 w-3 text-brand-blue flex-shrink-0" />
+                )}
+                <div className="min-w-0">
+                  <div
+                    className={cn(
+                      "font-medium",
+                      isSelected
+                        ? "text-brand-dark-blue dark:text-brand-light-blue"
+                        : "text-gray-900 dark:text-white",
+                    )}
+                  >
+                    {agency.name}
+                  </div>
+                  <div className="text-gray-500 dark:text-gray-400 truncate">
+                    {agency.description}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Section 3: Deadline Preferences */}
+      <div className="space-y-3">
+        <div>
+          <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
+            Deadline Preference
+          </h4>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            How urgent should the grant opportunities be? This helps prioritize
+            which opportunities to surface first.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {[
+            {
+              code: "ALL",
+              name: "All Deadlines",
+              description: "Show all opportunities regardless of deadline",
+              color: "#3b82f6",
+            },
+            ...deadlineUrgencyTiers.map((tier) => ({
+              code: tier.code,
+              name: tier.name,
+              description: tier.description,
+              color: tier.color,
+            })),
+          ].map((pref) => (
+            <button
+              key={pref.code}
+              type="button"
+              onClick={() => onDeadlinePreferenceChange(pref.code)}
+              className={cn(
+                "flex flex-col items-start p-3 rounded-lg border transition-all duration-200 text-left",
+                deadlinePreference === pref.code
+                  ? "bg-brand-light-blue dark:bg-brand-blue/20 border-brand-blue ring-2 ring-brand-blue/30"
+                  : "bg-white dark:bg-dark-surface-elevated border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-dark-surface-hover",
+              )}
+              aria-pressed={deadlinePreference === pref.code}
+            >
+              <div className="flex items-center gap-2">
+                <div
+                  className="w-2.5 h-2.5 rounded-full"
+                  style={{ backgroundColor: pref.color }}
+                />
+                <span
+                  className={cn(
+                    "text-sm font-semibold",
+                    deadlinePreference === pref.code
+                      ? "text-brand-dark-blue dark:text-brand-light-blue"
+                      : "text-gray-900 dark:text-white",
+                  )}
+                >
+                  {pref.name}
+                </span>
+              </div>
+              <span className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                {pref.description}
+              </span>
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );

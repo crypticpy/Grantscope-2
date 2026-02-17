@@ -1,5 +1,5 @@
 """
-Signal Agent Service for Foresight.
+Signal Agent Service for GrantScope.
 
 Replaces deterministic one-source-per-card clustering with an AI agent
 that intelligently groups discovered sources into meaningful "signals"
@@ -35,6 +35,11 @@ from app.openai_provider import (
     get_embedding_deployment,
 )
 from app.research_service import ProcessedSource
+from app.taxonomy import (
+    PILLAR_NAMES,
+    STAGE_NUMBER_TO_ID as STAGE_ID_MAP,
+    VALID_PILLAR_IDS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -43,27 +48,6 @@ logger = logging.getLogger(__name__)
 # Constants
 # =============================================================================
 
-PILLAR_NAMES = {
-    "CH": "Community Health & Sustainability",
-    "EW": "Economic & Workforce Development",
-    "HG": "High-Performing Government",
-    "HH": "Homelessness & Housing",
-    "MC": "Mobility & Critical Infrastructure",
-    "PS": "Public Safety",
-}
-
-STAGE_ID_MAP = {
-    1: "1_concept",
-    2: "2_exploring",
-    3: "3_pilot",
-    4: "4_proof",
-    5: "5_implementing",
-    6: "6_scaling",
-    7: "7_mature",
-    8: "8_declining",
-}
-
-VALID_PILLAR_IDS = {"CH", "EW", "HG", "HH", "MC", "PS"}
 VALID_HORIZONS = {"H1", "H2", "H3"}
 
 MAX_AGENT_ITERATIONS = 25
@@ -76,7 +60,7 @@ COST_PER_OUTPUT_TOKEN = 0.008 / 1000
 # System Prompt
 # =============================================================================
 
-SIGNAL_AGENT_SYSTEM_PROMPT = """You are a Strategic Signal Detection Agent for the City of Austin's Foresight system.
+SIGNAL_AGENT_SYSTEM_PROMPT = """You are a Strategic Signal Detection Agent for the City of Austin's GrantScope2 system.
 
 Your job is to analyze a batch of recently discovered sources and organize them into meaningful SIGNALS.
 
@@ -382,7 +366,7 @@ def _define_tools() -> List[Dict[str, Any]]:
                 "name": "list_strategic_context",
                 "description": (
                     "List the strategic pillars, priorities, and stage definitions "
-                    "used by the City of Austin's Foresight system. Use if you need "
+                    "used by the City of Austin's GrantScope2 system. Use if you need "
                     "context to correctly classify a signal."
                 ),
                 "parameters": {

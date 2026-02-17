@@ -1,6 +1,6 @@
 # Backend Scripts
 
-This directory contains utility scripts for the Foresight AI pipeline.
+This directory contains utility scripts for the GrantScope2 AI pipeline.
 
 ## Classification Accuracy Validation
 
@@ -31,6 +31,7 @@ python -m scripts.validate_classification --mode interactive --count 100
 ```
 
 For each card, you'll:
+
 - See the card's name, summary, and predicted pillar
 - Enter the correct pillar code (CH, EW, HG, HH, MC, PS)
 - Optionally add notes explaining your decision
@@ -40,11 +41,13 @@ For each card, you'll:
 For offline review or team-based validation:
 
 **Export cards for review:**
+
 ```bash
 python -m scripts.validate_classification --mode export --count 100 --output cards_to_review.json
 ```
 
 **After manual review, import the labels:**
+
 ```bash
 python -m scripts.validate_classification --mode import --input reviewed_cards.json
 ```
@@ -59,34 +62,34 @@ python -m scripts.validate_classification --mode report --output validation_repo
 
 ### Command Line Options
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--mode` | Operation mode: interactive, export, import, accuracy, report | accuracy |
-| `--count` | Number of cards to process | 100 |
-| `--days` | Number of days to look back | 7 |
-| `--output` | Output file path (for export/report) | - |
-| `--input` | Input file path (for import) | - |
-| `--api-url` | Backend API URL | http://localhost:8000 |
-| `--api-token` | API authentication token | - |
+| Option        | Description                                                   | Default               |
+| ------------- | ------------------------------------------------------------- | --------------------- |
+| `--mode`      | Operation mode: interactive, export, import, accuracy, report | accuracy              |
+| `--count`     | Number of cards to process                                    | 100                   |
+| `--days`      | Number of days to look back                                   | 7                     |
+| `--output`    | Output file path (for export/report)                          | -                     |
+| `--input`     | Input file path (for import)                                  | -                     |
+| `--api-url`   | Backend API URL                                               | http://localhost:8000 |
+| `--api-token` | API authentication token                                      | -                     |
 
 ### Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `API_BASE_URL` | Backend API URL |
-| `API_TOKEN` | Authentication token |
-| `REVIEWER_ID` | Identifier for the reviewer |
+| Variable       | Description                 |
+| -------------- | --------------------------- |
+| `API_BASE_URL` | Backend API URL             |
+| `API_TOKEN`    | Authentication token        |
+| `REVIEWER_ID`  | Identifier for the reviewer |
 
 ### Strategic Pillar Codes
 
-| Code | Pillar Name |
-|------|-------------|
-| CH | Community Health & Sustainability |
-| EW | Economic & Workforce Development |
-| HG | High-Performing Government |
-| HH | Homelessness & Housing |
-| MC | Mobility & Critical Infrastructure |
-| PS | Public Safety |
+| Code | Pillar Name                        |
+| ---- | ---------------------------------- |
+| CH   | Community Health & Sustainability  |
+| EW   | Economic & Workforce Development   |
+| HG   | High-Performing Government         |
+| HH   | Homelessness & Housing             |
+| MC   | Mobility & Critical Infrastructure |
+| PS   | Public Safety                      |
 
 ### Validation Workflow
 
@@ -111,26 +114,29 @@ python -m scripts.validate_classification --mode report --output validation_repo
 
 ### API Endpoints Used
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/v1/validation/pending` | GET | Get cards needing validation |
-| `/api/v1/validation/submit` | POST | Submit ground truth label |
-| `/api/v1/validation/accuracy` | GET | Get overall accuracy metrics |
-| `/api/v1/validation/accuracy/by-pillar` | GET | Get per-pillar breakdown |
+| Endpoint                                | Method | Description                  |
+| --------------------------------------- | ------ | ---------------------------- |
+| `/api/v1/validation/pending`            | GET    | Get cards needing validation |
+| `/api/v1/validation/submit`             | POST   | Submit ground truth label    |
+| `/api/v1/validation/accuracy`           | GET    | Get overall accuracy metrics |
+| `/api/v1/validation/accuracy/by-pillar` | GET    | Get per-pillar breakdown     |
 
 ### Troubleshooting
 
 **No cards found:**
+
 - Check that the pipeline has run recently
 - Verify cards have `pillar_id` set
 - Check API authentication
 
 **Validation submission fails:**
+
 - Verify the card ID exists
 - Check that pillar code is valid
 - Ensure no duplicate validation for same card/reviewer
 
 **Accuracy not computed:**
+
 - Need at least one validation with `is_correct` determined
 - Cards without predicted pillars are excluded
 

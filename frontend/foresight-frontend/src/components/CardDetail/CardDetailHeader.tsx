@@ -12,7 +12,7 @@
 
 import React from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Clock, DollarSign, Building2 } from "lucide-react";
 
 // Badge Components
 import { PillarBadge } from "../PillarBadge";
@@ -27,6 +27,7 @@ import type { Card } from "./types";
 
 // Utilities
 import { parseStageNumber } from "./utils";
+import { getDeadlineUrgency } from "../../data/taxonomy";
 
 /**
  * Props for the CardDetailHeader component
@@ -67,6 +68,28 @@ export const CardDetailHeader: React.FC<CardDetailHeaderProps> = ({
 }) => {
   // Parse stage number from stage_id string
   const stageNumber = parseStageNumber(card.stage_id);
+
+  // Deadline urgency for grant cards
+  const deadlineUrgency = card.deadline
+    ? getDeadlineUrgency(card.deadline)
+    : undefined;
+  const daysUntilDeadline = card.deadline
+    ? Math.ceil(
+        (new Date(card.deadline).getTime() - new Date().getTime()) /
+          (1000 * 60 * 60 * 24),
+      )
+    : null;
+
+  // Format funding range
+  const hasFunding =
+    card.funding_amount_min != null || card.funding_amount_max != null;
+  const fundingDisplay = hasFunding
+    ? card.funding_amount_min != null && card.funding_amount_max != null
+      ? `$${(card.funding_amount_min / 1000).toFixed(0)}K - $${(card.funding_amount_max / 1000).toFixed(0)}K`
+      : card.funding_amount_min != null
+        ? `From $${(card.funding_amount_min / 1000).toFixed(0)}K`
+        : `Up to $${((card.funding_amount_max ?? 0) / 1000).toFixed(0)}K`
+    : null;
 
   return (
     <div className="mb-8">
@@ -153,6 +176,38 @@ export const CardDetailHeader: React.FC<CardDetailHeaderProps> = ({
               Created: {new Date(card.created_at).toLocaleDateString()}
             </span>
           </div>
+
+          {/* Grant Quick Info Row */}
+          {(deadlineUrgency || hasFunding || card.grantor) && (
+            <div className="flex items-center flex-wrap gap-3 sm:gap-4 pt-3 mt-3 border-t border-gray-200/60 dark:border-gray-700/50">
+              {deadlineUrgency &&
+                daysUntilDeadline != null &&
+                daysUntilDeadline >= 0 && (
+                  <span
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
+                    style={{
+                      backgroundColor: deadlineUrgency.colorLight,
+                      color: deadlineUrgency.color,
+                    }}
+                  >
+                    <Clock className="h-3.5 w-3.5" />
+                    {deadlineUrgency.name}: {daysUntilDeadline}d left
+                  </span>
+                )}
+              {fundingDisplay && (
+                <span className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <DollarSign className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                  {fundingDisplay}
+                </span>
+              )}
+              {card.grantor && (
+                <span className="inline-flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
+                  <Building2 className="h-3.5 w-3.5" />
+                  {card.grantor}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

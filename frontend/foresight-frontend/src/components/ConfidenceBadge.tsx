@@ -162,10 +162,10 @@ function ConfidenceTooltipContent({
   };
 
   const recommendations = {
-    high: "This signal is likely ready for quick approval with minimal changes.",
+    high: "This opportunity is likely ready for quick approval with minimal changes.",
     medium:
       "Consider reviewing the summary and classification before approval.",
-    low: "Carefully review all fields and consider if this signal should be dismissed.",
+    low: "Carefully review all fields and consider if this opportunity should be dismissed.",
   };
 
   return (

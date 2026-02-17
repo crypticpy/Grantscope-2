@@ -172,7 +172,7 @@ const Methodology: React.FC = () => {
               Methodology
             </h1>
             <p className="mt-3 text-lg text-gray-600 dark:text-gray-400 max-w-2xl leading-relaxed">
-              How Foresight discovers, scores, and delivers strategic
+              How GrantScope2 discovers, scores, and delivers strategic
               intelligence for the City of Austin.
             </p>
           </header>
@@ -192,7 +192,7 @@ const Methodology: React.FC = () => {
               </AccordionTrigger>
               <AccordionContent>
                 <p className="mb-4">
-                  Foresight continuously monitors hundreds of sources across
+                  GrantScope2 continuously monitors hundreds of sources across
                   news, academic research, government publications, and
                   technology media. Our AI-powered pipeline fetches, validates,
                   and classifies content relevant to Austin's strategic
@@ -594,7 +594,7 @@ const Methodology: React.FC = () => {
           <p className="mt-10 text-sm text-gray-400 dark:text-gray-500 text-center no-print">
             Questions about our methodology?{" "}
             <span className="text-brand-blue dark:text-brand-light-blue">
-              Reach out to the Foresight team.
+              Reach out to the GrantScope2 team.
             </span>
           </p>
         </div>

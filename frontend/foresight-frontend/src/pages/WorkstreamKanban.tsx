@@ -37,6 +37,7 @@ import {
   X,
   Radar,
   MessageSquare,
+  FileSpreadsheet,
 } from "lucide-react";
 import { supabase } from "../App";
 import { useAuthContext } from "../hooks/useAuthContext";
@@ -238,7 +239,7 @@ function StageRangeDisplay({ stageIds }: { stageIds: string[] }) {
   }
 
   const isConsecutive = stageNumbers.every(
-    (n, i) => i === 0 || n === stageNumbers[i - 1] + 1,
+    (n, i) => i === 0 || n === (stageNumbers[i - 1] ?? 0) + 1,
   );
 
   if (isConsecutive) {
@@ -265,6 +266,19 @@ function StageRangeDisplay({ stageIds }: { stageIds: string[] }) {
 }
 
 /**
+ * Format a number as compact currency (e.g., "$1.2M", "$500K").
+ */
+function formatCompactCurrency(value: number): string {
+  if (value >= 1_000_000) {
+    return `$${(value / 1_000_000).toFixed(1)}M`;
+  }
+  if (value >= 1_000) {
+    return `$${(value / 1_000).toFixed(0)}K`;
+  }
+  return `$${value.toLocaleString()}`;
+}
+
+/**
  * Stats bar displaying card counts per Kanban column
  */
 function StatsBar({
@@ -277,16 +291,100 @@ function StatsBar({
     0,
   );
 
+  // Calculate pipeline value: sum the average of min/max funding across all cards
+  const pipelineValue = Object.values(cards)
+    .flat()
+    .reduce((sum, wsCard) => {
+      const min = wsCard.card.funding_amount_min;
+      const max = wsCard.card.funding_amount_max;
+      if (min != null && max != null) {
+        return sum + (min + max) / 2;
+      }
+      if (min != null) return sum + min;
+      if (max != null) return sum + max;
+      return sum;
+    }, 0);
+
+  // Win/loss summary for awarded and declined columns
+  const awardedCards = cards.awarded || [];
+  const declinedCards = cards.declined || [];
+  const awardedValue = awardedCards.reduce((sum, wsCard) => {
+    const min = wsCard.card.funding_amount_min;
+    const max = wsCard.card.funding_amount_max;
+    if (min != null && max != null) return sum + (min + max) / 2;
+    if (min != null) return sum + min;
+    if (max != null) return sum + max;
+    return sum;
+  }, 0);
+  const declinedValue = declinedCards.reduce((sum, wsCard) => {
+    const min = wsCard.card.funding_amount_min;
+    const max = wsCard.card.funding_amount_max;
+    if (min != null && max != null) return sum + (min + max) / 2;
+    if (min != null) return sum + min;
+    if (max != null) return sum + max;
+    return sum;
+  }, 0);
+
+  const hasWinLoss = awardedCards.length > 0 || declinedCards.length > 0;
+
   return (
     <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-4 mb-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-gray-900 dark:text-white">
-            Total Signals:
-          </span>
-          <span className="text-lg font-bold text-brand-blue">
-            {totalCards}
-          </span>
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-900 dark:text-white">
+              Total Opportunities:
+            </span>
+            <span className="text-lg font-bold text-brand-blue">
+              {totalCards}
+            </span>
+          </div>
+          {pipelineValue > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-900 dark:text-white">
+                Pipeline Value:
+              </span>
+              <span className="text-lg font-bold text-green-600 dark:text-green-400">
+                {formatCompactCurrency(pipelineValue)}
+              </span>
+            </div>
+          )}
+          {hasWinLoss && (
+            <div className="flex items-center gap-3 pl-3 border-l border-gray-200 dark:border-gray-700">
+              {awardedCards.length > 0 && (
+                <div
+                  className="flex items-center gap-1.5 text-sm"
+                  title="Awarded grants"
+                >
+                  <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  <span className="text-green-700 dark:text-green-400 font-medium">
+                    {awardedCards.length} won
+                  </span>
+                  {awardedValue > 0 && (
+                    <span className="text-green-600 dark:text-green-400 text-xs">
+                      ({formatCompactCurrency(awardedValue)})
+                    </span>
+                  )}
+                </div>
+              )}
+              {declinedCards.length > 0 && (
+                <div
+                  className="flex items-center gap-1.5 text-sm"
+                  title="Declined applications"
+                >
+                  <XCircle className="h-4 w-4 text-red-400" />
+                  <span className="text-red-600 dark:text-red-400 font-medium">
+                    {declinedCards.length} declined
+                  </span>
+                  {declinedValue > 0 && (
+                    <span className="text-red-500 dark:text-red-400 text-xs">
+                      ({formatCompactCurrency(declinedValue)})
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-4 flex-wrap">
           {KANBAN_COLUMNS.map((column) => {
@@ -329,10 +427,10 @@ function FormModal({
       <div className="bg-white dark:bg-dark-surface rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto my-8">
         <div className="sticky top-0 bg-white dark:bg-dark-surface border-b border-gray-200 dark:border-gray-700 px-6 py-4 rounded-t-lg">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white">
-            Edit Workstream Filters
+            Edit Program Filters
           </h3>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Update the filters and settings for this workstream.
+            Update the filters and settings for this program.
           </p>
         </div>
         <div className="px-6 py-4">
@@ -376,6 +474,13 @@ const WorkstreamKanban: React.FC = () => {
     brief: [],
     watching: [],
     archived: [],
+    discovered: [],
+    evaluating: [],
+    applying: [],
+    submitted: [],
+    awarded: [],
+    declined: [],
+    expired: [],
   });
 
   // Loading states
@@ -549,14 +654,14 @@ const WorkstreamKanban: React.FC = () => {
       if (fetchError) {
         console.error("Error loading workstream:", fetchError);
         setError(
-          "Failed to load workstream. It may not exist or you may not have access.",
+          "Failed to load program. It may not exist or you may not have access.",
         );
         return;
       }
 
       // Verify ownership
       if (data.user_id !== user.id) {
-        setError("You do not have access to this workstream.");
+        setError("You do not have access to this program.");
         return;
       }
 
@@ -582,10 +687,12 @@ const WorkstreamKanban: React.FC = () => {
     try {
       setCardsLoading(true);
       const groupedCards = await fetchWorkstreamCards(token, id);
-      setCards(groupedCards);
+      setCards(
+        groupedCards as unknown as Record<KanbanStatus, WorkstreamCard[]>,
+      );
     } catch (err) {
       console.error("Error loading cards:", err);
-      showToast("error", "Failed to load signals");
+      showToast("error", "Failed to load opportunities");
     } finally {
       setCardsLoading(false);
     }
@@ -622,7 +729,7 @@ const WorkstreamKanban: React.FC = () => {
         if (result.added > 0) {
           showToast(
             "info",
-            `${result.added} new signal${result.added !== 1 ? "s" : ""} added to inbox`,
+            `${result.added} new opportunit${result.added !== 1 ? "ies" : "y"} added to inbox`,
           );
           // Refresh cards to include the new additions
           await loadCards();
@@ -726,6 +833,13 @@ const WorkstreamKanban: React.FC = () => {
       brief: [],
       watching: [],
       archived: [],
+      discovered: [],
+      evaluating: [],
+      applying: [],
+      submitted: [],
+      awarded: [],
+      declined: [],
+      expired: [],
     };
 
     for (const [status, columnCards] of Object.entries(cards)) {
@@ -810,14 +924,14 @@ const WorkstreamKanban: React.FC = () => {
           status: newStatus,
           position: newPosition,
         });
-        showToast("success", "Signal moved successfully");
+        showToast("success", "Opportunity moved successfully");
       } catch (err: unknown) {
         // Rollback on error
         const errorMessage =
           err instanceof Error ? err.message : "Unknown error";
         console.error("Error moving card:", errorMessage);
         setCards(previousCards);
-        showToast("error", "Failed to move signal. Changes reverted.");
+        showToast("error", "Failed to move opportunity. Changes reverted.");
       }
     },
     [id, cards, getAuthToken, showToast],
@@ -923,11 +1037,11 @@ const WorkstreamKanban: React.FC = () => {
 
       try {
         await removeCardFromWorkstream(token, id, cardId);
-        showToast("success", "Card removed from workstream");
+        showToast("success", "Card removed from program");
       } catch (err) {
         console.error("Error removing card:", err);
         setCards(previousCards);
-        showToast("error", "Failed to remove signal");
+        showToast("error", "Failed to remove opportunity");
       }
     },
     [id, cards, getAuthToken, showToast],
@@ -985,11 +1099,11 @@ const WorkstreamKanban: React.FC = () => {
           status,
           position: targetPosition,
         });
-        showToast("success", "Signal moved successfully");
+        showToast("success", "Opportunity moved successfully");
       } catch (err) {
         console.error("Error moving card:", err);
         setCards(previousCards);
-        showToast("error", "Failed to move signal");
+        showToast("error", "Failed to move opportunity");
       }
     },
     [id, cards, getAuthToken, showToast],
@@ -1189,6 +1303,50 @@ const WorkstreamKanban: React.FC = () => {
   );
 
   /**
+   * Handle evaluate grant action - navigate to card detail for evaluation.
+   */
+  const handleEvaluateGrant = useCallback(
+    async (cardId: string) => {
+      // Find the card to get its slug
+      for (const columnCards of Object.values(cards)) {
+        const wsCard = columnCards.find((c) => c.id === cardId);
+        if (wsCard) {
+          navigate(`/signals/${wsCard.card.slug}`);
+          return;
+        }
+      }
+    },
+    [cards, navigate],
+  );
+
+  /**
+   * Handle start application action - navigate to card detail with apply action.
+   */
+  const handleStartApplication = useCallback(
+    async (cardId: string) => {
+      // Find the card to get its UUID for the wizard
+      for (const columnCards of Object.values(cards)) {
+        const wsCard = columnCards.find((c) => c.id === cardId);
+        if (wsCard) {
+          navigate(`/apply?card_id=${wsCard.card.id}&workstream_id=${id}`);
+          return;
+        }
+      }
+    },
+    [cards, navigate, id],
+  );
+
+  /**
+   * Handle prepare proposal action - navigate to proposal editor.
+   */
+  const handlePrepareProposal = useCallback(
+    (_cardId: string, cardUuid: string) => {
+      navigate(`/apply?card_id=${cardUuid}&workstream_id=${id}`);
+    },
+    [navigate, id],
+  );
+
+  /**
    * Card action callbacks for KanbanBoard.
    */
   const cardActions: CardActionCallbacks = {
@@ -1201,6 +1359,9 @@ const WorkstreamKanban: React.FC = () => {
     onExportBrief: handleBriefExportFromCard,
     onCheckUpdates: handleCheckUpdates,
     onGenerateBrief: handleGenerateBrief,
+    onEvaluateGrant: handleEvaluateGrant,
+    onStartApplication: handleStartApplication,
+    onPrepareProposal: handlePrepareProposal,
   };
 
   /**
@@ -1220,6 +1381,13 @@ const WorkstreamKanban: React.FC = () => {
       brief: [],
       watching: [],
       archived: [],
+      discovered: [],
+      evaluating: [],
+      applying: [],
+      submitted: [],
+      awarded: [],
+      declined: [],
+      expired: [],
     };
 
     const query = searchQuery.toLowerCase().trim();
@@ -1285,7 +1453,7 @@ const WorkstreamKanban: React.FC = () => {
     setRefreshing(true);
     await loadCards();
     setRefreshing(false);
-    showToast("success", "Signals refreshed");
+    showToast("success", "Opportunities refreshed");
   }, [loadCards, showToast]);
 
   /**
@@ -1307,16 +1475,16 @@ const WorkstreamKanban: React.FC = () => {
       if (result.added > 0) {
         showToast(
           "success",
-          `Added ${result.added} signal${result.added !== 1 ? "s" : ""} to inbox`,
+          `Added ${result.added} opportunit${result.added !== 1 ? "ies" : "y"} to inbox`,
         );
         // Reload cards to show the new ones
         await loadCards();
       } else {
-        showToast("info", "No new matching signals found");
+        showToast("info", "No new matching opportunities found");
       }
     } catch (err) {
       console.error("Error auto-populating:", err);
-      showToast("error", "Failed to auto-populate workstream");
+      showToast("error", "Failed to auto-populate program");
     } finally {
       setAutoPopulating(false);
     }
@@ -1341,11 +1509,11 @@ const WorkstreamKanban: React.FC = () => {
         if (cardsAdded > 0 || cardsCreated > 0) {
           showToast(
             "success",
-            `Scan complete! ${cardsCreated} new signal${cardsCreated !== 1 ? "s" : ""} created, ${cardsAdded} added to inbox`,
+            `Scan complete! ${cardsCreated} new opportunit${cardsCreated !== 1 ? "ies" : "y"} created, ${cardsAdded} added to inbox`,
           );
           await loadCards();
         } else {
-          showToast("info", "Scan complete - no new signals found");
+          showToast("info", "Scan complete - no new opportunities found");
         }
       } else if (status.status === "failed") {
         showToast("error", status.error_message || "Scan failed");
@@ -1399,7 +1567,7 @@ const WorkstreamKanban: React.FC = () => {
       } else if (message.includes("keywords or pillars")) {
         showToast(
           "error",
-          "Add keywords or pillars to this workstream to enable scanning.",
+          "Add keywords or pillars to this program to enable scanning.",
         );
       } else {
         showToast("error", message);
@@ -1413,7 +1581,7 @@ const WorkstreamKanban: React.FC = () => {
     navigate(location.pathname, { replace: true, state: {} });
     showToast(
       "info",
-      "Scan started! We're looking for signals matching your workstream...",
+      "Scan started! We're looking for opportunities matching your program...",
     );
     startPollingExistingScan();
   }, [
@@ -1432,7 +1600,7 @@ const WorkstreamKanban: React.FC = () => {
   const handleFormSuccess = useCallback(() => {
     setShowEditModal(false);
     loadWorkstream();
-    showToast("success", "Workstream updated");
+    showToast("success", "Program updated");
   }, [loadWorkstream, showToast]);
 
   /**
@@ -1480,7 +1648,7 @@ const WorkstreamKanban: React.FC = () => {
         if (contentDisposition) {
           const filenameMatch =
             contentDisposition.match(/filename="?([^"]+)"?/);
-          if (filenameMatch) {
+          if (filenameMatch?.[1]) {
             filename = filenameMatch[1];
           }
         }
@@ -1510,19 +1678,151 @@ const WorkstreamKanban: React.FC = () => {
     [workstream, id, getAuthToken, showToast],
   );
 
+  /**
+   * Export pipeline data as CSV.
+   * Collects all cards from all kanban columns and generates a downloadable CSV file.
+   */
+  const handleCsvExport = useCallback(() => {
+    if (!workstream) return;
+
+    setShowExportMenu(false);
+
+    // Collect all cards from all columns
+    const allCards: { wsCard: WorkstreamCard; columnStatus: KanbanStatus }[] =
+      [];
+    for (const [status, columnCards] of Object.entries(cards)) {
+      for (const wsCard of columnCards) {
+        allCards.push({ wsCard, columnStatus: status as KanbanStatus });
+      }
+    }
+
+    // CSV escape helper: wraps in quotes if value contains comma, quote, or newline
+    const escapeCsv = (value: string): string => {
+      if (
+        value.includes(",") ||
+        value.includes('"') ||
+        value.includes("\n") ||
+        value.includes("\r")
+      ) {
+        return `"${value.replace(/"/g, '""')}"`;
+      }
+      return value;
+    };
+
+    // Build CSV header
+    const headers = [
+      "Name",
+      "Status",
+      "Grantor",
+      "Funding Min",
+      "Funding Max",
+      "Deadline",
+      "Category",
+      "Alignment Score",
+      "Date Added",
+      "Notes",
+    ];
+
+    // Build CSV rows
+    const rows = allCards.map(({ wsCard, columnStatus }) => {
+      const card = wsCard.card;
+      return [
+        escapeCsv(card.name || ""),
+        escapeCsv(columnStatus),
+        escapeCsv(card.grantor || ""),
+        card.funding_amount_min != null ? String(card.funding_amount_min) : "",
+        card.funding_amount_max != null ? String(card.funding_amount_max) : "",
+        escapeCsv(card.deadline || ""),
+        escapeCsv(card.category_id || ""),
+        card.alignment_score != null ? String(card.alignment_score) : "",
+        escapeCsv(wsCard.added_at || ""),
+        escapeCsv(wsCard.notes || ""),
+      ].join(",");
+    });
+
+    // Combine header and rows
+    const csvContent = [headers.join(","), ...rows].join("\n");
+
+    // Generate filename
+    const date = new Date().toISOString().split("T")[0];
+    const safeName = workstream.name.replace(/[^a-zA-Z0-9-_]/g, "_");
+    const filename = `${safeName}-pipeline-${date}.csv`;
+
+    // Create download via Blob
+    const blob = new Blob(["\uFEFF" + csvContent], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+
+    showToast("success", "CSV export downloaded");
+  }, [workstream, cards, showToast]);
+
   // ============================================================================
   // Render States
   // ============================================================================
 
-  // Loading state
+  // Loading state - skeleton loader showing kanban column placeholders
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-brand-blue" />
-          <p className="text-gray-600 dark:text-gray-400">
-            Loading workstream...
-          </p>
+      <div className="min-h-screen dark:bg-brand-dark-blue">
+        <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Skeleton header */}
+          <div className="mb-6">
+            <div className="h-4 w-32 bg-gray-200 dark:bg-gray-700 rounded animate-pulse mb-4" />
+            <div className="h-8 w-64 bg-gray-200 dark:bg-gray-700 rounded animate-pulse mb-2" />
+            <div className="h-4 w-96 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+          </div>
+          {/* Skeleton stats bar */}
+          <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-4 mb-6">
+            <div className="flex items-center gap-4">
+              <div className="h-5 w-40 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+              <div className="h-5 w-24 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+              <div className="h-5 w-24 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+            </div>
+          </div>
+          {/* Skeleton kanban columns */}
+          <div className="flex gap-4 overflow-x-auto pb-4">
+            {[0, 1, 2, 3].map((colIdx) => (
+              <div
+                key={colIdx}
+                className="w-72 min-w-72 flex-shrink-0 bg-gray-50 dark:bg-dark-surface-deep rounded-xl border border-gray-200 dark:border-gray-800"
+              >
+                {/* Column header skeleton */}
+                <div className="px-4 py-3 rounded-t-xl border-b border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800/50">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+                    <div className="h-5 w-5 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse" />
+                  </div>
+                  <div className="h-3 w-36 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+                </div>
+                {/* Card placeholders */}
+                <div className="p-3 space-y-3">
+                  {[0, 1, 2]
+                    .slice(0, colIdx === 0 ? 3 : colIdx === 1 ? 2 : 1)
+                    .map((cardIdx) => (
+                      <div
+                        key={cardIdx}
+                        className="bg-white dark:bg-dark-surface rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2"
+                      >
+                        <div className="h-4 w-full bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+                        <div className="h-3 w-3/4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+                        <div className="flex items-center gap-2">
+                          <div className="h-5 w-12 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse" />
+                          <div className="h-5 w-8 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse" />
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -1545,24 +1845,24 @@ const WorkstreamKanban: React.FC = () => {
             className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-brand-dark-blue transition-colors"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Workstreams
+            Back to Programs
           </Link>
         </div>
       </div>
     );
   }
 
-  // Workstream not found
+  // Program not found
   if (!workstream) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="text-center py-12 bg-white dark:bg-dark-surface rounded-lg shadow">
           <Filter className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" />
           <h3 className="mt-2 text-lg font-medium text-gray-900 dark:text-white">
-            Workstream not found
+            Program not found
           </h3>
           <p className="mt-1 text-gray-600 dark:text-gray-400">
-            The workstream you're looking for doesn't exist or has been deleted.
+            The program you're looking for doesn't exist or has been deleted.
           </p>
           <div className="mt-6">
             <Link
@@ -1570,7 +1870,7 @@ const WorkstreamKanban: React.FC = () => {
               className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-brand-dark-blue transition-colors"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Workstreams
+              Back to Programs
             </Link>
           </div>
         </div>
@@ -1593,7 +1893,7 @@ const WorkstreamKanban: React.FC = () => {
             className="inline-flex items-center text-sm text-gray-600 dark:text-gray-400 hover:text-brand-blue transition-colors mb-4"
           >
             <ArrowLeft className="h-4 w-4 mr-1" />
-            Back to Workstreams
+            Back to Programs
           </Link>
 
           {/* Title and Actions */}
@@ -1622,7 +1922,7 @@ const WorkstreamKanban: React.FC = () => {
                   "inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-dark-surface transition-colors",
                   scanning && "opacity-75 cursor-not-allowed",
                 )}
-                title="Scan web sources for new content matching this workstream (2/day limit)"
+                title="Scan web sources for new content matching this program (2/day limit)"
               >
                 {scanning ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -1674,7 +1974,7 @@ const WorkstreamKanban: React.FC = () => {
                     "inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-dark-surface-elevated hover:bg-gray-50 dark:hover:bg-dark-surface-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-dark-surface transition-colors",
                     exportLoading !== null && "opacity-75 cursor-not-allowed",
                   )}
-                  title="Export workstream report"
+                  title="Export program report"
                 >
                   {exportLoading !== null ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -1729,6 +2029,19 @@ const WorkstreamKanban: React.FC = () => {
                             </div>
                           </div>
                         </button>
+                        <button
+                          onClick={handleCsvExport}
+                          className="w-full text-left px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-dark-surface-hover flex items-center gap-3 transition-colors"
+                          role="menuitem"
+                        >
+                          <FileSpreadsheet className="h-5 w-5 text-green-500" />
+                          <div>
+                            <div className="font-medium">CSV Spreadsheet</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              Pipeline data for spreadsheets
+                            </div>
+                          </div>
+                        </button>
                       </div>
                     </div>
                   </>
@@ -1739,7 +2052,7 @@ const WorkstreamKanban: React.FC = () => {
               <button
                 onClick={() => setChatOpen(true)}
                 className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-dark-surface-elevated hover:bg-gray-50 dark:hover:bg-dark-surface-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-dark-surface transition-colors"
-                aria-label="Open workstream chat"
+                aria-label="Open program chat"
               >
                 <MessageSquare className="h-4 w-4" />
                 <span className="hidden sm:inline">Chat</span>
@@ -1749,7 +2062,7 @@ const WorkstreamKanban: React.FC = () => {
               <button
                 onClick={() => setShowEditModal(true)}
                 className="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-dark-surface-elevated hover:bg-gray-50 dark:hover:bg-dark-surface-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue dark:focus:ring-offset-dark-surface transition-colors"
-                title="Edit workstream filters"
+                title="Edit program filters"
               >
                 <Settings className="h-4 w-4 mr-2" />
                 Edit Filters
@@ -1983,7 +2296,7 @@ const WorkstreamKanban: React.FC = () => {
           format={exportState.format || "pptx"}
           progress={exportState.progress}
           statusMessage={exportState.statusMessage}
-          errorMessage={exportState.errorMessage}
+          errorMessage={exportState.errorMessage ?? undefined}
           downloadUrl={exportState.downloadUrl || undefined}
           filename={exportState.filename || undefined}
           onDownload={downloadExport}

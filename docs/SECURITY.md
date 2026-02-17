@@ -2,24 +2,24 @@
 
 **Audit Date:** 2025-12-27
 **Auditor:** Backend Security Specialist
-**Project:** Foresight Strategic Intelligence Application
+**Project:** GrantScope2 Strategic Intelligence Application
 **Scope:** Complete RLS analysis of all 30 migration files in `supabase/migrations/`
 
 ---
 
 ## Executive Summary
 
-This audit examines Row Level Security (RLS) implementation across all database tables in the Foresight application. The application is a strategic intelligence platform where users should only see their own data (manually provisioned users, no self-registration).
+This audit examines Row Level Security (RLS) implementation across all database tables in the GrantScope2 application. The application is a strategic intelligence platform where users should only see their own data (manually provisioned users, no self-registration).
 
 ### Overall Assessment: MODERATE SECURITY GAPS IDENTIFIED
 
-| Category | Status |
-|----------|--------|
-| RLS Enabled on User Tables | PASS (with gaps) |
-| RLS Policies for CRUD Operations | PARTIAL |
-| User Data Isolation | NEEDS IMPROVEMENT |
-| Reference Table Security | PASS |
-| Service Role Access | PASS |
+| Category                         | Status            |
+| -------------------------------- | ----------------- |
+| RLS Enabled on User Tables       | PASS (with gaps)  |
+| RLS Policies for CRUD Operations | PARTIAL           |
+| User Data Isolation              | NEEDS IMPROVEMENT |
+| Reference Table Security         | PASS              |
+| Service Role Access              | PASS              |
 
 ---
 
@@ -27,57 +27,57 @@ This audit examines Row Level Security (RLS) implementation across all database 
 
 ### Core User-Owned Tables
 
-| Table | RLS Enabled | SELECT | INSERT | UPDATE | DELETE | Status |
-|-------|-------------|--------|--------|--------|--------|--------|
-| `users` | YES | Own only | N/A | Own only | N/A | OK |
-| `cards` | YES | Public | Auth check | Auth check | **MISSING** | NEEDS FIX |
-| `sources` | YES | Public | Auth check | **MISSING** | **MISSING** | NEEDS FIX |
-| `card_timeline` | YES | Via cards | **MISSING** | **MISSING** | **MISSING** | NEEDS FIX |
-| `card_follows` | YES | Own only | Own only | Own only | Own only | OK |
-| `card_notes` | YES | Own + public | Own only | Own only | Own only | OK |
-| `workstreams` | YES | Own only | Own only | Own only | Own only | OK |
-| `workstream_cards` | YES | Via workstream | Via workstream | Via workstream | **MISSING** | NEEDS FIX |
-| `research_tasks` | YES | Own only | Own only | Own only | Service only | OK |
+| Table              | RLS Enabled | SELECT         | INSERT         | UPDATE         | DELETE       | Status    |
+| ------------------ | ----------- | -------------- | -------------- | -------------- | ------------ | --------- |
+| `users`            | YES         | Own only       | N/A            | Own only       | N/A          | OK        |
+| `cards`            | YES         | Public         | Auth check     | Auth check     | **MISSING**  | NEEDS FIX |
+| `sources`          | YES         | Public         | Auth check     | **MISSING**    | **MISSING**  | NEEDS FIX |
+| `card_timeline`    | YES         | Via cards      | **MISSING**    | **MISSING**    | **MISSING**  | NEEDS FIX |
+| `card_follows`     | YES         | Own only       | Own only       | Own only       | Own only     | OK        |
+| `card_notes`       | YES         | Own + public   | Own only       | Own only       | Own only     | OK        |
+| `workstreams`      | YES         | Own only       | Own only       | Own only       | Own only     | OK        |
+| `workstream_cards` | YES         | Via workstream | Via workstream | Via workstream | **MISSING**  | NEEDS FIX |
+| `research_tasks`   | YES         | Own only       | Own only       | Own only       | Service only | OK        |
 
 ### Discovery System Tables
 
-| Table | RLS Enabled | SELECT | INSERT | UPDATE | DELETE | Status |
-|-------|-------------|--------|--------|--------|--------|--------|
-| `discovery_runs` | YES | All auth | Service only | Service only | Service only | OK |
-| `discovery_blocks` | YES | All auth | All auth | Service only | Service only | OK |
-| `user_card_dismissals` | YES | Own only | Own only | Own only | Own only | OK |
-| `discovered_sources` | YES | All auth | Service only | Service only | Service only | OK |
+| Table                  | RLS Enabled | SELECT   | INSERT       | UPDATE       | DELETE       | Status |
+| ---------------------- | ----------- | -------- | ------------ | ------------ | ------------ | ------ |
+| `discovery_runs`       | YES         | All auth | Service only | Service only | Service only | OK     |
+| `discovery_blocks`     | YES         | All auth | All auth     | Service only | Service only | OK     |
+| `user_card_dismissals` | YES         | Own only | Own only     | Own only     | Own only     | OK     |
+| `discovered_sources`   | YES         | All auth | Service only | Service only | Service only | OK     |
 
 ### Analysis & Validation Tables
 
-| Table | RLS Enabled | SELECT | INSERT | UPDATE | DELETE | Status |
-|-------|-------------|--------|--------|--------|--------|--------|
-| `classification_validations` | YES | All auth | Own only | Own only | Own only | OK |
-| `implications_analyses` | YES | Public | Auth check | **MISSING** | **MISSING** | NEEDS FIX |
-| `implications` | YES | Public | Auth check | **MISSING** | **MISSING** | NEEDS FIX |
-| `entities` | YES | All auth | Service only | Service only | Service only | OK |
-| `entity_relationships` | YES | All auth | Service only | Service only | Service only | OK |
+| Table                        | RLS Enabled | SELECT   | INSERT       | UPDATE       | DELETE       | Status    |
+| ---------------------------- | ----------- | -------- | ------------ | ------------ | ------------ | --------- |
+| `classification_validations` | YES         | All auth | Own only     | Own only     | Own only     | OK        |
+| `implications_analyses`      | YES         | Public   | Auth check   | **MISSING**  | **MISSING**  | NEEDS FIX |
+| `implications`               | YES         | Public   | Auth check   | **MISSING**  | **MISSING**  | NEEDS FIX |
+| `entities`                   | YES         | All auth | Service only | Service only | Service only | OK        |
+| `entity_relationships`       | YES         | All auth | Service only | Service only | Service only | OK        |
 
 ### Search & History Tables
 
-| Table | RLS Enabled | SELECT | INSERT | UPDATE | DELETE | Status |
-|-------|-------------|--------|--------|--------|--------|--------|
-| `saved_searches` | YES | Own only | Own only | Own only | Own only | OK |
-| `search_history` | YES | Own only | Own only | N/A | Own only | OK |
-| `card_score_history` | YES | All auth | All auth | Service only | Service only | OK |
-| `card_relationships` | YES | **MISSING** | **MISSING** | **MISSING** | **MISSING** | CRITICAL |
-| `executive_briefs` | YES | All auth | Via workstream | Own + workstream | Via workstream | OK |
+| Table                | RLS Enabled | SELECT      | INSERT         | UPDATE           | DELETE         | Status   |
+| -------------------- | ----------- | ----------- | -------------- | ---------------- | -------------- | -------- |
+| `saved_searches`     | YES         | Own only    | Own only       | Own only         | Own only       | OK       |
+| `search_history`     | YES         | Own only    | Own only       | N/A              | Own only       | OK       |
+| `card_score_history` | YES         | All auth    | All auth       | Service only     | Service only   | OK       |
+| `card_relationships` | YES         | **MISSING** | **MISSING**    | **MISSING**      | **MISSING**    | CRITICAL |
+| `executive_briefs`   | YES         | All auth    | Via workstream | Own + workstream | Via workstream | OK       |
 
 ### Reference Tables (Read-Only for Users)
 
-| Table | RLS Enabled | SELECT | INSERT | UPDATE | DELETE | Status |
-|-------|-------------|--------|--------|--------|--------|--------|
-| `pillars` | YES | All auth | Service only | Service only | Service only | OK |
-| `goals` | YES | All auth | Service only | Service only | Service only | OK |
-| `anchors` | YES | All auth | Service only | Service only | Service only | OK |
-| `stages` | YES | All auth | Service only | Service only | Service only | OK |
-| `priorities` | YES | All auth | Service only | Service only | Service only | OK |
-| `card_embeddings` | YES | All auth | **MISSING** | **MISSING** | **MISSING** | NEEDS FIX |
+| Table             | RLS Enabled | SELECT   | INSERT       | UPDATE       | DELETE       | Status    |
+| ----------------- | ----------- | -------- | ------------ | ------------ | ------------ | --------- |
+| `pillars`         | YES         | All auth | Service only | Service only | Service only | OK        |
+| `goals`           | YES         | All auth | Service only | Service only | Service only | OK        |
+| `anchors`         | YES         | All auth | Service only | Service only | Service only | OK        |
+| `stages`          | YES         | All auth | Service only | Service only | Service only | OK        |
+| `priorities`      | YES         | All auth | Service only | Service only | Service only | OK        |
+| `card_embeddings` | YES         | All auth | **MISSING**  | **MISSING**  | **MISSING**  | NEEDS FIX |
 
 ---
 
@@ -88,12 +88,14 @@ This audit examines Row Level Security (RLS) implementation across all database 
 **Location:** `supabase/migrations/1766436101_create_card_relationships.sql`
 
 **Issue:** RLS is enabled but NO policies are created. This means:
+
 - No user can SELECT, INSERT, UPDATE, or DELETE records
 - Application functionality is broken unless using service key
 
 **Risk Level:** CRITICAL (blocks functionality or forces service key usage)
 
 **Recommended Fix:**
+
 ```sql
 -- Add policies for card_relationships
 CREATE POLICY "Authenticated users can view card_relationships"
@@ -117,6 +119,7 @@ CREATE POLICY "Service role full access on card_relationships"
 **Risk Level:** HIGH (users cannot delete their own cards, or must use service key)
 
 **Recommended Fix:**
+
 ```sql
 -- Add delete policy - only card creator can delete
 CREATE POLICY "Users can delete own cards"
@@ -133,6 +136,7 @@ CREATE POLICY "Users can delete own cards"
 **Risk Level:** HIGH
 
 **Recommended Fix:**
+
 ```sql
 -- Service role only for source management (sources are system-generated)
 CREATE POLICY "Service role can manage sources"
@@ -151,6 +155,7 @@ CREATE POLICY "Service role can manage sources"
 **Risk Level:** MEDIUM (timeline entries are system-generated)
 
 **Recommended Fix:**
+
 ```sql
 -- Timeline entries should only be created by service role
 CREATE POLICY "Service role can manage card_timeline"
@@ -169,6 +174,7 @@ CREATE POLICY "Service role can manage card_timeline"
 **Risk Level:** MEDIUM (embeddings are system-generated)
 
 **Recommended Fix:**
+
 ```sql
 CREATE POLICY "Service role full access on card_embeddings"
     ON card_embeddings FOR ALL
@@ -186,6 +192,7 @@ CREATE POLICY "Service role full access on card_embeddings"
 **Risk Level:** MEDIUM
 
 **Recommended Fix:**
+
 ```sql
 -- Allow users to update/delete their own analyses
 CREATE POLICY "Users can update own implications_analyses"
@@ -213,17 +220,20 @@ CREATE POLICY "Service role can manage implications"
 **CONCERN:** The current design allows all authenticated users to see ALL cards.
 
 **Current Policy:**
+
 ```sql
 CREATE POLICY "Anyone can view cards" ON cards
     FOR SELECT USING (true);
 ```
 
 **Analysis:** This is intentional for a collaborative intelligence platform where users share insights. However, it means:
+
 1. Any authenticated user can see all cards
 2. User dismissals and notes are properly isolated
 3. Workstreams and follows are properly user-scoped
 
 **Recommendation:** If true multi-tenant isolation is required:
+
 ```sql
 -- Option 1: Cards visible to creator or followers only
 CREATE POLICY "Users can view accessible cards" ON cards
@@ -240,6 +250,7 @@ CREATE POLICY "Users can view accessible cards" ON cards
 ### Service Role Usage Patterns
 
 The application correctly uses service role for:
+
 - Discovery pipeline operations
 - AI-generated content (sources, entities, embeddings)
 - Background job processing (research_tasks)
@@ -248,6 +259,7 @@ The application correctly uses service role for:
 ### Function Security
 
 All database functions have been properly secured with:
+
 - `SECURITY DEFINER` for elevated operations
 - `SET search_path = ''` or `SET search_path = extensions, public` to prevent search path injection
 - Proper grants to `authenticated` and `service_role` roles
@@ -259,6 +271,7 @@ All database functions have been properly secured with:
 ## Policy Detail by Table
 
 ### `users` Table
+
 ```sql
 -- Location: 1766434562_create_embeddings_and_rls.sql
 CREATE POLICY "Users can view own profile" ON users
@@ -271,9 +284,11 @@ CREATE POLICY "Users can update own profile" ON users
 CREATE POLICY users_own ON users
     FOR ALL USING (auth.uid() = id);
 ```
+
 **Status:** SECURE - Users can only access their own profile.
 
 ### `cards` Table
+
 ```sql
 -- SELECT: Anyone can view
 CREATE POLICY "Anyone can view cards" ON cards
@@ -289,9 +304,11 @@ CREATE POLICY "Users can update own cards" ON cards
 
 -- DELETE: MISSING
 ```
+
 **Status:** NEEDS DELETE POLICY
 
 ### `workstream_cards` Table
+
 ```sql
 -- Inherits workstream user ownership via join
 CREATE POLICY "Users can view own workstream cards" ON workstream_cards
@@ -303,6 +320,7 @@ CREATE POLICY "Users can view own workstream cards" ON workstream_cards
         )
     );
 ```
+
 **Status:** NEEDS DELETE POLICY
 
 ---
@@ -487,6 +505,7 @@ COMMENT ON EXTENSION vector IS 'Security audit: RLS policies completed for all t
 ### Testing Checklist
 
 After applying fixes:
+
 - [ ] Test card deletion as authenticated user
 - [ ] Verify card_relationships queries work without service key
 - [ ] Confirm sources are not modifiable by users directly
@@ -530,4 +549,4 @@ After applying fixes:
 
 ---
 
-*This security audit was conducted as part of the Foresight application development process.*
+_This security audit was conducted as part of the GrantScope2 application development process._

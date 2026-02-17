@@ -4,7 +4,7 @@ import logging
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -16,6 +16,7 @@ from app.models.discovery_models import (
     get_discovery_max_queries,
     get_discovery_max_sources,
 )
+from app.alignment_service import AlignmentService
 from app.discovery_service import DiscoveryService
 from app.helpers.workstream_utils import _filter_cards_for_workstream
 
@@ -825,3 +826,265 @@ async def update_discovery_schedule(
         raise HTTPException(
             status_code=500, detail=_safe_error("update discovery schedule", e)
         ) from e
+
+
+# ============================================================================
+# Alignment / Matching
+# ============================================================================
+
+
+class AlignmentScoreResponse(BaseModel):
+    fit_score: int
+    amount_score: int
+    competition_score: int
+    readiness_score: int
+    urgency_score: int
+    probability_score: int
+    overall_score: int
+    explanation: Dict[str, str] = {}
+    recommended_action: str
+
+
+class MatchResult(BaseModel):
+    card_id: str
+    card_name: str
+    card_summary: Optional[str] = None
+    grantor: Optional[str] = None
+    funding_amount_min: Optional[float] = None
+    funding_amount_max: Optional[float] = None
+    deadline: Optional[str] = None
+    grant_type: Optional[str] = None
+    alignment: AlignmentScoreResponse
+
+
+class MatchesResponse(BaseModel):
+    program_id: str
+    total_scored: int
+    matches: List[MatchResult]
+
+
+class AutoMatchResponse(BaseModel):
+    program_id: str
+    cards_scored: int
+    cards_added: int
+    card_ids: List[str]
+
+
+@router.post("/align/{card_id}/{program_id}", response_model=AlignmentScoreResponse)
+async def score_grant_against_program(
+    card_id: str,
+    program_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Score a grant card against a program (workstream) for alignment.
+
+    Returns a multi-factor alignment score showing how well the grant
+    matches the program's goals, capacity, and timeline.
+    """
+    # Fetch card
+    card_resp = supabase.table("cards").select("*").eq("id", card_id).execute()
+    if not card_resp.data:
+        raise HTTPException(status_code=404, detail="Card not found")
+    card = card_resp.data[0]
+
+    # Fetch workstream and verify ownership
+    ws_resp = supabase.table("workstreams").select("*").eq("id", program_id).execute()
+    if not ws_resp.data:
+        raise HTTPException(status_code=404, detail="Workstream not found")
+    workstream = ws_resp.data[0]
+
+    if workstream.get("user_id") != current_user["id"]:
+        raise HTTPException(status_code=403, detail="You do not own this workstream")
+
+    try:
+        service = AlignmentService()
+        result = await service.score_grant_against_program(card, workstream)
+        return result
+    except Exception as e:
+        logger.error(f"Alignment scoring failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=_safe_error("alignment scoring", e)
+        ) from e
+
+
+@router.get("/me/programs/{program_id}/matches", response_model=MatchesResponse)
+@router.get("/me/workstreams/{program_id}/matches", response_model=MatchesResponse)
+async def get_program_matches(
+    program_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Get top matching grants for a program (workstream).
+
+    Scores active grant cards against the workstream and returns
+    the top 20 matches sorted by overall alignment score.
+    """
+    # Fetch workstream and verify ownership
+    ws_resp = supabase.table("workstreams").select("*").eq("id", program_id).execute()
+    if not ws_resp.data:
+        raise HTTPException(status_code=404, detail="Workstream not found")
+    workstream = ws_resp.data[0]
+
+    if workstream.get("user_id") != current_user["id"]:
+        raise HTTPException(status_code=403, detail="You do not own this workstream")
+
+    # Fetch active cards with grant fields (deadline null or >= now, status active)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    cards_resp = (
+        supabase.table("cards")
+        .select(
+            "id, name, summary, grantor, funding_amount_min, funding_amount_max, "
+            "deadline, grant_type, status, pillar_id, stage_id, description"
+        )
+        .eq("status", "active")
+        .order("created_at", desc=True)
+        .limit(50)
+        .execute()
+    )
+    cards = cards_resp.data or []
+
+    # Filter: deadline is null or >= now
+    eligible_cards = [
+        c for c in cards if c.get("deadline") is None or c.get("deadline") >= now_iso
+    ]
+
+    try:
+        service = AlignmentService()
+        scored = await service.score_grants_for_program(eligible_cards, workstream)
+    except Exception as e:
+        logger.error(f"Batch alignment scoring failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=_safe_error("batch alignment scoring", e)
+        ) from e
+
+    # scored is list[tuple[dict, AlignmentResult]] already sorted by overall_score
+    top_matches = scored[:20]
+
+    matches = []
+    for card_data, alignment_result in top_matches:
+        matches.append(
+            MatchResult(
+                card_id=card_data.get("id", ""),
+                card_name=card_data.get("name", ""),
+                card_summary=card_data.get("summary"),
+                grantor=card_data.get("grantor"),
+                funding_amount_min=card_data.get("funding_amount_min"),
+                funding_amount_max=card_data.get("funding_amount_max"),
+                deadline=card_data.get("deadline"),
+                grant_type=card_data.get("grant_type"),
+                alignment=AlignmentScoreResponse(
+                    fit_score=alignment_result.fit_score,
+                    amount_score=alignment_result.amount_score,
+                    competition_score=alignment_result.competition_score,
+                    readiness_score=alignment_result.readiness_score,
+                    urgency_score=alignment_result.urgency_score,
+                    probability_score=alignment_result.probability_score,
+                    overall_score=alignment_result.overall_score,
+                    explanation=alignment_result.explanation,
+                    recommended_action=alignment_result.recommended_action,
+                ),
+            )
+        )
+
+    return MatchesResponse(
+        program_id=program_id,
+        total_scored=len(eligible_cards),
+        matches=matches,
+    )
+
+
+@router.post("/me/programs/{program_id}/auto-match", response_model=AutoMatchResponse)
+@router.post(
+    "/me/workstreams/{program_id}/auto-match", response_model=AutoMatchResponse
+)
+async def auto_match_program(
+    program_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Auto-add top matching grants to a program's pipeline.
+
+    Scores recent active cards against the workstream and automatically
+    adds cards with overall_score >= 60 to the workstream_cards table
+    with status 'discovered'. Skips cards already in the workstream.
+    """
+    # Fetch workstream and verify ownership
+    ws_resp = supabase.table("workstreams").select("*").eq("id", program_id).execute()
+    if not ws_resp.data:
+        raise HTTPException(status_code=404, detail="Workstream not found")
+    workstream = ws_resp.data[0]
+
+    if workstream.get("user_id") != current_user["id"]:
+        raise HTTPException(status_code=403, detail="You do not own this workstream")
+
+    # Fetch active cards
+    now_iso = datetime.now(timezone.utc).isoformat()
+    cards_resp = (
+        supabase.table("cards")
+        .select(
+            "id, name, summary, grantor, funding_amount_min, funding_amount_max, "
+            "deadline, grant_type, status, pillar_id, stage_id, description"
+        )
+        .eq("status", "active")
+        .order("created_at", desc=True)
+        .limit(50)
+        .execute()
+    )
+    cards = cards_resp.data or []
+
+    eligible_cards = [
+        c for c in cards if c.get("deadline") is None or c.get("deadline") >= now_iso
+    ]
+
+    try:
+        service = AlignmentService()
+        scored = await service.score_grants_for_program(eligible_cards, workstream)
+    except Exception as e:
+        logger.error(f"Auto-match scoring failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=_safe_error("auto-match scoring", e)
+        ) from e
+
+    # Filter to cards with overall_score >= 60
+    # scored is list[tuple[dict, AlignmentResult]]
+    qualifying = [
+        (card, result) for card, result in scored if result.overall_score >= 60
+    ]
+
+    # Get existing card IDs in this workstream to avoid duplicates
+    existing_resp = (
+        supabase.table("workstream_cards")
+        .select("card_id")
+        .eq("workstream_id", program_id)
+        .execute()
+    )
+    existing_card_ids = {row["card_id"] for row in (existing_resp.data or [])}
+
+    # Build insert records for new qualifying cards
+    now = datetime.now(timezone.utc).isoformat()
+    new_card_ids = []
+    records = []
+    for card_data, _alignment_result in qualifying:
+        cid = card_data.get("id", "")
+        if cid and cid not in existing_card_ids:
+            new_card_ids.append(cid)
+            records.append(
+                {
+                    "workstream_id": program_id,
+                    "card_id": cid,
+                    "added_by": current_user["id"],
+                    "added_at": now,
+                    "status": "discovered",
+                    "added_from": "auto_match",
+                    "updated_at": now,
+                }
+            )
+
+    if records:
+        supabase.table("workstream_cards").insert(records).execute()
+        logger.info(f"Auto-match added {len(records)} cards to workstream {program_id}")
+
+    return AutoMatchResponse(
+        program_id=program_id,
+        cards_scored=len(eligible_cards),
+        cards_added=len(new_card_ids),
+        card_ids=new_card_ids,
+    )

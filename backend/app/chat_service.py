@@ -1,10 +1,11 @@
 """
-Chat Service for Foresight Application (Ask Foresight / NLQ).
+Chat Service for GrantScope2 Application (Ask GrantScope / NLQ).
 
-Provides RAG-powered conversational AI with three scopes:
+Provides RAG-powered conversational AI with four scopes:
 - signal: Deep Q&A about a single card and its sources
 - workstream: Analysis across cards within a workstream
 - global: Broad strategic intelligence search using vector similarity
+- wizard: Grant application advisor interview mode
 
 Uses Azure OpenAI for streaming chat completions and embedding generation.
 Context is assembled from Supabase and injected into the system prompt.
@@ -144,6 +145,109 @@ async def _check_rate_limit(supabase: Client, user_id: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Wizard Interview System Prompt
+# ---------------------------------------------------------------------------
+
+WIZARD_INTERVIEW_PROMPT = """You are GrantScope's Grant Application Advisor — a friendly, expert guide who helps City of Austin program managers prepare grant applications.
+
+IMPORTANT: Many users have NEVER applied for a grant before. Be encouraging, explain everything in simple terms, and never use jargon without explaining it first.
+
+## Your Role
+You are interviewing the user to help them develop a strong grant application. Ask questions conversationally — this should feel like a helpful chat, not a form.
+
+## Grant Opportunity
+{grant_context}
+
+## Topics to Cover
+Work through these topics naturally. Ask 1-2 questions at a time. Adapt based on their answers.
+
+1. **Program Overview** — What is their program? What problem does it address for Austin residents?
+2. **Staffing** — Who would do the work? Existing staff or new hires? What roles?
+3. **Budget** — How would they spend the money? Major cost categories? Any matching funds?
+4. **Timeline** — When would they start? Key milestones? How does this align with the grant period?
+5. **Deliverables** — What tangible outcomes? How many people served?
+6. **Evaluation** — How would they measure success? What data would they collect?
+7. **Capacity** — Has their department done similar work? Any partnerships?
+
+## Interview Rules
+- Start by warmly greeting them and asking about their program
+- Ask ONE question at a time (maybe two if closely related)
+- If they seem confused, offer examples from city government context
+- If they say "I don't know", help them think through it with suggestions
+- Validate their answers positively before moving to the next topic
+- When you have enough for a topic, naturally transition to the next
+- After covering all essential topics (at least program overview, staffing, budget, and timeline), summarize what you've learned and ask if they're ready to move to the next step
+
+## Progress Tracking
+When you've gathered enough information on a topic, include this hidden marker at the END of your response (after all visible text):
+<!-- TOPIC_COMPLETE: topic_name -->
+
+Valid topic names: program_overview, staffing, budget, timeline, deliverables, evaluation, capacity
+
+You can mark multiple topics complete in one response if the user covered several areas.
+
+## Already Gathered Information
+{interview_data}
+"""
+
+
+def _format_wizard_context(data: Any) -> str:
+    """Format wizard session JSONB data as a readable string for the system prompt."""
+    if not data:
+        return "None yet."
+    if isinstance(data, str):
+        return data
+    if isinstance(data, dict):
+        parts = []
+        for key, value in data.items():
+            if value:
+                label = key.replace("_", " ").title()
+                if isinstance(value, (dict, list)):
+                    parts.append(f"- {label}: {json.dumps(value, indent=2)}")
+                else:
+                    parts.append(f"- {label}: {value}")
+        return "\n".join(parts) if parts else "None yet."
+    return json.dumps(data, indent=2)
+
+
+async def _build_wizard_system_prompt(
+    supabase: Client,
+    scope_id: Optional[str],
+) -> str:
+    """Build the system prompt for wizard scope by loading the wizard session."""
+    grant_context = "No specific grant selected yet. Help the user think about their program generally."
+    interview_data = "None yet."
+
+    if scope_id:
+        try:
+            session_resp = await asyncio.to_thread(
+                lambda: supabase.table("wizard_sessions")
+                .select("*")
+                .eq("id", scope_id)
+                .single()
+                .execute()
+            )
+            if session_resp.data:
+                session = session_resp.data
+                raw_grant_context = session.get("grant_context")
+                raw_interview_data = session.get("interview_data")
+
+                if raw_grant_context:
+                    grant_context = _format_wizard_context(raw_grant_context)
+                if raw_interview_data:
+                    interview_data = _format_wizard_context(raw_interview_data)
+        except Exception as e:
+            logger.warning(
+                f"Failed to load wizard session {scope_id}, using generic prompt: {e}"
+            )
+
+    return WIZARD_INTERVIEW_PROMPT.format(
+        grant_context=grant_context,
+        interview_data=interview_data,
+    )
+
+
+# ---------------------------------------------------------------------------
 # System Prompt Builder
 # ---------------------------------------------------------------------------
 
@@ -201,7 +305,7 @@ Do NOT use web_search when the provided signals and sources already answer the q
 When citing web search results, use the same [N] citation format as internal sources.
 """
 
-    return f"""You are Foresight, the City of Austin's AI strategic intelligence assistant.
+    return f"""You are GrantScope, the City of Austin's AI strategic intelligence assistant.
 
 You help city leaders, analysts, and decision-makers understand emerging trends, technologies, and issues that could impact municipal operations. You are part of a horizon scanning system aligned with Austin's strategic framework.
 
@@ -476,41 +580,67 @@ async def chat(
         # Store the user message
         await _store_message(supabase_client, conv_id, "user", message)
 
-        # 3. Context retrieval via hybrid RAG engine
-        yield _sse_event(
-            "progress",
-            {"step": "searching", "detail": "Searching signals and sources..."},
-        )
+        # 3. Context retrieval via hybrid RAG engine (skipped for wizard scope)
+        source_map: Dict[int, Dict[str, Any]] = {}
+        scope_metadata: Dict[str, Any] = {}
 
-        try:
-            engine = RAGEngine(supabase_client)
-            context_text, scope_metadata = await engine.retrieve(
-                query=message,
-                scope=scope,
-                scope_id=scope_id,
-                mentions=mentions,
-                max_context_chars=MAX_CONTEXT_CHARS,
+        if scope == "wizard":
+            # Wizard scope uses its own system prompt, no RAG retrieval needed
+            yield _sse_event(
+                "progress",
+                {"step": "searching", "detail": "Loading grant application context..."},
             )
-            source_map = scope_metadata.get("source_map", {})
-        except Exception as e:
-            logger.error(f"Context retrieval failed for scope={scope}: {e}")
-            yield _sse_error("Failed to retrieve context. Please try again.")
-            return
+            try:
+                system_prompt = await _build_wizard_system_prompt(
+                    supabase_client, scope_id
+                )
+            except Exception as e:
+                logger.error(f"Failed to build wizard system prompt: {e}")
+                yield _sse_error("Failed to load wizard session. Please try again.")
+                return
 
-        if scope_metadata.get("error"):
-            yield _sse_error(f"Context error: {scope_metadata['error']}")
-            return
+            yield _sse_event(
+                "progress",
+                {
+                    "step": "analyzing",
+                    "detail": "Ready to help with your grant application",
+                },
+            )
+        else:
+            yield _sse_event(
+                "progress",
+                {"step": "searching", "detail": "Searching signals and sources..."},
+            )
 
-        yield _sse_event(
-            "progress",
-            {
-                "step": "analyzing",
-                "detail": f"Found {scope_metadata.get('matched_cards', 0)} signals and {scope_metadata.get('matched_sources', 0)} sources",
-            },
-        )
+            try:
+                engine = RAGEngine(supabase_client)
+                context_text, scope_metadata = await engine.retrieve(
+                    query=message,
+                    scope=scope,
+                    scope_id=scope_id,
+                    mentions=mentions,
+                    max_context_chars=MAX_CONTEXT_CHARS,
+                )
+                source_map = scope_metadata.get("source_map", {})
+            except Exception as e:
+                logger.error(f"Context retrieval failed for scope={scope}: {e}")
+                yield _sse_error("Failed to retrieve context. Please try again.")
+                return
 
-        # 4. Build messages for the LLM
-        system_prompt = _build_system_prompt(scope, context_text, scope_metadata)
+            if scope_metadata.get("error"):
+                yield _sse_error(f"Context error: {scope_metadata['error']}")
+                return
+
+            yield _sse_event(
+                "progress",
+                {
+                    "step": "analyzing",
+                    "detail": f"Found {scope_metadata.get('matched_cards', 0)} signals and {scope_metadata.get('matched_sources', 0)} sources",
+                },
+            )
+
+            # 4. Build messages for the LLM
+            system_prompt = _build_system_prompt(scope, context_text, scope_metadata)
 
         # Get conversation history (for multi-turn context)
         history = await _get_conversation_history(supabase_client, conv_id)
@@ -802,6 +932,8 @@ async def chat(
             meta["card_count"] = scope_metadata.get("card_count", 0)
         elif scope == "global":
             meta["matched_cards"] = scope_metadata.get("matched_cards", 0)
+        elif scope == "wizard":
+            meta["scope"] = "wizard"
 
         yield _sse_event("metadata", meta)
 
@@ -857,6 +989,7 @@ async def _generate_suggestions_internal(
         "signal": f"""The user is exploring a signal called \"{scope_metadata.get('card_name', 'Unknown')}\". Suggest questions about its implications for Austin, implementation timeline, risks, comparison with similar trends, or what other cities are doing.""",
         "workstream": f"""The user is exploring a workstream called \"{scope_metadata.get('workstream_name', 'Unknown')}\" with {scope_metadata.get('card_count', 0)} signals. Suggest questions about cross-cutting themes, priority signals, resource allocation, or strategic recommendations.""",
         "global": "The user asked a broad strategic question. Suggest questions about specific pillars, emerging patterns, comparisons between trends, or actionable next steps for the city.",
+        "wizard": "The user is working through a grant application interview. Suggest responses they might give or questions they might ask about writing the grant, such as budget details, staffing plans, or timeline clarifications.",
     }
 
     prompt = f"""Based on this Q&A exchange, suggest exactly 3 follow-up questions the user might ask.
@@ -966,6 +1099,11 @@ async def generate_suggestions(
             "Focus on cross-cutting themes, high-velocity signals, new patterns, "
             "and actionable intelligence."
         ),
+        "wizard": (
+            "Generate 3 starter prompts to help a city program manager begin "
+            "a grant application interview. Focus on describing their program, "
+            "the problem it solves, and who it would help."
+        ),
     }
 
     prompt = scope_hints.get(scope, scope_hints["global"])
@@ -1014,6 +1152,11 @@ async def generate_suggestions(
             "What are the fastest-moving trends right now?",
             "Are there any new cross-cutting patterns emerging?",
             "What should Austin prioritize in the next 12 months?",
+        ],
+        "wizard": [
+            "Tell me about the program I want to fund",
+            "I need help figuring out a budget for my grant",
+            "What kind of grants are available for city programs?",
         ],
     }
 

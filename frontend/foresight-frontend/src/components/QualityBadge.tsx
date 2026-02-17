@@ -4,7 +4,7 @@
  * A reusable traffic-light badge that displays the Source Quality Index (SQI)
  * tier for a card. Uses a green/amber/red/gray color scheme to communicate
  * confidence level at a glance, consistent with the badge patterns used
- * throughout the Foresight app (PillarBadge, HorizonBadge, etc.).
+ * throughout the GrantScope app (PillarBadge, HorizonBadge, etc.).
  *
  * Visual design:
  * - High Confidence (>= 80): green background

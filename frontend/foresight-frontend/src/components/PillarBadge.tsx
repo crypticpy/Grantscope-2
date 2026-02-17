@@ -7,7 +7,6 @@
  * - Tooltip showing full pillar name, description, and related goals
  */
 
-import React from 'react';
 import {
   Heart,
   Briefcase,
@@ -16,18 +15,20 @@ import {
   Car,
   Shield,
   type LucideIcon,
-} from 'lucide-react';
-import { Tooltip } from './ui/Tooltip';
-import { cn } from '../lib/utils';
-import { getSizeClasses, getIconSize } from '../lib/badge-utils';
+} from "lucide-react";
+import { Tooltip } from "./ui/Tooltip";
+import { cn } from "../lib/utils";
+import { getSizeClasses, getIconSize } from "../lib/badge-utils";
 import {
   getPillarByCode,
   getGoalsByPillar,
+  getGrantCategoryByCode,
   type Pillar,
   type Goal,
-} from '../data/taxonomy';
+  type GrantCategory,
+} from "../data/taxonomy";
 
-// Icon mapping for pillars
+// Icon mapping for pillars and grant categories
 const pillarIcons: Record<string, LucideIcon> = {
   Heart: Heart,
   Briefcase: Briefcase,
@@ -35,6 +36,11 @@ const pillarIcons: Record<string, LucideIcon> = {
   Home: Home,
   Car: Car,
   Shield: Shield,
+  // Grant category icons reuse existing icons; add more as needed
+  Construction: Building2,
+  Leaf: Heart,
+  Cpu: Building2,
+  GraduationCap: Briefcase,
 };
 
 export interface PillarBadgeProps {
@@ -45,7 +51,7 @@ export interface PillarBadgeProps {
   /** Whether to show the pillar icon */
   showIcon?: boolean;
   /** Size variant */
-  size?: 'sm' | 'md' | 'lg';
+  size?: "sm" | "md" | "lg";
   /** Additional className */
   className?: string;
   /** Whether tooltip is disabled */
@@ -60,74 +66,182 @@ function getPillarColorClasses(pillar: Pillar): {
   text: string;
   border: string;
 } {
-  const colorMap: Record<string, { bg: string; text: string; border: string }> = {
-    CH: {
-      bg: 'bg-green-100',
-      text: 'text-green-800',
-      border: 'border-green-300',
-    },
-    EW: {
-      bg: 'bg-blue-100',
-      text: 'text-blue-800',
-      border: 'border-blue-300',
-    },
-    HG: {
-      bg: 'bg-indigo-100',
-      text: 'text-indigo-800',
-      border: 'border-indigo-300',
-    },
-    HH: {
-      bg: 'bg-pink-100',
-      text: 'text-pink-800',
-      border: 'border-pink-300',
-    },
-    MC: {
-      bg: 'bg-amber-100',
-      text: 'text-amber-800',
-      border: 'border-amber-300',
-    },
-    PS: {
-      bg: 'bg-red-100',
-      text: 'text-red-800',
-      border: 'border-red-300',
-    },
-  };
+  const colorMap: Record<string, { bg: string; text: string; border: string }> =
+    {
+      CH: {
+        bg: "bg-green-100",
+        text: "text-green-800",
+        border: "border-green-300",
+      },
+      EW: {
+        bg: "bg-blue-100",
+        text: "text-blue-800",
+        border: "border-blue-300",
+      },
+      HG: {
+        bg: "bg-indigo-100",
+        text: "text-indigo-800",
+        border: "border-indigo-300",
+      },
+      HH: {
+        bg: "bg-pink-100",
+        text: "text-pink-800",
+        border: "border-pink-300",
+      },
+      MC: {
+        bg: "bg-amber-100",
+        text: "text-amber-800",
+        border: "border-amber-300",
+      },
+      PS: {
+        bg: "bg-red-100",
+        text: "text-red-800",
+        border: "border-red-300",
+      },
+    };
 
-  return colorMap[pillar.code] || { bg: 'bg-gray-100', text: 'text-gray-800', border: 'border-gray-300' };
+  return (
+    colorMap[pillar.code] || {
+      bg: "bg-gray-100",
+      text: "text-gray-800",
+      border: "border-gray-300",
+    }
+  );
 }
 
+/**
+ * Get color classes for a grant category
+ */
+function getGrantCategoryColorClasses(category: GrantCategory): {
+  bg: string;
+  text: string;
+  border: string;
+} {
+  const colorMap: Record<string, { bg: string; text: string; border: string }> =
+    {
+      HS: {
+        bg: "bg-green-100",
+        text: "text-green-800",
+        border: "border-green-300",
+      },
+      PS: {
+        bg: "bg-red-100",
+        text: "text-red-800",
+        border: "border-red-300",
+      },
+      HD: {
+        bg: "bg-pink-100",
+        text: "text-pink-800",
+        border: "border-pink-300",
+      },
+      IN: {
+        bg: "bg-amber-100",
+        text: "text-amber-800",
+        border: "border-amber-300",
+      },
+      EN: {
+        bg: "bg-emerald-100",
+        text: "text-emerald-800",
+        border: "border-emerald-300",
+      },
+      CE: {
+        bg: "bg-blue-100",
+        text: "text-blue-800",
+        border: "border-blue-300",
+      },
+      TG: {
+        bg: "bg-indigo-100",
+        text: "text-indigo-800",
+        border: "border-indigo-300",
+      },
+      EQ: {
+        bg: "bg-violet-100",
+        text: "text-violet-800",
+        border: "border-violet-300",
+      },
+    };
+
+  return (
+    colorMap[category.code] || {
+      bg: "bg-gray-100",
+      text: "text-gray-800",
+      border: "border-gray-300",
+    }
+  );
+}
 
 /**
  * Get extended description for each pillar with strategic context
  */
-function getPillarExtendedInfo(code: string): { focus: string; keyDepartments: string[] } {
+function getPillarExtendedInfo(code: string): {
+  focus: string;
+  keyDepartments: string[];
+} {
   const infoMap: Record<string, { focus: string; keyDepartments: string[] }> = {
     CH: {
-      focus: 'Focuses on public health equity, park access, climate action, emergency preparedness, and animal welfare to build a healthier, more resilient Austin.',
-      keyDepartments: ['Austin Public Health', 'Parks & Recreation', 'Office of Sustainability', 'Homeland Security & Emergency Mgmt'],
+      focus:
+        "Focuses on public health equity, park access, climate action, emergency preparedness, and animal welfare to build a healthier, more resilient Austin.",
+      keyDepartments: [
+        "Austin Public Health",
+        "Parks & Recreation",
+        "Office of Sustainability",
+        "Homeland Security & Emergency Mgmt",
+      ],
     },
     EW: {
-      focus: 'Drives economic mobility through workforce development, small business support, and preserving Austin\'s creative and cultural economy.',
-      keyDepartments: ['Economic Development', 'Workforce Solutions', 'Small Business Program', 'Cultural Arts Division'],
+      focus:
+        "Drives economic mobility through workforce development, small business support, and preserving Austin's creative and cultural economy.",
+      keyDepartments: [
+        "Economic Development",
+        "Workforce Solutions",
+        "Small Business Program",
+        "Cultural Arts Division",
+      ],
     },
     HG: {
-      focus: 'Ensures fiscal responsibility, modernizes technology and data capabilities, builds a diverse workforce, and strengthens community engagement.',
-      keyDepartments: ['Financial Services', 'Communications & Technology Mgmt', 'Human Resources', 'Communications & Public Info'],
+      focus:
+        "Ensures fiscal responsibility, modernizes technology and data capabilities, builds a diverse workforce, and strengthens community engagement.",
+      keyDepartments: [
+        "Financial Services",
+        "Communications & Technology Mgmt",
+        "Human Resources",
+        "Communications & Public Info",
+      ],
     },
     HH: {
-      focus: 'Creates complete communities with accessible services, expands affordable housing, and reduces homelessness through coordinated care.',
-      keyDepartments: ['Housing & Planning', 'Homeless Services', 'Neighborhood Housing', 'Austin Housing Finance Corp'],
+      focus:
+        "Creates complete communities with accessible services, expands affordable housing, and reduces homelessness through coordinated care.",
+      keyDepartments: [
+        "Housing & Planning",
+        "Homeless Services",
+        "Neighborhood Housing",
+        "Austin Housing Finance Corp",
+      ],
     },
     MC: {
-      focus: 'Prioritizes transportation safety, invests in transit expansion including Project Connect, and maintains resilient utility infrastructure.',
-      keyDepartments: ['Austin Transportation', 'Capital Metro', 'Austin Energy', 'Austin Water', 'Building Services'],
+      focus:
+        "Prioritizes transportation safety, invests in transit expansion including Project Connect, and maintains resilient utility infrastructure.",
+      keyDepartments: [
+        "Austin Transportation",
+        "Capital Metro",
+        "Austin Energy",
+        "Austin Water",
+        "Building Services",
+      ],
     },
     PS: {
-      focus: 'Builds community trust, ensures equitable public safety services, and prepares for disasters through cross-sector partnerships.',
-      keyDepartments: ['Austin Police', 'Austin Fire', 'EMS', 'Municipal Court', 'Office of Police Oversight'],
+      focus:
+        "Builds community trust, ensures equitable public safety services, and prepares for disasters through cross-sector partnerships.",
+      keyDepartments: [
+        "Austin Police",
+        "Austin Fire",
+        "EMS",
+        "Municipal Court",
+        "Office of Police Oversight",
+      ],
     },
   };
-  return infoMap[code] || { focus: '', keyDepartments: [] };
+  return infoMap[code] || { focus: "", keyDepartments: [] };
 }
 
 /**
@@ -151,13 +265,8 @@ function PillarTooltipContent({
       {/* Header */}
       <div className="flex items-start gap-2">
         {Icon && (
-          <div
-            className={cn(
-              'p-2 rounded-lg',
-              colors.bg
-            )}
-          >
-            <Icon className={cn('h-5 w-5', colors.text)} />
+          <div className={cn("p-2 rounded-lg", colors.bg)}>
+            <Icon className={cn("h-5 w-5", colors.text)} />
           </div>
         )}
         <div>
@@ -177,7 +286,7 @@ function PillarTooltipContent({
 
       {/* Key Departments */}
       {extendedInfo.keyDepartments.length > 0 && (
-        <div className={cn('rounded-md p-2', colors.bg)}>
+        <div className={cn("rounded-md p-2", colors.bg)}>
           <div className="text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
             Key Departments
           </div>
@@ -205,18 +314,18 @@ function PillarTooltipContent({
               <li
                 key={goal.code}
                 className={cn(
-                  'text-xs flex items-start gap-1.5',
+                  "text-xs flex items-start gap-1.5",
                   highlightGoalId === goal.code
-                    ? 'text-gray-900 dark:text-gray-100 font-medium'
-                    : 'text-gray-600 dark:text-gray-400'
+                    ? "text-gray-900 dark:text-gray-100 font-medium"
+                    : "text-gray-600 dark:text-gray-400",
                 )}
               >
                 <span
                   className={cn(
-                    'font-mono shrink-0',
+                    "font-mono shrink-0",
                     highlightGoalId === goal.code
                       ? colors.text
-                      : 'text-gray-400 dark:text-gray-500'
+                      : "text-gray-400 dark:text-gray-500",
                   )}
                 >
                   {goal.code}
@@ -243,20 +352,21 @@ export function PillarBadge({
   pillarId,
   goalId,
   showIcon = true,
-  size = 'md',
+  size = "md",
   className,
   disableTooltip = false,
 }: PillarBadgeProps) {
   const pillar = getPillarByCode(pillarId);
+  const grantCategory = !pillar ? getGrantCategoryByCode(pillarId) : undefined;
 
-  if (!pillar) {
+  if (!pillar && !grantCategory) {
     return (
       <span
         className={cn(
-          'inline-flex items-center gap-1 rounded font-medium border',
-          'bg-gray-100 text-gray-600 border-gray-300',
+          "inline-flex items-center gap-1 rounded font-medium border",
+          "bg-gray-100 text-gray-600 border-gray-300",
           getSizeClasses(size),
-          className
+          className,
         )}
       >
         {pillarId}
@@ -264,27 +374,80 @@ export function PillarBadge({
     );
   }
 
-  const colors = getPillarColorClasses(pillar);
-  const Icon = showIcon ? pillarIcons[pillar.icon] : null;
+  // Use pillar data if available, otherwise fall back to grant category
+  if (grantCategory && !pillar) {
+    const colors = getGrantCategoryColorClasses(grantCategory);
+    const Icon = showIcon ? pillarIcons[grantCategory.icon] : null;
+    const iconSize = getIconSize(size);
+
+    const badge = (
+      <span
+        className={cn(
+          "inline-flex items-center gap-1 rounded font-medium border cursor-default",
+          colors.bg,
+          colors.text,
+          colors.border,
+          getSizeClasses(size),
+          !disableTooltip && "cursor-pointer",
+          className,
+        )}
+        role="status"
+        aria-label={`${grantCategory.name} grant category`}
+      >
+        {Icon && <Icon className="shrink-0" size={iconSize} />}
+        <span>{grantCategory.code}</span>
+      </span>
+    );
+
+    if (disableTooltip) {
+      return badge;
+    }
+
+    return (
+      <Tooltip
+        content={
+          <div className="space-y-2 min-w-[200px] max-w-[280px]">
+            <div className="font-semibold text-gray-900 dark:text-gray-100">
+              {grantCategory.name}
+            </div>
+            <div className="text-xs font-mono text-gray-500 dark:text-gray-400">
+              Grant Category {grantCategory.code}
+            </div>
+            <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed">
+              {grantCategory.description}
+            </p>
+          </div>
+        }
+        side="top"
+        align="center"
+        contentClassName="p-3"
+      >
+        {badge}
+      </Tooltip>
+    );
+  }
+
+  const colors = getPillarColorClasses(pillar!);
+  const Icon = showIcon ? pillarIcons[pillar!.icon] : null;
   const iconSize = getIconSize(size);
   const goals = getGoalsByPillar(pillarId);
 
   const badge = (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded font-medium border cursor-default',
+        "inline-flex items-center gap-1 rounded font-medium border cursor-default",
         colors.bg,
         colors.text,
         colors.border,
         getSizeClasses(size),
-        !disableTooltip && 'cursor-pointer',
-        className
+        !disableTooltip && "cursor-pointer",
+        className,
       )}
       role="status"
-      aria-label={`${pillar.name} pillar`}
+      aria-label={`${pillar!.name} pillar`}
     >
       {Icon && <Icon className="shrink-0" size={iconSize} />}
-      <span>{pillar.code}</span>
+      <span>{pillar!.code}</span>
     </span>
   );
 
@@ -296,7 +459,7 @@ export function PillarBadge({
     <Tooltip
       content={
         <PillarTooltipContent
-          pillar={pillar}
+          pillar={pillar!}
           goals={goals}
           highlightGoalId={goalId}
         />
@@ -317,7 +480,7 @@ export interface PillarBadgeGroupProps {
   /** Array of pillar codes */
   pillarIds: string[];
   /** Size variant */
-  size?: 'sm' | 'md' | 'lg';
+  size?: "sm" | "md" | "lg";
   /** Whether to show icons */
   showIcon?: boolean;
   /** Maximum number to show before "+N more" */
@@ -328,7 +491,7 @@ export interface PillarBadgeGroupProps {
 
 export function PillarBadgeGroup({
   pillarIds,
-  size = 'sm',
+  size = "sm",
   showIcon = true,
   maxVisible = 3,
   className,
@@ -337,7 +500,7 @@ export function PillarBadgeGroup({
   const remainingCount = pillarIds.length - maxVisible;
 
   return (
-    <div className={cn('inline-flex items-center gap-1 flex-wrap', className)}>
+    <div className={cn("inline-flex items-center gap-1 flex-wrap", className)}>
       {visiblePillars.map((pillarId) => (
         <PillarBadge
           key={pillarId}
@@ -349,9 +512,9 @@ export function PillarBadgeGroup({
       {remainingCount > 0 && (
         <span
           className={cn(
-            'inline-flex items-center rounded font-medium',
-            'bg-gray-100 text-gray-600 border border-gray-300',
-            getSizeClasses(size)
+            "inline-flex items-center rounded font-medium",
+            "bg-gray-100 text-gray-600 border border-gray-300",
+            getSizeClasses(size),
           )}
         >
           +{remainingCount}

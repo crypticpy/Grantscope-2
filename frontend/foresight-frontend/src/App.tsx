@@ -32,12 +32,18 @@ const Workstreams = lazy(() => import("./pages/Workstreams"));
 const WorkstreamFeed = lazy(() => import("./pages/WorkstreamFeed"));
 const WorkstreamKanban = lazy(() => import("./pages/WorkstreamKanban"));
 
+// Proposal pages
+const ProposalEditor = lazy(() => import("./pages/ProposalEditor"));
+
+// Grant Application Wizard
+const GrantWizard = lazy(() => import("./pages/GrantWizard"));
+
 // Standalone pages
 const Settings = lazy(() => import("./pages/Settings"));
 const Analytics = lazy(() => import("./pages/AnalyticsV2"));
 const Methodology = lazy(() => import("./pages/Methodology"));
 const Signals = lazy(() => import("./pages/Signals"));
-const AskForesight = lazy(() => import("./pages/AskForesight"));
+const AskGrantScope = lazy(() => import("./pages/AskGrantScope"));
 const Feeds = lazy(() => import("./pages/Feeds"));
 
 // Guide pages
@@ -201,7 +207,7 @@ function App() {
                   element={
                     <ProtectedRoute
                       element={<CardDetail />}
-                      loadingMessage="Loading signal details..."
+                      loadingMessage="Loading opportunity details..."
                     />
                   }
                 />
@@ -210,18 +216,18 @@ function App() {
                   element={
                     <ProtectedRoute
                       element={<Signals />}
-                      loadingMessage="Loading signals..."
+                      loadingMessage="Loading opportunities..."
                     />
                   }
                 />
 
-                {/* Ask Foresight - AI chat interface */}
+                {/* Ask GrantScope - AI chat interface */}
                 <Route
                   path="/ask"
                   element={
                     <ProtectedRoute
-                      element={<AskForesight />}
-                      loadingMessage="Loading Ask Foresight..."
+                      element={<AskGrantScope />}
+                      loadingMessage="Loading Ask GrantScope..."
                     />
                   }
                 />
@@ -342,6 +348,102 @@ function App() {
                     <ProtectedRoute
                       element={<GuideWorkstreams />}
                       loadingMessage="Loading guide..."
+                    />
+                  }
+                />
+
+                {/* Grant-oriented route aliases */}
+                <Route
+                  path="/opportunities"
+                  element={
+                    <ProtectedRoute
+                      element={<Signals />}
+                      loadingMessage="Loading opportunities..."
+                    />
+                  }
+                />
+                <Route
+                  path="/opportunities/:slug"
+                  element={
+                    <ProtectedRoute
+                      element={<CardDetail />}
+                      loadingMessage="Loading opportunity details..."
+                    />
+                  }
+                />
+                <Route
+                  path="/programs"
+                  element={
+                    <ProtectedRoute
+                      element={<Workstreams />}
+                      loadingMessage="Loading programs..."
+                    />
+                  }
+                />
+                <Route
+                  path="/programs/:id/board"
+                  element={
+                    <ProtectedRoute
+                      element={<WorkstreamKanban />}
+                      loadingMessage="Loading pipeline..."
+                    />
+                  }
+                />
+                <Route
+                  path="/programs/:id"
+                  element={
+                    <ProtectedRoute
+                      element={<WorkstreamFeed />}
+                      loadingMessage="Loading program..."
+                    />
+                  }
+                />
+                <Route
+                  path="/guide/programs"
+                  element={
+                    <ProtectedRoute
+                      element={<GuideWorkstreams />}
+                      loadingMessage="Loading guide..."
+                    />
+                  }
+                />
+                <Route
+                  path="/guide/opportunities"
+                  element={
+                    <ProtectedRoute
+                      element={<GuideSignals />}
+                      loadingMessage="Loading guide..."
+                    />
+                  }
+                />
+
+                {/* Proposal editor */}
+                <Route
+                  path="/proposals/:id"
+                  element={
+                    <ProtectedRoute
+                      element={<ProposalEditor />}
+                      loadingMessage="Loading proposal editor..."
+                    />
+                  }
+                />
+
+                {/* Grant Application Wizard */}
+                <Route
+                  path="/apply"
+                  element={
+                    <ProtectedRoute
+                      element={<GrantWizard />}
+                      loadingMessage="Loading grant wizard..."
+                    />
+                  }
+                />
+                <Route
+                  path="/apply/:sessionId"
+                  element={
+                    <ProtectedRoute
+                      element={<GrantWizard />}
+                      loadingMessage="Loading grant wizard..."
                     />
                   }
                 />

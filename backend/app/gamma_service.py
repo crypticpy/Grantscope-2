@@ -11,7 +11,7 @@ Usage:
         title="Perovskite Solar Cells",
         executive_summary="...",
         content_markdown="...",
-        classification={"pillar": "ES", "horizon": "H2", "stage": "4"}
+        classification={"pillar": "CH", "horizon": "H2", "stage": "4"}
     )
 
     if result.success:
@@ -28,6 +28,8 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
+
+from app.taxonomy import PILLAR_DEFINITIONS, PILLAR_NAMES
 
 logger = logging.getLogger(__name__)
 
@@ -90,93 +92,6 @@ COA_COLORS = {
     "brown": "#8F5201",
     "dark_gray": "#636262",  # Body text
     "black": "#000000",
-}
-
-# Classification data for slide context (matches database pillars table)
-PILLAR_NAMES = {
-    "CH": "Community Health & Sustainability",
-    "EW": "Economic & Workforce Development",
-    "HG": "High-Performing Government",
-    "HH": "Homelessness & Housing",
-    "MC": "Mobility & Critical Infrastructure",
-    "PS": "Public Safety",
-}
-
-# Extended pillar definitions for backup slides
-# Uses the 6 canonical AI pillar codes (CH, EW, HG, HH, MC, PS)
-PILLAR_DEFINITIONS = {
-    "CH": {
-        "name": "Community Health & Sustainability",
-        "icon": "🏥",
-        "description": "Promoting physical, mental, and social well-being for all Austinites",
-        "focus_areas": [
-            "Health equity and access to services",
-            "Preventive health and early intervention",
-            "Mental health resources and support",
-            "Healthy environments for physical activity",
-            "Public health emergency preparedness",
-        ],
-    },
-    "EW": {
-        "name": "Economic & Workforce Development",
-        "icon": "📈",
-        "description": "Economic mobility, small business support, and creative economy",
-        "focus_areas": [
-            "Workforce development and job training",
-            "Small business support platforms",
-            "Creative economy initiatives",
-            "Economic resilience planning",
-            "Entrepreneurship ecosystems",
-        ],
-    },
-    "HG": {
-        "name": "High-Performing Government",
-        "icon": "🏛️",
-        "description": "Fiscal integrity, technology modernization, and community engagement",
-        "focus_areas": [
-            "Government technology modernization",
-            "Civic engagement platforms",
-            "Municipal process automation",
-            "Data-driven decision making",
-            "Government workforce development",
-        ],
-    },
-    "HH": {
-        "name": "Homelessness & Housing",
-        "icon": "🏠",
-        "description": "Complete communities, affordable housing, and homelessness reduction",
-        "focus_areas": [
-            "Affordable housing supply",
-            "Homelessness prevention and solutions",
-            "Housing quality and safety",
-            "Supportive housing models",
-            "Community development",
-        ],
-    },
-    "MC": {
-        "name": "Mobility & Critical Infrastructure",
-        "icon": "🚇",
-        "description": "Ensuring accessible, sustainable, and efficient transportation options",
-        "focus_areas": [
-            "Public transit accessibility",
-            "Bike lanes and pedestrian infrastructure",
-            "Traffic management and congestion reduction",
-            "Smart transportation technology",
-            "Regional connectivity",
-        ],
-    },
-    "PS": {
-        "name": "Public Safety",
-        "icon": "🛡️",
-        "description": "Community relationships, fair service delivery, and disaster preparedness",
-        "focus_areas": [
-            "Community policing and trust building",
-            "Emergency response innovation",
-            "Disaster preparedness systems",
-            "Violence prevention programs",
-            "Fair service delivery",
-        ],
-    },
 }
 
 HORIZON_NAMES = {

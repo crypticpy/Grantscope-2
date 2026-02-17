@@ -30,6 +30,7 @@ import { WorkstreamWizard } from "../components/workstream/WorkstreamWizard";
 import { PillarBadgeGroup } from "../components/PillarBadge";
 import { getGoalByCode } from "../data/taxonomy";
 import { cn } from "../lib/utils";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 import {
   getWorkstreamScanStatus,
   type WorkstreamScanStatusResponse,
@@ -52,8 +53,13 @@ function DeleteConfirmModal({
   onCancel,
   isDeleting,
 }: DeleteConfirmModalProps) {
+  const focusTrapRef = useFocusTrap(true);
+
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+    <div
+      ref={focusTrapRef}
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+    >
       <div className="bg-white dark:bg-dark-surface rounded-xl shadow-2xl max-w-md w-full p-6">
         <div className="flex items-start gap-4">
           <div className="flex-shrink-0 w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
@@ -61,7 +67,7 @@ function DeleteConfirmModal({
           </div>
           <div className="flex-1">
             <h3 className="text-lg font-medium text-gray-900 dark:text-white">
-              Delete Workstream
+              Delete Program
             </h3>
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
               Are you sure you want to delete{" "}
@@ -125,10 +131,10 @@ function FormModal({ workstream, onSuccess, onCancel }: FormModalProps) {
           <>
             <div className="sticky top-0 bg-white dark:bg-dark-surface border-b border-gray-200 dark:border-gray-700 px-6 py-4 rounded-t-lg">
               <h3 className="text-lg font-medium text-gray-900 dark:text-white">
-                Edit Workstream
+                Edit Program
               </h3>
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Update the filters and settings for this workstream.
+                Update the filters and settings for this program.
               </p>
             </div>
             <div className="px-6 py-4">
@@ -163,7 +169,7 @@ function WorkstreamHelpBanner({ onDismiss }: WorkstreamHelpBannerProps) {
       name: "Inbox",
       icon: Inbox,
       color: "bg-blue-100 dark:bg-blue-900/30",
-      description: "New signals awaiting triage",
+      description: "New opportunities awaiting triage",
     },
     {
       name: "Screening",
@@ -207,9 +213,9 @@ function WorkstreamHelpBanner({ onDismiss }: WorkstreamHelpBannerProps) {
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
             <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-              Workstreams are personalized research workspaces. Define filter
-              criteria to automatically collect and track relevant signals
-              through a structured research workflow.
+              Programs are personalized grant tracking workspaces. Define filter
+              criteria to automatically collect and track relevant opportunities
+              through a structured review workflow.
             </p>
             <button
               onClick={() => setExpanded(!expanded)}
@@ -240,12 +246,12 @@ function WorkstreamHelpBanner({ onDismiss }: WorkstreamHelpBannerProps) {
               <p className="text-gray-700 dark:text-gray-300 leading-relaxed text-sm">
                 A{" "}
                 <strong className="text-brand-dark-blue dark:text-brand-light-blue">
-                  Workstream
+                  Program
                 </strong>{" "}
-                is a personalized research workspace that helps you organize and
-                track intelligence signals relevant to a specific focus area.
-                Think of it as a customized feed combined with a Kanban board
-                for topics you care about.
+                is a personalized grant tracking workspace that helps you
+                organize and track opportunities relevant to a specific focus
+                area. Think of it as a customized feed combined with a Kanban
+                board for grant categories you care about.
               </p>
             </div>
 
@@ -253,7 +259,7 @@ function WorkstreamHelpBanner({ onDismiss }: WorkstreamHelpBannerProps) {
             <div>
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
                 <Plus className="h-4 w-4 text-brand-blue" />
-                Creating a Workstream
+                Creating a Program
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="bg-gray-50 dark:bg-dark-surface/50 rounded-lg p-3">
@@ -261,8 +267,8 @@ function WorkstreamHelpBanner({ onDismiss }: WorkstreamHelpBannerProps) {
                     1. Define Your Focus
                   </h4>
                   <p className="text-xs text-gray-600 dark:text-gray-400">
-                    Give your workstream a name like "Smart Mobility
-                    Initiatives" or "Climate Resilience Tech"
+                    Give your program a name like "Infrastructure Grants" or
+                    "Climate Resilience Funding"
                   </p>
                 </div>
                 <div className="bg-gray-50 dark:bg-dark-surface/50 rounded-lg p-3">
@@ -298,8 +304,8 @@ function WorkstreamHelpBanner({ onDismiss }: WorkstreamHelpBannerProps) {
                 Research Workflow
               </h3>
               <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
-                Signals in your workstream flow through a Kanban board as you
-                research them:
+                Opportunities in your program flow through a Kanban board as you
+                evaluate them:
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
                 {kanbanColumns.map((col, idx) => (
@@ -339,7 +345,7 @@ function WorkstreamHelpBanner({ onDismiss }: WorkstreamHelpBannerProps) {
                       Auto-Populate
                     </h4>
                     <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-                      AI finds and adds matching signals to your inbox
+                      AI finds and adds matching opportunities to your inbox
                       automatically
                     </p>
                   </div>
@@ -353,7 +359,7 @@ function WorkstreamHelpBanner({ onDismiss }: WorkstreamHelpBannerProps) {
                       Deep Dive Research
                     </h4>
                     <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-                      Trigger comprehensive AI analysis on any signal
+                      Trigger comprehensive AI analysis on any opportunity
                     </p>
                   </div>
                 </div>
@@ -394,8 +400,8 @@ function WorkstreamHelpBanner({ onDismiss }: WorkstreamHelpBannerProps) {
                     Ready to get started?
                   </h4>
                   <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                    Create your first workstream to begin organizing your
-                    research.
+                    Create your first program to begin organizing your grant
+                    pipeline.
                   </p>
                 </div>
                 <button
@@ -812,7 +818,7 @@ const Workstreams: React.FC = () => {
       loadWorkstreams();
     } catch (error) {
       console.error("Error deleting workstream:", error);
-      setErrorMessage("Failed to delete workstream. Please try again.");
+      setErrorMessage("Failed to delete program. Please try again.");
     } finally {
       setIsDeleting(false);
     }
@@ -837,10 +843,10 @@ const Workstreams: React.FC = () => {
         <div className="flex items-center gap-3">
           <div>
             <h1 className="text-3xl font-bold text-brand-dark-blue dark:text-white">
-              Workstreams
+              Programs
             </h1>
             <p className="mt-2 text-gray-600 dark:text-gray-400">
-              Create custom research streams based on your strategic priorities.
+              Create custom research programs based on your grant priorities.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -848,8 +854,8 @@ const Workstreams: React.FC = () => {
               <button
                 onClick={handleRestoreBanner}
                 className="p-2 text-gray-400 hover:text-brand-blue hover:bg-brand-light-blue/30 dark:hover:bg-brand-blue/20 rounded-lg transition-colors"
-                aria-label="Show workstream help"
-                title="Show workstream help"
+                aria-label="Show program help"
+                title="Show program help"
               >
                 <HelpCircle className="h-5 w-5" />
               </button>
@@ -871,7 +877,7 @@ const Workstreams: React.FC = () => {
           className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-brand-dark-blue focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue transition-colors"
         >
           <Plus className="h-4 w-4 mr-2" />
-          New Workstream
+          New Program
         </button>
       </div>
 
@@ -898,14 +904,33 @@ const Workstreams: React.FC = () => {
       {workstreams.length === 0 ? (
         <div className="text-center py-12 bg-white dark:bg-dark-surface rounded-lg shadow">
           <FolderOpen className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">
-            No workstreams yet
+          <h3 className="mt-2 text-lg font-medium text-gray-900 dark:text-white">
+            No programs yet
           </h3>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Create your first workstream to start tracking relevant
-            intelligence.
+          <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto">
+            A program groups grants around a focus area, like &ldquo;Public
+            Safety Grants&rdquo; or &ldquo;Youth Services Funding&rdquo;.
+            GrantScope automatically finds matching opportunities and adds them
+            to your review board.
           </p>
-          <div className="mt-6">
+          <ol className="text-sm text-gray-500 dark:text-gray-400 space-y-2 mb-4 mt-4 text-left max-w-sm mx-auto">
+            <li className="flex gap-2">
+              <span className="text-brand-blue font-semibold shrink-0">1.</span>
+              <span>Name your program and describe your focus area</span>
+            </li>
+            <li className="flex gap-2">
+              <span className="text-brand-blue font-semibold shrink-0">2.</span>
+              <span>Set keywords and filters to match relevant grants</span>
+            </li>
+            <li className="flex gap-2">
+              <span className="text-brand-blue font-semibold shrink-0">3.</span>
+              <span>
+                GrantScope fills your board with matching opportunities
+                automatically
+              </span>
+            </li>
+          </ol>
+          <div className="mt-6 flex flex-col items-center gap-3">
             <button
               onClick={() => {
                 setEditingWorkstream(undefined);
@@ -914,8 +939,14 @@ const Workstreams: React.FC = () => {
               className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-brand-dark-blue focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue transition-colors"
             >
               <Plus className="h-4 w-4 mr-2" />
-              Create Workstream
+              Create Program
             </button>
+            <Link
+              to="/guide/workstreams"
+              className="text-xs text-brand-blue hover:underline"
+            >
+              Learn more about programs
+            </Link>
           </div>
         </div>
       ) : (

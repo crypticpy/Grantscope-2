@@ -831,7 +831,7 @@ async def bulk_brief_export(
                         import tempfile
 
                         temp_file = tempfile.NamedTemporaryFile(
-                            suffix=".pptx", delete=False, prefix="foresight_portfolio_"
+                            suffix=".pptx", delete=False, prefix="grantscope_portfolio_"
                         )
                         temp_file.write(pptx_bytes)
                         temp_file.close()

@@ -1,13 +1,15 @@
-# Foresight Prototype Implementation Guide
+# GrantScope2 Prototype Implementation Guide
+
 ## Quick Start: Supabase + HuggingFace + Azure OpenAI
 
 ## 🚀 Getting Started (30 minutes)
 
 ### Step 1: Supabase Setup
+
 ```bash
 # 1. Create new Supabase project
 # Go to: https://supabase.com/dashboard
-# Project name: foresight-prototype
+# Project name: grantscope-prototype
 
 # 2. Get your project credentials
 # Settings > API > Project URL
@@ -16,20 +18,22 @@
 ```
 
 ### Step 2: HuggingFace Space Setup
+
 ```bash
 # 1. Create new Space
 # Go to: https://huggingface.co/spaces
-# Name: austin-foresight-prototype
+# Name: austin-grantscope-prototype
 # License: apache-2.0
 # Hardware: CPU basic
 # Framework: gradio
 
 # 2. Clone locally
-git clone https://huggingface.co/spaces/YOUR_USERNAME/austin-foresight-prototype
-cd austin-foresight-prototype
+git clone https://huggingface.co/spaces/YOUR_USERNAME/austin-grantscope-prototype
+cd austin-grantscope-prototype
 ```
 
 ### Step 3: Azure OpenAI Configuration
+
 ```bash
 # 1. Get Azure credentials
 # Azure Portal > Azure OpenAI Service > Your resource
@@ -37,7 +41,7 @@ cd austin-foresight-prototype
 # Keys and Endpoint > Key 1
 
 # 2. Set environment variables in HuggingFace
-# Go to: https://huggingface.co/spaces/YOUR_USERNAME/austin-foresight-prototype/edit
+# Go to: https://huggingface.co/spaces/YOUR_USERNAME/austin-grantscope-prototype/edit
 # Add secrets:
 # AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 # AZURE_OPENAI_KEY=your-azure-openai-key
@@ -46,7 +50,7 @@ cd austin-foresight-prototype
 ## 📁 Project Structure
 
 ```
-austin-foresight-prototype/
+austin-grantscope-prototype/
 ├── app.py                 # Main Gradio application
 ├── requirements.txt       # Python dependencies
 ├── supabase_client.py    # Supabase connection & queries
@@ -97,14 +101,14 @@ CREATE TABLE research_content (
   source_type TEXT,
   published_date TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
-  
+
   -- Strategic pillar classification (0-1 scores)
   equity_score FLOAT DEFAULT 0,
   innovation_score FLOAT DEFAULT 0,
   prevention_score FLOAT DEFAULT 0,
   data_driven_score FLOAT DEFAULT 0,
   adaptive_score FLOAT DEFAULT 0,
-  
+
   -- Relevance and impact scores (0-100)
   relevance_score FLOAT DEFAULT 0,
   impact_score FLOAT DEFAULT 0,
@@ -150,6 +154,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE user_cards;
 ## 🔧 Core Code Files
 
 ### app.py (Main Application)
+
 ```python
 import gradio as gr
 from supabase_client import SupabaseClient
@@ -165,12 +170,12 @@ def create_demo_dashboard():
     """Main dashboard interface"""
     with gr.Row():
         with gr.Column(scale=2):
-            gr.Markdown("# 🎯 Austin Foresight Dashboard")
+            gr.Markdown("# 🎯 Austin GrantScope2 Dashboard")
             gr.Markdown("### Strategic Research & Intelligence")
-        
+
         with gr.Column(scale=1):
             login_btn = gr.Button("Sign in with Google", variant="primary")
-    
+
     # Content feed
     with gr.Row():
         content_feed = gr.Dataframe(
@@ -180,7 +185,7 @@ def create_demo_dashboard():
             col_count=(4, "fixed"),
             interactive=False
         )
-    
+
     # Card management
     with gr.Row():
         with gr.Column():
@@ -190,7 +195,7 @@ def create_demo_dashboard():
                 datatype=["str", "str", "str", "str"],
                 row_count=(5, "fixed")
             )
-        
+
         with gr.Column():
             gr.Markdown("## 🔄 Workstreams")
             workstream_display = gr.Dataframe(
@@ -204,7 +209,7 @@ demo = gr.Interface(
     fn=create_demo_dashboard,
     inputs=[],
     outputs=[content_feed, card_display, workstream_display],
-    title="Austin Foresight System Prototype",
+    title="Austin GrantScope2 System Prototype",
     description="AI-powered strategic research for municipal governance"
 )
 
@@ -213,6 +218,7 @@ if __name__ == "__main__":
 ```
 
 ### supabase_client.py
+
 ```python
 from supabase import create_client, Client
 import os
@@ -223,17 +229,17 @@ class SupabaseClient:
         url = os.getenv("SUPABASE_URL")
         key = os.getenv("SUPABASE_ANON_KEY")
         self.client: Client = create_client(url, key)
-    
+
     def get_user_profile(self, user_id: str) -> Dict[str, Any]:
         """Get user profile data"""
         result = self.client.table("profiles").select("*").eq("id", user_id).execute()
         return result.data[0] if result.data else None
-    
+
     def get_research_content(self, limit: int = 20) -> List[Dict[str, Any]]:
         """Get latest research content"""
         result = self.client.table("research_content").select("*").order("created_at", desc=True).limit(limit).execute()
         return result.data
-    
+
     def add_user_card(self, user_id: str, content_id: str, priority: str = "medium") -> bool:
         """Add content to user's card collection"""
         result = self.client.table("user_cards").insert({
@@ -242,19 +248,19 @@ class SupabaseClient:
             "priority": priority
         }).execute()
         return len(result.data) > 0
-    
+
     def get_user_cards(self, user_id: str) -> List[Dict[str, Any]]:
         """Get user's card collection"""
         query = """
-        SELECT uc.*, rc.title, rc.created_at 
-        FROM user_cards uc 
-        JOIN research_content rc ON uc.content_id = rc.id 
+        SELECT uc.*, rc.title, rc.created_at
+        FROM user_cards uc
+        JOIN research_content rc ON uc.content_id = rc.id
         WHERE uc.user_id = ? AND uc.status = 'active'
         ORDER BY uc.created_at DESC
         """
         result = self.client.rpc('execute_sql', {'sql': query, 'params': [user_id]}).execute()
         return result.data
-    
+
     def create_workstream(self, user_id: str, name: str, pillars: List[str]) -> str:
         """Create a new workstream"""
         result = self.client.table("user_workstreams").insert({
@@ -266,6 +272,7 @@ class SupabaseClient:
 ```
 
 ### azure_client.py
+
 ```python
 import openai
 import os
@@ -278,23 +285,23 @@ class AzureOpenAIClient:
             base_url=os.getenv("AZURE_OPENAI_ENDPOINT") + "/openai/deployments"
         )
         self.model_name = "gpt-4"  # or "gpt-35-turbo" for cost savings
-    
+
     async def analyze_content(self, content: str) -> Dict[str, any]:
         """Analyze content for strategic relevance"""
-        
+
         # Strategic pillar classification
         classification_prompt = f"""
         Analyze the following content for Austin municipal government relevance.
-        
+
         Content: {content}
-        
+
         Classify this content (0-1 scale) for these strategic pillars:
         - Equity: Fairness, accessibility, inclusive services
         - Innovation: Emerging technologies, digital transformation
         - Prevention: Predictive systems, early warning, risk management
         - Data-driven: Analytics, AI, evidence-based approaches
         - Adaptive: Agility, crisis response, resilience
-        
+
         Return JSON format:
         {{
             "equity_score": 0.0-1.0,
@@ -307,15 +314,15 @@ class AzureOpenAIClient:
             "summary": "Brief 2-3 sentence summary"
         }}
         """
-        
+
         response = self.client.chat.completions.create(
             model=self.model_name,
             messages=[{"role": "user", "content": classification_prompt}],
             temperature=0.3
         )
-        
+
         return self._parse_classification(response.choices[0].message.content)
-    
+
     async def create_embedding(self, text: str) -> List[float]:
         """Create vector embedding for content"""
         response = self.client.embeddings.create(
@@ -323,7 +330,7 @@ class AzureOpenAIClient:
             input=text
         )
         return response.data[0].embedding
-    
+
     def _parse_classification(self, content: str) -> Dict[str, any]:
         """Parse AI classification response"""
         try:
@@ -346,6 +353,7 @@ class AzureOpenAIClient:
 ## 🎯 Quick Test Data
 
 ### Sample Content for Testing
+
 ```python
 SAMPLE_CONTENT = [
     {
@@ -372,6 +380,7 @@ SAMPLE_CONTENT = [
 ## 🔄 Daily Processing Workflow
 
 ### Automated Content Collection Script
+
 ```python
 import asyncio
 from datetime import datetime
@@ -381,15 +390,15 @@ from supabase_client import SupabaseClient
 async def daily_content_update():
     """Run daily content processing pipeline"""
     print(f"Starting daily update at {datetime.now()}")
-    
+
     # 1. Collect new content from sources
     new_content = await collect_content_sources()
-    
+
     # 2. Process each piece of content
     for content in new_content:
         # AI analysis
         analysis = await azure_client.analyze_content(content['text'])
-        
+
         # Store in database
         supabase.client.table('research_content').insert({
             'title': content['title'],
@@ -403,11 +412,11 @@ async def daily_content_update():
             'relevance_score': analysis['relevance_score'],
             'impact_score': analysis['impact_score']
         }).execute()
-        
+
         # Create embedding for search
         embedding = await azure_client.create_embedding(content['text'])
         # Store embedding...
-    
+
     print("Daily update complete")
 
 # Schedule to run daily at 6 PM Austin time
@@ -417,6 +426,7 @@ async def daily_content_update():
 ## 📊 Testing & Validation
 
 ### Test Cases
+
 1. **User Authentication**: Google OAuth login/logout
 2. **Content Display**: Research items appear with correct pillar classifications
 3. **Card Management**: Users can add/remove cards from their collection
@@ -425,6 +435,7 @@ async def daily_content_update():
 6. **Real-time Updates**: New content appears automatically
 
 ### Success Criteria
+
 - [ ] Users can authenticate with Google
 - [ ] Dashboard loads with categorized research content
 - [ ] Users can add content to their card collection

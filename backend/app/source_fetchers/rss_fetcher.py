@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 # Data Classes
 # ============================================================================
 
+
 @dataclass
 class FetchedArticle:
     """
@@ -39,6 +40,7 @@ class FetchedArticle:
     This dataclass is used across all source fetchers to provide a consistent
     interface for downstream processing in the AI pipeline.
     """
+
     url: str
     title: str
     content: str
@@ -54,6 +56,7 @@ class FetchedArticle:
 @dataclass
 class FeedFetchResult:
     """Result of fetching a single RSS feed."""
+
     feed_url: str
     success: bool
     articles: List[FetchedArticle] = field(default_factory=list)
@@ -65,6 +68,7 @@ class FeedFetchResult:
 # ============================================================================
 # Helper Functions
 # ============================================================================
+
 
 def _parse_published_date(entry: Dict[str, Any]) -> Optional[datetime]:
     """
@@ -87,6 +91,7 @@ def _parse_published_date(entry: Dict[str, Any]) -> Optional[datetime]:
             try:
                 # feedparser usually provides parsed versions, but just in case
                 from dateutil import parser as date_parser
+
                 return date_parser.parse(date_str)
             except Exception:
                 continue
@@ -178,11 +183,12 @@ def _extract_author(entry: Dict[str, Any]) -> Optional[str]:
 # Main Fetcher Functions
 # ============================================================================
 
+
 async def fetch_single_feed(
     feed_url: str,
     session: Optional[aiohttp.ClientSession] = None,
     timeout: int = 30,
-    max_articles: int = 50
+    max_articles: int = 50,
 ) -> FeedFetchResult:
     """
     Fetch and parse a single RSS/Atom feed.
@@ -206,23 +212,21 @@ async def fetch_single_feed(
     try:
         # Fetch feed content
         headers = {
-            "User-Agent": "Foresight-ContentPipeline/1.0 (https://foresight.city)",
-            "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*"
+            "User-Agent": "GrantScope-ContentPipeline/1.0 (https://grantscope.app)",
+            "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
         }
 
         async with session.get(
             feed_url,
             headers=headers,
             timeout=aiohttp.ClientTimeout(total=timeout),
-            allow_redirects=True
+            allow_redirects=True,
         ) as response:
             if response.status != 200:
                 error_msg = f"HTTP {response.status}: {response.reason}"
                 logger.warning(f"Feed fetch failed for {feed_url}: {error_msg}")
                 return FeedFetchResult(
-                    feed_url=feed_url,
-                    success=False,
-                    error_message=error_msg
+                    feed_url=feed_url, success=False, error_message=error_msg
                 )
 
             content = await response.text()
@@ -232,7 +236,11 @@ async def fetch_single_feed(
 
         # Check for feed parsing errors
         if feed.bozo:
-            bozo_exception = str(feed.bozo_exception) if feed.bozo_exception else "Unknown parsing error"
+            bozo_exception = (
+                str(feed.bozo_exception)
+                if feed.bozo_exception
+                else "Unknown parsing error"
+            )
             logger.warning(f"Feed parsing warning for {feed_url}: {bozo_exception}")
             # Continue anyway - feedparser often succeeds partially
 
@@ -267,8 +275,8 @@ async def fetch_single_feed(
                     metadata={
                         "feed_url": feed_url,
                         "entry_id": entry.get("id"),
-                        "feed_link": feed_link
-                    }
+                        "feed_link": feed_link,
+                    },
                 )
                 articles.append(article)
 
@@ -283,34 +291,28 @@ async def fetch_single_feed(
             success=True,
             articles=articles,
             feed_title=feed_title,
-            feed_link=feed_link
+            feed_link=feed_link,
         )
 
     except asyncio.TimeoutError:
         error_msg = f"Timeout after {timeout}s"
         logger.warning(f"Feed fetch timeout for {feed_url}: {error_msg}")
         return FeedFetchResult(
-            feed_url=feed_url,
-            success=False,
-            error_message=error_msg
+            feed_url=feed_url, success=False, error_message=error_msg
         )
 
     except aiohttp.ClientError as e:
         error_msg = f"Client error: {str(e)}"
         logger.warning(f"Feed fetch client error for {feed_url}: {error_msg}")
         return FeedFetchResult(
-            feed_url=feed_url,
-            success=False,
-            error_message=error_msg
+            feed_url=feed_url, success=False, error_message=error_msg
         )
 
     except Exception as e:
         error_msg = f"Unexpected error: {str(e)}"
         logger.error(f"Feed fetch failed for {feed_url}: {error_msg}")
         return FeedFetchResult(
-            feed_url=feed_url,
-            success=False,
-            error_message=error_msg
+            feed_url=feed_url, success=False, error_message=error_msg
         )
 
     finally:
@@ -322,7 +324,7 @@ async def fetch_rss_sources(
     feed_urls: List[str],
     max_articles_per_feed: int = 50,
     timeout_per_feed: int = 30,
-    max_concurrent: int = 5
+    max_concurrent: int = 5,
 ) -> List[FetchedArticle]:
     """
     Fetch articles from multiple RSS/Atom feeds concurrently.
@@ -358,13 +360,15 @@ async def fetch_rss_sources(
     # Use semaphore for rate limiting
     semaphore = asyncio.Semaphore(max_concurrent)
 
-    async def fetch_with_semaphore(url: str, session: aiohttp.ClientSession) -> FeedFetchResult:
+    async def fetch_with_semaphore(
+        url: str, session: aiohttp.ClientSession
+    ) -> FeedFetchResult:
         async with semaphore:
             return await fetch_single_feed(
                 feed_url=url,
                 session=session,
                 timeout=timeout_per_feed,
-                max_articles=max_articles_per_feed
+                max_articles=max_articles_per_feed,
             )
 
     # Create shared session for connection reuse
@@ -447,9 +451,9 @@ async def fetch_default_sources() -> List[FetchedArticle]:
     relevant to municipal technology intelligence.
     """
     all_feeds = (
-        DEFAULT_TECH_FEEDS +
-        DEFAULT_GOV_TECH_FEEDS +
-        DEFAULT_NEWS_FEEDS +
-        DEFAULT_RESEARCH_FEEDS
+        DEFAULT_TECH_FEEDS
+        + DEFAULT_GOV_TECH_FEEDS
+        + DEFAULT_NEWS_FEEDS
+        + DEFAULT_RESEARCH_FEEDS
     )
     return await fetch_rss_sources(all_feeds)

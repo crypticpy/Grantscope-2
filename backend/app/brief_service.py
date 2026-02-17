@@ -1,16 +1,16 @@
 """
-Executive Brief Service for Foresight Application.
+Grant Opportunity Summary Service for GrantScope2 Application.
 
-This service generates comprehensive executive briefs for strategic cards,
-synthesizing card data, user notes, related cards, and source materials
-into leadership-ready briefings with an Austin-specific perspective.
+This service generates comprehensive grant opportunity summaries for grant cards,
+synthesizing card data, user notes, related opportunities, and source materials
+into actionable opportunity assessments with an Austin-specific perspective.
 
-The brief generation is async - it creates a record immediately and processes
+The summary generation is async - it creates a record immediately and processes
 in the background, allowing the frontend to poll for completion.
 
 Key Features:
-- Austin-focused strategic intelligence perspective
-- 800-1500 word comprehensive briefs
+- Austin-focused grant opportunity assessment perspective
+- 800-1500 word comprehensive summaries
 - Token usage tracking for cost monitoring
 - Generation time tracking for performance monitoring
 - Integration with workstream Kanban workflow
@@ -32,6 +32,7 @@ import openai
 
 # Azure OpenAI deployment names
 from app.openai_provider import get_chat_deployment
+from app.taxonomy import PILLAR_NAMES
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,7 @@ def with_retry(max_retries: int = MAX_RETRIES):
 
     Handles OpenAI API errors and rate limits gracefully.
     """
+
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
@@ -63,7 +65,7 @@ def with_retry(max_retries: int = MAX_RETRIES):
                     return await func(*args, **kwargs)
                 except openai.RateLimitError as e:
                     last_exception = e
-                    wait_time = backoff * (BACKOFF_MULTIPLIER ** attempt)
+                    wait_time = backoff * (BACKOFF_MULTIPLIER**attempt)
                     logger.warning(
                         f"Rate limited on {func.__name__}, "
                         f"retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})"
@@ -71,7 +73,7 @@ def with_retry(max_retries: int = MAX_RETRIES):
                     await asyncio.sleep(wait_time)
                 except openai.APITimeoutError as e:
                     last_exception = e
-                    wait_time = backoff * (BACKOFF_MULTIPLIER ** attempt)
+                    wait_time = backoff * (BACKOFF_MULTIPLIER**attempt)
                     logger.warning(
                         f"Timeout on {func.__name__}, "
                         f"retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})"
@@ -79,7 +81,7 @@ def with_retry(max_retries: int = MAX_RETRIES):
                     await asyncio.sleep(wait_time)
                 except openai.APIConnectionError as e:
                     last_exception = e
-                    wait_time = backoff * (BACKOFF_MULTIPLIER ** attempt)
+                    wait_time = backoff * (BACKOFF_MULTIPLIER**attempt)
                     logger.warning(
                         f"Connection error on {func.__name__}, "
                         f"retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})"
@@ -88,10 +90,12 @@ def with_retry(max_retries: int = MAX_RETRIES):
                 except openai.APIStatusError as e:
                     # Don't retry on 4xx errors (except 429 which is RateLimitError)
                     if 400 <= e.status_code < 500:
-                        logger.error(f"API error on {func.__name__}: {e.status_code} - {e.message}")
+                        logger.error(
+                            f"API error on {func.__name__}: {e.status_code} - {e.message}"
+                        )
                         raise
                     last_exception = e
-                    wait_time = backoff * (BACKOFF_MULTIPLIER ** attempt)
+                    wait_time = backoff * (BACKOFF_MULTIPLIER**attempt)
                     logger.warning(
                         f"API error on {func.__name__}, "
                         f"retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})"
@@ -102,24 +106,25 @@ def with_retry(max_retries: int = MAX_RETRIES):
             raise last_exception
 
         return wrapper
+
     return decorator
 
 
 # ============================================================================
-# Executive Brief Prompt (Austin-focused, comprehensive)
+# Grant Opportunity Summary Prompt (Austin-focused, comprehensive)
 # ============================================================================
 
-EXECUTIVE_BRIEF_PROMPT = """You are a strategic advisor preparing a comprehensive leadership briefing for City of Austin decision-makers.
+GRANT_OPPORTUNITY_PROMPT = """You are a grants specialist preparing a comprehensive grant opportunity assessment for City of Austin decision-makers and grants management staff.
 
-Generate an executive brief on "{card_name}" that a City Manager could read on the car ride to an interview and sound knowledgeable about this topic. This brief should synthesize all available information into actionable intelligence with an Austin-specific perspective.
+Generate a grant opportunity summary for "{card_name}" that helps the grants team quickly evaluate whether to pursue this funding opportunity. This summary should synthesize all available information into an actionable assessment with an Austin-specific perspective.
 
 ---
 
-## CARD INFORMATION
+## GRANT OPPORTUNITY INFORMATION
 Name: {card_name}
 Summary: {summary}
 Description: {description}
-Pillar: {pillar}
+Category: {pillar}
 Horizon: {horizon}
 Stage: {stage}
 Scores: Novelty={novelty}/100, Impact={impact}/100, Relevance={relevance}/100, Risk={risk}/100
@@ -127,9 +132,9 @@ Scores: Novelty={novelty}/100, Impact={impact}/100, Relevance={relevance}/100, R
 ## USER CONTEXT & NOTES
 Workstream: {workstream_name}
 Workstream Description: {workstream_description}
-User Notes on Card: {user_notes}
+User Notes on Opportunity: {user_notes}
 
-## RELATED INTELLIGENCE
+## RELATED OPPORTUNITIES
 {related_cards_summary}
 
 ## SOURCE MATERIALS
@@ -137,55 +142,80 @@ User Notes on Card: {user_notes}
 
 ---
 
-Create an executive brief with these sections:
+Create a grant opportunity summary with these sections:
 
 ## EXECUTIVE SUMMARY
-(3-4 sentences capturing what this is, why it matters to Austin, and the key takeaway for leadership)
+(2-3 paragraphs providing an overview of the grant opportunity, the funding agency, available amounts, and strategic fit for City of Austin)
 
-## VALUE PROPOSITION FOR AUSTIN
-- What specific value does this offer the City of Austin?
-- How does it align with Austin's strategic priorities?
-- What problem does it solve or opportunity does it create?
+## GRANT DETAILS
+- **Funding Agency**: (Name of the federal, state, or foundation grantor)
+- **CFDA Number**: (If federal, provide the CFDA/ALN number if available, otherwise note "Not identified")
+- **Funding Range**: (Minimum and maximum award amounts, or estimated range)
+- **Application Deadline**: (Known or estimated deadline)
+- **Eligible Applicants**: (Who can apply - municipalities, nonprofits, etc.)
+- **Cost Sharing Requirements**: (Match requirements, in-kind allowances)
+- **Grant Type**: (Formula, competitive, pass-through, etc.)
+- **Performance Period**: (Duration of the grant if known)
 
-## KEY TALKING POINTS
-(5-7 bullet points a leader could use in conversation - clear, memorable, quotable)
+## STRATEGIC ALIGNMENT
+- How does this opportunity align with Austin's strategic priorities and CMO Top 25?
+- Which City of Austin departments would benefit most?
+- Has Austin or peer cities received similar grants in the past?
+- How does this connect to existing city programs or initiatives?
 
-## CURRENT LANDSCAPE
-- Where is this in terms of maturity and adoption?
-- Who are the key players and what are peer cities doing?
-- What's the trajectory - accelerating, stable, or declining?
+## ELIGIBILITY ASSESSMENT
+- Does the City of Austin meet all eligibility criteria?
+- Are there any potentially disqualifying factors?
+- What certifications or pre-requisites are required (SAM registration, etc.)?
+- Are there geographic, demographic, or programmatic restrictions?
 
-## AUSTIN-SPECIFIC CONSIDERATIONS
-- How does this intersect with Austin's unique context (growth, tech hub, equity focus)?
-- Which city departments or initiatives would this affect?
-- What existing Austin programs or infrastructure does this relate to?
+## APPLICATION REQUIREMENTS
+- What documents are required (narrative, budget, letters of support, etc.)?
+- What certifications or registrations must be current?
+- Are there pre-application requirements (letter of intent, pre-proposal)?
+- What is the estimated timeline from start to submission?
+- Are there page limits, formatting requirements, or other constraints?
 
-## STRATEGIC IMPLICATIONS
-- What decisions or preparations should city leadership consider?
-- What happens if Austin acts vs. waits?
-- What's the cost of inaction?
+## BUDGET CONSIDERATIONS
+- What is the realistic budget range for a competitive application?
+- What matching fund requirements exist (cash match, in-kind)?
+- What indirect cost rate applies?
+- Are there budget category restrictions or caps?
+- What are the likely staffing and administrative costs?
 
-## RISK FACTORS & CONCERNS
-- What could go wrong or what challenges exist?
-- What are the equity, privacy, or political considerations?
-- What unknowns or uncertainties should leadership be aware of?
+## COMPETITIVE LANDSCAPE
+- How many applicants are expected (based on historical data if available)?
+- What is the historical award rate?
+- What are Austin's competitive advantages for this opportunity?
+- What weaknesses or gaps might reviewers flag?
+- Are there scoring criteria or priority areas that favor Austin?
 
-## RECOMMENDED ACTIONS
-(3-5 numbered, specific, actionable recommendations prioritized by urgency)
+## RECOMMENDATIONS
+- **Go/No-Go Recommendation**: (Clear recommendation with rationale)
+- **Key Strengths**: What makes Austin a strong candidate?
+- **Key Risks**: What could prevent a successful application or award?
+- **Mitigations**: How can identified risks be addressed?
+- **Confidence Level**: (High/Medium/Low) confidence in success if applied
 
-## TIMELINE & URGENCY
-- How urgent is this? What's the decision window?
-- What signals should Austin watch for?
+## NEXT STEPS
+(Numbered list of specific action items with target dates for pursuing this opportunity, such as:)
+1. Identify lead department and grant writer
+2. Confirm eligibility and registration status
+3. Schedule kickoff meeting with stakeholders
+4. Draft project narrative outline
+5. Develop budget framework
+6. Secure letters of support
+7. Internal review and submission
 
 ---
 
 Guidelines:
-- Write for a busy executive who needs to sound informed in 10 minutes
-- Be SPECIFIC with examples, numbers, and city names where available
-- Frame everything through Austin's lens and priorities
-- Include concrete talking points that could be quoted
-- Use plain language - no jargon or acronyms without explanation
-- If information is limited, acknowledge gaps and focus on what IS known
+- Write for grants professionals who need to quickly assess opportunity fit
+- Be SPECIFIC with dollar amounts, dates, and agency names where available
+- Frame everything through Austin's lens: departments, programs, and community needs
+- If information is limited, clearly note what is unknown and needs further research
+- Include practical details that accelerate the application process
+- Use plain language - spell out all acronyms on first use
 - Total length: 800-1500 words depending on available information
 """
 
@@ -194,9 +224,11 @@ Guidelines:
 # Data Classes
 # ============================================================================
 
+
 @dataclass
 class BriefGenerationResult:
-    """Result of brief generation operation."""
+    """Result of grant opportunity summary generation operation."""
+
     content_markdown: str
     summary: str
     content_json: Dict[str, Any]
@@ -208,11 +240,12 @@ class BriefGenerationResult:
 @dataclass
 class PortfolioSynthesis:
     """
-    AI-synthesized content for portfolio/bulk brief exports.
-    
-    Generated by analyzing multiple briefs together to create
+    AI-synthesized content for portfolio/bulk grant summary exports.
+
+    Generated by analyzing multiple grant opportunity summaries together to create
     executive overview, cross-cutting themes, and prioritized recommendations.
     """
+
     executive_overview: str  # 2-3 paragraph synthesis of all cards
     key_themes: List[str]  # 3-5 common themes across cards
     priority_matrix: Dict[str, Any]  # Cards organized by impact/urgency
@@ -227,7 +260,7 @@ class PortfolioSynthesis:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     model_used: str = ""
-    
+
     def __post_init__(self):
         if self.implementation_guidance is None:
             self.implementation_guidance = {}
@@ -235,9 +268,10 @@ class PortfolioSynthesis:
             self.ninety_day_actions = []
 
 
-@dataclass 
+@dataclass
 class PortfolioBrief:
-    """A brief with its associated card data for portfolio generation."""
+    """A grant opportunity summary with its associated card data for portfolio generation."""
+
     card_id: str
     card_name: str
     pillar_id: str
@@ -253,6 +287,7 @@ class PortfolioBrief:
 # ============================================================================
 # Helper Functions
 # ============================================================================
+
 
 def sections_to_markdown(sections: List[Dict[str, Any]], title: str = "") -> str:
     """Convert sections list to markdown format."""
@@ -278,7 +313,7 @@ def get_stage_name(stage_id: Optional[str]) -> str:
         "5": "Municipal Pilot (government testing)",
         "6": "Early Adoption (multiple cities)",
         "7": "Mainstream (widespread adoption)",
-        "8": "Mature (established)"
+        "8": "Mature (established)",
     }
 
     # Handle formats like "5_implementing" or just "5"
@@ -291,16 +326,7 @@ def get_pillar_name(pillar_id: Optional[str]) -> str:
     if not pillar_id:
         return "Unknown"
 
-    pillar_map = {
-        "CH": "Community Health & Sustainability",
-        "EW": "Economic & Workforce Development",
-        "HG": "High-Performing Government",
-        "HH": "Homelessness & Housing",
-        "MC": "Mobility & Critical Infrastructure",
-        "PS": "Public Safety"
-    }
-
-    return pillar_map.get(pillar_id, pillar_id)
+    return PILLAR_NAMES.get(pillar_id, pillar_id)
 
 
 def extract_executive_summary(content: str) -> str:
@@ -314,20 +340,20 @@ def extract_executive_summary(content: str) -> str:
         Executive summary text (first 500 chars if section not found)
     """
     # Look for executive summary section
-    pattern = r'##\s*EXECUTIVE\s*SUMMARY\s*\n(.*?)(?=\n##|\Z)'
+    pattern = r"##\s*EXECUTIVE\s*SUMMARY\s*\n(.*?)(?=\n##|\Z)"
     if match := re.search(pattern, content, re.IGNORECASE | re.DOTALL):
         summary = match[1].strip()
         # Clean up and limit length
-        summary = summary.replace('\n', ' ').strip()
+        summary = summary.replace("\n", " ").strip()
         if len(summary) > 500:
             summary = f"{summary[:497]}..."
         return summary
 
     # Fallback: first paragraph
-    paragraphs = content.split('\n\n')
+    paragraphs = content.split("\n\n")
     for p in paragraphs:
         p = p.strip()
-        if p and not p.startswith('#'):
+        if p and not p.startswith("#"):
             return f"{p[:497]}..." if len(p) > 500 else p
     return f"{content[:500]}..." if len(content) > 500 else content
 
@@ -346,16 +372,18 @@ def parse_brief_sections(content: str) -> Dict[str, Any]:
     current_section = None
     current_content = []
 
-    for line in content.split('\n'):
+    for line in content.split("\n"):
         # Check for section header (## SECTION NAME)
-        if line.startswith('## '):
+        if line.startswith("## "):
             # Save previous section
             if current_section:
-                sections.append({
-                    "title": current_section,
-                    "content": '\n'.join(current_content).strip(),
-                    "order": len(sections)
-                })
+                sections.append(
+                    {
+                        "title": current_section,
+                        "content": "\n".join(current_content).strip(),
+                        "order": len(sections),
+                    }
+                )
             current_section = line[3:].strip()
             current_content = []
         elif current_section:
@@ -363,28 +391,31 @@ def parse_brief_sections(content: str) -> Dict[str, Any]:
 
     # Save last section
     if current_section:
-        sections.append({
-            "title": current_section,
-            "content": '\n'.join(current_content).strip(),
-            "order": len(sections)
-        })
+        sections.append(
+            {
+                "title": current_section,
+                "content": "\n".join(current_content).strip(),
+                "order": len(sections),
+            }
+        )
 
     return {
         "sections": sections,
         "section_count": len(sections),
-        "word_count": len(content.split())
+        "word_count": len(content.split()),
     }
 
 
 # ============================================================================
-# Executive Brief Service
+# Grant Opportunity Summary Service
 # ============================================================================
+
 
 class ExecutiveBriefService:
     """
-    Service for generating executive briefs for strategic cards.
+    Service for generating grant opportunity summaries for grant cards.
 
-    Handles async brief generation with background processing,
+    Handles async summary generation with background processing,
     status tracking, AI-powered content synthesis, and comprehensive
     metadata tracking for monitoring and cost analysis.
     """
@@ -409,7 +440,7 @@ class ExecutiveBriefService:
         workstream_card_id: str,
         card_id: str,
         user_id: str,
-        sources_since_previous: Optional[Dict[str, Any]] = None
+        sources_since_previous: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Create initial brief record with pending status.
@@ -427,11 +458,14 @@ class ExecutiveBriefService:
             Created brief record with version number
         """
         # Get the next version number
-        version_result = self.supabase.table("executive_briefs").select(
-            "version"
-        ).eq("workstream_card_id", workstream_card_id).order(
-            "version", desc=True
-        ).limit(1).execute()
+        version_result = (
+            self.supabase.table("executive_briefs")
+            .select("version")
+            .eq("workstream_card_id", workstream_card_id)
+            .order("version", desc=True)
+            .limit(1)
+            .execute()
+        )
 
         next_version = 1
         if version_result.data:
@@ -446,7 +480,7 @@ class ExecutiveBriefService:
             "version": next_version,
             "sources_since_previous": sources_since_previous,
             "created_at": now,
-            "updated_at": now
+            "updated_at": now,
         }
 
         result = self.supabase.table("executive_briefs").insert(brief_record).execute()
@@ -454,7 +488,9 @@ class ExecutiveBriefService:
         if not result.data:
             raise Exception("Failed to create brief record")
 
-        logger.info(f"Created brief record version {next_version} for workstream_card {workstream_card_id}")
+        logger.info(
+            f"Created brief record version {next_version} for workstream_card {workstream_card_id}"
+        )
         return result.data[0]
 
     async def get_brief(self, brief_id: str) -> Optional[Dict[str, Any]]:
@@ -467,16 +503,17 @@ class ExecutiveBriefService:
         Returns:
             Brief record or None
         """
-        result = self.supabase.table("executive_briefs").select("*").eq(
-            "id", brief_id
-        ).execute()
+        result = (
+            self.supabase.table("executive_briefs")
+            .select("*")
+            .eq("id", brief_id)
+            .execute()
+        )
 
         return result.data[0] if result.data else None
 
     async def get_brief_by_workstream_card(
-        self,
-        workstream_card_id: str,
-        version: Optional[int] = None
+        self, workstream_card_id: str, version: Optional[int] = None
     ) -> Optional[Dict[str, Any]]:
         """
         Get brief for a specific workstream card.
@@ -490,8 +527,10 @@ class ExecutiveBriefService:
         Returns:
             Brief record or None
         """
-        query = self.supabase.table("executive_briefs").select("*").eq(
-            "workstream_card_id", workstream_card_id
+        query = (
+            self.supabase.table("executive_briefs")
+            .select("*")
+            .eq("workstream_card_id", workstream_card_id)
         )
 
         if version is not None:
@@ -503,10 +542,7 @@ class ExecutiveBriefService:
         result = query.execute()
         return result.data[0] if result.data else None
 
-    async def get_brief_versions(
-        self,
-        workstream_card_id: str
-    ) -> List[Dict[str, Any]]:
+    async def get_brief_versions(self, workstream_card_id: str) -> List[Dict[str, Any]]:
         """
         Get all brief versions for a workstream card.
 
@@ -518,18 +554,21 @@ class ExecutiveBriefService:
         Returns:
             List of brief records (without full content for efficiency)
         """
-        result = self.supabase.table("executive_briefs").select(
-            "id, version, status, summary, sources_since_previous, "
-            "generated_at, created_at, model_used"
-        ).eq(
-            "workstream_card_id", workstream_card_id
-        ).order("version", desc=True).execute()
+        result = (
+            self.supabase.table("executive_briefs")
+            .select(
+                "id, version, status, summary, sources_since_previous, "
+                "generated_at, created_at, model_used"
+            )
+            .eq("workstream_card_id", workstream_card_id)
+            .order("version", desc=True)
+            .execute()
+        )
 
         return result.data or []
 
     async def get_latest_completed_brief(
-        self,
-        workstream_card_id: str
+        self, workstream_card_id: str
     ) -> Optional[Dict[str, Any]]:
         """
         Get the most recent completed brief for a workstream card.
@@ -542,13 +581,15 @@ class ExecutiveBriefService:
         Returns:
             Latest completed brief or None
         """
-        result = self.supabase.table("executive_briefs").select(
-            "id, version, generated_at"
-        ).eq(
-            "workstream_card_id", workstream_card_id
-        ).eq(
-            "status", "completed"
-        ).order("version", desc=True).limit(1).execute()
+        result = (
+            self.supabase.table("executive_briefs")
+            .select("id, version, generated_at")
+            .eq("workstream_card_id", workstream_card_id)
+            .eq("status", "completed")
+            .order("version", desc=True)
+            .limit(1)
+            .execute()
+        )
 
         return result.data[0] if result.data else None
 
@@ -562,18 +603,17 @@ class ExecutiveBriefService:
         Returns:
             Status data or None
         """
-        result = self.supabase.table("executive_briefs").select(
-            "id, status, version, summary, error_message, generated_at"
-        ).eq("id", brief_id).execute()
+        result = (
+            self.supabase.table("executive_briefs")
+            .select("id, status, version, summary, error_message, generated_at")
+            .eq("id", brief_id)
+            .execute()
+        )
 
         return result.data[0] if result.data else None
 
     async def update_brief_status(
-        self,
-        brief_id: str,
-        status: str,
-        error_message: Optional[str] = None,
-        **kwargs
+        self, brief_id: str, status: str, error_message: Optional[str] = None, **kwargs
     ) -> None:
         """
         Update brief status and optional fields.
@@ -584,10 +624,7 @@ class ExecutiveBriefService:
             error_message: Error message if failed
             **kwargs: Additional fields to update
         """
-        update_data = {
-            "status": status,
-            "updated_at": datetime.utcnow().isoformat()
-        }
+        update_data = {"status": status, "updated_at": datetime.utcnow().isoformat()}
 
         if error_message:
             update_data["error_message"] = error_message
@@ -604,7 +641,7 @@ class ExecutiveBriefService:
 
     async def _gather_card_context(self, card_id: str) -> Dict[str, Any]:
         """
-        Gather all card data for brief generation.
+        Gather all card data for grant opportunity summary generation.
 
         Args:
             card_id: Card identifier
@@ -612,9 +649,7 @@ class ExecutiveBriefService:
         Returns:
             Card data with all relevant fields
         """
-        result = self.supabase.table("cards").select("*").eq(
-            "id", card_id
-        ).execute()
+        result = self.supabase.table("cards").select("*").eq("id", card_id).execute()
 
         if not result.data:
             raise ValueError(f"Card not found: {card_id}")
@@ -622,8 +657,7 @@ class ExecutiveBriefService:
         return result.data[0]
 
     async def _gather_workstream_context(
-        self,
-        workstream_card_id: str
+        self, workstream_card_id: str
     ) -> Dict[str, Any]:
         """
         Gather workstream and workstream_card context.
@@ -635,15 +669,18 @@ class ExecutiveBriefService:
             Dict with workstream info and user notes
         """
         # Get workstream_card with workstream details
-        wsc_result = self.supabase.table("workstream_cards").select(
-            "*, workstreams(id, name, description)"
-        ).eq("id", workstream_card_id).execute()
+        wsc_result = (
+            self.supabase.table("workstream_cards")
+            .select("*, workstreams(id, name, description)")
+            .eq("id", workstream_card_id)
+            .execute()
+        )
 
         if not wsc_result.data:
             return {
                 "workstream_name": "Unknown Workstream",
                 "workstream_description": "",
-                "user_notes": ""
+                "user_notes": "",
             }
 
         wsc = wsc_result.data[0]
@@ -652,45 +689,51 @@ class ExecutiveBriefService:
         return {
             "workstream_name": workstream.get("name", "Unknown Workstream"),
             "workstream_description": workstream.get("description", ""),
-            "user_notes": wsc.get("notes", "") or ""
+            "user_notes": wsc.get("notes", "") or "",
         }
 
     async def _gather_related_cards(self, card_id: str, limit: int = 5) -> str:
         """
-        Gather related cards summary for context.
+        Gather related grant opportunities summary for context.
 
         Args:
             card_id: Card identifier
             limit: Maximum number of related cards
 
         Returns:
-            Formatted string with related cards summary
+            Formatted string with related opportunities summary
         """
         # Try to find related cards through card_relationships table
-        result = self.supabase.table("card_relationships").select(
-            "target_card_id, relationship_type, strength"
-        ).eq("source_card_id", card_id).order(
-            "strength", desc=True
-        ).limit(limit).execute()
+        result = (
+            self.supabase.table("card_relationships")
+            .select("target_card_id, relationship_type, strength")
+            .eq("source_card_id", card_id)
+            .order("strength", desc=True)
+            .limit(limit)
+            .execute()
+        )
 
         if not result.data:
-            return "No related cards identified."
+            return "No related opportunities identified."
 
         # Fetch details for related cards
         related_ids = [r["target_card_id"] for r in result.data]
-        cards_result = self.supabase.table("cards").select(
-            "id, name, summary, pillar_id, horizon"
-        ).in_("id", related_ids).execute()
+        cards_result = (
+            self.supabase.table("cards")
+            .select("id, name, summary, pillar_id, horizon")
+            .in_("id", related_ids)
+            .execute()
+        )
 
         if not cards_result.data:
-            return "No related cards identified."
+            return "No related opportunities identified."
 
         # Build summary
         lines = []
         card_map = {c["id"]: c for c in cards_result.data}
         for rel in result.data:
             if card := card_map.get(rel["target_card_id"]):
-                summary_text = card.get('summary', 'No summary')
+                summary_text = card.get("summary", "No summary")
                 if summary_text and len(summary_text) > 150:
                     summary_text = f"{summary_text[:147]}..."
                 lines.append(
@@ -698,16 +741,13 @@ class ExecutiveBriefService:
                     f"strength: {rel.get('strength', 0):.0%}): {summary_text}"
                 )
 
-        return "\n".join(lines) if lines else "No related cards identified."
+        return "\n".join(lines) if lines else "No related opportunities identified."
 
     async def _gather_source_materials(
-        self,
-        card_id: str,
-        limit: int = 10,
-        since_timestamp: Optional[str] = None
+        self, card_id: str, limit: int = 10, since_timestamp: Optional[str] = None
     ) -> tuple[str, int]:
         """
-        Gather source materials/excerpts for the card.
+        Gather source materials/excerpts for the grant opportunity card.
 
         Args:
             card_id: Card identifier
@@ -717,9 +757,13 @@ class ExecutiveBriefService:
         Returns:
             Tuple of (formatted string with source excerpts, count of sources)
         """
-        query = self.supabase.table("discovered_sources").select(
-            "title, url, domain, analysis_summary, analysis_key_excerpts, created_at"
-        ).eq("resulting_card_id", card_id)
+        query = (
+            self.supabase.table("discovered_sources")
+            .select(
+                "title, url, domain, analysis_summary, analysis_key_excerpts, created_at"
+            )
+            .eq("resulting_card_id", card_id)
+        )
 
         if since_timestamp:
             query = query.gt("created_at", since_timestamp)
@@ -728,7 +772,7 @@ class ExecutiveBriefService:
 
         if not result.data:
             if since_timestamp:
-                return "No new source materials since last brief.", 0
+                return "No new source materials since last summary.", 0
             return "No source materials available.", 0
 
         lines = []
@@ -749,15 +793,13 @@ class ExecutiveBriefService:
                 line += f" [Source: {url}]"
             lines.append(line)
 
-        return "\n".join(lines) if lines else "No source materials available.", len(result.data)
+        return "\n".join(lines) if lines else "No source materials available.", len(
+            result.data
+        )
 
-    async def count_new_sources(
-        self,
-        card_id: str,
-        since_timestamp: str
-    ) -> int:
+    async def count_new_sources(self, card_id: str, since_timestamp: str) -> int:
         """
-        Count sources discovered since a given timestamp.
+        Count sources discovered since a given timestamp for a grant opportunity.
 
         Args:
             card_id: Card identifier
@@ -766,16 +808,18 @@ class ExecutiveBriefService:
         Returns:
             Count of new sources
         """
-        result = self.supabase.table("discovered_sources").select(
-            "id", count="exact"
-        ).eq("resulting_card_id", card_id).gt(
-            "created_at", since_timestamp
-        ).execute()
+        result = (
+            self.supabase.table("discovered_sources")
+            .select("id", count="exact")
+            .eq("resulting_card_id", card_id)
+            .gt("created_at", since_timestamp)
+            .execute()
+        )
 
         return result.count or 0
 
     # ========================================================================
-    # Brief Generation
+    # Grant Opportunity Summary Generation
     # ========================================================================
 
     @with_retry(max_retries=MAX_RETRIES)
@@ -784,22 +828,22 @@ class ExecutiveBriefService:
         card: Dict[str, Any],
         workstream_context: Dict[str, Any],
         related_cards: str,
-        source_materials: str
+        source_materials: str,
     ) -> BriefGenerationResult:
         """
-        Generate brief content using OpenAI API.
+        Generate grant opportunity summary content using OpenAI API.
 
         Args:
             card: Card data
             workstream_context: Workstream and notes context
-            related_cards: Related cards summary string
+            related_cards: Related opportunities summary string
             source_materials: Source excerpts string
 
         Returns:
             BriefGenerationResult with content and metadata
         """
         # Build the prompt
-        prompt = EXECUTIVE_BRIEF_PROMPT.format(
+        prompt = GRANT_OPPORTUNITY_PROMPT.format(
             card_name=card.get("name", "Unknown"),
             summary=card.get("summary", "No summary available"),
             description=card.get("description", "No description available"),
@@ -814,10 +858,12 @@ class ExecutiveBriefService:
             workstream_description=workstream_context.get("workstream_description", ""),
             user_notes=workstream_context.get("user_notes", "No notes provided"),
             related_cards_summary=related_cards,
-            source_excerpts=source_materials
+            source_excerpts=source_materials,
         )
 
-        logger.info(f"Generating executive brief for card: {card.get('name', 'Unknown')}")
+        logger.info(
+            f"Generating grant opportunity summary for card: {card.get('name', 'Unknown')}"
+        )
 
         # Get Azure deployment name for chat completions
         model_deployment = get_chat_deployment()
@@ -829,15 +875,15 @@ class ExecutiveBriefService:
                 {
                     "role": "system",
                     "content": (
-                        "You are a strategic advisor for the City of Austin. "
-                        "Generate comprehensive, actionable executive briefs in clear markdown format."
-                    )
+                        "You are a grants specialist for the City of Austin. "
+                        "Generate comprehensive, actionable grant opportunity summaries in clear markdown format."
+                    ),
                 },
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": prompt},
             ],
             max_tokens=4000,
             temperature=0.7,
-            timeout=REQUEST_TIMEOUT
+            timeout=REQUEST_TIMEOUT,
         )
 
         content_markdown = response.choices[0].message.content
@@ -854,7 +900,7 @@ class ExecutiveBriefService:
             content_json=content_json,
             prompt_tokens=response.usage.prompt_tokens,
             completion_tokens=response.usage.completion_tokens,
-            model_used=model_deployment
+            model_used=model_deployment,
         )
 
     async def generate_executive_brief(
@@ -862,18 +908,18 @@ class ExecutiveBriefService:
         brief_id: str,
         workstream_card_id: str,
         card_id: str,
-        since_timestamp: Optional[str] = None
+        since_timestamp: Optional[str] = None,
     ) -> None:
         """
-        Generate executive brief content (runs in background).
+        Generate grant opportunity summary content (runs in background).
 
-        This is the main entry point for brief generation, called
+        This is the main entry point for summary generation, called
         asynchronously after creating the brief record.
 
         Args:
             brief_id: Brief identifier to update
             workstream_card_id: Workstream card identifier for context
-            card_id: Card to generate brief for
+            card_id: Card to generate summary for
             since_timestamp: Optional timestamp to filter sources (for regeneration)
         """
         start_time = time.time()
@@ -884,7 +930,9 @@ class ExecutiveBriefService:
 
             # Gather all context
             card = await self._gather_card_context(card_id)
-            workstream_context = await self._gather_workstream_context(workstream_card_id)
+            workstream_context = await self._gather_workstream_context(
+                workstream_card_id
+            )
             related_cards = await self._gather_related_cards(card_id)
             source_materials, source_count = await self._gather_source_materials(
                 card_id, since_timestamp=since_timestamp
@@ -895,7 +943,7 @@ class ExecutiveBriefService:
                 card=card,
                 workstream_context=workstream_context,
                 related_cards=related_cards,
-                source_materials=source_materials
+                source_materials=source_materials,
             )
 
             # Calculate generation time
@@ -912,7 +960,7 @@ class ExecutiveBriefService:
                 generation_time_ms=generation_time_ms,
                 model_used=result.model_used,
                 prompt_tokens=result.prompt_tokens,
-                completion_tokens=result.completion_tokens
+                completion_tokens=result.completion_tokens,
             )
 
             logger.info(
@@ -927,47 +975,46 @@ class ExecutiveBriefService:
                 brief_id,
                 "failed",
                 error_message=str(e),
-                generation_time_ms=generation_time_ms
+                generation_time_ms=generation_time_ms,
             )
 
     # =========================================================================
-    # Portfolio Synthesis (for Bulk Brief Export)
+    # Portfolio Synthesis (for Bulk Grant Summary Export)
     # =========================================================================
 
     @with_retry(max_retries=MAX_RETRIES)
     async def synthesize_portfolio(
-        self,
-        briefs: List[PortfolioBrief],
-        workstream_name: str
+        self, briefs: List[PortfolioBrief], workstream_name: str
     ) -> PortfolioSynthesis:
         """
-        Generate AI-synthesized content for a portfolio of briefs.
-        
-        Uses GPT-4 to analyze multiple briefs together and create:
-        - Executive overview synthesizing all cards
+        Generate AI-synthesized content for a portfolio of grant opportunity summaries.
+
+        Uses GPT-4 to analyze multiple grant summaries together and create:
+        - Executive overview synthesizing all opportunities
         - Key themes across the portfolio
-        - Priority matrix (impact vs urgency)
+        - Priority matrix (funding impact vs deadline urgency)
         - Cross-cutting insights and connections
         - Recommended actions with ownership
-        
+
         Args:
             briefs: List of PortfolioBrief objects in display order
             workstream_name: Name of the workstream for context
-            
+
         Returns:
             PortfolioSynthesis with all synthesized content
         """
         if not briefs:
             raise ValueError("Cannot synthesize empty portfolio")
-        
+
         # Build context for each card
         card_summaries = []
         for i, brief in enumerate(briefs, 1):
             pillar_name = get_pillar_name(brief.pillar_id)
             horizon_name = f"H{brief.horizon[-1]}" if brief.horizon else "Unknown"
             stage_name = get_stage_name(brief.stage_id)
-            
-            card_summaries.append(f"""
+
+            card_summaries.append(
+                f"""
 ### Card {i}: {brief.card_name}
 - **Pillar**: {pillar_name} ({brief.pillar_id})
 - **Horizon**: {horizon_name}
@@ -980,101 +1027,102 @@ class ExecutiveBriefService:
 
 **Key Content**:
 {brief.brief_content_markdown[:2000]}...
-""")
-        
+"""
+            )
+
         cards_context = "\n---\n".join(card_summaries)
-        
-        system_prompt = """You are a senior strategic analyst for the City of Austin, Texas. 
-You synthesize multiple strategic intelligence briefs into executive-ready portfolio summaries.
+
+        system_prompt = """You are a senior grants analyst for the City of Austin, Texas.
+You synthesize multiple grant opportunity summaries into executive-ready portfolio assessments.
 
 Your analysis should be:
-- Decision-oriented: Help leadership decide what to prioritize
-- Implementation-focused: Tell them exactly what to DO with each trend
-- Comparative: Show how trends relate to each other
-- Austin-specific: Frame everything in terms of city impact
+- Decision-oriented: Help leadership decide which grants to prioritize
+- Implementation-focused: Tell them exactly what to DO with each opportunity
+- Comparative: Show how opportunities relate to each other and can be combined
+- Austin-specific: Frame everything in terms of city needs and capacity
 - Actionable: Provide concrete next steps, not vague recommendations
 
 Output your analysis as valid JSON matching the specified structure."""
 
-        user_prompt = f"""Analyze this portfolio of {len(briefs)} strategic intelligence briefs for the "{workstream_name}" workstream.
+        user_prompt = f"""Analyze this portfolio of {len(briefs)} grant opportunity summaries for the "{workstream_name}" workstream.
 
 {cards_context}
 
 Generate a comprehensive portfolio synthesis as JSON with this exact structure:
 {{
-    "executive_overview": "2-3 paragraphs synthesizing what leadership needs to know about these {len(briefs)} trends together. What's the big picture? How do they connect? What decisions need to be made?",
-    
-    "urgency_statement": "A compelling 2-3 sentence statement about why this portfolio demands attention NOW. What window of opportunity is closing? What risks are accelerating?",
-    
+    "executive_overview": "2-3 paragraphs synthesizing what leadership needs to know about these {len(briefs)} grant opportunities together. What's the total funding landscape? How do they connect? What decisions need to be made about which to pursue?",
+
+    "urgency_statement": "A compelling 2-3 sentence statement about why this grant portfolio demands attention NOW. What deadlines are approaching? What funding windows are closing?",
+
     "key_themes": [
-        "Theme 1: A common thread across multiple cards",
+        "Theme 1: A common funding thread across multiple opportunities",
         "Theme 2: Another pattern you've identified",
         "Theme 3: etc (provide 3-5 themes)"
     ],
-    
+
     "priority_matrix": {{
-        "high_impact_urgent": ["Card names that need immediate attention"],
-        "high_impact_strategic": ["Card names important but longer-term"],
-        "monitor": ["Card names to watch but not act on yet"],
+        "high_impact_urgent": ["Grant names with approaching deadlines and high funding potential"],
+        "high_impact_strategic": ["Grant names with large awards but longer timelines"],
+        "monitor": ["Grant names to track but not pursue immediately"],
         "rationale": "Brief explanation of how you prioritized"
     }},
-    
+
     "implementation_guidance": {{
-        "pilot_now": ["Card names ready for small-scale testing - technology is mature enough"],
-        "investigate_further": ["Card names needing more research before action"],
-        "meet_with_vendors": ["Card names where vendor evaluation is the logical next step"],
-        "policy_review": ["Card names requiring regulatory or policy analysis"],
-        "staff_training": ["Card names where workforce readiness is the priority"],
-        "budget_planning": ["Card names ready for larger deployment planning"]
+        "apply_now": ["Grant names ready for immediate application - strong fit and capacity exists"],
+        "investigate_further": ["Grant names needing more eligibility or feasibility research"],
+        "build_partnerships": ["Grant names where partner or subrecipient coordination is needed"],
+        "policy_review": ["Grant names requiring council approval or policy changes"],
+        "capacity_building": ["Grant names where staff training or hiring is a prerequisite"],
+        "budget_planning": ["Grant names requiring match funding or budget allocation"]
     }},
-    
+
     "cross_cutting_insights": [
-        "Insight 1: How Card X connects to Card Y",
-        "Insight 2: Resource implications across multiple cards",
+        "Insight 1: How Grant X could complement Grant Y for greater impact",
+        "Insight 2: Shared matching fund or staffing requirements across grants",
         "Insight 3: etc (provide 3-5 insights)"
     ],
-    
+
     "recommended_actions": [
-        {{"action": "Specific action to take", "owner": "Department or role", "timeline": "Q1 2025", "cards": ["Related card names"]}},
-        {{"action": "Another action", "owner": "Owner", "timeline": "Timeline", "cards": ["Cards"]}}
+        {{"action": "Specific action to take", "owner": "Department or role", "timeline": "Q1 2025", "cards": ["Related grant names"]}},
+        {{"action": "Another action", "owner": "Owner", "timeline": "Timeline", "cards": ["Grants"]}}
     ],
-    
+
     "ninety_day_actions": [
         {{"action": "Concrete action for next 90 days", "owner": "Specific department", "by_when": "Within 30/60/90 days", "success_metric": "How we know it's done"}},
         {{"action": "Another 90-day action", "owner": "Owner", "by_when": "Timeline", "success_metric": "Metric"}}
     ],
-    
-    "risk_summary": "2-3 sentences on the top risks if Austin doesn't act on this portfolio. What could go wrong? What opportunities would be missed?",
-    
-    "opportunity_summary": "2-3 sentences on the top opportunities if Austin leads on these trends. What competitive advantage? What citizen benefits?"
+
+    "risk_summary": "2-3 sentences on the top risks if Austin doesn't pursue these grants. What funding would be left on the table? What peer cities might gain advantage?",
+
+    "opportunity_summary": "2-3 sentences on the total funding potential if Austin pursues this portfolio strategically. What programs could be funded? What community impact?"
 }}
 
 Respond with ONLY the JSON object, no markdown formatting or explanation."""
 
         model_deployment = get_chat_deployment()
-        
+
         response = await asyncio.to_thread(
             self.openai_client.chat.completions.create,
             model=model_deployment,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": user_prompt},
             ],
             temperature=0.7,
             max_tokens=4500,  # Increased for expanded synthesis fields
-            timeout=REQUEST_TIMEOUT
+            timeout=REQUEST_TIMEOUT,
         )
-        
+
         # Parse response
         content = response.choices[0].message.content.strip()
-        
+
         # Clean up potential markdown code blocks
         if content.startswith("```"):
             content = content.split("```")[1]
             if content.startswith("json"):
                 content = content[4:]
         content = content.strip()
-        
+
         try:
             synthesis_data = json.loads(content)
         except json.JSONDecodeError as e:
@@ -1082,16 +1130,36 @@ Respond with ONLY the JSON object, no markdown formatting or explanation."""
             logger.error(f"Raw content: {content[:500]}")
             # Return minimal synthesis on parse failure
             return PortfolioSynthesis(
-                executive_overview=f"This portfolio contains {len(briefs)} strategic intelligence briefs for the {workstream_name} workstream.",
-                key_themes=["Strategic technology trends", "Municipal service implications", "Resource considerations"],
-                priority_matrix={"high_impact_urgent": [], "high_impact_strategic": [], "monitor": [], "rationale": "Unable to generate detailed analysis"},
-                cross_cutting_insights=["Multiple trends may require coordinated response"],
-                recommended_actions=[{"action": "Review individual briefs for detailed recommendations", "owner": "Leadership", "timeline": "Immediate", "cards": [b.card_name for b in briefs]}],
+                executive_overview=f"This portfolio contains {len(briefs)} grant opportunity summaries for the {workstream_name} workstream.",
+                key_themes=[
+                    "Grant funding opportunities",
+                    "Municipal program alignment",
+                    "Resource and capacity considerations",
+                ],
+                priority_matrix={
+                    "high_impact_urgent": [],
+                    "high_impact_strategic": [],
+                    "monitor": [],
+                    "rationale": "Unable to generate detailed analysis",
+                },
+                cross_cutting_insights=[
+                    "Multiple grant opportunities may benefit from coordinated pursuit"
+                ],
+                recommended_actions=[
+                    {
+                        "action": "Review individual grant summaries for detailed recommendations",
+                        "owner": "Grants Management",
+                        "timeline": "Immediate",
+                        "cards": [b.card_name for b in briefs],
+                    }
+                ],
                 prompt_tokens=response.usage.prompt_tokens if response.usage else 0,
-                completion_tokens=response.usage.completion_tokens if response.usage else 0,
-                model_used=model_deployment
+                completion_tokens=(
+                    response.usage.completion_tokens if response.usage else 0
+                ),
+                model_used=model_deployment,
             )
-        
+
         return PortfolioSynthesis(
             executive_overview=synthesis_data.get("executive_overview", ""),
             key_themes=synthesis_data.get("key_themes", []),
@@ -1105,5 +1173,5 @@ Respond with ONLY the JSON object, no markdown formatting or explanation."""
             opportunity_summary=synthesis_data.get("opportunity_summary", ""),
             prompt_tokens=response.usage.prompt_tokens if response.usage else 0,
             completion_tokens=response.usage.completion_tokens if response.usage else 0,
-            model_used=model_deployment
+            model_used=model_deployment,
         )

@@ -181,7 +181,7 @@ export const DiscoverCard = React.memo(function DiscoverCard({
                 ? "text-red-500 hover:text-red-600"
                 : "text-gray-400 hover:text-red-500"
             }`}
-            title={isFollowed ? "Unfollow signal" : "Follow signal"}
+            title={isFollowed ? "Unfollow opportunity" : "Follow opportunity"}
             aria-pressed={isFollowed}
           >
             <Heart

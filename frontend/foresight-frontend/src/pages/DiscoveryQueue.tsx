@@ -23,6 +23,8 @@ import {
   Zap,
   Undo2,
   X,
+  ArrowRight,
+  Heart,
 } from "lucide-react";
 import { supabase } from "../App";
 import { useAuthContext } from "../hooks/useAuthContext";
@@ -1002,7 +1004,7 @@ const DiscoveryQueue: React.FC = () => {
       } catch (err) {
         console.error("Error reviewing card:", err);
         setError(
-          err instanceof Error ? err.message : "Failed to review signal",
+          err instanceof Error ? err.message : "Failed to review opportunity",
         );
       } finally {
         setActionLoading(null);
@@ -1056,7 +1058,7 @@ const DiscoveryQueue: React.FC = () => {
       } catch (err) {
         console.error("Error dismissing card:", err);
         setError(
-          err instanceof Error ? err.message : "Failed to dismiss signal",
+          err instanceof Error ? err.message : "Failed to dismiss opportunity",
         );
       } finally {
         setActionLoading(null);
@@ -1152,7 +1154,9 @@ const DiscoveryQueue: React.FC = () => {
       } catch (err) {
         console.error("Error bulk reviewing cards:", err);
         setError(
-          err instanceof Error ? err.message : "Failed to bulk review signals",
+          err instanceof Error
+            ? err.message
+            : "Failed to bulk review opportunities",
         );
       } finally {
         setActionLoading(null);
@@ -1362,7 +1366,7 @@ const DiscoveryQueue: React.FC = () => {
               <span className="truncate">Discovery Queue</span>
             </h1>
             <p className="mt-1 sm:mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400">
-              Review AI-discovered signals before they're added to the
+              Review AI-discovered opportunities before they're added to the
               intelligence library.
             </p>
           </div>
@@ -1414,7 +1418,7 @@ const DiscoveryQueue: React.FC = () => {
                 Review Progress
               </span>
               <span className="text-sm text-gray-600 dark:text-gray-400">
-                {progressStats.reviewed} of {progressStats.total} signals
+                {progressStats.reviewed} of {progressStats.total} opportunities
                 reviewed
               </span>
             </div>
@@ -1432,7 +1436,7 @@ const DiscoveryQueue: React.FC = () => {
             {progressStats.percentage === 100 && progressStats.total > 0 && (
               <p className="mt-2 text-sm text-green-600 dark:text-green-400 flex items-center gap-1.5">
                 <CheckCircle className="h-4 w-4" />
-                All signals reviewed! Great job.
+                All opportunities reviewed! Great job.
               </p>
             )}
           </div>
@@ -1466,7 +1470,7 @@ const DiscoveryQueue: React.FC = () => {
                 type="text"
                 id="search"
                 className="pl-10 block w-full min-h-[44px] sm:min-h-0 border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue text-base sm:text-sm"
-                placeholder="Search pending signals..."
+                placeholder="Search pending opportunities..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -1641,26 +1645,41 @@ const DiscoveryQueue: React.FC = () => {
                 All Caught Up!
               </h3>
               <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
-                Great work! You&apos;ve reviewed all pending discoveries. Check
-                back later for new AI-discovered signals.
+                You&apos;ve reviewed all pending discoveries. GrantScope is
+                always scanning for new opportunities &mdash; check back soon!
               </p>
-              <Link
-                to="/discover"
-                className="mt-6 inline-flex items-center justify-center min-h-[44px] px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-brand-dark-blue transition-colors active:scale-95"
-              >
-                Browse Intelligence Library
-              </Link>
+              <div className="mt-5 flex flex-col items-center gap-2">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                  What&apos;s next?
+                </p>
+                <div className="flex flex-col items-start gap-1.5">
+                  <Link
+                    to="/discover"
+                    className="inline-flex items-center gap-1.5 text-sm text-brand-blue hover:underline font-medium"
+                  >
+                    Browse the full grant library
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                  <Link
+                    to="/signals"
+                    className="inline-flex items-center gap-1.5 text-sm text-brand-blue hover:underline font-medium"
+                  >
+                    <Heart className="h-3.5 w-3.5" />
+                    Check your followed grants
+                  </Link>
+                </div>
+              </div>
             </>
           ) : (
             <>
               {/* No cards match current filters */}
               <Inbox className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
-                No Matching Signals
+                No Matching Opportunities
               </h3>
               <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
-                No signals match your current filters. Try adjusting your search
-                or filter settings.
+                No opportunities match your current filters. Try adjusting your
+                search or filter settings.
               </p>
               <button
                 onClick={() => {
@@ -1687,7 +1706,7 @@ const DiscoveryQueue: React.FC = () => {
           focusedIndex={focusedCardIndex}
           onFocusedIndexChange={setFocusedCardIndex}
           onItemClick={openCardDetail}
-          ariaLabel="Discovery queue signals"
+          ariaLabel="Discovery queue opportunities"
           scrollContainerClassName="h-[calc(100vh-280px)] sm:h-[calc(100vh-300px)]"
           renderItem={(card, _index) => {
             const stageNumber = parseStageNumber(card.stage_id);
@@ -1796,7 +1815,7 @@ const DiscoveryQueue: React.FC = () => {
                         }}
                         disabled={isLoading}
                         className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 px-3 sm:px-3 py-2 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50 disabled:opacity-50 transition-colors active:scale-95"
-                        title="Approve this signal"
+                        title="Approve this opportunity"
                       >
                         <CheckCircle className="h-5 w-5 sm:h-4 sm:w-4 sm:mr-1.5" />
                         <span className="hidden sm:inline ml-1.5">Approve</span>

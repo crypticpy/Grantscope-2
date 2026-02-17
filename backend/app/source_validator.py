@@ -1,5 +1,5 @@
 """
-Source content validator for Foresight discovery pipeline.
+Source content validator for GrantScope discovery pipeline.
 
 Validates source content quality, freshness, and provenance before it enters
 the AI triage stage. This module acts as a fast, deterministic pre-filter that

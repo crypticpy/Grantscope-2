@@ -220,9 +220,9 @@ const KANBAN_COLUMN_INFO: KanbanColumnInfo[] = [
     bgColor: "bg-gray-100 dark:bg-gray-700",
     icon: <Inbox className="h-4 w-4" />,
     description:
-      "The landing zone for all new signals. Cards arrive here via auto-populate, manual additions from Discover, or workstream scans.",
+      "The landing zone for all new opportunities. Cards arrive here via auto-populate, manual additions from Discover, or program scans.",
     workflow:
-      "Triage quickly: skim the signal, decide if it warrants further attention.",
+      "Triage quickly: skim the opportunity, decide if it warrants further attention.",
     actions: ["Move to Screening or Archive", "Add notes for context"],
   },
   {
@@ -232,9 +232,9 @@ const KANBAN_COLUMN_INFO: KanbanColumnInfo[] = [
     bgColor: "bg-yellow-100 dark:bg-yellow-900/30",
     icon: <Filter className="h-4 w-4" />,
     description:
-      "Initial evaluation stage. Run a Quick Update to gather a concise 5-source research snapshot and decide if the signal is worth a deeper look.",
+      "Initial evaluation stage. Run a Quick Update to gather a concise 5-source research snapshot and decide if the opportunity is worth a deeper look.",
     workflow:
-      "Read the quick update summary, then promote or dismiss the signal.",
+      "Read the quick update summary, then promote or dismiss the opportunity.",
     actions: ["Quick Update (5-source scan)", "Move to Research or Archive"],
   },
   {
@@ -277,7 +277,7 @@ const KANBAN_COLUMN_INFO: KanbanColumnInfo[] = [
     bgColor: "bg-green-100 dark:bg-green-900/30",
     icon: <Eye className="h-4 w-4" />,
     description:
-      "Ongoing monitoring stage. Signals here have been briefed or are important enough to track. Use Check for Updates to poll for new developments periodically.",
+      "Ongoing monitoring stage. Opportunities here have been briefed or are important enough to track. Use Check for Updates to poll for new developments periodically.",
     workflow:
       "Periodically check for updates; move back to Research if activity spikes.",
     actions: [
@@ -293,7 +293,7 @@ const KANBAN_COLUMN_INFO: KanbanColumnInfo[] = [
     bgColor: "bg-gray-100 dark:bg-gray-600",
     icon: <Archive className="h-4 w-4" />,
     description:
-      "Completed or deprioritized signals. Archived cards remain accessible but do not appear in active workflows. You can always move them back if circumstances change.",
+      "Completed or deprioritized opportunities. Archived cards remain accessible but do not appear in active workflows. You can always move them back if circumstances change.",
     workflow: "No active work needed. Reference for historical context.",
     actions: ["Restore to any column if needed"],
   },
@@ -407,7 +407,7 @@ function ResearchComparisonTable() {
       duration: "3-8 minutes",
       depth: "Comprehensive",
       bestFor:
-        "Full investigation of high-priority signals. Produces detailed research across academic, government, and industry sources.",
+        "Full investigation of high-priority opportunities. Produces detailed research across academic, government, and industry sources.",
       column: "Research",
       color: "border-blue-500",
     },
@@ -419,7 +419,7 @@ function ResearchComparisonTable() {
       duration: "30-90 seconds",
       depth: "Surface",
       bestFor:
-        "Rapid triage during screening. Provides a concise snapshot to decide if a signal warrants deeper research.",
+        "Rapid triage during screening. Provides a concise snapshot to decide if an opportunity warrants deeper research.",
       column: "Screening",
       color: "border-yellow-500",
     },
@@ -431,7 +431,7 @@ function ResearchComparisonTable() {
       duration: "20-60 seconds",
       depth: "Focused",
       bestFor:
-        "Monitoring signals you are watching. Looks for new developments since the last research run.",
+        "Monitoring opportunities you are watching. Looks for new developments since the last research run.",
       column: "Watching",
       color: "border-green-500",
     },
@@ -583,14 +583,14 @@ function BriefStructurePreview() {
       title: "Municipal Applications",
       icon: <Target className="h-3.5 w-3.5" />,
       content:
-        "Specific use cases for the City of Austin. Maps the signal to city departments, operational areas, and strategic priorities. Includes examples from peer cities and government agencies.",
+        "Specific use cases for the City of Austin. Maps the opportunity to city departments, operational areas, and strategic priorities. Includes examples from peer cities and government agencies.",
     },
     {
       id: "implementation",
       title: "Implementation Considerations",
       icon: <Settings className="h-3.5 w-3.5" />,
       content:
-        "Practical guidance on what it would take to adopt or respond to this signal. Covers timelines, resource requirements, integration with existing systems, and change management considerations.",
+        "Practical guidance on what it would take to adopt or respond to this opportunity. Covers timelines, resource requirements, integration with existing systems, and change management considerations.",
     },
     {
       id: "vendors",
@@ -618,7 +618,7 @@ function BriefStructurePreview() {
       title: "Future Outlook",
       icon: <Telescope className="h-3.5 w-3.5" />,
       content:
-        "Where this signal is likely headed over the next 1, 3, and 5 years. Scenarios for different adoption trajectories and the implications for Austin if it acts early, on time, or late.",
+        "Where this opportunity is likely headed over the next 1, 3, and 5 years. Scenarios for different adoption trajectories and the implications for Austin if it acts early, on time, or late.",
     },
   ];
 
@@ -761,19 +761,19 @@ export default function GuideWorkstreams() {
   const quickStartSteps: QuickStartStep[] = [
     {
       step: 1,
-      title: "Create Workstream",
+      title: "Create Program",
       icon: <Plus className="h-5 w-5" />,
       description: "Define your research focus",
       details:
-        "Name your workstream, write a description, select strategic pillars and goals, pick maturity stages and time horizons, and add keywords. These filters determine which signals are relevant to your research stream.",
+        "Name your program, write a description, select strategic pillars and goals, pick maturity stages and time horizons, and add keywords. These filters determine which opportunities are relevant to your research stream.",
     },
     {
       step: 2,
       title: "Populate",
       icon: <Sparkles className="h-5 w-5" />,
-      description: "Add signals automatically or manually",
+      description: "Add opportunities automatically or manually",
       details:
-        "Use Auto-Populate for AI-matched signals from the existing database, run a Workstream Scan to discover fresh content from the web, or manually add signals from the Discover page. Signals land in your Inbox column.",
+        "Use Auto-Populate for AI-matched opportunities from the existing database, run a Program Scan to discover fresh content from the web, or manually add opportunities from the Discover page. Opportunities land in your Inbox column.",
     },
     {
       step: 3,
@@ -781,7 +781,7 @@ export default function GuideWorkstreams() {
       icon: <Search className="h-5 w-5" />,
       description: "Investigate with AI-powered tools",
       details:
-        "Move signals through Screening (Quick Update) and Research (Deep Dive) columns. The AI pulls from 5 to 15+ sources to build comprehensive research packages. Add your own notes and context at every stage.",
+        "Move opportunities through Screening (Quick Update) and Research (Deep Dive) columns. The AI pulls from 5 to 15+ sources to build comprehensive research packages. Add your own notes and context at every stage.",
     },
     {
       step: 4,
@@ -820,7 +820,7 @@ export default function GuideWorkstreams() {
               className="no-print inline-flex items-center gap-1.5 text-sm text-white/80 hover:text-white transition-colors mb-6"
             >
               <ArrowLeft className="h-4 w-4" />
-              Back to Workstreams
+              Back to Programs
             </Link>
             <div className="flex items-start gap-4">
               <div className="hidden sm:flex w-12 h-12 rounded-xl bg-white/15 items-center justify-center flex-shrink-0">
@@ -828,13 +828,13 @@ export default function GuideWorkstreams() {
               </div>
               <div>
                 <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">
-                  How to Use Workstreams
+                  How to Use Programs
                 </h1>
                 <p className="mt-3 text-lg text-white/80 max-w-2xl leading-relaxed">
-                  Workstreams transform raw signals into structured research and
-                  leadership-ready deliverables. This guide walks you through
-                  every capability -- from creating your first workstream to
-                  exporting polished executive presentations.
+                  Programs transform raw opportunities into structured research
+                  and leadership-ready deliverables. This guide walks you
+                  through every capability -- from creating your first program
+                  to exporting polished executive presentations.
                 </p>
               </div>
             </div>
@@ -850,7 +850,7 @@ export default function GuideWorkstreams() {
               Quick Start
             </h2>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-              The four-step workflow from signal discovery to stakeholder
+              The four-step workflow from opportunity discovery to stakeholder
               presentation. Click any step to learn more.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -876,24 +876,24 @@ export default function GuideWorkstreams() {
               id="what-are-workstreams"
             >
               <AccordionTrigger icon={<FolderOpen className="h-5 w-5" />}>
-                What Are Workstreams?
+                What Are Programs?
               </AccordionTrigger>
               <AccordionContent>
                 <p className="mb-4">
                   A{" "}
                   <strong className="text-brand-dark-blue dark:text-brand-light-blue">
-                    Workstream
+                    Program
                   </strong>{" "}
                   is a personal research workspace for systematically
                   investigating a topic area that matters to your team. While
-                  following signals on the Signals page gives you a personal
-                  feed of updates, a workstream goes further: it provides a
-                  structured research pipeline, AI-assisted deep dives,
+                  following opportunities on the Opportunities page gives you a
+                  personal feed of updates, a program goes further: it provides
+                  a structured research pipeline, AI-assisted deep dives,
                   executive brief generation, and polished export capabilities.
                 </p>
 
                 <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">
-                  How Workstreams Differ from Following Signals
+                  How Programs Differ from Following Opportunities
                 </h4>
                 <div className="overflow-x-auto mb-4">
                   <table className="w-full text-sm border-collapse">
@@ -903,10 +903,10 @@ export default function GuideWorkstreams() {
                           Capability
                         </th>
                         <th className="text-left py-2 pr-4 font-semibold text-gray-900 dark:text-gray-100">
-                          Following Signals
+                          Following Opportunities
                         </th>
                         <th className="text-left py-2 font-semibold text-gray-900 dark:text-gray-100">
-                          Workstreams
+                          Programs
                         </th>
                       </tr>
                     </thead>
@@ -970,7 +970,7 @@ export default function GuideWorkstreams() {
                 </div>
 
                 <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">
-                  When to Create a Workstream
+                  When to Create a Program
                 </h4>
                 <ul className="list-disc list-inside space-y-1 mb-4">
                   <li>
@@ -979,7 +979,7 @@ export default function GuideWorkstreams() {
                   </li>
                   <li>
                     A topic requires structured investigation across multiple
-                    signals
+                    opportunities
                   </li>
                   <li>
                     Your team is tracking an emerging area that aligns with one
@@ -998,11 +998,11 @@ export default function GuideWorkstreams() {
                   Strategic Alignment
                 </h4>
                 <p>
-                  Every workstream can be aligned to Austin's strategic pillars
+                  Every program can be aligned to Austin's strategic pillars
                   (Community Health, Mobility, Housing, Economic, Environmental,
                   Cultural) and the CMO's Top 25 Priorities. This alignment
-                  helps the AI surface the most relevant signals and ensures
-                  briefs frame findings in terms of the city's goals.
+                  helps the AI surface the most relevant opportunities and
+                  ensures briefs frame findings in terms of the city's goals.
                 </p>
               </AccordionContent>
             </Accordion.Item>
@@ -1012,13 +1012,13 @@ export default function GuideWorkstreams() {
             {/* ------------------------------------------------------------ */}
             <Accordion.Item value="creating" id="creating">
               <AccordionTrigger icon={<Plus className="h-5 w-5" />}>
-                Creating a Workstream
+                Creating a Program
               </AccordionTrigger>
               <AccordionContent>
                 <p className="mb-4">
-                  From the Workstreams page, click the{" "}
-                  <strong>New Workstream</strong> button in the top right. A
-                  modal will appear with the following fields:
+                  From the Programs page, click the <strong>New Program</strong>{" "}
+                  button in the top right. A modal will appear with the
+                  following fields:
                 </p>
 
                 <div className="space-y-4 mb-6">
@@ -1029,7 +1029,7 @@ export default function GuideWorkstreams() {
                     <p className="text-sm mb-2">
                       Choose a clear, specific name that describes the research
                       focus. The description provides context for anyone
-                      reviewing your workstreams.
+                      reviewing your programs.
                     </p>
                     <div className="bg-gray-50 dark:bg-dark-surface-elevated rounded-md p-3 text-sm">
                       <div className="font-medium text-gray-900 dark:text-white mb-1">
@@ -1059,8 +1059,8 @@ export default function GuideWorkstreams() {
                       Select one or more strategic pillars (e.g., Mobility,
                       Community Health) and optionally drill down to specific
                       strategic goals within those pillars. This determines the
-                      strategic lens through which signals are evaluated and
-                      filtered.
+                      strategic lens through which opportunities are evaluated
+                      and filtered.
                     </p>
                   </div>
 
@@ -1073,7 +1073,7 @@ export default function GuideWorkstreams() {
                       Declining) and time horizon (H1: now-2 years, H2: 2-5
                       years, H3: 5+ years). For forward-looking research,
                       combine early-stage maturity with H2/H3 horizons to
-                      capture emerging signals.
+                      capture emerging opportunities.
                     </p>
                   </div>
 
@@ -1082,18 +1082,18 @@ export default function GuideWorkstreams() {
                       4. Keywords
                     </h4>
                     <p className="text-sm">
-                      Add keywords to fine-tune what signals match this
-                      workstream. Keywords are used by both the auto-populate
-                      function and workstream scans to find relevant content.
+                      Add keywords to fine-tune what opportunities match this
+                      program. Keywords are used by both the auto-populate
+                      function and program scans to find relevant content.
                     </p>
                   </div>
                 </div>
 
                 <ProTip>
-                  Start focused, then expand. A narrow workstream with 3-5
-                  specific keywords will surface higher-quality results than a
-                  broad one. You can always edit the filters later from the
-                  "Edit Filters" button on the Kanban board.
+                  Start focused, then expand. A narrow program with 3-5 specific
+                  keywords will surface higher-quality results than a broad one.
+                  You can always edit the filters later from the "Edit Filters"
+                  button on the Kanban board.
                 </ProTip>
               </AccordionContent>
             </Accordion.Item>
@@ -1107,8 +1107,8 @@ export default function GuideWorkstreams() {
               </AccordionTrigger>
               <AccordionContent>
                 <p className="mb-4">
-                  Each workstream has a six-column Kanban board that represents
-                  the full lifecycle of a research signal. Cards move from left
+                  Each program has a six-column Kanban board that represents the
+                  full lifecycle of a research opportunity. Cards move from left
                   to right as they progress through investigation, and each
                   column unlocks specific AI-powered actions.
                 </p>
@@ -1142,17 +1142,17 @@ export default function GuideWorkstreams() {
                 <ul className="list-disc list-inside space-y-1">
                   <li>
                     <strong>Notes</strong> -- Add context-specific notes to any
-                    card. Notes are scoped to this workstream and do not appear
-                    on other workstreams that include the same signal.
+                    card. Notes are scoped to this program and do not appear on
+                    other programs that include the same opportunity.
                   </li>
                   <li>
-                    <strong>Remove</strong> -- Remove a card from this
-                    workstream. The underlying signal is not deleted and can be
+                    <strong>Remove</strong> -- Remove a card from this program.
+                    The underlying opportunity is not deleted and can be
                     re-added later.
                   </li>
                   <li>
                     <strong>View Details</strong> -- Click the card to navigate
-                    to the full signal detail page.
+                    to the full opportunity detail page.
                   </li>
                 </ul>
 
@@ -1170,12 +1170,12 @@ export default function GuideWorkstreams() {
             {/* ------------------------------------------------------------ */}
             <Accordion.Item value="populating" id="populating">
               <AccordionTrigger icon={<Sparkles className="h-5 w-5" />}>
-                Populating Your Workstream
+                Populating Your Program
               </AccordionTrigger>
               <AccordionContent>
                 <p className="mb-4">
-                  There are three ways to add signals to your workstream, each
-                  suited to different situations:
+                  There are three ways to add opportunities to your program,
+                  each suited to different situations:
                 </p>
 
                 <div className="space-y-4 mb-6">
@@ -1193,16 +1193,16 @@ export default function GuideWorkstreams() {
                       </span>
                     </div>
                     <p className="text-sm mb-2">
-                      The AI scans the existing signal database and matches
-                      cards to your workstream's filters (pillars, keywords,
-                      stages, horizon). Matched signals are added directly to
-                      your Inbox.
+                      The AI scans the existing opportunity database and matches
+                      cards to your program's filters (pillars, keywords,
+                      stages, horizon). Matched opportunities are added directly
+                      to your Inbox.
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
                       <strong>When to use:</strong> When you first create a
-                      workstream, or when you want to check if any recently
-                      discovered signals match your focus area. This happens
-                      automatically when you open the Kanban board.
+                      program, or when you want to check if any recently
+                      discovered opportunities match your focus area. This
+                      happens automatically when you open the Kanban board.
                     </p>
                   </div>
 
@@ -1213,7 +1213,7 @@ export default function GuideWorkstreams() {
                         <Telescope className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                       </div>
                       <h4 className="font-semibold text-gray-900 dark:text-gray-100">
-                        Workstream Scan
+                        Program Scan
                       </h4>
                       <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded-full">
                         New Content
@@ -1221,15 +1221,15 @@ export default function GuideWorkstreams() {
                     </div>
                     <p className="text-sm mb-2">
                       Triggers a targeted discovery scan that searches the web
-                      for fresh content matching your workstream's keywords and
-                      pillars. Newly discovered signals are created and added to
-                      your Inbox.
+                      for fresh content matching your program's keywords and
+                      pillars. Newly discovered opportunities are created and
+                      added to your Inbox.
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
                       <strong>When to use:</strong> When you need the latest
                       information that may not be in the database yet. Limited
-                      to 2 scans per day per workstream. Requires at least
-                      keywords or pillars to be configured.
+                      to 2 scans per day per program. Requires at least keywords
+                      or pillars to be configured.
                     </p>
                   </div>
 
@@ -1244,15 +1244,16 @@ export default function GuideWorkstreams() {
                       </h4>
                     </div>
                     <p className="text-sm mb-2">
-                      Browse the Discover page, find a signal of interest, and
-                      add it to your workstream via the card's action menu. This
-                      gives you full control over exactly which signals enter
-                      your research pipeline.
+                      Browse the Discover page, find an opportunity of interest,
+                      and add it to your workstream via the card's action menu.
+                      This gives you full control over exactly which
+                      opportunities enter your research pipeline.
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
                       <strong>When to use:</strong> When you spot a specific
-                      signal during browsing that is relevant to your research,
-                      even if it does not match your filter criteria exactly.
+                      opportunity during browsing that is relevant to your
+                      research, even if it does not match your filter criteria
+                      exactly.
                     </p>
                   </div>
                 </div>
@@ -1260,8 +1261,8 @@ export default function GuideWorkstreams() {
                 <ProTip>
                   The best approach is to combine all three methods. Start with
                   Auto-Populate for breadth, run a Workstream Scan for fresh
-                  content, and manually add any specific signals you find during
-                  your regular browsing of the Discover page.
+                  content, and manually add any specific opportunities you find
+                  during your regular browsing of the Discover page.
                 </ProTip>
               </AccordionContent>
             </Accordion.Item>
@@ -1275,7 +1276,7 @@ export default function GuideWorkstreams() {
               </AccordionTrigger>
               <AccordionContent>
                 <p className="mb-4">
-                  Foresight provides three tiers of AI research, each designed
+                  GrantScope2 provides three tiers of AI research, each designed
                   for a different stage of the investigation workflow. All
                   research is powered by gpt-researcher, which orchestrates
                   multiple web searches and synthesizes findings from diverse
@@ -1294,7 +1295,8 @@ export default function GuideWorkstreams() {
                   </li>
                   <li>
                     The system formulates targeted search queries based on the
-                    signal's title, summary, and your workstream's focus areas.
+                    opportunity's title, summary, and your workstream's focus
+                    areas.
                   </li>
                   <li>
                     gpt-researcher conducts multiple parallel web searches
@@ -1456,7 +1458,7 @@ export default function GuideWorkstreams() {
               </AccordionTrigger>
               <AccordionContent>
                 <p className="mb-4">
-                  Foresight's export system is designed to bridge the gap
+                  GrantScope2's export system is designed to bridge the gap
                   between research and action. It supports both individual brief
                   exports and multi-brief portfolio documents, all branded with
                   the City of Austin identity.
@@ -1569,8 +1571,8 @@ export default function GuideWorkstreams() {
                 <p className="mb-4">
                   Workstream scans actively search the web for new content
                   matching your workstream's focus. This goes beyond the
-                  existing database -- it discovers fresh signals that have not
-                  yet been captured by the system.
+                  existing database -- it discovers fresh opportunities that
+                  have not yet been captured by the system.
                 </p>
 
                 <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">
@@ -1590,8 +1592,12 @@ export default function GuideWorkstreams() {
                     academic)
                   </li>
                   <li>Filter results for relevance and freshness</li>
-                  <li>De-duplicate against existing signals in the database</li>
-                  <li>Create new signal cards and add them to your Inbox</li>
+                  <li>
+                    De-duplicate against existing opportunities in the database
+                  </li>
+                  <li>
+                    Create new opportunity cards and add them to your Inbox
+                  </li>
                 </ol>
 
                 <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">
@@ -1600,9 +1606,9 @@ export default function GuideWorkstreams() {
                 <p className="mb-3">
                   Enable the auto-scan toggle on your workstream to have scans
                   run automatically on a periodic schedule. When auto-scan is
-                  active, new signals are added to your Inbox without manual
-                  intervention, keeping your workstream continuously fed with
-                  fresh intelligence.
+                  active, new opportunities are added to your Inbox without
+                  manual intervention, keeping your workstream continuously fed
+                  with fresh intelligence.
                 </p>
 
                 <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">
@@ -1642,9 +1648,10 @@ export default function GuideWorkstreams() {
                 </h4>
                 <p>
                   Each scan's results are tracked, including how many new
-                  signals were created and how many were added to your
+                  opportunities were created and how many were added to your
                   workstream. The status bar on the Kanban board reflects the
-                  total signal count across all columns after a scan completes.
+                  total opportunity count across all columns after a scan
+                  completes.
                 </p>
 
                 <ProTip>
@@ -1665,7 +1672,7 @@ export default function GuideWorkstreams() {
               </AccordionTrigger>
               <AccordionContent>
                 <p className="mb-4">
-                  Workstreams are one part of the complete Foresight pipeline.
+                  Workstreams are one part of the complete GrantScope2 pipeline.
                   Understanding how they connect to other features helps you get
                   the most value from the system.
                 </p>
@@ -1682,11 +1689,11 @@ export default function GuideWorkstreams() {
                     },
                     {
                       label: "Discover",
-                      desc: "Browse all signals",
+                      desc: "Browse all opportunities",
                       icon: <Search className="h-4 w-4" />,
                     },
                     {
-                      label: "Signals",
+                      label: "Opportunities",
                       desc: "Follow & track",
                       icon: <BookOpen className="h-4 w-4" />,
                     },
@@ -1755,13 +1762,13 @@ export default function GuideWorkstreams() {
                   </li>
                   <li>
                     <strong>Discover to Workstream:</strong> Find a compelling
-                    signal on the Discover page and add it directly to a
+                    opportunity on the Discover page and add it directly to a
                     workstream for structured research.
                   </li>
                   <li>
-                    <strong>Signals to Workstream:</strong> Signals you follow
-                    can be added to workstreams when they warrant deeper
-                    investigation beyond passive monitoring.
+                    <strong>Opportunities to Workstream:</strong> Opportunities
+                    you follow can be added to workstreams when they warrant
+                    deeper investigation beyond passive monitoring.
                   </li>
                   <li>
                     <strong>Workstream to Action:</strong> Export briefs and
@@ -1823,9 +1830,9 @@ export default function GuideWorkstreams() {
                   </li>
                   <li>
                     <strong>Cross-cutting:</strong> Use keywords that span
-                    multiple pillars to capture interdisciplinary signals (e.g.,
-                    "digital equity" touches technology, housing, and community
-                    health)
+                    multiple pillars to capture interdisciplinary opportunities
+                    (e.g., "digital equity" touches technology, housing, and
+                    community health)
                   </li>
                 </ul>
 
@@ -1846,7 +1853,7 @@ export default function GuideWorkstreams() {
                 <p className="mb-4">
                   Build portfolio exports around specific themes or decisions.
                   For a council presentation on infrastructure technology,
-                  create a workstream, research 5-8 key signals, generate
+                  create a workstream, research 5-8 key opportunities, generate
                   individual briefs, then use Bulk Export to create a unified
                   PPTX deck ordered by strategic priority.
                 </p>
@@ -1857,13 +1864,13 @@ export default function GuideWorkstreams() {
                 <ul className="list-disc list-inside space-y-1 mb-5">
                   <li>
                     <strong>Archive, do not delete:</strong> Move completed
-                    signals to Archived rather than removing them. They serve as
-                    a record of what was investigated.
+                    opportunities to Archived rather than removing them. They
+                    serve as a record of what was investigated.
                   </li>
                   <li>
                     <strong>Periodic review:</strong> Check the Watching column
-                    monthly. Signals that have been dormant for 3+ months can
-                    usually be archived.
+                    monthly. Opportunities that have been dormant for 3+ months
+                    can usually be archived.
                   </li>
                   <li>
                     <strong>Seasonal cleanup:</strong> At the end of each
@@ -1881,7 +1888,7 @@ export default function GuideWorkstreams() {
                     <li>
                       <strong>Screen first:</strong> Run a Quick Update before
                       committing to a Deep Dive to avoid wasting research
-                      capacity on low-value signals.
+                      capacity on low-value opportunities.
                     </li>
                     <li>
                       <strong>Add notes before research:</strong> Write what
@@ -1895,21 +1902,21 @@ export default function GuideWorkstreams() {
                     </li>
                     <li>
                       <strong>
-                        Use Check for Updates on watching signals:
+                        Use Check for Updates on watching opportunities:
                       </strong>{" "}
-                      Periodically refresh high-priority signals in the Watching
-                      column to catch breaking developments.
+                      Periodically refresh high-priority opportunities in the
+                      Watching column to catch breaking developments.
                     </li>
                   </ol>
                 </div>
 
                 <ProTip title="Advanced Pattern: Research Sprints">
                   For time-sensitive topics, create a dedicated workstream and
-                  batch-process signals in a single session. Move 5-10 signals
-                  from Inbox to Screening, run Quick Updates on all of them,
-                  then promote the top 3-4 to Research for Deep Dives. This
-                  focused approach is more efficient than trickling signals
-                  through the pipeline over days.
+                  batch-process opportunities in a single session. Move 5-10
+                  opportunities from Inbox to Screening, run Quick Updates on
+                  all of them, then promote the top 3-4 to Research for Deep
+                  Dives. This focused approach is more efficient than trickling
+                  opportunities through the pipeline over days.
                 </ProTip>
               </AccordionContent>
             </Accordion.Item>
@@ -1924,7 +1931,7 @@ export default function GuideWorkstreams() {
                 Continue Learning
               </h2>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-5">
-                Explore the other guide pages to master the complete Foresight
+                Explore the other guide pages to master the complete GrantScope2
                 workflow.
               </p>
               <div className="grid sm:grid-cols-3 gap-3">
@@ -1935,10 +1942,10 @@ export default function GuideWorkstreams() {
                   <Star className="h-5 w-5 text-amber-500 flex-shrink-0" />
                   <div>
                     <p className="font-semibold text-sm text-gray-900 dark:text-white">
-                      How to Use Signals
+                      How to Use Opportunities
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                      Manage your followed signals
+                      Manage your followed opportunities
                     </p>
                   </div>
                   <ArrowRight className="h-4 w-4 text-gray-400 ml-auto" />
@@ -1953,7 +1960,7 @@ export default function GuideWorkstreams() {
                       How to Use Discover
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                      Browse and triage AI-curated signals
+                      Browse and triage AI-curated opportunities
                     </p>
                   </div>
                   <ArrowRight className="h-4 w-4 text-gray-400 ml-auto" />
@@ -1979,7 +1986,7 @@ export default function GuideWorkstreams() {
 
           {/* Footer note */}
           <p className="mt-10 text-sm text-gray-400 dark:text-gray-500 text-center no-print">
-            Questions about workstreams? Reach out to the Foresight team.
+            Questions about workstreams? Reach out to the GrantScope2 team.
           </p>
         </div>
       </div>

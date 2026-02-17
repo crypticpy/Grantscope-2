@@ -1,4 +1,4 @@
-"""Chat (Ask Foresight) router."""
+"""Chat (Ask GrantScope) router."""
 
 import json
 import logging
@@ -70,7 +70,7 @@ async def chat_stats(
             cards = supabase.table("cards").select("id", count="exact").execute()
             if cards.count and cards.count > 0:
                 facts.append(
-                    f"Foresight is monitoring {cards.count} signals across all pillars"
+                    f"GrantScope is monitoring {cards.count} signals across all pillars"
                 )
         except Exception:
             pass
@@ -85,7 +85,7 @@ async def chat_stats(
             )
             if convs.count and convs.count > 0:
                 facts.append(
-                    f"You've had {convs.count} conversation{'s' if convs.count != 1 else ''} with Foresight"
+                    f"You've had {convs.count} conversation{'s' if convs.count != 1 else ''} with GrantScope"
                 )
         except Exception:
             pass
@@ -117,13 +117,14 @@ async def chat_endpoint(
     current_user: dict = Depends(get_current_user),
 ):
     """
-    Main chat endpoint for Ask Foresight NLQ feature.
+    Main chat endpoint for Ask GrantScope NLQ feature.
 
     Streams an AI-powered response using Server-Sent Events (SSE).
-    Supports three scopes:
+    Supports four scopes:
     - signal: Q&A about a specific card and its sources
     - workstream: Analysis across cards in a workstream
     - global: Broad strategic intelligence search
+    - wizard: Grant application advisor interview
 
     Returns streaming SSE events:
     - {"type": "token", "content": "..."} -- incremental response tokens
@@ -135,14 +136,14 @@ async def chat_endpoint(
     user_id = current_user["id"]
 
     # Validate scope
-    if request.scope not in ("signal", "workstream", "global"):
+    if request.scope not in ("signal", "workstream", "global", "wizard"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid scope. Must be 'signal', 'workstream', or 'global'.",
+            detail="Invalid scope. Must be 'signal', 'workstream', 'global', or 'wizard'.",
         )
 
     # Validate scope_id is provided for non-global scopes
-    if request.scope in ("signal", "workstream") and not request.scope_id:
+    if request.scope in ("signal", "workstream", "wizard") and not request.scope_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"scope_id is required for '{request.scope}' scope.",
@@ -442,7 +443,9 @@ async def delete_chat_conversation(
 
 @router.get("/chat/suggestions")
 async def chat_suggestions(
-    scope: str = Query(..., description="Chat scope: signal, workstream, or global"),
+    scope: str = Query(
+        ..., description="Chat scope: signal, workstream, global, or wizard"
+    ),
     scope_id: Optional[str] = Query(None, description="ID of the scoped entity"),
     current_user: dict = Depends(get_current_user),
 ):
@@ -450,14 +453,14 @@ async def chat_suggestions(
     Get AI-generated suggested questions for a given scope.
 
     Returns context-aware starter questions to help users begin
-    exploring a signal, workstream, or global strategic intelligence.
+    exploring a signal, workstream, global strategic intelligence, or wizard interview.
     """
     user_id = current_user["id"]
 
-    if scope not in ("signal", "workstream", "global"):
+    if scope not in ("signal", "workstream", "global", "wizard"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid scope. Must be 'signal', 'workstream', or 'global'.",
+            detail="Invalid scope. Must be 'signal', 'workstream', 'global', or 'wizard'.",
         )
 
     try:
@@ -477,7 +480,9 @@ async def chat_suggestions(
 
 @router.get("/chat/suggestions/smart")
 async def smart_chat_suggestions(
-    scope: str = Query(..., description="Chat scope: signal, workstream, or global"),
+    scope: str = Query(
+        ..., description="Chat scope: signal, workstream, global, or wizard"
+    ),
     scope_id: Optional[str] = Query(None, description="ID of the scoped entity"),
     conversation_id: Optional[str] = Query(
         None, description="Conversation ID for context-aware suggestions"
@@ -495,10 +500,10 @@ async def smart_chat_suggestions(
     """
     user_id = current_user["id"]
 
-    if scope not in ("signal", "workstream", "global"):
+    if scope not in ("signal", "workstream", "global", "wizard"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid scope. Must be 'signal', 'workstream', or 'global'.",
+            detail="Invalid scope. Must be 'signal', 'workstream', 'global', or 'wizard'.",
         )
 
     try:
@@ -715,6 +720,24 @@ Example:
             },
             {
                 "text": "Are there any new cross-cutting patterns emerging?",
+                "category": "explore",
+            },
+        ],
+        "wizard": [
+            {
+                "text": "Tell me more about what my program does",
+                "category": "deeper",
+            },
+            {
+                "text": "What do similar grant applications usually include?",
+                "category": "compare",
+            },
+            {
+                "text": "Help me outline a budget for this grant",
+                "category": "action",
+            },
+            {
+                "text": "What other funding sources should I consider?",
                 "category": "explore",
             },
         ],
@@ -1036,7 +1059,7 @@ async def export_chat_message_pdf(
             metadata["model"] = message["model"]
 
         # 7. Generate the PDF
-        title = conversation.get("title") or "Foresight Intelligence Response"
+        title = conversation.get("title") or "GrantScope2 Intelligence Response"
         export_service = ExportService(supabase)
         pdf_path = await export_service.generate_chat_response_pdf(
             title=title,
@@ -1050,7 +1073,7 @@ async def export_chat_message_pdf(
 
         # 8. Return file with cleanup
         short_id = message_id[:8] if len(message_id) >= 8 else message_id
-        filename = f"foresight-response-{short_id}.pdf"
+        filename = f"grantscope-response-{short_id}.pdf"
 
         return FileResponse(
             path=pdf_path,

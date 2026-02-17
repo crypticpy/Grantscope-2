@@ -1,4 +1,4 @@
-"""APScheduler scheduled jobs for the Foresight application.
+"""APScheduler scheduled jobs for the GrantScope2 application.
 
 Contains all nightly / weekly background jobs and the scheduler lifecycle
 helpers ``start_scheduler()`` and ``shutdown_scheduler()``.
@@ -330,6 +330,55 @@ async def run_digest_batch():
         logger.error(f"Digest batch processing failed: {e}")
 
 
+async def scan_grants():
+    """Scan Grants.gov and SAM.gov for new grant opportunities.
+
+    Runs every 6 hours.  Creates a discovery run that the worker will
+    pick up and execute through the standard discovery pipeline.  The
+    config hints which source categories to prioritise via
+    ``source_categories``.
+    """
+
+    logger.info("Starting scheduled grant scan...")
+
+    try:
+        system_user = supabase.table("users").select("id").limit(1).execute()
+        user_id = system_user.data[0]["id"] if system_user.data else None
+
+        if not user_id:
+            logger.warning("Grant scan: No system user found, skipping")
+            return
+
+        run_id = str(uuid.uuid4())
+        config_data = {
+            "source_categories": ["grants_gov", "sam_gov"],
+            "dry_run": False,
+        }
+
+        run_record = {
+            "id": run_id,
+            "status": "running",
+            "triggered_by": "scheduled",
+            "triggered_by_user": user_id,
+            "cards_created": 0,
+            "cards_enriched": 0,
+            "cards_deduplicated": 0,
+            "sources_found": 0,
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "summary_report": {
+                "stage": "queued",
+                "config": config_data,
+                "job": "scan_grants",
+            },
+        }
+
+        supabase.table("discovery_runs").insert(run_record).execute()
+        logger.info(f"Grant scan discovery run queued: {run_id}")
+
+    except Exception as e:
+        logger.error(f"Grant scan failed: {str(e)}")
+
+
 # ---------------------------------------------------------------------------
 # Lifecycle helpers
 # ---------------------------------------------------------------------------
@@ -425,6 +474,15 @@ def start_scheduler():
         replace_existing=True,
     )
 
+    # Grant opportunity scan every 6 hours (0:00, 6:00, 12:00, 18:00 UTC)
+    scheduler.add_job(
+        scan_grants,
+        "interval",
+        hours=6,
+        id="scan_grants",
+        replace_existing=True,
+    )
+
     scheduler.start()
     logger.info(
         "Scheduler started - workstream auto-scans at 4:00 AM UTC, "
@@ -433,7 +491,8 @@ def start_scheduler():
         "pattern detection at 7:00 AM UTC, "
         "velocity calculation at 7:30 AM UTC, "
         "digest batch at 8:00 AM UTC, "
-        "weekly discovery Sundays at 2:00 AM UTC"
+        "weekly discovery Sundays at 2:00 AM UTC, "
+        "grant scan every 6 hours"
     )
 
 

@@ -148,7 +148,7 @@ export function WorkstreamForm({
               description: e.target.value,
             }))
           }
-          placeholder="Describe the focus and purpose of this workstream..."
+          placeholder="Describe the focus and purpose of this program..."
           rows={3}
           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-brand-blue bg-white dark:bg-dark-surface-elevated dark:text-white dark:placeholder-gray-400 resize-none"
         />
@@ -157,7 +157,7 @@ export function WorkstreamForm({
       {/* Pillars Selection */}
       <FormSection
         title="Pillars"
-        description="Optionally select strategic pillars to filter by, or leave empty for a topic-driven workstream"
+        description="Optionally select strategic pillars to filter by, or leave empty for a topic-driven program"
       >
         <div className="flex flex-wrap gap-2">
           {pillars.map((pillar) => (
@@ -302,7 +302,7 @@ export function WorkstreamForm({
       {/* Keywords Input */}
       <FormSection
         title="Keywords"
-        description="Add keywords to match against signal content (press Enter or comma to add)"
+        description="Add keywords to match against opportunity content (press Enter or comma to add)"
       >
         <div className="space-y-2">
           <div className="flex gap-2">
@@ -402,7 +402,7 @@ export function WorkstreamForm({
             form.setFormData((prev) => ({ ...prev, is_active: checked }))
           }
           label="Active"
-          description="Active workstreams will appear in your feed and receive new signals"
+          description="Active programs will appear in your feed and receive new opportunities"
         />
       </div>
 
@@ -415,7 +415,7 @@ export function WorkstreamForm({
               form.setFormData((prev) => ({ ...prev, analyze_now: checked }))
             }
             label="Analyze Now"
-            description="Immediately run AI research to find matching signals and discover new technologies based on your keywords"
+            description="Immediately run AI research to find matching opportunities and discover new grants based on your keywords"
           />
         </div>
       )}
@@ -431,8 +431,8 @@ export function WorkstreamForm({
             label="Auto-scan for sources on create"
             description={
               form.formData.pillar_ids.length === 0
-                ? "Recommended for topic-driven workstreams without pillars -- automatically discover relevant content sources"
-                : "Automatically scan for content sources matching your workstream filters"
+                ? "Recommended for topic-driven programs without pillars -- automatically discover relevant content sources"
+                : "Automatically scan for content sources matching your program filters"
             }
           />
         </div>
@@ -455,7 +455,7 @@ export function WorkstreamForm({
               <>
                 <Loader2 className="h-5 w-5 text-gray-400 animate-spin" />
                 <span className="text-sm text-gray-600 dark:text-gray-400">
-                  Searching for matching signals...
+                  Searching for matching opportunities...
                 </span>
               </>
             ) : form.preview ? (
@@ -486,8 +486,8 @@ export function WorkstreamForm({
                       )}
                     >
                       {form.preview.estimated_count === 1
-                        ? "signal matches"
-                        : "signals match"}{" "}
+                        ? "opportunity matches"
+                        : "opportunities match"}{" "}
                       these filters
                     </span>
                   </div>
@@ -525,7 +525,7 @@ export function WorkstreamForm({
               <>
                 <Sparkles className="h-5 w-5 text-gray-400" />
                 <span className="text-sm text-gray-600 dark:text-gray-400">
-                  Add filters to see matching signals
+                  Add filters to see matching opportunities
                 </span>
               </>
             )}
@@ -560,7 +560,7 @@ export function WorkstreamForm({
             <Radar className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
             <div className="flex-1 space-y-2">
               <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
-                No existing signals match this topic.
+                No existing opportunities match this topic.
               </p>
               <p className="text-xs text-blue-600 dark:text-blue-400">
                 Would you like to discover new content?
@@ -606,7 +606,7 @@ export function WorkstreamForm({
           {form.isSubmitting && (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
           )}
-          {form.isEditMode ? "Save Changes" : "Create Workstream"}
+          {form.isEditMode ? "Save Changes" : "Create Program"}
         </button>
       </div>
     </form>

@@ -130,7 +130,7 @@ export function ManualCreateTab({ onCreated }: ManualCreateTabProps) {
         data: { session },
       } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        setError("Please sign in to create signals.");
+        setError("Please sign in to create opportunities.");
         return;
       }
 
@@ -167,7 +167,9 @@ export function ManualCreateTab({ onCreated }: ManualCreateTabProps) {
       setCreatedCard(card);
       onCreated?.(card);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create signal.");
+      setError(
+        err instanceof Error ? err.message : "Failed to create opportunity.",
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -479,7 +481,7 @@ export function ManualCreateTab({ onCreated }: ManualCreateTabProps) {
             Creating Signal...
           </>
         ) : (
-          "Create Signal"
+          "Create Opportunity"
         )}
       </button>
     </div>

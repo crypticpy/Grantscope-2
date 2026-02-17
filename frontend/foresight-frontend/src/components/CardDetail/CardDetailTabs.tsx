@@ -173,7 +173,7 @@ export const CardDetailTabs: React.FC<CardDetailTabsProps> = ({
         ref={tabListRef}
         className="-mb-px flex space-x-4 sm:space-x-8 overflow-x-auto scrollbar-hide"
         role="tablist"
-        aria-label="Signal detail sections"
+        aria-label="Opportunity detail sections"
       >
         {tabs.map((tab, index) => {
           const Icon = tab.icon;

@@ -18,12 +18,13 @@ from app.models.workstream import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1", tags=["workstream-scans"])
+router = APIRouter(prefix="/api/v1", tags=["workstream-scans & program-scans"])
 
 
 @router.post(
     "/me/workstreams/{workstream_id}/scan", response_model=WorkstreamScanResponse
 )
+@router.post("/me/programs/{workstream_id}/scan", response_model=WorkstreamScanResponse)
 async def start_workstream_scan(
     workstream_id: str, current_user: dict = Depends(get_current_user)
 ):
@@ -165,6 +166,10 @@ async def start_workstream_scan(
     "/me/workstreams/{workstream_id}/scan/status",
     response_model=WorkstreamScanStatusResponse,
 )
+@router.get(
+    "/me/programs/{workstream_id}/scan/status",
+    response_model=WorkstreamScanStatusResponse,
+)
 async def get_workstream_scan_status(
     workstream_id: str,
     scan_id: Optional[str] = Query(
@@ -264,6 +269,10 @@ async def get_workstream_scan_status(
 
 @router.get(
     "/me/workstreams/{workstream_id}/scan/history",
+    response_model=WorkstreamScanHistoryResponse,
+)
+@router.get(
+    "/me/programs/{workstream_id}/scan/history",
     response_model=WorkstreamScanHistoryResponse,
 )
 async def get_workstream_scan_history(

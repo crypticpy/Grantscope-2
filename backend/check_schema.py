@@ -191,7 +191,7 @@ def get_table_columns(table_name):
 def check_schema():
     """Check all tables and columns."""
     print("=" * 60)
-    print("FORESIGHT DATABASE SCHEMA VALIDATION")
+    print("GRANTSCOPE2 DATABASE SCHEMA VALIDATION")
     print("=" * 60)
 
     missing_tables = []

@@ -1,10 +1,11 @@
-# Foresight Design Documents
+# GrantScope2 Design Documents
 
 ## Overview
 
-Foresight is a strategic horizon scanning system for the City of Austin. These documents define the architecture, data model, and implementation specifications.
+GrantScope2 is a strategic horizon scanning system for the City of Austin. These documents define the architecture, data model, and implementation specifications.
 
 **Target Stack:**
+
 - Frontend: React + TypeScript + Vite + TailwindCSS
 - Backend: FastAPI (Python 3.11+)
 - Database: Supabase (PostgreSQL + pgvector)
@@ -15,17 +16,17 @@ Foresight is a strategic horizon scanning system for the City of Austin. These d
 
 ## Document Index
 
-| # | Document | Description | Read When |
-|---|----------|-------------|-----------|
-| 01 | [PROJECT_OVERVIEW.md](./01_PROJECT_OVERVIEW.md) | What Foresight is, the problem it solves, core concepts | Start here |
-| 02 | [ARCHITECTURE.md](./02_ARCHITECTURE.md) | System components, data flows, hosting | Planning infrastructure |
-| 03 | [TECH_STACK.md](./03_TECH_STACK.md) | Dependencies, project structure, Docker config | Setting up projects |
-| 04 | [DATA_MODEL.md](./04_DATA_MODEL.md) | Database schema, tables, indexes, RLS | Building database |
-| 05 | [API_SPEC.md](./05_API_SPEC.md) | REST API endpoints, request/response formats | Building backend |
-| 06 | [FRONTEND_SPEC.md](./06_FRONTEND_SPEC.md) | Pages, components, wireframes, state management | Building frontend |
-| 07 | [AI_PIPELINE.md](./07_AI_PIPELINE.md) | Nightly scan, processing, prompts, costs | Building AI features |
-| 08 | [MVP_SCOPE.md](./08_MVP_SCOPE.md) | What's in v1 vs deferred, timeline, success criteria | Prioritizing work |
-| 09 | [TAXONOMY.md](./09_TAXONOMY.md) | Complete reference for pillars, goals, stages, etc. | Quick reference |
+| #   | Document                                        | Description                                               | Read When               |
+| --- | ----------------------------------------------- | --------------------------------------------------------- | ----------------------- |
+| 01  | [PROJECT_OVERVIEW.md](./01_PROJECT_OVERVIEW.md) | What GrantScope2 is, the problem it solves, core concepts | Start here              |
+| 02  | [ARCHITECTURE.md](./02_ARCHITECTURE.md)         | System components, data flows, hosting                    | Planning infrastructure |
+| 03  | [TECH_STACK.md](./03_TECH_STACK.md)             | Dependencies, project structure, Docker config            | Setting up projects     |
+| 04  | [DATA_MODEL.md](./04_DATA_MODEL.md)             | Database schema, tables, indexes, RLS                     | Building database       |
+| 05  | [API_SPEC.md](./05_API_SPEC.md)                 | REST API endpoints, request/response formats              | Building backend        |
+| 06  | [FRONTEND_SPEC.md](./06_FRONTEND_SPEC.md)       | Pages, components, wireframes, state management           | Building frontend       |
+| 07  | [AI_PIPELINE.md](./07_AI_PIPELINE.md)           | Nightly scan, processing, prompts, costs                  | Building AI features    |
+| 08  | [MVP_SCOPE.md](./08_MVP_SCOPE.md)               | What's in v1 vs deferred, timeline, success criteria      | Prioritizing work       |
+| 09  | [TAXONOMY.md](./09_TAXONOMY.md)                 | Complete reference for pillars, goals, stages, etc.       | Quick reference         |
 
 ---
 
@@ -81,6 +82,7 @@ curl -X POST http://localhost:8000/api/v1/admin/scan
 ## Development Order (Suggested)
 
 ### Phase 1: Foundation (Week 1)
+
 1. Set up Supabase with schema
 2. Scaffold FastAPI project
 3. Implement auth endpoints
@@ -88,18 +90,21 @@ curl -X POST http://localhost:8000/api/v1/admin/scan
 5. Implement login flow
 
 ### Phase 2: Core Data (Week 2)
+
 1. Card CRUD endpoints
 2. Source endpoints
 3. Timeline endpoints
 4. Search endpoint (vector)
 
 ### Phase 3: User Features (Week 3)
+
 1. Follow/unfollow endpoints
 2. Workstream endpoints
 3. Notes endpoints
 4. User profile endpoints
 
 ### Phase 4: Frontend (Week 3-4)
+
 1. Layout components
 2. Discovery page
 3. Card detail page
@@ -107,6 +112,7 @@ curl -X POST http://localhost:8000/api/v1/admin/scan
 5. Workstreams page
 
 ### Phase 5: Pipeline (Week 4-5)
+
 1. Fetchers (NewsAPI, RSS)
 2. Triage processor
 3. Full processor
@@ -114,6 +120,7 @@ curl -X POST http://localhost:8000/api/v1/admin/scan
 5. Scheduler
 
 ### Phase 6: Deploy & Test (Week 5-6)
+
 1. Deploy backend to HF Spaces
 2. Deploy frontend to Vercel
 3. End-to-end testing
@@ -124,21 +131,22 @@ curl -X POST http://localhost:8000/api/v1/admin/scan
 
 ## Key Decisions Made
 
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| Backend language | Python | Best AI/ML ecosystem |
-| Frontend framework | React (not Next.js) | Simpler, SPA sufficient |
-| Database | Supabase | Managed, pgvector, auth included |
-| Vector DB | pgvector | Built into Supabase, no extra service |
-| Graph DB | Deferred | Use relational for MVP, add Neo4j later |
-| Hosting | HF Spaces | Free tier, Docker support |
-| Auth | Supabase Auth | Integrated, JWT-based |
+| Decision           | Choice              | Rationale                               |
+| ------------------ | ------------------- | --------------------------------------- |
+| Backend language   | Python              | Best AI/ML ecosystem                    |
+| Frontend framework | React (not Next.js) | Simpler, SPA sufficient                 |
+| Database           | Supabase            | Managed, pgvector, auth included        |
+| Vector DB          | pgvector            | Built into Supabase, no extra service   |
+| Graph DB           | Deferred            | Use relational for MVP, add Neo4j later |
+| Hosting            | HF Spaces           | Free tier, Docker support               |
+| Auth               | Supabase Auth       | Integrated, JWT-based                   |
 
 ---
 
 ## Environment Variables Needed
 
 ### Backend
+
 ```
 SUPABASE_URL=
 SUPABASE_KEY=
@@ -148,6 +156,7 @@ NEWSAPI_KEY=
 ```
 
 ### Frontend
+
 ```
 VITE_SUPABASE_URL=
 VITE_SUPABASE_ANON_KEY=

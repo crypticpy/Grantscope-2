@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import {
-  Calendar,
+  Heart,
   TrendingUp,
   Eye,
   Plus,
@@ -9,8 +9,11 @@ import {
   Star,
   Sparkles,
   ArrowRight,
-  RefreshCw,
+  Clock,
+  DollarSign,
   BookOpen,
+  ExternalLink,
+  FileText,
 } from "lucide-react";
 import { supabase } from "../App";
 import { useAuthContext } from "../hooks/useAuthContext";
@@ -21,10 +24,23 @@ import { Top25Badge } from "../components/Top25Badge";
 import { QualityBadge } from "../components/QualityBadge";
 import { VelocityBadge, type VelocityTrend } from "../components/VelocityBadge";
 import { PatternInsightsSection } from "../components/PatternInsightsSection";
-import { AskForesightBar } from "../components/Chat/AskForesightBar";
+import { AskGrantScopeBar } from "../components/Chat/AskGrantScopeBar";
 import { fetchPendingCount } from "../lib/discovery-api";
 import { parseStageNumber } from "../lib/stage-utils";
 import { logger } from "../lib/logger";
+import { getDeadlineUrgency } from "../data/taxonomy";
+import { OnboardingDialog } from "../components/onboarding/OnboardingDialog";
+import { GettingStartedChecklist } from "../components/onboarding/GettingStartedChecklist";
+import { DashboardNudge } from "../components/onboarding/DashboardNudge";
+import { InfoTooltip } from "../components/onboarding/InfoTooltip";
+import {
+  hasCompletedOnboarding,
+  markOnboardingComplete,
+  isGettingStartedDismissed,
+  dismissGettingStarted,
+  markStepCompleted,
+} from "../lib/onboarding-state";
+import { STAT_EXPLANATIONS } from "../lib/onboarding-content";
 import type { BaseCard } from "../types/card";
 
 type Card = BaseCard;
@@ -130,8 +146,18 @@ const getPriorityGradient = (priority: string) => {
 
 const Dashboard: React.FC = () => {
   const { user } = useAuthContext();
+  const navigate = useNavigate();
+  const [showOnboarding, setShowOnboarding] = useState(
+    () => !hasCompletedOnboarding(),
+  );
+  const [showChecklist, setShowChecklist] = useState(
+    () => !isGettingStartedDismissed(),
+  );
   const [recentCards, setRecentCards] = useState<Card[]>([]);
   const [followingCards, setFollowingCards] = useState<FollowingCard[]>([]);
+  const [upcomingDeadlineCards, setUpcomingDeadlineCards] = useState<Card[]>(
+    [],
+  );
   const [loading, setLoading] = useState(true);
   const [pendingReviewCount, setPendingReviewCount] = useState(0);
   const [stats, setStats] = useState({
@@ -139,7 +165,8 @@ const Dashboard: React.FC = () => {
     newThisWeek: 0,
     following: 0,
     workstreams: 0,
-    updatedThisWeek: 0,
+    deadlinesThisWeek: 0,
+    pipelineValue: 0,
   });
   const [qualityDistribution, setQualityDistribution] = useState({
     high: 0,
@@ -152,7 +179,8 @@ const Dashboard: React.FC = () => {
   const animatedNewThisWeek = useCountUp(stats.newThisWeek);
   const animatedFollowing = useCountUp(stats.following);
   const animatedWorkstreams = useCountUp(stats.workstreams);
-  const animatedUpdatedThisWeek = useCountUp(stats.updatedThisWeek);
+  const animatedDeadlinesThisWeek = useCountUp(stats.deadlinesThisWeek);
+  const animatedPipelineValue = useCountUp(stats.pipelineValue);
 
   useEffect(() => {
     loadDashboardData();
@@ -176,14 +204,19 @@ const Dashboard: React.FC = () => {
 
   const loadDashboardData = async () => {
     try {
-      const oneWeekAgo = new Date();
-      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+      const now = new Date();
+      const oneWeekFromNow = new Date();
+      oneWeekFromNow.setDate(oneWeekFromNow.getDate() + 7);
+      const todayISO = now.toISOString().split("T")[0];
+      const oneWeekFromNowISO = oneWeekFromNow.toISOString().split("T")[0];
 
       const [
         recentCardsResult,
         followingCardsResult,
         statsResult,
-        updatedResult,
+        deadlinesThisWeekResult,
+        pipelineValueResult,
+        upcomingDeadlinesResult,
         qualityHighResult,
         qualityModResult,
         qualityLowResult,
@@ -205,12 +238,29 @@ const Dashboard: React.FC = () => {
         // Dashboard stats via RPC
         supabase.rpc("get_dashboard_stats", { p_user_id: user?.id }),
 
-        // Updated this week
+        // Deadlines this week — cards with deadline between today and 7 days from now
         supabase
           .from("cards")
           .select("id", { count: "exact", head: true })
           .eq("status", "active")
-          .gte("updated_at", oneWeekAgo.toISOString()),
+          .gte("deadline", todayISO)
+          .lte("deadline", oneWeekFromNowISO),
+
+        // Pipeline value — fetch funding_amount_min and funding_amount_max for cards in user's workstreams
+        supabase
+          .from("cards")
+          .select("funding_amount_min, funding_amount_max")
+          .eq("status", "active")
+          .not("funding_amount_min", "is", null),
+
+        // Upcoming deadlines — nearest 5 cards with deadlines in the future
+        supabase
+          .from("cards")
+          .select("*")
+          .eq("status", "active")
+          .gte("deadline", todayISO)
+          .order("deadline", { ascending: true })
+          .limit(5),
 
         // Quality distribution buckets (high ≥75 / moderate 50-74 / low <50)
         supabase
@@ -271,6 +321,32 @@ const Dashboard: React.FC = () => {
         }));
       setFollowingCards(transformedFollowing);
 
+      // --- Upcoming deadline cards ---
+      setUpcomingDeadlineCards(
+        upcomingDeadlinesResult.error
+          ? []
+          : (upcomingDeadlinesResult.data ?? []),
+      );
+
+      // --- Pipeline value ---
+      let pipelineTotal = 0;
+      if (!pipelineValueResult.error && pipelineValueResult.data) {
+        for (const row of pipelineValueResult.data) {
+          const min =
+            (row as { funding_amount_min: number | null }).funding_amount_min ??
+            0;
+          const max =
+            (row as { funding_amount_max: number | null }).funding_amount_max ??
+            0;
+          // Use average of min/max if both available, otherwise whichever is set
+          if (min && max) {
+            pipelineTotal += (min + max) / 2;
+          } else {
+            pipelineTotal += min || max;
+          }
+        }
+      }
+
       // --- Stats ---
       const statsData: DashboardStatsResponse | null = statsResult.error
         ? null
@@ -281,7 +357,8 @@ const Dashboard: React.FC = () => {
         newThisWeek: statsData?.new_this_week ?? 0,
         following: statsData?.following ?? 0,
         workstreams: statsData?.workstreams ?? 0,
-        updatedThisWeek: safeCount(updatedResult),
+        deadlinesThisWeek: safeCount(deadlinesThisWeekResult),
+        pipelineValue: Math.round(pipelineTotal),
       });
 
       // --- Quality distribution ---
@@ -312,15 +389,15 @@ const Dashboard: React.FC = () => {
           />
         </div>
 
-        {/* Ask Foresight Bar skeleton */}
+        {/* Ask GrantScope Bar skeleton */}
         <div
           className="animate-pulse bg-gray-200 dark:bg-gray-700/50 rounded-xl h-12 mb-8"
           style={{ animationDelay: "100ms" }}
         />
 
-        {/* Stat cards skeleton — 5 cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-          {Array.from({ length: 5 }).map((_, i) => (
+        {/* Stat cards skeleton — 6 cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-8">
+          {Array.from({ length: 6 }).map((_, i) => (
             <div
               key={i}
               className="animate-pulse bg-gray-200 dark:bg-gray-700/50 rounded-xl h-28"
@@ -401,20 +478,90 @@ const Dashboard: React.FC = () => {
     );
   }
 
+  const handleChecklistStepClick = useCallback(
+    (href: string) => {
+      if (href === "/discover") markStepCompleted("explore-library");
+      if (href === "/ask") markStepCompleted("ask-question");
+      if (href === "/apply") markStepCompleted("start-application");
+      navigate(href);
+    },
+    [navigate],
+  );
+
+  const handleDismissChecklist = useCallback(() => {
+    dismissGettingStarted();
+    setShowChecklist(false);
+  }, []);
+
+  const isNewUser = stats.following === 0 && stats.workstreams === 0;
+  const userName = user?.email?.split("@")[0];
+
+  const greetingTitle = (() => {
+    if (isNewUser && !hasCompletedOnboarding()) {
+      return `Welcome to GrantScope2${userName ? `, ${userName}` : ""}!`;
+    }
+    return `Welcome back${userName ? `, ${userName}` : ""}!`;
+  })();
+
+  const greetingSubtitle = (() => {
+    if (isNewUser && !hasCompletedOnboarding()) {
+      return "Let's find the right grants for your programs.";
+    }
+    if (
+      stats.totalCards === 0 &&
+      stats.following === 0 &&
+      stats.workstreams === 0
+    ) {
+      return "Ready to discover some grant opportunities?";
+    }
+    return "Here's what's happening in your grant pipeline.";
+  })();
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Onboarding Dialog (first-time users) */}
+      <OnboardingDialog
+        open={showOnboarding}
+        onClose={() => {
+          markOnboardingComplete();
+          setShowOnboarding(false);
+        }}
+      />
+
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-brand-dark-blue dark:text-white">
-          Welcome back, {user?.email?.split("@")[0]}
+          {greetingTitle}
         </h1>
         <p className="mt-2 text-gray-600 dark:text-gray-400">
-          Here's what's happening in your strategic intelligence feed.
+          {greetingSubtitle}
         </p>
       </div>
 
-      {/* Ask Foresight Bar */}
-      <AskForesightBar className="mb-8" />
+      {/* Ask GrantScope Bar */}
+      <AskGrantScopeBar className="mb-8" />
+
+      {/* Getting Started Checklist (new users) */}
+      {showChecklist && (
+        <GettingStartedChecklist
+          stats={{
+            following: stats.following ?? 0,
+            workstreams: stats.workstreams ?? 0,
+          }}
+          onStepClick={handleChecklistStepClick}
+          onDismiss={handleDismissChecklist}
+          className="mb-6"
+        />
+      )}
+
+      {/* Contextual nudge */}
+      <DashboardNudge
+        stats={{
+          following: stats.following,
+          workstreams: stats.workstreams,
+        }}
+        className="mb-6"
+      />
 
       {/* Pending Review Alert */}
       {pendingReviewCount > 0 && (
@@ -434,7 +581,7 @@ const Dashboard: React.FC = () => {
                     {pendingReviewCount !== 1 ? "ies" : ""} Pending Review
                   </h3>
                   <p className="text-sm text-gray-600 dark:text-gray-400">
-                    AI has found new intelligence signals. Review and approve
+                    AI has found new grant opportunities. Review and approve
                     them to add to your library.
                   </p>
                 </div>
@@ -448,11 +595,41 @@ const Dashboard: React.FC = () => {
         </div>
       )}
 
+      {/* Apply for a Grant CTA */}
+      <div className="mb-8">
+        <Link
+          to="/apply"
+          className="block bg-gradient-to-r from-brand-blue/10 to-extended-purple/10 dark:from-brand-blue/20 dark:to-extended-purple/20 border border-brand-blue/20 dark:border-brand-blue/30 rounded-xl p-4 hover:from-brand-blue/15 hover:to-extended-purple/15 dark:hover:from-brand-blue/25 dark:hover:to-extended-purple/25 transition-all duration-200 group"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex-shrink-0 p-2 bg-brand-blue/20 dark:bg-brand-blue/30 rounded-full">
+                <FileText className="h-5 w-5 text-brand-blue" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-brand-dark-blue dark:text-white">
+                  Ready to apply for a grant?
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Our AI-powered wizard walks you through every step — from
+                  understanding requirements to generating a professional
+                  proposal.
+                </p>
+              </div>
+            </div>
+            <div className="flex-shrink-0 flex items-center gap-1 text-brand-blue group-hover:translate-x-1 transition-transform">
+              <span className="text-sm font-medium">Start Application</span>
+              <ArrowRight className="h-4 w-4" />
+            </div>
+          </div>
+        </Link>
+      </div>
+
       {/* Stats Cards - Clickable KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-8">
         <Link
           to="/discover"
-          aria-label={`Total Signals: ${stats.totalCards}`}
+          aria-label={`Total Opportunities: ${stats.totalCards}`}
           className="bg-white dark:bg-dark-surface rounded-xl shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg active:scale-95 active:shadow-inner cursor-pointer group"
         >
           <div className="flex items-center">
@@ -460,8 +637,9 @@ const Dashboard: React.FC = () => {
               <Eye className="h-8 w-8 text-brand-blue group-hover:scale-110 transition-transform" />
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                Total Signals
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                Total Opportunities
+                <InfoTooltip content={STAT_EXPLANATIONS.totalOpportunities} />
               </p>
               <p className="text-2xl font-semibold text-gray-900 dark:text-white">
                 {animatedTotalCards}
@@ -480,8 +658,9 @@ const Dashboard: React.FC = () => {
               <TrendingUp className="h-8 w-8 text-brand-green group-hover:scale-110 transition-transform" />
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
                 New This Week
+                <InfoTooltip content={STAT_EXPLANATIONS.newThisWeek} />
               </p>
               <p className="text-2xl font-semibold text-gray-900 dark:text-white">
                 {animatedNewThisWeek}
@@ -497,11 +676,12 @@ const Dashboard: React.FC = () => {
         >
           <div className="flex items-center">
             <div className="flex-shrink-0">
-              <Calendar className="h-8 w-8 text-extended-purple group-hover:scale-110 transition-transform" />
+              <Heart className="h-8 w-8 text-extended-purple group-hover:scale-110 transition-transform" />
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
                 Following
+                <InfoTooltip content={STAT_EXPLANATIONS.following} />
               </p>
               <p className="text-2xl font-semibold text-gray-900 dark:text-white">
                 {animatedFollowing}
@@ -512,7 +692,7 @@ const Dashboard: React.FC = () => {
 
         <Link
           to="/workstreams"
-          aria-label={`Workstreams: ${stats.workstreams}`}
+          aria-label={`Programs: ${stats.workstreams}`}
           className="bg-white dark:bg-dark-surface rounded-xl shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg active:scale-95 active:shadow-inner cursor-pointer group"
         >
           <div className="flex items-center">
@@ -520,8 +700,9 @@ const Dashboard: React.FC = () => {
               <Filter className="h-8 w-8 text-extended-orange group-hover:scale-110 transition-transform" />
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                Workstreams
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                Programs
+                <InfoTooltip content={STAT_EXPLANATIONS.programs} />
               </p>
               <p className="text-2xl font-semibold text-gray-900 dark:text-white">
                 {animatedWorkstreams}
@@ -531,24 +712,45 @@ const Dashboard: React.FC = () => {
         </Link>
 
         <Link
-          to="/discover?filter=updated"
-          aria-label={`Updated This Week: ${stats.updatedThisWeek}`}
+          to="/discover?filter=deadline"
+          aria-label={`Deadlines This Week: ${stats.deadlinesThisWeek}`}
           className="bg-white dark:bg-dark-surface rounded-xl shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg active:scale-95 active:shadow-inner cursor-pointer group"
         >
           <div className="flex items-center">
             <div className="flex-shrink-0">
-              <RefreshCw className="h-8 w-8 text-amber-500 group-hover:scale-110 transition-transform" />
+              <Clock className="h-8 w-8 text-red-500 group-hover:scale-110 transition-transform" />
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                Updated This Week
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                Deadlines This Week
+                <InfoTooltip content={STAT_EXPLANATIONS.deadlinesThisWeek} />
               </p>
               <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                {animatedUpdatedThisWeek}
+                {animatedDeadlinesThisWeek}
               </p>
             </div>
           </div>
         </Link>
+
+        <div
+          aria-label={`Pipeline Value: $${stats.pipelineValue.toLocaleString()}`}
+          className="bg-white dark:bg-dark-surface rounded-xl shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg group"
+        >
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <DollarSign className="h-8 w-8 text-emerald-500 group-hover:scale-110 transition-transform" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                Pipeline Value
+                <InfoTooltip content={STAT_EXPLANATIONS.pipelineValue} />
+              </p>
+              <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                ${animatedPipelineValue.toLocaleString()}
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Quality Distribution & Methodology Link */}
@@ -558,6 +760,10 @@ const Dashboard: React.FC = () => {
           aria-live="polite"
           className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400"
         >
+          <span className="flex items-center gap-1.5 font-medium text-gray-700 dark:text-gray-300">
+            Quality Distribution
+            <InfoTooltip content={STAT_EXPLANATIONS.qualityDistribution} />
+          </span>
           <span className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-green-500"></span>
             {qualityDistribution.high} High
@@ -576,9 +782,72 @@ const Dashboard: React.FC = () => {
           className="inline-flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-brand-blue dark:hover:text-brand-blue transition-colors"
         >
           <BookOpen className="h-4 w-4" />
-          How does Foresight work?
+          How does GrantScope2 work?
         </Link>
       </div>
+
+      {/* Upcoming Deadlines */}
+      {upcomingDeadlineCards.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-4">
+            <Clock className="h-5 w-5 text-red-500" />
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+              Upcoming Deadlines
+            </h2>
+          </div>
+          <div className="bg-white dark:bg-dark-surface rounded-xl shadow divide-y divide-gray-100 dark:divide-gray-700/50">
+            {upcomingDeadlineCards.map((card) => {
+              const urgency = card.deadline
+                ? getDeadlineUrgency(card.deadline)
+                : undefined;
+              const deadlineDate = card.deadline
+                ? new Date(card.deadline)
+                : null;
+              return (
+                <Link
+                  key={card.id}
+                  to={`/signals/${card.slug}`}
+                  className="flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 dark:hover:bg-dark-surface-hover transition-colors group first:rounded-t-xl last:rounded-b-xl"
+                >
+                  <div className="flex-1 min-w-0 mr-4">
+                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate group-hover:text-brand-blue transition-colors">
+                      {card.name}
+                    </p>
+                    {card.grantor && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                        {card.grantor}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    {deadlineDate && (
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        {deadlineDate.toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </span>
+                    )}
+                    {urgency && (
+                      <span
+                        className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+                        style={{
+                          backgroundColor: urgency.colorLight,
+                          color: urgency.color,
+                        }}
+                      >
+                        {urgency.name}
+                      </span>
+                    )}
+                    <ExternalLink className="h-3.5 w-3.5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* AI-Detected Patterns */}
       <PatternInsightsSection className="mb-8" />
@@ -588,7 +857,7 @@ const Dashboard: React.FC = () => {
         <div className="flex items-center gap-2 mb-4">
           <Star className="h-5 w-5 text-amber-500 fill-amber-500" />
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            Your Followed Signals
+            Your Followed Opportunities
           </h2>
         </div>
         {followingCards.length > 0 ? (
@@ -674,26 +943,35 @@ const Dashboard: React.FC = () => {
             })}
           </div>
         ) : (
-          <div className="text-center py-12 bg-white dark:bg-dark-surface rounded-lg shadow">
-            <Star className="mx-auto h-12 w-12 text-gray-400" />
-            <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
-              Start Following Signals
-            </h3>
-            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto">
-              Follow signals to build your personalized intelligence feed.
-              <br />
-              <span className="text-gray-400">
-                Browse the Discover page and click the heart icon on any signal
-                to start following it.
-              </span>
+          <div className="text-center py-8 bg-white dark:bg-dark-surface rounded-lg shadow">
+            <Heart className="h-8 w-8 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              No followed opportunities yet
             </p>
-            <div className="mt-6">
+            <ol className="text-xs text-gray-500 dark:text-gray-400 space-y-1 mb-3 text-left max-w-xs mx-auto">
+              <li>
+                1. Go to the{" "}
+                <button
+                  onClick={() => navigate("/discover")}
+                  className="text-brand-blue hover:underline"
+                >
+                  Discover page
+                </button>
+              </li>
+              <li>2. Find a grant that interests you</li>
+              <li>3. Click the heart icon to follow it</li>
+            </ol>
+            <p className="text-xs text-gray-400 dark:text-gray-500 italic mb-4">
+              Following a grant adds it to your personal watchlist so you never
+              miss a deadline.
+            </p>
+            <div>
               <Link
                 to="/discover"
                 className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-blue hover:bg-brand-dark-blue transition-colors"
               >
                 <Eye className="h-4 w-4 mr-2" />
-                Explore Signals
+                Discover Opportunities
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Link>
             </div>
@@ -705,7 +983,7 @@ const Dashboard: React.FC = () => {
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            Recent Intelligence
+            Recent Opportunities
           </h2>
           <Link
             to="/discover"

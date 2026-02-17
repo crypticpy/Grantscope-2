@@ -1,5 +1,5 @@
 """
-Discovery orchestration service for Foresight.
+Discovery orchestration service for GrantScope.
 
 Runs automated discovery scans to find emerging trends and technologies
 relevant to municipal government. Uses the query generator to create
@@ -14,12 +14,14 @@ Key Features:
 - Creates new cards or enriches existing ones
 - Auto-approves high-confidence discoveries (>0.95)
 - Configurable scope caps to control costs
-- Multi-source content ingestion from 5 categories:
+- Multi-source content ingestion from 7 categories:
   1. RSS/Atom feeds - Curated feeds from various sources
   2. News outlets - Major news sites (Reuters, AP News, GCN)
   3. Academic publications - arXiv research papers
   4. Government sources - .gov domains, policy documents
   5. Tech blogs - TechCrunch, Ars Technica, company blogs
+  6. Grants.gov - Federal grant opportunities
+  7. SAM.gov - Federal procurement and grant opportunities
 
 Usage:
     from app.discovery_service import DiscoveryService, DiscoveryConfig
@@ -52,7 +54,7 @@ from .source_validator import SourceValidator
 from .story_clustering_service import cluster_sources, get_cluster_count
 from . import domain_reputation_service
 
-# Import multi-source content fetchers (5 categories)
+# Import multi-source content fetchers (7 categories)
 from .source_fetchers import (
     # RSS/Atom feeds
     fetch_rss_sources,
@@ -77,7 +79,7 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# Source Category Tracking (5 Categories)
+# Source Category Tracking (7 Categories)
 # ============================================================================
 
 
@@ -85,7 +87,7 @@ class SourceCategory(Enum):
     """
     Content source categories for multi-source ingestion.
 
-    The pipeline fetches from 5 diverse source categories to ensure
+    The pipeline fetches from 7 diverse source categories to ensure
     comprehensive coverage of emerging trends and technologies.
     """
 
@@ -94,6 +96,8 @@ class SourceCategory(Enum):
     ACADEMIC = "academic"  # Academic publications (arXiv)
     GOVERNMENT = "government"  # Government sources (.gov domains)
     TECH_BLOG = "tech_blog"  # Tech blogs (TechCrunch, Ars Technica)
+    GRANTS_GOV = "grants_gov"  # Grants.gov federal grant opportunities
+    SAM_GOV = "sam_gov"  # SAM.gov procurement and grant opportunities
 
 
 # Default RSS feeds for curated content
@@ -182,7 +186,7 @@ class DiscoveryConfig:
 
     # Multi-source category configuration
     source_categories: Dict[str, SourceCategoryConfig] = field(default_factory=dict)
-    enable_multi_source: bool = True  # Enable fetching from all 5 source categories
+    enable_multi_source: bool = True  # Enable fetching from all 7 source categories
     search_topics: List[str] = field(default_factory=list)  # Topics for source searches
 
     def __post_init__(self):
@@ -213,6 +217,12 @@ class DiscoveryConfig:
                 ),
                 SourceCategory.TECH_BLOG.value: SourceCategoryConfig(
                     enabled=True, max_sources=30
+                ),
+                SourceCategory.GRANTS_GOV.value: SourceCategoryConfig(
+                    enabled=True, max_sources=50
+                ),
+                SourceCategory.SAM_GOV.value: SourceCategoryConfig(
+                    enabled=True, max_sources=50
                 ),
             }
         if not self.search_topics:
@@ -246,6 +256,8 @@ def apply_source_preferences(
         "government": SourceCategory.GOVERNMENT.value,
         "tech_blog": SourceCategory.TECH_BLOG.value,
         "rss": SourceCategory.RSS.value,
+        "grants_gov": SourceCategory.GRANTS_GOV.value,
+        "sam_gov": SourceCategory.SAM_GOV.value,
     }
 
     # Apply enabled_categories: disable any category not in the list
@@ -1868,14 +1880,14 @@ class DiscoveryService:
             return [], 0.0
 
     # ========================================================================
-    # Step 3b: Multi-Source Content Fetching (5 Categories)
+    # Step 3b: Multi-Source Content Fetching (7 Categories)
     # ========================================================================
 
     async def _fetch_from_all_source_categories(
         self, config: DiscoveryConfig
     ) -> MultiSourceFetchResult:
         """
-        Fetch content from all 5 source categories concurrently.
+        Fetch content from all 7 source categories concurrently.
 
         Categories:
         1. RSS/Atom feeds - Curated feeds from various sources
@@ -1883,6 +1895,8 @@ class DiscoveryService:
         3. Academic publications - arXiv research papers
         4. Government sources - .gov domains, policy documents
         5. Tech blogs - TechCrunch, Ars Technica, company blogs
+        6. Grants.gov - Federal grant opportunities
+        7. SAM.gov - Federal procurement and grant opportunities
 
         Args:
             config: Discovery configuration with source category settings
@@ -1900,8 +1914,10 @@ class DiscoveryService:
 
         topics = config.search_topics or DEFAULT_SEARCH_TOPICS
 
+        num_categories = len(SourceCategory)
         logger.info(
-            f"Starting multi-source fetch from 5 categories with topics: {topics[:3]}..."
+            f"Starting multi-source fetch from {num_categories} categories "
+            f"with topics: {topics[:3]}..."
         )
 
         # Create tasks for each source category
@@ -1945,6 +1961,24 @@ class DiscoveryService:
         if tech_config.enabled:
             tasks.append(self._fetch_tech_blog_sources(topics, tech_config.max_sources))
 
+        # 6. Grants.gov
+        grants_gov_config = config.source_categories.get(
+            SourceCategory.GRANTS_GOV.value, SourceCategoryConfig()
+        )
+        if grants_gov_config.enabled:
+            tasks.append(
+                self._fetch_grants_gov_sources(topics, grants_gov_config.max_sources)
+            )
+
+        # 7. SAM.gov
+        sam_gov_config = config.source_categories.get(
+            SourceCategory.SAM_GOV.value, SourceCategoryConfig()
+        )
+        if sam_gov_config.enabled:
+            tasks.append(
+                self._fetch_sam_gov_sources(topics, sam_gov_config.max_sources)
+            )
+
         # Execute all fetches concurrently
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -1955,6 +1989,8 @@ class DiscoveryService:
             SourceCategory.ACADEMIC.value,
             SourceCategory.GOVERNMENT.value,
             SourceCategory.TECH_BLOG.value,
+            SourceCategory.GRANTS_GOV.value,
+            SourceCategory.SAM_GOV.value,
         ]
 
         result_idx = 0
@@ -1992,7 +2028,7 @@ class DiscoveryService:
 
         logger.info(
             f"Multi-source fetch complete: {len(all_sources)} sources from "
-            f"{categories_fetched}/5 categories in {fetch_time:.1f}s"
+            f"{categories_fetched}/{num_categories} categories in {fetch_time:.1f}s"
         )
         for cat, count in sources_by_category.items():
             if count > 0:
@@ -2148,6 +2184,44 @@ class DiscoveryService:
         except Exception as e:
             logger.warning(f"Tech blog fetch failed: {e}")
             return [], SourceCategory.TECH_BLOG.value
+
+    async def _fetch_grants_gov_sources(
+        self, topics: List[str], max_sources: int
+    ) -> Tuple[List[RawSource], str]:
+        """Fetch grant opportunities from Grants.gov API."""
+        try:
+            from app.source_fetchers.grants_gov_fetcher import (
+                fetch_and_convert_opportunities,
+            )
+
+            sources, category = await fetch_and_convert_opportunities(
+                topics=topics, max_results=max_sources
+            )
+            logger.info(f"Grants.gov: fetched {len(sources)} opportunities")
+            return sources, SourceCategory.GRANTS_GOV.value
+
+        except Exception as e:
+            logger.warning(f"Grants.gov fetch failed: {e}")
+            return [], SourceCategory.GRANTS_GOV.value
+
+    async def _fetch_sam_gov_sources(
+        self, topics: List[str], max_sources: int
+    ) -> Tuple[List[RawSource], str]:
+        """Fetch opportunities from SAM.gov API."""
+        try:
+            from app.source_fetchers.sam_gov_fetcher import (
+                fetch_and_convert_opportunities,
+            )
+
+            sources, category = await fetch_and_convert_opportunities(
+                topics=topics, max_results=max_sources
+            )
+            logger.info(f"SAM.gov: fetched {len(sources)} opportunities")
+            return sources, SourceCategory.SAM_GOV.value
+
+        except Exception as e:
+            logger.warning(f"SAM.gov fetch failed: {e}")
+            return [], SourceCategory.SAM_GOV.value
 
     # ========================================================================
     # Step 4: Triage Sources
@@ -2951,6 +3025,10 @@ class DiscoveryService:
                         error_stage="enrichment",
                     )
 
+        # Score alignment for enriched cards (non-blocking)
+        for enriched_card_id in cards_enriched:
+            await self._score_alignment_for_card(enriched_card_id)
+
         # STEP 2: Cluster similar new concepts before creation
         # Group sources with similar names to avoid creating near-duplicate cards
         new_concepts = dedup_result.new_concept_candidates
@@ -3056,6 +3134,9 @@ class DiscoveryService:
                     auto_approved += 1
                 else:
                     pending_review += 1
+
+                # Score alignment against active workstreams (non-blocking)
+                await self._score_alignment_for_card(card_id)
 
             except Exception as e:
                 logger.warning(
@@ -3506,6 +3587,112 @@ class DiscoveryService:
 
         except Exception as e:
             logger.warning(f"Failed to auto-approve card {card_id}: {e}")
+
+    async def _score_alignment_for_card(self, card_id: str) -> None:
+        """Score a newly created/enriched card against all active workstreams.
+
+        Stores the highest alignment score on the card record and auto-adds
+        the card to any workstream scoring >= 60 as "discovered" status.
+
+        This is a best-effort operation -- failures are logged but never
+        block the main discovery pipeline.
+        """
+        try:
+            from app.alignment_service import AlignmentService
+
+            # Fetch the card record
+            card_resp = (
+                self.supabase.table("cards")
+                .select("*")
+                .eq("id", card_id)
+                .limit(1)
+                .execute()
+            )
+            if not card_resp.data:
+                return
+            card = card_resp.data[0]
+
+            # Fetch all active workstreams for this user
+            ws_resp = (
+                self.supabase.table("workstreams")
+                .select("*")
+                .eq("is_active", True)
+                .eq("user_id", self.triggered_by_user_id)
+                .execute()
+            )
+            workstreams = ws_resp.data or []
+            if not workstreams:
+                return
+
+            alignment_svc = AlignmentService()
+            best_score = 0
+            auto_added_count = 0
+
+            for ws in workstreams:
+                try:
+                    result = await alignment_svc.score_grant_against_program(card, ws)
+                    if result.overall_score > best_score:
+                        best_score = result.overall_score
+
+                    # Auto-add to workstream pipeline if score >= 60
+                    if result.overall_score >= 60:
+                        # Check if already present
+                        existing = (
+                            self.supabase.table("workstream_cards")
+                            .select("id")
+                            .eq("workstream_id", ws["id"])
+                            .eq("card_id", card_id)
+                            .limit(1)
+                            .execute()
+                        )
+                        if not existing.data:
+                            now = datetime.now(timezone.utc).isoformat()
+                            self.supabase.table("workstream_cards").insert(
+                                {
+                                    "workstream_id": ws["id"],
+                                    "card_id": card_id,
+                                    "added_by": self.triggered_by_user_id,
+                                    "added_at": now,
+                                    "status": "discovered",
+                                    "position": 0,
+                                    "added_from": "auto",
+                                    "updated_at": now,
+                                }
+                            ).execute()
+                            auto_added_count += 1
+                            logger.info(
+                                "Alignment auto-add: card %s -> workstream %s "
+                                "(score=%d)",
+                                card_id,
+                                ws["id"],
+                                result.overall_score,
+                            )
+                except Exception as ws_err:
+                    logger.warning(
+                        "Alignment scoring failed for card %s vs workstream %s: %s",
+                        card_id,
+                        ws.get("id", "?"),
+                        ws_err,
+                    )
+
+            # Store highest alignment score on the card
+            if best_score > 0:
+                self.supabase.table("cards").update({"alignment_score": best_score}).eq(
+                    "id", card_id
+                ).execute()
+                logger.info(
+                    "Alignment score stored for card %s: %d (auto-added to %d workstreams)",
+                    card_id,
+                    best_score,
+                    auto_added_count,
+                )
+
+        except Exception as e:
+            logger.warning(
+                "Alignment scoring failed for card %s (non-fatal): %s",
+                card_id,
+                e,
+            )
 
     async def _create_timeline_event(
         self,

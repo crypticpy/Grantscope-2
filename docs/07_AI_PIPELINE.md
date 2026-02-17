@@ -1,4 +1,4 @@
-# Foresight: AI Pipeline Specification
+# GrantScope2: AI Pipeline Specification
 
 ## Overview
 
@@ -53,16 +53,16 @@ The AI pipeline handles automated intelligence gathering, processing, and analys
 
 ### Sources
 
-| Source | Type | API | Rate Limit | Focus |
-|--------|------|-----|------------|-------|
-| NewsAPI | News | REST | 100/day (free) | General tech news |
-| GDELT | News | REST | Unlimited | Global events |
-| GovTech | RSS | Feed | N/A | Municipal tech |
-| Route Fifty | RSS | Feed | N/A | State/local gov |
-| Smart Cities Dive | RSS | Feed | N/A | Smart city tech |
-| MIT Tech Review | RSS | Feed | N/A | Emerging tech |
-| arXiv | API | REST | Reasonable | Research papers |
-| SSRN | RSS | Feed | N/A | Policy papers |
+| Source            | Type | API  | Rate Limit     | Focus             |
+| ----------------- | ---- | ---- | -------------- | ----------------- |
+| NewsAPI           | News | REST | 100/day (free) | General tech news |
+| GDELT             | News | REST | Unlimited      | Global events     |
+| GovTech           | RSS  | Feed | N/A            | Municipal tech    |
+| Route Fifty       | RSS  | Feed | N/A            | State/local gov   |
+| Smart Cities Dive | RSS  | Feed | N/A            | Smart city tech   |
+| MIT Tech Review   | RSS  | Feed | N/A            | Emerging tech     |
+| arXiv             | API  | REST | Reasonable     | Research papers   |
+| SSRN              | RSS  | Feed | N/A            | Policy papers     |
 
 ### Fetch Implementation
 
@@ -86,12 +86,12 @@ class RawArticle:
 
 class BaseFetcher(ABC):
     """Base class for all source fetchers."""
-    
+
     @abstractmethod
     async def fetch(self, since: datetime) -> List[RawArticle]:
         """Fetch articles published since given datetime."""
         pass
-    
+
     @property
     @abstractmethod
     def source_name(self) -> str:
@@ -106,14 +106,14 @@ from datetime import datetime, timedelta
 
 class NewsAPIFetcher(BaseFetcher):
     source_name = "newsapi"
-    
+
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.base_url = "https://newsapi.org/v2"
-        
+
     async def fetch(self, since: datetime) -> List[RawArticle]:
         articles = []
-        
+
         # Search queries targeting municipal/gov tech
         queries = [
             "municipal technology",
@@ -122,7 +122,7 @@ class NewsAPIFetcher(BaseFetcher):
             "public sector innovation",
             "city infrastructure technology",
         ]
-        
+
         async with httpx.AsyncClient() as client:
             for query in queries:
                 response = await client.get(
@@ -136,7 +136,7 @@ class NewsAPIFetcher(BaseFetcher):
                     }
                 )
                 data = response.json()
-                
+
                 for item in data.get("articles", []):
                     articles.append(RawArticle(
                         url=item["url"],
@@ -147,7 +147,7 @@ class NewsAPIFetcher(BaseFetcher):
                         author=item.get("author"),
                         api_source=self.source_name,
                     ))
-        
+
         return articles
 ```
 
@@ -161,15 +161,15 @@ class RSSFetcher(BaseFetcher):
     def __init__(self, feed_url: str, name: str):
         self.feed_url = feed_url
         self._source_name = name
-        
+
     @property
     def source_name(self) -> str:
         return self._source_name
-    
+
     async def fetch(self, since: datetime) -> List[RawArticle]:
         feed = feedparser.parse(self.feed_url)
         articles = []
-        
+
         for entry in feed.entries:
             pub_date = datetime(*entry.published_parsed[:6])
             if pub_date > since:
@@ -182,7 +182,7 @@ class RSSFetcher(BaseFetcher):
                     author=entry.get("author"),
                     api_source=self.source_name,
                 ))
-        
+
         return articles
 ```
 
@@ -203,7 +203,7 @@ SOURCES = [
         "enabled": True,
     },
     {
-        "type": "rss", 
+        "type": "rss",
         "name": "route_fifty",
         "url": "https://www.route-fifty.com/rss/",
         "enabled": True,
@@ -228,6 +228,7 @@ SOURCES = [
 ## Stage 2: Deduplicate
 
 Remove duplicate articles by:
+
 1. Exact URL match
 2. Content similarity (embedding cosine similarity > 0.95)
 
@@ -238,15 +239,15 @@ async def deduplicate(articles: List[RawArticle]) -> List[RawArticle]:
     """Remove duplicate articles."""
     seen_urls = set()
     unique = []
-    
+
     for article in articles:
         # Normalize URL
         normalized_url = normalize_url(article.url)
-        
+
         if normalized_url not in seen_urls:
             seen_urls.add(normalized_url)
             unique.append(article)
-    
+
     return unique
 ```
 
@@ -289,7 +290,7 @@ Respond with JSON:
 
 async def triage_article(article: RawArticle) -> dict:
     """Quick relevance check for an article."""
-    
+
     response = await openai_client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[{
@@ -302,11 +303,12 @@ async def triage_article(article: RawArticle) -> dict:
         response_format={"type": "json_object"},
         max_tokens=200,
     )
-    
+
     return json.loads(response.choices[0].message.content)
 ```
 
 **Triage thresholds:**
+
 - `is_relevant == True` AND `confidence >= 0.6` → Continue to processing
 - Otherwise → Skip
 
@@ -322,23 +324,23 @@ Full analysis of relevant articles using GPT-4o.
 @dataclass
 class ProcessedArticle:
     raw: RawArticle
-    
+
     # AI-generated
     summary: str
     key_excerpts: List[str]
     entities: List[str]  # Technologies, organizations, concepts
-    
+
     # Classification
     pillars: List[str]
     goals: List[str]
     steep_categories: List[str]
     anchors: List[str]
-    
+
     # Scoring
     horizon: str  # H1, H2, H3
     suggested_stage: int  # 1-8
     triage_score: int  # 1, 3, 5
-    
+
     credibility: float
     novelty: float
     likelihood: float
@@ -346,11 +348,11 @@ class ProcessedArticle:
     relevance: float
     time_to_awareness_months: int
     time_to_prepare_months: int
-    
+
     # For card matching
     suggested_card_name: str
     is_new_concept: bool
-    
+
     # Embedding
     embedding: List[float]
 ```
@@ -388,16 +390,16 @@ Respond with JSON:
   "summary": "2-3 sentence summary focused on municipal relevance",
   "key_excerpts": ["quote 1", "quote 2"],
   "entities": ["technology/org/concept names"],
-  
+
   "pillars": ["XX", "XX"],
   "goals": ["XX.X"],
   "steep_categories": ["X"],
   "anchors": ["anchor name"],
-  
+
   "horizon": "H1|H2|H3",
   "suggested_stage": 1-8,
   "triage_score": 1|3|5,
-  
+
   "credibility": 1.0-5.0,
   "novelty": 1.0-5.0,
   "likelihood": 1.0-9.0,
@@ -405,7 +407,7 @@ Respond with JSON:
   "relevance": 1.0-5.0,
   "time_to_awareness_months": number,
   "time_to_prepare_months": number,
-  
+
   "suggested_card_name": "Concise concept name",
   "is_new_concept": true/false,
   "reasoning": "Brief explanation of classification choices"
@@ -418,12 +420,12 @@ Respond with JSON:
 ```python
 async def generate_embedding(text: str) -> List[float]:
     """Generate embedding for text using OpenAI."""
-    
+
     response = await openai_client.embeddings.create(
         model="text-embedding-ada-002",
         input=text[:8000]  # Token limit
     )
-    
+
     return response.data[0].embedding
 ```
 
@@ -442,10 +444,10 @@ async def match_to_card(
 ) -> Tuple[Optional[Card], bool]:
     """
     Match article to existing card or determine if new card needed.
-    
+
     Returns: (matched_card, should_create_new)
     """
-    
+
     # 1. Semantic search against existing cards
     similar_cards = await vector_search(
         processed.embedding,
@@ -453,18 +455,18 @@ async def match_to_card(
         limit=5,
         threshold=0.82
     )
-    
+
     if not similar_cards:
         # No similar cards - likely new concept
         return None, processed.is_new_concept
-    
+
     # 2. Check top match
     top_match = similar_cards[0]
-    
+
     if top_match.similarity > 0.92:
         # Strong match - add as source to existing card
         return top_match.card, False
-    
+
     elif top_match.similarity > 0.82:
         # Moderate match - use LLM to decide
         decision = await llm_match_decision(processed, top_match.card)
@@ -472,7 +474,7 @@ async def match_to_card(
             return top_match.card, False
         else:
             return None, True
-    
+
     else:
         # Weak match - probably new concept
         return None, processed.is_new_concept
@@ -515,7 +517,7 @@ Persist results to database.
 ```python
 async def add_source_to_card(card_id: str, processed: ProcessedArticle):
     """Add new source to existing card."""
-    
+
     # 1. Insert source
     source = await db.sources.insert({
         "card_id": card_id,
@@ -531,7 +533,7 @@ async def add_source_to_card(card_id: str, processed: ProcessedArticle):
         "relevance_to_card": processed.relevance,
         "embedding": processed.embedding,
     })
-    
+
     # 2. Log timeline event
     await db.card_timeline.insert({
         "card_id": card_id,
@@ -539,10 +541,10 @@ async def add_source_to_card(card_id: str, processed: ProcessedArticle):
         "event_description": f"New source: {processed.raw.title}",
         "triggered_by_source_id": source.id,
     })
-    
+
     # 3. Check for stage change
     await check_stage_change(card_id, processed)
-    
+
     # 4. Update card summary if significant
     if processed.novelty > 3.5:
         await regenerate_card_summary(card_id)
@@ -553,27 +555,27 @@ async def add_source_to_card(card_id: str, processed: ProcessedArticle):
 ```python
 async def create_card(processed: ProcessedArticle) -> Card:
     """Create new card from processed article."""
-    
+
     # 1. Generate card embedding (from summary)
     card_embedding = await generate_embedding(
         f"{processed.suggested_card_name} {processed.summary}"
     )
-    
+
     # 2. Create card
     card = await db.cards.insert({
         "name": processed.suggested_card_name,
         "slug": slugify(processed.suggested_card_name),
         "summary": processed.summary,
-        
+
         "horizon": processed.horizon,
         "stage": processed.suggested_stage,
         "triage_score": processed.triage_score,
-        
+
         "pillars": processed.pillars,
         "goals": processed.goals,
         "steep_categories": processed.steep_categories,
         "anchors": processed.anchors,
-        
+
         "credibility_score": processed.credibility,
         "novelty_score": processed.novelty,
         "likelihood_score": processed.likelihood,
@@ -581,20 +583,20 @@ async def create_card(processed: ProcessedArticle) -> Card:
         "relevance_score": processed.relevance,
         "time_to_awareness_months": processed.time_to_awareness_months,
         "time_to_prepare_months": processed.time_to_prepare_months,
-        
+
         "embedding": card_embedding,
     })
-    
+
     # 3. Add initial source
     await add_source_to_card(card.id, processed)
-    
+
     # 4. Log creation
     await db.card_timeline.insert({
         "card_id": card.id,
         "event_type": "created",
         "event_description": f"Card created from {processed.raw.source_name}",
     })
-    
+
     return card
 ```
 
@@ -607,19 +609,19 @@ Queue digest emails for users.
 ```python
 async def queue_notifications(scan_results: ScanResults):
     """Queue digest emails for users with updates."""
-    
+
     # Get all users with notification preferences
     users = await db.users.select().where(
         preferences__digest_frequency != None
     )
-    
+
     for user in users:
         # Get user's followed cards that have updates
         updated_cards = await get_user_updated_cards(
-            user.id, 
+            user.id,
             scan_results.processed_card_ids
         )
-        
+
         if updated_cards:
             await queue_digest_email(user, updated_cards)
 ```
@@ -635,41 +637,41 @@ User-triggered deep research on a topic.
 ```python
 async def run_research_task(task_id: str, query: str, user_id: str):
     """Execute a research task."""
-    
+
     await update_task_status(task_id, "processing")
-    
+
     try:
         # 1. Expand query into search terms
         search_terms = await expand_query(query)
-        
+
         # 2. Search across all sources (not just last 24h)
         articles = []
         for term in search_terms:
             articles.extend(await search_sources(term, days_back=30))
-        
+
         # 3. Deduplicate
         articles = await deduplicate(articles)
-        
+
         # 4. Process all (no triage - user requested these)
         processed = []
         for article in articles[:50]:  # Limit to 50
             processed.append(await process_article(article))
-        
+
         # 5. Cluster into concepts
         clusters = await cluster_by_concept(processed)
-        
+
         # 6. Create cards for each cluster
         cards_created = []
         for cluster in clusters:
             card = await create_card_from_cluster(cluster)
             cards_created.append(card)
-        
+
         # 7. Update task status
         await update_task_status(task_id, "completed", {
             "cards_created": [c.id for c in cards_created],
             "sources_processed": len(processed),
         })
-        
+
     except Exception as e:
         await update_task_status(task_id, "failed", {"error": str(e)})
 ```
@@ -767,34 +769,34 @@ Respond with JSON:
 
 ### Per Nightly Scan (estimated 200 articles)
 
-| Stage | Model | Tokens | Cost |
-|-------|-------|--------|------|
-| Triage (200) | gpt-4o-mini | ~400K | $0.06 |
-| Process (60) | gpt-4o | ~600K | $3.00 |
-| Embeddings (60) | ada-002 | ~120K | $0.01 |
-| Match decisions (20) | gpt-4o | ~40K | $0.20 |
-| **Daily Total** | | | **~$3.30** |
-| **Monthly Total** | | | **~$100** |
+| Stage                | Model       | Tokens | Cost       |
+| -------------------- | ----------- | ------ | ---------- |
+| Triage (200)         | gpt-4o-mini | ~400K  | $0.06      |
+| Process (60)         | gpt-4o      | ~600K  | $3.00      |
+| Embeddings (60)      | ada-002     | ~120K  | $0.01      |
+| Match decisions (20) | gpt-4o      | ~40K   | $0.20      |
+| **Daily Total**      |             |        | **~$3.30** |
+| **Monthly Total**    |             |        | **~$100**  |
 
 ### Per Research Task
 
-| Stage | Model | Tokens | Cost |
-|-------|-------|--------|------|
-| Query expansion | gpt-4o | ~2K | $0.01 |
-| Process (50) | gpt-4o | ~500K | $2.50 |
-| Clustering | gpt-4o | ~20K | $0.10 |
-| **Per Task** | | | **~$2.60** |
+| Stage           | Model  | Tokens | Cost       |
+| --------------- | ------ | ------ | ---------- |
+| Query expansion | gpt-4o | ~2K    | $0.01      |
+| Process (50)    | gpt-4o | ~500K  | $2.50      |
+| Clustering      | gpt-4o | ~20K   | $0.10      |
+| **Per Task**    |        |        | **~$2.60** |
 
 ### Per Implications Analysis
 
-| Stage | Model | Tokens | Cost |
-|-------|-------|--------|------|
-| First-order (1) | gpt-4o | ~2K | $0.01 |
-| Second-order (5) | gpt-4o | ~10K | $0.05 |
-| Third-order (25) | gpt-4o | ~50K | $0.25 |
-| **Full Analysis** | | | **~$0.31** |
+| Stage             | Model  | Tokens | Cost       |
+| ----------------- | ------ | ------ | ---------- |
+| First-order (1)   | gpt-4o | ~2K    | $0.01      |
+| Second-order (5)  | gpt-4o | ~10K   | $0.05      |
+| Third-order (25)  | gpt-4o | ~50K   | $0.25      |
+| **Full Analysis** |        |        | **~$0.31** |
 
 ---
 
-*Document Version: 1.0*
-*Last Updated: December 2024*
+_Document Version: 1.0_
+_Last Updated: December 2024_

@@ -1,5 +1,5 @@
 """
-Foresight Background Worker.
+GrantScope2 Background Worker.
 
 This process runs outside the FastAPI web server and executes long-running jobs
 that must survive web restarts / scale-to-zero behaviors:
@@ -37,6 +37,7 @@ from app.routers.discovery import execute_discovery_run_background
 from app.routers.research import execute_research_task_background
 from app.routers.workstream_scans import execute_workstream_scan_background
 from app.scheduler import start_scheduler
+from app.taxonomy import VALID_PILLAR_CODES
 from fastapi import FastAPI
 import uvicorn
 
@@ -72,32 +73,32 @@ def _get_float_env(name: str, default: float) -> float:
         return default
 
 
-class ForesightWorker:
+class GrantScopeWorker:
     def __init__(self) -> None:
-        self.worker_id = os.getenv("FORESIGHT_WORKER_ID") or str(uuid.uuid4())
+        self.worker_id = os.getenv("GRANTSCOPE_WORKER_ID") or str(uuid.uuid4())
         self.poll_interval_seconds = _get_float_env(
-            "FORESIGHT_WORKER_POLL_INTERVAL_SECONDS", 5.0
+            "GRANTSCOPE_WORKER_POLL_INTERVAL_SECONDS", 5.0
         )
         self.max_poll_interval_seconds = _get_float_env(
-            "FORESIGHT_WORKER_MAX_POLL_INTERVAL_SECONDS", 30.0
+            "GRANTSCOPE_WORKER_MAX_POLL_INTERVAL_SECONDS", 30.0
         )
         self.brief_timeout_seconds = _get_int_env(
-            "FORESIGHT_BRIEF_TIMEOUT_SECONDS", 30 * 60
+            "GRANTSCOPE_BRIEF_TIMEOUT_SECONDS", 30 * 60
         )
         self.discovery_timeout_seconds = _get_int_env(
-            "FORESIGHT_DISCOVERY_TIMEOUT_SECONDS", 90 * 60
+            "GRANTSCOPE_DISCOVERY_TIMEOUT_SECONDS", 90 * 60
         )
         self.workstream_scan_timeout_seconds = _get_int_env(
-            "FORESIGHT_WORKSTREAM_SCAN_TIMEOUT_SECONDS", 5 * 60
+            "GRANTSCOPE_WORKSTREAM_SCAN_TIMEOUT_SECONDS", 5 * 60
         )
         self.rss_check_interval_seconds = _get_int_env(
-            "FORESIGHT_RSS_CHECK_INTERVAL_SECONDS", 30 * 60  # 30 minutes
+            "GRANTSCOPE_RSS_CHECK_INTERVAL_SECONDS", 30 * 60  # 30 minutes
         )
         self.scheduled_discovery_timeout_seconds = _get_int_env(
-            "FORESIGHT_SCHEDULED_DISCOVERY_TIMEOUT_SECONDS", 120 * 60  # 2 hours
+            "GRANTSCOPE_SCHEDULED_DISCOVERY_TIMEOUT_SECONDS", 120 * 60  # 2 hours
         )
         self.enable_scheduler = _truthy(
-            os.getenv("FORESIGHT_ENABLE_SCHEDULER", "false")
+            os.getenv("GRANTSCOPE_ENABLE_SCHEDULER", "false")
         )
         self._stop_event = asyncio.Event()
         self._current_interval = self.poll_interval_seconds
@@ -340,14 +341,27 @@ class ForesightWorker:
                 "Discovery run has no triggered_by_user and no users exist to run as."
             )
 
-        logger.info(
-            "Processing discovery run",
-            extra={
-                "worker_id": self.worker_id,
-                "run_id": run_id,
-                "triggered_by_user": triggered_by_user,
-            },
-        )
+        # Detect grant-oriented discovery runs
+        source_categories = config_data.get("source_categories") or []
+        grant_categories = {"grants_gov", "sam_gov"}
+        if grant_categories & set(source_categories):
+            logger.info(
+                "Processing grant opportunity discovery run",
+                extra={
+                    "worker_id": self.worker_id,
+                    "run_id": run_id,
+                    "grant_sources": sorted(grant_categories & set(source_categories)),
+                },
+            )
+        else:
+            logger.info(
+                "Processing discovery run",
+                extra={
+                    "worker_id": self.worker_id,
+                    "run_id": run_id,
+                    "triggered_by_user": triggered_by_user,
+                },
+            )
 
         try:
             await asyncio.wait_for(
@@ -563,14 +577,7 @@ class ForesightWorker:
             schedule = schedules[0]
             schedule_id = schedule["id"]
             interval_hours = schedule.get("interval_hours") or 24
-            pillars = schedule.get("pillars_to_scan") or [
-                "CH",
-                "MC",
-                "HS",
-                "EC",
-                "ES",
-                "CE",
-            ]
+            pillars = schedule.get("pillars_to_scan") or sorted(VALID_PILLAR_CODES)
             max_queries = schedule.get("max_search_queries_per_run") or 20
             process_rss = schedule.get("process_rss_first", True)
 
@@ -741,14 +748,14 @@ class ForesightWorker:
 
 async def _main() -> None:
     # Load environment variables (safe no-op in Railway where env is injected).
-    load_dotenv(os.getenv("FORESIGHT_DOTENV_PATH", ".env"))
+    load_dotenv(os.getenv("GRANTSCOPE_DOTENV_PATH", ".env"))
 
-    worker = ForesightWorker()
+    worker = GrantScopeWorker()
 
     port_env = os.getenv("PORT")
     enable_health_server_default = "true" if port_env else "false"
     enable_health_server = _truthy(
-        os.getenv("FORESIGHT_WORKER_HEALTH_SERVER", enable_health_server_default)
+        os.getenv("GRANTSCOPE_WORKER_HEALTH_SERVER", enable_health_server_default)
     )
 
     server: Optional[uvicorn.Server] = None
@@ -768,7 +775,7 @@ async def _main() -> None:
 
     if enable_health_server:
         port = int(port_env or "8000")
-        app = FastAPI(title="Foresight Worker", version="1.0.0")
+        app = FastAPI(title="GrantScope2 Worker", version="1.0.0")
 
         @app.get("/api/v1/health")
         async def health() -> Dict[str, Any]:

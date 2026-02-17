@@ -32,6 +32,10 @@ export const getSortConfig = (
       return { column: "updated_at", ascending: true };
     case "signal_quality_score":
       return { column: "signal_quality_score", ascending: false };
+    case "deadline_soonest":
+      return { column: "deadline", ascending: true };
+    case "funding_highest":
+      return { column: "funding_amount_max", ascending: false };
     case "newest":
     default:
       return { column: "created_at", ascending: false };

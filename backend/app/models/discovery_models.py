@@ -1,4 +1,4 @@
-"""Discovery models for Foresight API.
+"""Discovery models for GrantScope API.
 
 Models for discovery run configuration, status tracking,
 and related helper functions.

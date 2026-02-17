@@ -678,10 +678,10 @@ export function ChatMessage({
             <span>
               Based on {message.metadata.source_count ?? 0} sources
               {message.metadata.matched_cards
-                ? ` across ${message.metadata.matched_cards} signals`
+                ? ` across ${message.metadata.matched_cards} opportunities`
                 : ""}
               {message.metadata.card_count
-                ? ` from ${message.metadata.card_count} signals`
+                ? ` from ${message.metadata.card_count} opportunities`
                 : ""}
             </span>
           </div>

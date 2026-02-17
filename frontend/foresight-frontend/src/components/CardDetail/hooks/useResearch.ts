@@ -24,14 +24,14 @@
  * ```
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react';
-import type { Card, ResearchTask } from '../types';
-import { API_BASE_URL } from '../utils';
+import { useState, useCallback, useEffect, useRef } from "react";
+import type { Card, ResearchTask } from "../types";
+import { API_BASE_URL } from "../utils";
 
 /**
  * Type of research task to trigger
  */
-export type ResearchTaskType = 'update' | 'deep_research';
+export type ResearchTaskType = "update" | "deep_research";
 
 /**
  * Return type for the useResearch hook
@@ -83,7 +83,7 @@ export interface UseResearchReturn {
 export function useResearch(
   card: Card | null,
   getAuthToken: () => Promise<string | undefined>,
-  onResearchComplete?: () => void
+  onResearchComplete?: () => void,
 ): UseResearchReturn {
   // Research task state
   const [researchTask, setResearchTask] = useState<ResearchTask | null>(null);
@@ -98,14 +98,14 @@ export function useResearch(
   const pollingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const getTaskStorageKey = useCallback((cardId: string) => {
-    return `foresight:activeResearchTask:${cardId}`;
+    return `grantscope:activeResearchTask:${cardId}`;
   }, []);
 
   /**
    * Check if deep research is available (rate limit: 2 per day)
    */
   const canDeepResearch = Boolean(
-    card && (card.deep_research_count_today ?? 0) < 2
+    card && (card.deep_research_count_today ?? 0) < 2,
   );
 
   /**
@@ -129,40 +129,43 @@ export function useResearch(
       const token = await getAuthToken();
       if (!token) {
         setIsResearching(false);
-        setResearchError('Authentication lost');
+        setResearchError("Authentication lost");
         return;
       }
 
       const poll = async () => {
         try {
-          const response = await fetch(`${API_BASE_URL}/api/v1/research/${taskId}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
+          const response = await fetch(
+            `${API_BASE_URL}/api/v1/research/${taskId}`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            },
+          );
 
           if (!response.ok) {
-            throw new Error('Failed to get task status');
+            throw new Error("Failed to get task status");
           }
 
           const task: ResearchTask = await response.json();
           setResearchTask(task);
 
-          if (task.status === 'completed') {
+          if (task.status === "completed") {
             setIsResearching(false);
             cleanupPolling();
             try {
-              if (typeof window !== 'undefined') {
+              if (typeof window !== "undefined") {
                 window.localStorage.removeItem(getTaskStorageKey(cardId));
               }
             } catch {
               // Ignore storage errors
             }
             onResearchComplete?.();
-          } else if (task.status === 'failed') {
+          } else if (task.status === "failed") {
             setIsResearching(false);
-            setResearchError(task.error_message || 'Research failed');
+            setResearchError(task.error_message || "Research failed");
             cleanupPolling();
             try {
-              if (typeof window !== 'undefined') {
+              if (typeof window !== "undefined") {
                 window.localStorage.removeItem(getTaskStorageKey(cardId));
               }
             } catch {
@@ -174,14 +177,14 @@ export function useResearch(
           }
         } catch {
           setIsResearching(false);
-          setResearchError('Failed to check research status');
+          setResearchError("Failed to check research status");
           cleanupPolling();
         }
       };
 
       poll();
     },
-    [getAuthToken, onResearchComplete, cleanupPolling, getTaskStorageKey]
+    [getAuthToken, onResearchComplete, cleanupPolling, getTaskStorageKey],
   );
 
   // Rehydrate an in-flight task after refresh/navigation.
@@ -190,8 +193,10 @@ export function useResearch(
     if (!card?.id) return;
 
     try {
-      if (typeof window === 'undefined') return;
-      const existingTaskId = window.localStorage.getItem(getTaskStorageKey(card.id));
+      if (typeof window === "undefined") return;
+      const existingTaskId = window.localStorage.getItem(
+        getTaskStorageKey(card.id),
+      );
       if (!existingTaskId) return;
 
       setIsResearching(true);
@@ -216,8 +221,8 @@ export function useResearch(
       if (!card || isResearching) return;
 
       // Validate deep research rate limit
-      if (taskType === 'deep_research' && !canDeepResearch) {
-        setResearchError('Daily deep research limit reached (2 per day)');
+      if (taskType === "deep_research" && !canDeepResearch) {
+        setResearchError("Daily deep research limit reached (2 per day)");
         return;
       }
 
@@ -229,13 +234,13 @@ export function useResearch(
       try {
         const token = await getAuthToken();
         if (!token) {
-          throw new Error('Not authenticated');
+          throw new Error("Not authenticated");
         }
 
         const response = await fetch(`${API_BASE_URL}/api/v1/research`, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
@@ -246,13 +251,13 @@ export function useResearch(
 
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.detail || 'Failed to start research');
+          throw new Error(errorData.detail || "Failed to start research");
         }
 
         const task: ResearchTask = await response.json();
         setResearchTask(task);
         try {
-          if (typeof window !== 'undefined') {
+          if (typeof window !== "undefined") {
             window.localStorage.setItem(getTaskStorageKey(card.id), task.id);
           }
         } catch {
@@ -261,12 +266,19 @@ export function useResearch(
         pollTaskStatus(task.id, card.id);
       } catch (error: unknown) {
         setResearchError(
-          error instanceof Error ? error.message : 'Failed to start research'
+          error instanceof Error ? error.message : "Failed to start research",
         );
         setIsResearching(false);
       }
     },
-    [card, isResearching, canDeepResearch, getAuthToken, pollTaskStatus, getTaskStorageKey]
+    [
+      card,
+      isResearching,
+      canDeepResearch,
+      getAuthToken,
+      pollTaskStatus,
+      getTaskStorageKey,
+    ],
   );
 
   /**
@@ -301,7 +313,7 @@ export function useResearch(
     setResearchTask(null);
     setShowReport(false);
     try {
-      if (typeof window !== 'undefined' && card?.id) {
+      if (typeof window !== "undefined" && card?.id) {
         window.localStorage.removeItem(getTaskStorageKey(card.id));
       }
     } catch {
@@ -320,7 +332,7 @@ export function useResearch(
     setShowReport(false);
     setReportCopied(false);
     try {
-      if (typeof window !== 'undefined' && card?.id) {
+      if (typeof window !== "undefined" && card?.id) {
         window.localStorage.removeItem(getTaskStorageKey(card.id));
       }
     } catch {

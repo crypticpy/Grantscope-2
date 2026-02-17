@@ -6,7 +6,6 @@ import {
   List,
   Plus,
   Radio,
-  Loader2,
   Filter,
   Star,
   AlertTriangle,
@@ -20,6 +19,7 @@ import {
   ChevronDown,
   Compass,
   BookOpen,
+  Heart,
 } from "lucide-react";
 import { supabase } from "../App";
 import { useAuthContext } from "../hooks/useAuthContext";
@@ -98,7 +98,7 @@ async function fetchMySignals(
   } = await supabase.auth.getSession();
   const token = session?.access_token;
   if (!token) {
-    throw new Error("You must be signed in to view your signals.");
+    throw new Error("You must be signed in to view your opportunities.");
   }
   const qs = new URLSearchParams(params).toString();
   const response = await fetch(`${API_BASE_URL}/api/v1/me/signals?${qs}`, {
@@ -106,7 +106,9 @@ async function fetchMySignals(
   });
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`Failed to load signals (${response.status}): ${body}`);
+    throw new Error(
+      `Failed to load opportunities (${response.status}): ${body}`,
+    );
   }
   return response.json();
 }
@@ -212,7 +214,7 @@ const Signals: React.FC = () => {
       setError(
         err instanceof Error
           ? err.message
-          : "Failed to load signals. Please try again.",
+          : "Failed to load opportunities. Please try again.",
       );
     } finally {
       setLoading(false);
@@ -344,12 +346,12 @@ const Signals: React.FC = () => {
             <div className="flex items-center gap-3 mb-2">
               <Radio className="w-7 h-7 text-white/90" />
               <h1 className="text-3xl md:text-4xl font-bold text-white">
-                My Signals
+                My Opportunities
               </h1>
             </div>
             <p className="text-white/80 text-lg max-w-2xl">
-              Your personal intelligence hub &mdash; followed, created, and
-              workstream signals in one place.
+              Your personal grant pipeline &mdash; followed, created, and
+              program opportunities in one place.
             </p>
           </div>
           <div className="flex items-center gap-3 shrink-0">
@@ -365,7 +367,7 @@ const Signals: React.FC = () => {
               className="inline-flex items-center gap-2 px-5 py-2.5 bg-white/20 hover:bg-white/30 text-white font-medium rounded-xl backdrop-blur-sm border border-white/20 transition-colors"
             >
               <Plus className="w-5 h-5" />
-              New Signal
+              New Opportunity
             </button>
           </div>
         </div>
@@ -383,11 +385,11 @@ const Signals: React.FC = () => {
               {stats.total}
             </p>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Signals across{" "}
+              Opportunities across{" "}
               <span className="font-medium text-gray-700 dark:text-gray-300">
                 {stats.workstream_count}
               </span>{" "}
-              workstreams
+              programs
             </p>
           </div>
         </div>
@@ -459,7 +461,7 @@ const Signals: React.FC = () => {
                 type="text"
                 id="signal-search"
                 className="pl-10 block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
-                placeholder="Search your signals..."
+                placeholder="Search your opportunities..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -527,7 +529,7 @@ const Signals: React.FC = () => {
               <option value="">All Sources</option>
               <option value="followed">Followed</option>
               <option value="created">Created by Me</option>
-              <option value="workstream">In Workstreams</option>
+              <option value="workstream">In Programs</option>
             </select>
           </div>
 
@@ -636,8 +638,8 @@ const Signals: React.FC = () => {
         {/* Filter summary */}
         <div className="mt-3 flex items-center justify-between">
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            Showing {sortedSignals.length} signal
-            {sortedSignals.length !== 1 ? "s" : ""}
+            Showing {sortedSignals.length} opportunit
+            {sortedSignals.length !== 1 ? "ies" : "y"}
           </p>
           {hasActiveFilters && (
             <button
@@ -682,11 +684,38 @@ const Signals: React.FC = () => {
 
       {/* ── Content ────────────────────────────────────────── */}
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-16">
-          <Loader2 className="h-8 w-8 text-brand-blue animate-spin" />
-          <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
-            Loading your signals...
-          </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div
+              key={i}
+              className="bg-white dark:bg-dark-surface rounded-xl shadow-sm overflow-hidden animate-pulse"
+            >
+              <div className="h-1 bg-gray-200 dark:bg-gray-700" />
+              <div className="p-5">
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="flex-1 space-y-2">
+                    <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded w-3/4" />
+                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2" />
+                  </div>
+                  <div className="h-8 w-8 bg-gray-200 dark:bg-gray-700 rounded-full" />
+                </div>
+                <div className="space-y-2 mb-4">
+                  <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-full" />
+                  <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" />
+                </div>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="h-5 w-16 bg-gray-200 dark:bg-gray-700 rounded-full" />
+                  <div className="h-5 w-12 bg-gray-200 dark:bg-gray-700 rounded-full" />
+                  <div className="h-5 w-14 bg-gray-200 dark:bg-gray-700 rounded-full" />
+                </div>
+                <div className="flex items-center gap-4 mt-3">
+                  <div className="h-3 w-16 bg-gray-200 dark:bg-gray-700 rounded" />
+                  <div className="h-3 w-12 bg-gray-200 dark:bg-gray-700 rounded" />
+                  <div className="h-3 w-20 bg-gray-200 dark:bg-gray-700 rounded ml-auto" />
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       ) : sortedSignals.length === 0 ? (
         <EmptyState hasFilters={hasActiveFilters} />
@@ -728,7 +757,7 @@ const EmptyState: React.FC<{ hasFilters: boolean }> = ({ hasFilters }) => (
       <>
         <Filter className="mx-auto h-12 w-12 text-gray-400" />
         <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
-          No Matching Signals
+          No Matching Opportunities
         </h3>
         <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto">
           Try adjusting your filters to see more results.
@@ -738,18 +767,48 @@ const EmptyState: React.FC<{ hasFilters: boolean }> = ({ hasFilters }) => (
       <>
         <Compass className="mx-auto h-12 w-12 text-gray-400" />
         <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
-          No Signals Yet
+          No Opportunities Yet
         </h3>
         <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto">
-          You haven&apos;t followed any signals yet. Discover signals to start
-          building your intelligence hub.
+          You haven&apos;t followed any opportunities yet. Here&apos;s how to
+          get started:
+        </p>
+        <ol className="text-sm text-gray-500 dark:text-gray-400 space-y-2 mb-4 mt-4 text-left max-w-sm mx-auto">
+          <li className="flex gap-2">
+            <span className="text-brand-blue font-semibold shrink-0">1.</span>
+            <span>
+              Visit the{" "}
+              <Link
+                to="/discover"
+                className="text-brand-blue hover:underline font-medium"
+              >
+                Discover page
+              </Link>{" "}
+              to browse grants
+            </span>
+          </li>
+          <li className="flex gap-2">
+            <span className="text-brand-blue font-semibold shrink-0">2.</span>
+            <span>
+              Click the <Heart className="inline h-4 w-4 text-rose-400" /> icon
+              on any grant to follow it
+            </span>
+          </li>
+          <li className="flex gap-2">
+            <span className="text-brand-blue font-semibold shrink-0">3.</span>
+            <span>Followed grants appear here for easy tracking</span>
+          </li>
+        </ol>
+        <p className="text-xs text-gray-400 dark:text-gray-500 italic max-w-sm mx-auto mb-4">
+          Following a grant means you&apos;ll always see it here and be alerted
+          about deadline changes.
         </p>
         <Link
           to="/discover"
-          className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 bg-brand-blue hover:bg-brand-blue/90 text-white font-medium rounded-xl transition-colors"
+          className="mt-2 inline-flex items-center gap-2 px-5 py-2.5 bg-brand-blue hover:bg-brand-blue/90 text-white font-medium rounded-xl transition-colors"
         >
           <Compass className="w-5 h-5" />
-          Discover Signals
+          Discover Opportunities
         </Link>
       </>
     )}
@@ -865,7 +924,7 @@ const SignalGroup: React.FC<SignalGroupProps> = ({
               gap={12}
               overscan={5}
               scrollContainerClassName="h-full"
-              ariaLabel="Signals list"
+              ariaLabel="Opportunities list"
             />
           </div>
         ))}
@@ -945,7 +1004,9 @@ const SignalCard: React.FC<SignalCardProps> = React.memo(
               ? "text-amber-500 bg-amber-50 dark:bg-amber-900/30"
               : "text-gray-300 hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 opacity-0 group-hover:opacity-100"
           }`}
-          aria-label={signal.is_pinned ? "Unpin signal" : "Pin signal"}
+          aria-label={
+            signal.is_pinned ? "Unpin opportunity" : "Pin opportunity"
+          }
           title={signal.is_pinned ? "Unpin" : "Pin"}
         >
           <Star
@@ -956,7 +1017,7 @@ const SignalCard: React.FC<SignalCardProps> = React.memo(
         <Link
           to={`/signals/${signal.slug}`}
           state={{ from: "/signals" }}
-          aria-label={`View signal: ${signal.name}`}
+          aria-label={`View opportunity: ${signal.name}`}
           className="block"
         >
           <div className="p-5">
@@ -1041,7 +1102,9 @@ const SignalListItem: React.FC<SignalCardProps> = React.memo(
               ? "text-amber-500 bg-amber-50 dark:bg-amber-900/30"
               : "text-gray-300 hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 opacity-0 group-hover:opacity-100"
           }`}
-          aria-label={signal.is_pinned ? "Unpin signal" : "Pin signal"}
+          aria-label={
+            signal.is_pinned ? "Unpin opportunity" : "Pin opportunity"
+          }
           title={signal.is_pinned ? "Unpin" : "Pin"}
         >
           <Star
@@ -1058,7 +1121,7 @@ const SignalListItem: React.FC<SignalCardProps> = React.memo(
         <Link
           to={`/signals/${signal.slug}`}
           state={{ from: "/signals" }}
-          aria-label={`View signal: ${signal.name}`}
+          aria-label={`View opportunity: ${signal.name}`}
           className="flex-1 min-w-0"
         >
           <h3 className="font-semibold text-gray-900 dark:text-white group-hover:text-brand-blue transition-colors truncate">
@@ -1079,7 +1142,7 @@ const SignalListItem: React.FC<SignalCardProps> = React.memo(
               label={
                 signal.workstream_names.length === 1
                   ? signal.workstream_names[0]
-                  : `${signal.workstream_names.length} workstreams`
+                  : `${signal.workstream_names.length} programs`
               }
             />
           )}

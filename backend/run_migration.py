@@ -8,6 +8,7 @@ from supabase import create_client
 
 # Load env
 from dotenv import load_dotenv
+
 load_dotenv()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -121,7 +122,9 @@ try:
     print(migration_sql)
     print("=" * 50)
     print("\nAlternatively, the migration file has been saved to:")
-    print("/Users/aiml/Projects/foresight-app/supabase/migrations/1766435006_fix_vector_search_path.sql")
+    print(
+        "/Users/aiml/Projects/grantscope-2/supabase/migrations/1766435006_fix_vector_search_path.sql"
+    )
 
 except Exception as e:
     print(f"Error: {e}")

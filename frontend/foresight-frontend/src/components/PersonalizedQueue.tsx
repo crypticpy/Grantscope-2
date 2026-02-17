@@ -553,8 +553,8 @@ export function PersonalizedQueue({
                 onClick={() => handleDismiss(card.id)}
                 disabled={dismissingCardId === card.id}
                 className="absolute top-2 right-2 p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                title="Dismiss this signal"
-                aria-label="Dismiss signal"
+                title="Dismiss this opportunity"
+                aria-label="Dismiss opportunity"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -604,8 +604,8 @@ export function PersonalizedQueue({
                   )}
                   title={
                     followedCardIds.has(card.id)
-                      ? "Unfollow signal"
-                      : "Follow signal"
+                      ? "Unfollow opportunity"
+                      : "Follow opportunity"
                   }
                   aria-pressed={followedCardIds.has(card.id)}
                 >

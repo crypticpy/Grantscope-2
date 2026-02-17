@@ -66,7 +66,9 @@ export type SortOption =
   | "oldest"
   | "recently_updated"
   | "least_recently_updated"
-  | "signal_quality_score";
+  | "signal_quality_score"
+  | "deadline_soonest"
+  | "funding_highest";
 
 /**
  * Filter state object used for debounced search and score filtering.
@@ -82,4 +84,16 @@ export interface FilterState {
   relevanceMin: number;
   /** Minimum novelty score threshold (0-100) */
   noveltyMin: number;
+  /** Grant type filter (e.g., 'Federal', 'State', 'Foundation') */
+  grantType?: string;
+  /** Filter cards with deadline on or after this date (YYYY-MM-DD) */
+  deadlineAfter?: string;
+  /** Filter cards with deadline on or before this date (YYYY-MM-DD) */
+  deadlineBefore?: string;
+  /** Minimum funding amount threshold */
+  fundingMin?: number;
+  /** Maximum funding amount threshold */
+  fundingMax?: number;
+  /** Grant category code filter */
+  grantCategory?: string;
 }

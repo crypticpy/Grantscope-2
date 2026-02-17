@@ -6,11 +6,14 @@
  * - Tooltip showing horizon name, timeframe, and description
  */
 
-import React from "react";
 import { Clock, TrendingUp, Sparkles } from "lucide-react";
 import { Tooltip } from "./ui/Tooltip";
 import { cn } from "../lib/utils";
-import { getHorizonByCode, type Horizon } from "../data/taxonomy";
+import {
+  getHorizonByCode,
+  deadlineUrgencyTiers,
+  type Horizon,
+} from "../data/taxonomy";
 import { getSizeClasses, getIconSize } from "../lib/badge-utils";
 
 export interface HorizonBadgeProps {
@@ -111,6 +114,25 @@ function HorizonTooltipContent({ horizon }: { horizon: Horizon }) {
       <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed">
         {horizon.description}
       </p>
+
+      {/* Grant Deadline Urgency Context */}
+      {(() => {
+        const urgencyMap: Record<
+          string,
+          (typeof deadlineUrgencyTiers)[number]
+        > = {
+          H1: deadlineUrgencyTiers[0]!, // Urgent (<30 days)
+          H2: deadlineUrgencyTiers[1]!, // Approaching (30-90 days)
+          H3: deadlineUrgencyTiers[2]!, // Planning (>90 days)
+        };
+        const urgency = urgencyMap[horizon.code];
+        if (!urgency) return null;
+        return (
+          <div className="text-xs text-gray-500 dark:text-gray-400 italic border-t border-gray-200 dark:border-gray-700 pt-1">
+            Grant context: {urgency.name} &mdash; {urgency.description}
+          </div>
+        );
+      })()}
 
       {/* Timeline indicator */}
       <div className="pt-1">

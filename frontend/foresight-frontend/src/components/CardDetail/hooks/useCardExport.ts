@@ -153,7 +153,9 @@ export function useCardExport(
         return true;
       } catch (error: unknown) {
         const errorMessage =
-          error instanceof Error ? error.message : "Failed to export signal";
+          error instanceof Error
+            ? error.message
+            : "Failed to export opportunity";
         setExportError(errorMessage);
         options?.onExportError?.(format, errorMessage);
         return false;

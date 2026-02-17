@@ -1,5 +1,5 @@
 """
-Unified Hybrid RAG Engine for Foresight Chat.
+Unified Hybrid RAG Engine for GrantScope Chat.
 
 Combines PostgreSQL full-text search with pgvector cosine similarity
 via Reciprocal Rank Fusion (RRF).  Supports three chat scopes:
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 class RAGEngine:
     """
-    Unified hybrid retrieval engine for Foresight chat.
+    Unified hybrid retrieval engine for GrantScope chat.
 
     Combines PostgreSQL full-text search with vector similarity
     via Reciprocal Rank Fusion. Supports all three scopes.

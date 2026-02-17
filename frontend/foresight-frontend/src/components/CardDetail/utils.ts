@@ -31,7 +31,7 @@ export const metricDefinitions: Record<string, MetricDefinition> = {
   novelty: {
     label: "Novelty",
     description:
-      "How new or unprecedented this signal is compared to existing knowledge",
+      "How new or unprecedented this opportunity is compared to existing knowledge",
   },
   opportunity: {
     label: "Opportunity",

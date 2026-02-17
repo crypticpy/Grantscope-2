@@ -1,12 +1,12 @@
 /**
- * WorkstreamWizard - 5-Step guided workstream creation wizard
+ * WorkstreamWizard - 5-Step guided grant program creation wizard
  *
  * Steps:
- *   1. Start     - Template selection or build your own
- *   2. Details   - Name & description
- *   3. Focus     - Pillars, stages, horizon
- *   4. Keywords  - Keywords & AI suggestions
- *   5. Review    - Preview & launch options
+ *   1. Program Setup   - Department, description, template selection
+ *   2. Grant Interests  - Categories, funding range, grant types
+ *   3. Readiness        - AI-powered readiness assessment questionnaire
+ *   4. Search Config    - Keywords, agencies, deadline preferences
+ *   5. Preview & Launch - Summary, matches preview, launch options
  *
  * Only used for CREATE mode. Edit mode uses WorkstreamForm.
  */
@@ -26,6 +26,16 @@ import type {
   WorkstreamTemplate,
 } from "../../types/workstream";
 
+interface ReadinessScore {
+  overall_score: number;
+  factors: Array<{
+    name: string;
+    score: number;
+    description: string;
+  }>;
+  recommendations: string[];
+}
+
 const TOTAL_STEPS = 5;
 
 export function WorkstreamWizard({
@@ -35,6 +45,9 @@ export function WorkstreamWizard({
 }: Omit<WorkstreamFormProps, "workstream">) {
   const [step, setStep] = useState(1);
   const [direction, setDirection] = useState<"forward" | "backward">("forward");
+  const [readinessScore, setReadinessScore] = useState<ReadinessScore | null>(
+    null,
+  );
 
   const form = useWorkstreamForm({
     onSuccess,
@@ -47,9 +60,9 @@ export function WorkstreamWizard({
 
   const validateStep = useCallback(
     (stepNum: number): boolean => {
-      if (stepNum === 2) {
+      if (stepNum === 1) {
         if (!form.formData.name.trim()) {
-          form.setErrors({ name: "Name is required" });
+          form.setErrors({ name: "Program name is required" });
           return false;
         }
         form.setErrors({});
@@ -73,7 +86,7 @@ export function WorkstreamWizard({
 
   const handleNext = useCallback(() => {
     // Per-step validation gate
-    if (step === 2 && !validateStep(2)) {
+    if (step === 1 && !validateStep(1)) {
       return;
     }
     if (step < TOTAL_STEPS) {
@@ -104,6 +117,41 @@ export function WorkstreamWizard({
   }, [form]);
 
   // ============================================================================
+  // Grant-specific handlers
+  // ============================================================================
+
+  const handleCategoryToggle = useCallback(
+    (categoryCode: string) => {
+      form.setFormData((prev) => ({
+        ...prev,
+        category_ids: prev.category_ids.includes(categoryCode)
+          ? prev.category_ids.filter((id) => id !== categoryCode)
+          : [...prev.category_ids, categoryCode],
+      }));
+    },
+    [form.setFormData],
+  );
+
+  const handleGrantTypeToggle = useCallback(
+    (grantType: string) => {
+      form.setFormData((prev) => ({
+        ...prev,
+        grant_types: prev.grant_types.includes(grantType)
+          ? prev.grant_types.filter((t) => t !== grantType)
+          : [...prev.grant_types, grantType],
+      }));
+    },
+    [form.setFormData],
+  );
+
+  const handleDeadlinePreferenceChange = useCallback(
+    (preference: string) => {
+      form.setFormData((prev) => ({ ...prev, horizon: preference }));
+    },
+    [form.setFormData],
+  );
+
+  // ============================================================================
   // Step Content
   // ============================================================================
 
@@ -112,34 +160,48 @@ export function WorkstreamWizard({
       case 1:
         return (
           <StepStart
+            formData={form.formData}
             onSelectTemplate={handleSelectTemplate}
             onBuildYourOwn={handleBuildYourOwn}
+            onDepartmentChange={(departmentId) =>
+              form.setFormData((prev) => ({
+                ...prev,
+                department_id: departmentId,
+              }))
+            }
+            onDescriptionChange={(description) =>
+              form.setFormData((prev) => ({ ...prev, description }))
+            }
+            onNameChange={(name) =>
+              form.setFormData((prev) => ({ ...prev, name }))
+            }
           />
         );
       case 2:
         return (
           <StepDetails
             formData={form.formData}
-            errors={form.errors}
-            onNameChange={(name) =>
-              form.setFormData((prev) => ({ ...prev, name }))
+            onCategoryToggle={handleCategoryToggle}
+            onGrantTypeToggle={handleGrantTypeToggle}
+            onBudgetMinChange={(value) =>
+              form.setFormData((prev) => ({
+                ...prev,
+                budget_range_min: value,
+              }))
             }
-            onDescriptionChange={(description) =>
-              form.setFormData((prev) => ({ ...prev, description }))
-            }
-            onClearNameError={() =>
-              form.setErrors((prev) => ({ ...prev, name: undefined }))
+            onBudgetMaxChange={(value) =>
+              form.setFormData((prev) => ({
+                ...prev,
+                budget_range_max: value,
+              }))
             }
           />
         );
       case 3:
         return (
           <StepFocus
-            formData={form.formData}
-            onPillarToggle={form.handlePillarToggle}
-            onGoalToggle={form.handleGoalToggle}
-            onStageToggle={form.handleStageToggle}
-            onHorizonChange={form.handleHorizonChange}
+            readinessScore={readinessScore}
+            onReadinessScoreChange={setReadinessScore}
           />
         );
       case 4:
@@ -155,6 +217,7 @@ export function WorkstreamWizard({
             onKeywordRemove={form.handleKeywordRemove}
             onSuggestKeywords={form.handleSuggestKeywords}
             onAddSuggestedKeyword={form.handleAddSuggestedKeyword}
+            onDeadlinePreferenceChange={handleDeadlinePreferenceChange}
           />
         );
       case 5:
@@ -164,6 +227,7 @@ export function WorkstreamWizard({
             preview={form.preview}
             previewLoading={form.previewLoading}
             hasFilters={form.hasFilters}
+            readinessScore={readinessScore}
             onAutoScanChange={(value) =>
               form.setFormData((prev) => ({ ...prev, auto_scan: value }))
             }
@@ -236,16 +300,17 @@ export function WorkstreamWizard({
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Skip to end (on steps 3-4, user can jump to review if they have at least a name) */}
-          {(step === 3 || step === 4) && form.formData.name.trim() && (
-            <button
-              type="button"
-              onClick={() => goToStep(5, "forward")}
-              className="text-sm text-gray-500 dark:text-gray-400 hover:text-brand-blue dark:hover:text-brand-light-blue transition-colors px-3 py-2"
-            >
-              Skip to Review
-            </button>
-          )}
+          {/* Skip to end (on steps 2-4, user can jump to preview if they have at least a name) */}
+          {(step === 2 || step === 3 || step === 4) &&
+            form.formData.name.trim() && (
+              <button
+                type="button"
+                onClick={() => goToStep(5, "forward")}
+                className="text-sm text-gray-500 dark:text-gray-400 hover:text-brand-blue dark:hover:text-brand-light-blue transition-colors px-3 py-2"
+              >
+                Skip to Preview
+              </button>
+            )}
 
           {step < TOTAL_STEPS ? (
             <button
@@ -276,7 +341,7 @@ export function WorkstreamWizard({
               ) : (
                 <Rocket className="h-4 w-4 mr-2" />
               )}
-              Create Workstream
+              Launch Grant Program
             </button>
           )}
         </div>

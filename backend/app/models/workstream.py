@@ -1,4 +1,4 @@
-"""Workstream models for Foresight API.
+"""Workstream models for GrantScope API.
 
 Models for workstream management, kanban board cards, notes,
 scan operations, filter previews, and research status tracking.
@@ -8,6 +8,8 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, validator
+
+from app.taxonomy import ALL_WORKSTREAM_CARD_STATUSES
 
 
 class Workstream(BaseModel):
@@ -19,6 +21,14 @@ class Workstream(BaseModel):
     stage_ids: Optional[List[str]] = []
     horizon: Optional[str] = None
     keywords: Optional[List[str]] = []
+    # Program/grant-specific fields
+    program_type: Optional[str] = None
+    department_id: Optional[str] = None
+    budget: Optional[float] = None
+    fiscal_year: Optional[str] = None
+    total_awarded: Optional[float] = 0
+    total_pending: Optional[float] = 0
+    category_ids: Optional[List[str]] = []
     is_active: bool = True
     auto_add: bool = False
     auto_scan: bool = False
@@ -47,6 +57,18 @@ class WorkstreamCreate(BaseModel):
     auto_scan: bool = Field(
         default=False,
         description="Enable automatic background source scanning for this workstream",
+    )
+    # Program/grant-specific fields
+    program_type: Optional[str] = Field(None, description="Type of program")
+    department_id: Optional[str] = Field(None, description="Department abbreviation")
+    budget: Optional[float] = Field(None, ge=0, description="Program budget")
+    fiscal_year: Optional[str] = Field(
+        None,
+        pattern=r"^FY\d{2}(-\d{2})?$",
+        description="Fiscal year (e.g., FY25, FY25-26)",
+    )
+    category_ids: Optional[List[str]] = Field(
+        default=[], description="Grant category codes"
     )
 
     @validator("name")
@@ -77,6 +99,11 @@ class WorkstreamUpdate(BaseModel):
     is_active: Optional[bool] = None
     auto_add: Optional[bool] = None
     auto_scan: Optional[bool] = None
+    program_type: Optional[str] = None
+    department_id: Optional[str] = None
+    budget: Optional[float] = None
+    fiscal_year: Optional[str] = None
+    category_ids: Optional[List[str]] = None
 
 
 class WorkstreamCreateResponse(BaseModel):
@@ -92,6 +119,11 @@ class WorkstreamCreateResponse(BaseModel):
     auto_scan: bool = False
     auto_add: bool = False
     auto_populated_count: int = 0
+    program_type: Optional[str] = None
+    department_id: Optional[str] = None
+    budget: Optional[float] = None
+    fiscal_year: Optional[str] = None
+    category_ids: Optional[List[str]] = []
     scan_queued: bool = False
 
 
@@ -100,14 +132,9 @@ class WorkstreamCreateResponse(BaseModel):
 # ============================================================================
 
 # Valid status values for workstream cards (Kanban columns)
-VALID_WORKSTREAM_CARD_STATUSES = {
-    "inbox",
-    "screening",
-    "research",
-    "brief",
-    "watching",
-    "archived",
-}
+# Includes both legacy statuses and new grant pipeline statuses.
+# Source of truth is app.taxonomy.ALL_WORKSTREAM_CARD_STATUSES.
+VALID_WORKSTREAM_CARD_STATUSES = ALL_WORKSTREAM_CARD_STATUSES
 
 
 class WorkstreamCardBase(BaseModel):
@@ -197,12 +224,21 @@ class WorkstreamCardUpdate(BaseModel):
 class WorkstreamCardsGroupedResponse(BaseModel):
     """Response model for cards grouped by status (Kanban view)."""
 
+    # Legacy columns
     inbox: List[WorkstreamCardWithDetails] = []
     screening: List[WorkstreamCardWithDetails] = []
     research: List[WorkstreamCardWithDetails] = []
     brief: List[WorkstreamCardWithDetails] = []
     watching: List[WorkstreamCardWithDetails] = []
     archived: List[WorkstreamCardWithDetails] = []
+    # Grant pipeline columns
+    discovered: List[WorkstreamCardWithDetails] = []
+    evaluating: List[WorkstreamCardWithDetails] = []
+    applying: List[WorkstreamCardWithDetails] = []
+    submitted: List[WorkstreamCardWithDetails] = []
+    awarded: List[WorkstreamCardWithDetails] = []
+    declined: List[WorkstreamCardWithDetails] = []
+    expired: List[WorkstreamCardWithDetails] = []
 
 
 class AutoPopulateResponse(BaseModel):

@@ -55,6 +55,20 @@ export interface Card {
   top25_relevance?: string[];
   /** Card lifecycle status (e.g., 'active', 'pending_review', 'archived') */
   status: string;
+
+  // Grant-specific fields
+  deadline?: string | null;
+  funding_amount_min?: number | null;
+  funding_amount_max?: number | null;
+  grantor?: string | null;
+  eligibility_text?: string | null;
+  grant_type?: string | null;
+  source_url?: string | null;
+  cfda_number?: string | null;
+  category_id?: string | null;
+  alignment_score?: number | null;
+  grants_gov_id?: string | null;
+  sam_opportunity_id?: string | null;
 }
 
 /**
@@ -348,6 +362,20 @@ export interface SearchResultItem {
   search_relevance?: number;
   /** Text snippets with matching terms highlighted */
   match_highlights?: string[];
+
+  // Grant-specific fields
+  deadline?: string | null;
+  funding_amount_min?: number | null;
+  funding_amount_max?: number | null;
+  grantor?: string | null;
+  eligibility_text?: string | null;
+  grant_type?: string | null;
+  source_url?: string | null;
+  cfda_number?: string | null;
+  category_id?: string | null;
+  alignment_score?: number | null;
+  grants_gov_id?: string | null;
+  sam_opportunity_id?: string | null;
 }
 
 /**

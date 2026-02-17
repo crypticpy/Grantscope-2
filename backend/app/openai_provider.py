@@ -1,5 +1,5 @@
 """
-Azure OpenAI Provider for Foresight Application.
+Azure OpenAI Provider for GrantScope2 Application.
 
 This module provides a centralized Azure OpenAI client configuration
 with proper API versioning for different model types (chat vs embeddings).
@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 # Configuration Loading
 # =============================================================================
 
+
 def _get_required_env(name: str) -> str:
     """Get a required environment variable or raise an error."""
     if value := os.getenv(name):
@@ -59,6 +60,7 @@ def _get_optional_env(name: str, default: str) -> str:
 # Azure OpenAI Configuration
 # =============================================================================
 
+
 class AzureOpenAIConfig:
     """Azure OpenAI configuration container."""
 
@@ -70,26 +72,21 @@ class AzureOpenAIConfig:
 
         # API versions (different for chat vs embeddings)
         self.chat_api_version = _get_optional_env(
-            "AZURE_OPENAI_API_VERSION",
-            "2024-12-01-preview"
+            "AZURE_OPENAI_API_VERSION", "2024-12-01-preview"
         )
         self.embedding_api_version = _get_optional_env(
-            "AZURE_OPENAI_EMBEDDING_API_VERSION",
-            "2023-05-15"
+            "AZURE_OPENAI_EMBEDDING_API_VERSION", "2023-05-15"
         )
 
         # Deployment names (Azure-specific model deployment names)
         self.deployment_chat = _get_optional_env(
-            "AZURE_OPENAI_DEPLOYMENT_CHAT",
-            "gpt-4.1"
+            "AZURE_OPENAI_DEPLOYMENT_CHAT", "gpt-4.1"
         )
         self.deployment_chat_mini = _get_optional_env(
-            "AZURE_OPENAI_DEPLOYMENT_CHAT_MINI",
-            "gpt-4.1-mini"
+            "AZURE_OPENAI_DEPLOYMENT_CHAT_MINI", "gpt-4.1-mini"
         )
         self.deployment_embedding = _get_optional_env(
-            "AZURE_OPENAI_DEPLOYMENT_EMBEDDING",
-            "text-embedding-ada-002"
+            "AZURE_OPENAI_DEPLOYMENT_EMBEDDING", "text-embedding-ada-002"
         )
 
     def log_configuration(self):
@@ -145,7 +142,11 @@ def get_deployment_name(model_name: str) -> str:
         return _MODEL_TO_DEPLOYMENT[model_name]
 
     # If the model name is already a deployment name, return it
-    if model_name in [_config.deployment_chat, _config.deployment_chat_mini, _config.deployment_embedding]:
+    if model_name in [
+        _config.deployment_chat,
+        _config.deployment_chat_mini,
+        _config.deployment_embedding,
+    ]:
         return model_name
 
     raise ValueError(
@@ -157,6 +158,7 @@ def get_deployment_name(model_name: str) -> str:
 # =============================================================================
 # Convenience Functions for Deployment Names
 # =============================================================================
+
 
 def get_chat_deployment() -> str:
     """Get the main chat model deployment name (gpt-41)."""
@@ -186,6 +188,7 @@ def get_embedding_api_version() -> str:
 # =============================================================================
 # Client Initialization
 # =============================================================================
+
 
 def _create_sync_client(config: AzureOpenAIConfig) -> AzureOpenAI:
     """Create a synchronous Azure OpenAI client."""
@@ -258,6 +261,7 @@ except ValueError as e:
 # Validation Function
 # =============================================================================
 
+
 async def validate_azure_connection() -> dict:
     """
     Validate the Azure OpenAI connection by making a simple API call.
@@ -293,7 +297,7 @@ async def validate_azure_connection() -> dict:
                 "chat": _config.deployment_chat,
                 "chat_mini": _config.deployment_chat_mini,
                 "embedding": _config.deployment_embedding,
-            }
+            },
         }
     except Exception as e:
         logger.error(f"Azure OpenAI validation failed: {e}")

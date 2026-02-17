@@ -7,7 +7,6 @@
  * - Tooltip showing description, typical signals, and horizon alignment
  */
 
-import React from "react";
 import { Tooltip } from "./ui/Tooltip";
 import { cn } from "../lib/utils";
 import {
@@ -147,7 +146,7 @@ function StageTooltipContent({ stageData }: { stageData: MaturityStage }) {
       {/* Signals */}
       <div>
         <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
-          Typical Signals
+          Typical Indicators
         </div>
         <p className="text-xs text-gray-600 dark:text-gray-300 italic">
           "{stageData.signals}"

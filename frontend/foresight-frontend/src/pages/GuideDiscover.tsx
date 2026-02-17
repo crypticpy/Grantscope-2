@@ -237,7 +237,7 @@ const SCORE_DIMENSIONS = [
     bgColor: "bg-brand-light-blue/30 dark:bg-brand-blue/10",
     borderColor: "border-brand-blue/20 dark:border-brand-blue/30",
     description:
-      "How closely does this signal align with Austin's strategic pillars and the CMO's Top 25 Priorities? Higher relevance means direct connection to ongoing city initiatives.",
+      "How closely does this opportunity align with Austin's strategic pillars and the CMO's Top 25 Priorities? Higher relevance means direct connection to ongoing city initiatives.",
     example:
       "A transit innovation in a similarly-sized city would score higher than one from a rural context.",
   },
@@ -248,7 +248,7 @@ const SCORE_DIMENSIONS = [
     bgColor: "bg-amber-50 dark:bg-amber-900/20",
     borderColor: "border-amber-200 dark:border-amber-800/40",
     description:
-      "How quickly is this trend accelerating or changing? Fast-moving signals require more urgent attention. Consider adoption rates, funding momentum, and regulatory timelines.",
+      "How quickly is this trend accelerating or changing? Fast-moving opportunities require more urgent attention. Consider adoption rates, funding momentum, and regulatory timelines.",
     example:
       "Rapidly spreading legislation across states would score high on velocity.",
   },
@@ -259,7 +259,7 @@ const SCORE_DIMENSIONS = [
     bgColor: "bg-purple-50 dark:bg-purple-900/20",
     borderColor: "border-purple-200 dark:border-purple-800/40",
     description:
-      "How new or emerging is this signal? Novel topics represent genuinely new information that is not yet widely known or discussed in municipal circles.",
+      "How new or emerging is this opportunity? Novel topics represent genuinely new information that is not yet widely known or discussed in municipal circles.",
     example:
       "A first-of-its-kind pilot program would score higher than an incremental update to existing policy.",
   },
@@ -270,7 +270,7 @@ const SCORE_DIMENSIONS = [
     bgColor: "bg-brand-light-green/30 dark:bg-brand-green/10",
     borderColor: "border-brand-green/20 dark:border-brand-green/30",
     description:
-      "What is the potential for positive action? Signals with high opportunity scores suggest areas where the city could gain an advantage, secure funding, or improve outcomes by acting early.",
+      "What is the potential for positive action? Opportunities with high opportunity scores suggest areas where the city could gain an advantage, secure funding, or improve outcomes by acting early.",
     example:
       "A new federal grant program for smart city infrastructure would score high.",
   },
@@ -281,7 +281,7 @@ const SCORE_DIMENSIONS = [
     bgColor: "bg-orange-50 dark:bg-orange-900/20",
     borderColor: "border-orange-200 dark:border-orange-800/40",
     description:
-      "What are the threats if this signal is ignored? High-risk scores indicate that inaction could lead to negative consequences -- regulatory penalties, missed deadlines, security vulnerabilities, or loss of public trust.",
+      "What are the threats if this opportunity is ignored? High-risk scores indicate that inaction could lead to negative consequences -- regulatory penalties, missed deadlines, security vulnerabilities, or loss of public trust.",
     example:
       "An emerging cybersecurity vulnerability affecting municipal systems would score high.",
   },
@@ -345,7 +345,7 @@ const FILTER_TYPES = [
       {
         code: "H3",
         label: "Far (5+ years)",
-        desc: "Long-range signals and emerging possibilities",
+        desc: "Long-range opportunities and emerging possibilities",
       },
     ],
   },
@@ -404,17 +404,17 @@ const PIPELINE_STAGES = [
   {
     label: "Scoring",
     icon: <BarChart3 className="h-5 w-5" />,
-    desc: "Multi-factor scoring assigns 0-100 values for Impact, Relevance, Velocity, Novelty, Opportunity, and Risk. A composite Signal Quality Index (SQI) is computed.",
+    desc: "Multi-factor scoring assigns 0-100 values for Impact, Relevance, Velocity, Novelty, Opportunity, and Risk. A composite Opportunity Quality Index (SQI) is computed.",
   },
   {
     label: "Deduplication",
     icon: <GitCompare className="h-5 w-5" />,
-    desc: "Vector embeddings enable semantic similarity matching. Content that is too similar to existing signals (above 0.92 threshold) is merged or discarded.",
+    desc: "Vector embeddings enable semantic similarity matching. Content that is too similar to existing opportunities (above 0.92 threshold) is merged or discarded.",
   },
   {
     label: "Published",
     icon: <CheckCircle className="h-5 w-5" />,
-    desc: "Signals that pass all checks appear in the Discover library, ready for analysts to explore, follow, and act upon.",
+    desc: "Opportunities that pass all checks appear in the Discover library, ready for analysts to explore, follow, and act upon.",
   },
 ];
 
@@ -502,8 +502,8 @@ export default function GuideDiscover() {
               </h1>
             </div>
             <p className="text-lg text-white/85 max-w-2xl leading-relaxed">
-              Your guide to exploring Foresight's intelligence library -- from
-              searching and filtering signals to building your personal
+              Your guide to exploring GrantScope2's intelligence library -- from
+              searching and filtering opportunities to building your personal
               watchlist and turning insights into action.
             </p>
           </div>
@@ -525,8 +525,8 @@ export default function GuideDiscover() {
               <QuickStartCard
                 step={1}
                 title="Browse"
-                description="Open the Discover page and scan the signal grid."
-                detail="The Discover page loads all published signals in a virtual grid. Scroll through to explore, or switch to list view for a denser layout. New and recently updated signals are highlighted."
+                description="Open the Discover page and scan the opportunity grid."
+                detail="The Discover page loads all published opportunities in a virtual grid. Scroll through to explore, or switch to list view for a denser layout. New and recently updated opportunities are highlighted."
                 icon={<Eye className="h-5 w-5" />}
                 isActive={activeStep === 0}
                 onClick={() => setActiveStep(activeStep === 0 ? -1 : 0)}
@@ -535,7 +535,7 @@ export default function GuideDiscover() {
                 step={2}
                 title="Search"
                 description="Use text or AI-powered semantic search."
-                detail="Type keywords in the search bar for fast text matching. Toggle the AI Search switch for vector-based semantic search that finds conceptually related signals -- even when exact terms do not appear."
+                detail="Type keywords in the search bar for fast text matching. Toggle the AI Search switch for vector-based semantic search that finds conceptually related opportunities -- even when exact terms do not appear."
                 icon={<Search className="h-5 w-5" />}
                 isActive={activeStep === 1}
                 onClick={() => setActiveStep(activeStep === 1 ? -1 : 1)}
@@ -552,8 +552,8 @@ export default function GuideDiscover() {
               <QuickStartCard
                 step={4}
                 title="Follow"
-                description="Follow signals to build your watchlist."
-                detail="Click the star icon on any signal card to add it to your personal watchlist on the My Signals page. Followed signals surface updates and can be organized into research workstreams."
+                description="Follow opportunities to build your watchlist."
+                detail="Click the star icon on any opportunity card to add it to your personal watchlist on the My Opportunities page. Followed opportunities surface updates and can be organized into research programs."
                 icon={<Star className="h-5 w-5" />}
                 isActive={activeStep === 3}
                 onClick={() => setActiveStep(activeStep === 3 ? -1 : 3)}
@@ -578,17 +578,17 @@ export default function GuideDiscover() {
               </AccordionTrigger>
               <AccordionContent>
                 <p className="mb-4">
-                  The Discover page is the central hub for all strategic
-                  intelligence signals in Foresight. Every signal you see here
+                  The Discover page is the central hub for all strategic grant
+                  opportunities in GrantScope2. Every opportunity you see here
                   has been automatically discovered, classified, and scored by
                   the AI-powered discovery pipeline running behind the scenes.
                 </p>
 
                 <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">
-                  Where Signals Come From
+                  Where Opportunities Come From
                 </h4>
                 <p className="mb-4">
-                  Foresight continuously monitors hundreds of sources across
+                  GrantScope2 continuously monitors hundreds of sources across
                   five categories. Each source category brings a different lens
                   to the strategic landscape:
                 </p>
@@ -623,11 +623,11 @@ export default function GuideDiscover() {
                 <ul className="list-disc list-inside space-y-1 mb-3">
                   <li>
                     <span className="font-medium">Title and summary</span>{" "}
-                    &mdash; a concise description of the signal
+                    &mdash; a concise description of the opportunity
                   </li>
                   <li>
                     <span className="font-medium">Strategic pillar badge</span>{" "}
-                    &mdash; which pillar(s) the signal aligns with
+                    &mdash; which pillar(s) the opportunity aligns with
                   </li>
                   <li>
                     <span className="font-medium">Quality tier indicator</span>{" "}
@@ -643,15 +643,17 @@ export default function GuideDiscover() {
                   </li>
                   <li>
                     <span className="font-medium">Follow status</span> &mdash;
-                    star icon indicates whether you are tracking this signal
+                    star icon indicates whether you are tracking this
+                    opportunity
                   </li>
                 </ul>
 
                 <ProTip>
                   Use the quick filter chips at the top of Discover to rapidly
-                  scope your view. "New This Week" shows signals discovered in
-                  the last 7 days, while "Updated This Week" catches recently
-                  re-scored or enriched signals you may have already seen.
+                  scope your view. "New This Week" shows opportunities
+                  discovered in the last 7 days, while "Updated This Week"
+                  catches recently re-scored or enriched opportunities you may
+                  have already seen.
                 </ProTip>
               </AccordionContent>
             </Accordion.Item>
@@ -713,7 +715,7 @@ export default function GuideDiscover() {
                       <li className="flex items-start gap-2">
                         <CheckCircle className="h-4 w-4 text-brand-blue flex-shrink-0 mt-0.5" />
                         <span>
-                          Finds conceptually related signals using vector
+                          Finds conceptually related opportunities using vector
                           embeddings
                         </span>
                       </li>
@@ -741,10 +743,10 @@ export default function GuideDiscover() {
                 <p className="mb-3">
                   When you toggle on AI Search, your query is converted into a
                   high-dimensional vector embedding using the same model that
-                  encodes all signal content. The system then performs a
-                  nearest-neighbor search in vector space, returning signals
-                  that are semantically similar to your query -- even if they
-                  use entirely different vocabulary.
+                  encodes all opportunity content. The system then performs a
+                  nearest-neighbor search in vector space, returning
+                  opportunities that are semantically similar to your query --
+                  even if they use entirely different vocabulary.
                 </p>
 
                 <InfoBox>
@@ -776,7 +778,7 @@ export default function GuideDiscover() {
               <AccordionContent>
                 <p className="mb-4">
                   Discover provides multi-dimensional filtering to help you
-                  focus on exactly the signals that matter for your work.
+                  focus on exactly the opportunities that matter for your work.
                   Filters can be combined freely and are preserved in your saved
                   searches.
                 </p>
@@ -854,7 +856,7 @@ export default function GuideDiscover() {
                 </h4>
                 <p className="mb-3">
                   Use the Impact, Relevance, and Novelty sliders to set minimum
-                  score thresholds. Only signals meeting or exceeding all
+                  score thresholds. Only opportunities meeting or exceeding all
                   thresholds will appear. This is useful for focusing on
                   high-impact or highly novel content.
                 </p>
@@ -904,7 +906,7 @@ export default function GuideDiscover() {
                 <div className="flex flex-wrap gap-2 mb-4">
                   {[
                     {
-                      label: "All Signals",
+                      label: "All Opportunities",
                       icon: <Eye className="h-3.5 w-3.5" />,
                     },
                     {
@@ -926,8 +928,8 @@ export default function GuideDiscover() {
                   ))}
                 </div>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                  Quick filter chips appear above the signal grid and let you
-                  rapidly toggle between common views. "New This Week" and
+                  Quick filter chips appear above the opportunity grid and let
+                  you rapidly toggle between common views. "New This Week" and
                   "Updated This Week" surface fresh intelligence without
                   requiring manual date range filtering.
                 </p>
@@ -945,8 +947,8 @@ export default function GuideDiscover() {
                 <ProTip>
                   Combine filters strategically: set pillar to "MC" (Mobility),
                   horizon to "H1" (Now), and quality to "High" to see only the
-                  most credible near-term transportation signals. Save this
-                  combination for quick access later.
+                  most credible near-term transportation opportunities. Save
+                  this combination for quick access later.
                 </ProTip>
               </AccordionContent>
             </Accordion.Item>
@@ -956,7 +958,7 @@ export default function GuideDiscover() {
             {/* -------------------------------------------------------------- */}
             <Accordion.Item value="working" id="working">
               <AccordionTrigger icon={<Grid3X3 className="h-5 w-5" />}>
-                Working with Signals
+                Working with Opportunities
               </AccordionTrigger>
               <AccordionContent>
                 <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">
@@ -994,7 +996,7 @@ export default function GuideDiscover() {
                   </div>
                 </div>
                 <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
-                  Both views use virtualized rendering -- only the signals
+                  Both views use virtualized rendering -- only the opportunities
                   currently visible in your viewport are rendered, keeping the
                   page fast even with thousands of results.
                 </p>
@@ -1005,49 +1007,49 @@ export default function GuideDiscover() {
                 <p className="mb-3">
                   Click the{" "}
                   <Star className="inline-block h-4 w-4 text-amber-500" /> star
-                  icon on any card to follow that signal. Following uses
+                  icon on any card to follow that opportunity. Following uses
                   optimistic updates -- the star fills immediately while the
                   request processes in the background. To unfollow, click the
                   star again.
                 </p>
                 <p className="mb-4">
-                  Followed signals appear on your{" "}
+                  Followed opportunities appear on your{" "}
                   <Link
                     to="/signals"
                     className="font-medium text-brand-blue dark:text-brand-light-blue hover:underline"
                   >
-                    My Signals
+                    My Opportunities
                   </Link>{" "}
                   page, where you can organize, prioritize, and route them into
-                  research workstreams.
+                  research programs.
                 </p>
 
                 <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">
                   Card Comparison Mode
                 </h4>
                 <p className="mb-3">
-                  Need to evaluate two signals side by side? Activate comparison
-                  mode by clicking the compare icon (
+                  Need to evaluate two opportunities side by side? Activate
+                  comparison mode by clicking the compare icon (
                   <GitCompare className="inline-block h-4 w-4 text-gray-500" />)
                   on any card. Select a second card to open the full comparison
-                  view, which displays both signals with their complete
+                  view, which displays both opportunities with their complete
                   metadata, scores, and classifications aligned for easy visual
                   comparison.
                 </p>
 
                 <InfoBox>
                   <span className="font-medium">Navigating to detail:</span>{" "}
-                  Click any signal's title or the "View" action to open its full
-                  detail page, where you can see the complete analysis, all
-                  source references, related signals, and the full scoring
+                  Click any opportunity's title or the "View" action to open its
+                  full detail page, where you can see the complete analysis, all
+                  source references, related opportunities, and the full scoring
                   breakdown.
                 </InfoBox>
 
                 <ProTip>
                   Comparison mode is especially useful for understanding why two
-                  seemingly similar signals were scored differently. Compare
-                  their source quality, recency, and pillar alignment to see
-                  what drives the difference.
+                  seemingly similar opportunities were scored differently.
+                  Compare their source quality, recency, and pillar alignment to
+                  see what drives the difference.
                 </ProTip>
               </AccordionContent>
             </Accordion.Item>
@@ -1110,7 +1112,7 @@ export default function GuideDiscover() {
                   Search History
                 </h4>
                 <p className="mb-3">
-                  Foresight also keeps a history of your recent searches. Open
+                  GrantScope2 also keeps a history of your recent searches. Open
                   the Search History panel (
                   <History className="inline-block h-3.5 w-3.5 text-gray-500" />
                   ) to browse, restore, or clear past search sessions. This is
@@ -1136,7 +1138,7 @@ export default function GuideDiscover() {
               </AccordionTrigger>
               <AccordionContent>
                 <p className="mb-5">
-                  Understanding how signals arrive in Discover helps you
+                  Understanding how opportunities arrive in Discover helps you
                   interpret their quality and coverage. Here is the automated
                   pipeline that runs behind the scenes:
                 </p>
@@ -1240,18 +1242,18 @@ export default function GuideDiscover() {
 
                 <InfoBox>
                   <span className="font-medium">Deduplication explained:</span>{" "}
-                  When multiple sources report on the same topic, Foresight uses
-                  vector embeddings to detect semantic overlap. Content above a
-                  0.92 similarity threshold is either merged into an existing
-                  signal (adding source diversity) or discarded, keeping the
-                  library clean and non-redundant.
+                  When multiple sources report on the same topic, GrantScope2
+                  uses vector embeddings to detect semantic overlap. Content
+                  above a 0.92 similarity threshold is either merged into an
+                  existing opportunity (adding source diversity) or discarded,
+                  keeping the library clean and non-redundant.
                 </InfoBox>
 
                 <ProTip>
                   The pipeline runs on a configurable schedule. If you notice a
                   gap in coverage for a specific topic area, consider creating a
-                  user-generated signal or requesting a manual discovery run
-                  through the admin settings.
+                  user-generated opportunity or requesting a manual discovery
+                  run through the admin settings.
                 </ProTip>
               </AccordionContent>
             </Accordion.Item>
@@ -1265,10 +1267,11 @@ export default function GuideDiscover() {
               </AccordionTrigger>
               <AccordionContent>
                 <p className="mb-4">
-                  Every signal receives six independent scores on a 0-100 scale.
-                  These scores are computed by AI analysis and combined into a
-                  composite Signal Quality Index (SQI). Click on any dimension
-                  below to learn what it measures and how it is calculated.
+                  Every opportunity receives six independent scores on a 0-100
+                  scale. These scores are computed by AI analysis and combined
+                  into a composite Opportunity Quality Index (OQI). Click on any
+                  dimension below to learn what it measures and how it is
+                  calculated.
                 </p>
 
                 {/* Interactive score dimension cards */}
@@ -1324,10 +1327,10 @@ export default function GuideDiscover() {
                 </div>
 
                 <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">
-                  Signal Quality Index (SQI)
+                  Opportunity Quality Index (OQI)
                 </h4>
                 <p className="mb-3">
-                  The SQI is a composite score that considers source authority,
+                  The OQI is a composite score that considers source authority,
                   source diversity, corroboration, recency, and municipal
                   specificity. It provides a single quality indicator at a
                   glance:
@@ -1378,9 +1381,9 @@ export default function GuideDiscover() {
 
                 <ProTip>
                   Use score threshold sliders in the filter panel to surface
-                  only signals above your minimum bar. Setting Impact above 60
-                  and Relevance above 50 is a good starting point for focused
-                  analysis sessions.
+                  only opportunities above your minimum bar. Setting Impact
+                  above 60 and Relevance above 50 is a good starting point for
+                  focused analysis sessions.
                 </ProTip>
               </AccordionContent>
             </Accordion.Item>
@@ -1397,17 +1400,17 @@ export default function GuideDiscover() {
                   Review Queue
                 </h4>
                 <p className="mb-3">
-                  Not all discovered signals are published automatically. Some
-                  are placed in the{" "}
+                  Not all discovered opportunities are published automatically.
+                  Some are placed in the{" "}
                   <Link
                     to="/discover/queue"
                     className="font-medium text-brand-blue dark:text-brand-light-blue hover:underline"
                   >
                     Review Queue
                   </Link>{" "}
-                  for human review -- typically signals with lower confidence
-                  scores, ambiguous classification, or content from unfamiliar
-                  sources.
+                  for human review -- typically opportunities with lower
+                  confidence scores, ambiguous classification, or content from
+                  unfamiliar sources.
                 </p>
 
                 <div className="grid sm:grid-cols-3 gap-3 mb-5">
@@ -1417,7 +1420,7 @@ export default function GuideDiscover() {
                       Approve
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      Publish signal to the Discover library
+                      Publish opportunity to the Discover library
                     </p>
                   </div>
                   <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-dark-surface p-4 text-center">
@@ -1457,8 +1460,8 @@ export default function GuideDiscover() {
                 <ul className="list-disc list-inside space-y-1 mb-4 text-sm">
                   <li>Timestamp and duration of the discovery run</li>
                   <li>Number of sources scanned per category</li>
-                  <li>Number of new signals created vs. deduplicated</li>
-                  <li>Number of signals queued for review</li>
+                  <li>Number of new opportunities created vs. deduplicated</li>
+                  <li>Number of opportunities queued for review</li>
                   <li>Any errors or warnings encountered</li>
                 </ul>
 
@@ -1490,7 +1493,7 @@ export default function GuideDiscover() {
                   {[
                     {
                       step: "Discover",
-                      desc: "Find signals",
+                      desc: "Find opportunities",
                       icon: <Compass className="h-5 w-5" />,
                       color:
                         "border-brand-blue/40 bg-brand-light-blue/30 dark:bg-brand-blue/10",
@@ -1507,7 +1510,7 @@ export default function GuideDiscover() {
                       active: false,
                     },
                     {
-                      step: "My Signals",
+                      step: "My Opportunities",
                       desc: "Organize & manage",
                       icon: <BookOpen className="h-5 w-5" />,
                       color:
@@ -1516,7 +1519,7 @@ export default function GuideDiscover() {
                       active: false,
                     },
                     {
-                      step: "Workstream",
+                      step: "Program",
                       desc: "Deep research",
                       icon: <Layers className="h-5 w-5" />,
                       color:
@@ -1573,9 +1576,9 @@ export default function GuideDiscover() {
                       1. Discover
                     </h4>
                     <p className="text-sm text-gray-700 dark:text-gray-300">
-                      Browse the intelligence library, search for topics, and
-                      use filters to surface the most relevant signals for your
-                      area of responsibility. This is where you are now.
+                      Browse the grant library, search for topics, and use
+                      filters to surface the most relevant opportunities for
+                      your area of responsibility. This is where you are now.
                     </p>
                   </div>
                   <div>
@@ -1583,14 +1586,14 @@ export default function GuideDiscover() {
                       2. Follow
                     </h4>
                     <p className="text-sm text-gray-700 dark:text-gray-300">
-                      When you find a signal worth tracking, follow it.
+                      When you find an opportunity worth tracking, follow it.
                       Following is lightweight and reversible -- think of it as
                       adding a bookmark with intelligence updates.
                     </p>
                   </div>
                   <div>
                     <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-1">
-                      3. My Signals
+                      3. My Opportunities
                     </h4>
                     <p className="text-sm text-gray-700 dark:text-gray-300">
                       Your{" "}
@@ -1598,25 +1601,25 @@ export default function GuideDiscover() {
                         to="/signals"
                         className="font-medium text-brand-blue dark:text-brand-light-blue hover:underline"
                       >
-                        Signals page
+                        Opportunities page
                       </Link>{" "}
                       collects everything you follow. Review, prioritize, and
-                      decide which signals warrant deeper investigation.
+                      decide which opportunities warrant deeper investigation.
                     </p>
                   </div>
                   <div>
                     <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-1">
-                      4. Workstream
+                      4. Program
                     </h4>
                     <p className="text-sm text-gray-700 dark:text-gray-300">
-                      Route high-priority signals into{" "}
+                      Route high-priority opportunities into{" "}
                       <Link
                         to="/workstreams"
                         className="font-medium text-brand-blue dark:text-brand-light-blue hover:underline"
                       >
-                        Workstreams
+                        Programs
                       </Link>{" "}
-                      for structured deep research. Workstreams provide kanban
+                      for structured deep research. Programs provide kanban
                       boards, AI-assisted research, and team collaboration
                       tools.
                     </p>
@@ -1627,7 +1630,7 @@ export default function GuideDiscover() {
                     </h4>
                     <p className="text-sm text-gray-700 dark:text-gray-300">
                       Generate executive briefs from your research findings.
-                      Briefs synthesize signal intelligence into actionable
+                      Briefs synthesize grant intelligence into actionable
                       summaries for decision-makers and leadership.
                     </p>
                   </div>
@@ -1635,10 +1638,11 @@ export default function GuideDiscover() {
 
                 <ProTip title="Building an Effective Workflow">
                   Start broad in Discover, narrow with filters, follow liberally
-                  in the early stages. Then use My Signals to periodically prune
-                  and prioritize before routing the most actionable signals into
-                  workstreams. This funnel approach ensures you do not miss weak
-                  signals while keeping your active research focused.
+                  in the early stages. Then use My Opportunities to periodically
+                  prune and prioritize before routing the most actionable
+                  opportunities into programs. This funnel approach ensures you
+                  do not miss emerging opportunities while keeping your active
+                  research focused.
                 </ProTip>
               </AccordionContent>
             </Accordion.Item>
@@ -1653,7 +1657,7 @@ export default function GuideDiscover() {
                 Continue Learning
               </h2>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-5">
-                Explore the other guide pages to master the complete Foresight
+                Explore the other guide pages to master the complete GrantScope2
                 workflow.
               </p>
               <div className="grid sm:grid-cols-3 gap-3">
@@ -1664,10 +1668,10 @@ export default function GuideDiscover() {
                   <Star className="h-5 w-5 text-amber-500 flex-shrink-0" />
                   <div>
                     <p className="font-semibold text-sm text-gray-900 dark:text-white">
-                      How to Use Signals
+                      How to Use Opportunities
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                      Manage your followed signals
+                      Manage your followed opportunities
                     </p>
                   </div>
                   <ArrowRight className="h-4 w-4 text-gray-400 ml-auto" />
@@ -1679,7 +1683,7 @@ export default function GuideDiscover() {
                   <Layers className="h-5 w-5 text-brand-green flex-shrink-0" />
                   <div>
                     <p className="font-semibold text-sm text-gray-900 dark:text-white">
-                      How to Use Workstreams
+                      How to Use Programs
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                       Deep research and collaboration
@@ -1708,7 +1712,7 @@ export default function GuideDiscover() {
 
           {/* Footer note */}
           <p className="mt-10 text-sm text-gray-400 dark:text-gray-500 text-center no-print">
-            Questions about using Discover? Reach out to the Foresight team.
+            Questions about using Discover? Reach out to the GrantScope2 team.
           </p>
         </div>
       </div>

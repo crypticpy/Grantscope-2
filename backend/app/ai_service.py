@@ -1,5 +1,5 @@
 """
-AI Service for Foresight application.
+AI Service for GrantScope2 application.
 
 Provides:
 - Embedding generation for semantic search
@@ -22,6 +22,7 @@ from app.openai_provider import (
     get_chat_mini_deployment,
     get_embedding_deployment,
 )
+from app.taxonomy import PILLAR_NAMES
 
 logger = logging.getLogger(__name__)
 
@@ -294,105 +295,129 @@ def get_word_count(text: str) -> int:
 # Prompts
 # ============================================================================
 
-TRIAGE_PROMPT = """You are a triage analyst for a municipal government horizon scanning system.
+TRIAGE_PROMPT = """You are a triage analyst for the City of Austin's grant discovery and management platform.
 
-Evaluate if this article is potentially relevant to city government operations, planning, or strategic interests.
+Evaluate if this content describes a grant opportunity, funding announcement, RFP, cooperative agreement, or other funding-related content relevant to City of Austin departments.
 
-Relevant topics include:
-- Technology that could affect city services or operations
-- Infrastructure innovations and smart city developments
-- Policy changes affecting municipalities
-- Climate, sustainability, and environmental resilience
-- Public safety innovations and emergency management
-- Economic development, workforce, and talent trends
-- Housing, homelessness, and affordability initiatives
-- Transportation, mobility, and urban planning
-- Government operations, procurement, and technology modernization
-- AI, data, and digital transformation in public sector
+Indicators of a relevant grant opportunity:
+- Federal grants (EPA, HUD, DOT, FEMA, HHS, DOJ, DOE, USDA, NSF, etc.)
+- State of Texas grants (TCEQ, TxDOT, TWDB, OOG, TEA, HHSC, GLO, etc.)
+- Foundation and private grants (Bloomberg, Kresge, Knight, Ford, etc.)
+- Cooperative agreements, formula grants, competitive grants
+- Notices of Funding Opportunity (NOFO), Requests for Proposals (RFP)
+- Grant renewals, supplemental funding, or continuation awards
+- Funding forecasts or pre-announcement notices
+
+Relevant funding areas for City of Austin:
+- Health & social services, behavioral health, youth programs
+- Public safety, emergency management, justice reform
+- Housing, homelessness prevention, community development
+- Infrastructure, transportation, water, energy
+- Environment, climate resilience, sustainability, parks
+- Cultural programs, libraries, arts, workforce development
+- Technology modernization, cybersecurity, data & innovation
+- Equity, accessibility, civic engagement, immigrant services
 
 Article Title: {title}
 Article Content: {content}
 
 Rate the relevance level:
-- "high": Directly relevant to municipal government strategy, operations, or planning. A city official would want to know about this.
-- "medium": Tangentially relevant or potentially useful for context. Could inform municipal strategy indirectly.
-- "low": Not relevant to municipal government interests.
+- "high": This is a specific grant opportunity, NOFO, or funding announcement directly relevant to one or more City of Austin departments. A grants manager would want to evaluate this immediately.
+- "medium": This is funding-related content (grant tips, policy changes affecting funding, upcoming grant cycles) that could inform grant strategy. Not a specific opportunity but useful context.
+- "low": Not related to grants, funding opportunities, or municipal funding strategy.
 
 Respond with JSON:
 {{
   "relevance_level": "high|medium|low",
   "is_relevant": true/false,
   "confidence": 0.0-1.0,
-  "primary_pillar": "CH|EW|HG|HH|MC|PS|null",
-  "reason": "1-2 sentence explanation of why this is or isn't relevant to municipal government"
+  "primary_pillar": "HS|PS|HD|IN|EN|CE|TG|EQ|null",
+  "reason": "1-2 sentence explanation of why this is or isn't a relevant grant opportunity for the City of Austin"
 }}
+
+Grant Category Codes:
+- HS: Health & Human Services (public health, behavioral health, social services, youth)
+- PS: Public Safety & Emergency Management (law enforcement, fire, EMS, justice, FEMA)
+- HD: Housing & Community Development (affordable housing, homelessness, planning)
+- IN: Infrastructure & Transportation (roads, water, energy, facilities, telecom)
+- EN: Environment & Sustainability (climate, conservation, parks, resilience)
+- CE: Cultural & Economic Development (libraries, arts, education, workforce)
+- TG: Technology & Government Innovation (IT, cybersecurity, data, e-government)
+- EQ: Equity & Engagement (civil rights, accessibility, civic engagement)
 """
 
-ANALYSIS_PROMPT = """You are a strategic foresight analyst for the City of Austin.
+ANALYSIS_PROMPT = """You are a grant opportunity analyst for the City of Austin's grant discovery platform.
 
-Analyze this article for horizon scanning purposes.
+Analyze this content to extract structured grant opportunity metadata and evaluate its strategic fit for City of Austin departments.
 
 SUMMARY STRUCTURE REQUIREMENTS:
-Your summary MUST follow this strategic structure:
-1. Problem Statement: What core challenge, trend, or opportunity does this article address?
-2. Implications: What are the direct and indirect effects for municipal government?
-3. Strategic Considerations: What decisions, preparations, or actions should city leaders consider?
+Your summary MUST follow this grant-focused structure:
+1. Opportunity: What is being funded, by whom, and for how much?
+2. Eligibility & Fit: Who can apply and how does this align with Austin's needs?
+3. Action Required: What should Austin's grants team do next (apply, monitor, prepare)?
 
 The summary should be 3-5 sentences that flow naturally while covering all three elements.
 
-TAXONOMY REFERENCE:
-Pillars:
-- CH (Community Health & Sustainability): Public health, parks, climate, preparedness
-- EW (Economic & Workforce Development): Economic mobility, small business, creative economy
-- HG (High-Performing Government): Fiscal, technology, workforce, engagement
-- HH (Homelessness & Housing): Communities, affordable housing, homelessness reduction
-- MC (Mobility & Critical Infrastructure): Transportation, transit, utilities, facilities
-- PS (Public Safety): Relationships, fair delivery, disaster preparedness
+GRANT CATEGORY REFERENCE:
+Categories (use these as pillar codes):
+- HS (Health & Human Services): Public health, behavioral health, social services, youth development
+- PS (Public Safety & Emergency Management): Law enforcement, fire, EMS, emergency management, justice
+- HD (Housing & Community Development): Affordable housing, homelessness, community development, planning
+- IN (Infrastructure & Transportation): Roads, water, energy, facilities, telecommunications
+- EN (Environment & Sustainability): Climate, conservation, parks, resilience, sustainability
+- CE (Cultural & Economic Development): Libraries, museums, arts, education, workforce development
+- TG (Technology & Government Innovation): IT modernization, data, cybersecurity, innovation, e-government
+- EQ (Equity & Engagement): Civil rights, accessibility, language access, civic participation
 
-Goals (examples):
-- CH.1: Equitable public health services
-- CH.3: Natural resources & climate mitigation
-- HG.2: Data & technology capabilities
-- MC.1: Mobility safety
-- MC.3: Sustainable transportation
+KEY AUSTIN DEPARTMENTS (for eligibility and fit assessment):
+- APH (Austin Public Health), APD (Austin Police), AFD (Austin Fire), EMS, HSEM (Homeland Security)
+- AWU (Austin Water), ATD (Transportation), AE (Austin Energy), ARR (Resource Recovery)
+- PARD (Parks & Recreation), APL (Library), EDD (Economic Development), NHCD (Housing & Planning)
+- CTM (Communications & Technology), OOI (Office of Innovation), WPD (Watershed Protection)
+- OEQ (Office of Equity), OII (Immigrant Integration), COS (Office of Sustainability)
+- CMO (City Manager Office), DSD (Development Services), PWD (Public Works)
 
-STEEP Categories: S (Social), T (Technological), E (Economic), En (Environmental), P (Political)
+GRANT-SPECIFIC SCORING:
 
-Anchors: Equity, Affordability, Innovation, Sustainability & Resiliency, Proactive Prevention, Community Trust
+Alignment Score (0-100): How well does this grant match Austin's strategic priorities and department needs?
+0-25=Poor fit, 26-50=Partial fit, 51-75=Good fit, 76-100=Excellent fit
 
-Horizons:
-- H1: Mainstream, already happening widely (stages 6-8)
-- H2: Transitional, pilots and early adoption (stages 3-5)
-- H3: Weak signals, emerging concepts (stages 1-2)
+Readiness Score (0-100): Can Austin realistically apply? Consider staff capacity, existing programs, infrastructure.
+0-25=Not ready, 26-50=Would need significant preparation, 51-75=Reasonably ready, 76-100=Highly prepared
 
-Stages (1-8):
-1=Concept (academic/theoretical)
-2=Emerging (startups, patents, VC interest)
-3=Prototype (working demos)
-4=Pilot (real-world testing)
-5=Municipal Pilot (government testing)
-6=Early Adoption (multiple cities implementing)
-7=Mainstream (widespread adoption)
-8=Mature (established, commoditized)
+Competition Score (0-100): How competitive is this grant? Higher = less competition = better chance.
+0-25=Extremely competitive (many applicants, low award rate), 26-50=Competitive, 51-75=Moderate competition, 76-100=Low competition (formula grant, few eligible applicants)
 
-Triage Scores:
-1=Confirms known baseline (not surprising)
-3=Resolves toward known alternative (expected development)
-5=Novel/game-changing (unexpected, significant implications)
+Urgency Score (0-100): How soon is the deadline?
+0-25=No deadline or >6 months, 26-50=3-6 months, 51-75=30-90 days, 76-100=<30 days (urgent)
 
-Velocity Score (1.0-10.0): Speed of trend development
-1-2=Very slow (decades to develop)
-3-4=Slow (5-10 years)
-5-6=Moderate (2-5 years)
-7-8=Fast (1-2 years)
-9-10=Rapid (months, accelerating quickly)
+Probability Score (0-100): Overall estimated probability of successful application.
+0-25=Low probability, 26-50=Below average, 51-75=Above average, 76-100=High probability
 
-Risk Score (1.0-10.0): Threat/uncertainty level for municipal operations
-1-2=Minimal risk (well-understood, low uncertainty)
-3-4=Low risk (some unknowns, manageable)
-5-6=Moderate risk (notable uncertainties, requires monitoring)
-7-8=High risk (significant threats or uncertainties)
-9-10=Critical risk (major threats, urgent attention needed)
+HORIZON MAPPING (for backward compatibility):
+- H1 = Urgent/Active grants (deadlines < 30 days) — maps to stages 7-8
+- H2 = Approaching grants (deadlines 30-90 days) — maps to stages 3-6
+- H3 = Planning/forecasted grants (deadlines > 90 days or future) — maps to stages 1-2
+
+Grant Lifecycle Stages (mapped to 1-8 for compatibility):
+1-2 = Forecasted (pre-announcement, upcoming grant cycle)
+3-4 = Open (recently posted, accepting applications)
+5-6 = Active (applications being accepted, mid-cycle)
+7-8 = Closing soon / Closed (deadline imminent or passed)
+
+Triage Scores (grant context):
+1=Routine/recurring grant (expected annual cycle)
+3=Notable opportunity (good fit, standard process)
+5=Exceptional opportunity (high value, strong fit, rare or new program)
+
+LEGACY SCORING (maintain for downstream compatibility):
+Credibility (1.0-5.0): Source reliability. Federal register/grants.gov=5, state agencies=4, foundations=3, news reports=2, unverified=1
+Novelty (1.0-5.0): Is this a new program? 5=Brand new program, 3=Modified existing, 1=Recurring unchanged
+Likelihood (1.0-9.0): Likelihood Austin would qualify. 9=Guaranteed eligible, 5=Likely eligible, 1=Unlikely
+Impact (1.0-5.0): Potential impact on Austin services. 5=Transformative, 3=Meaningful, 1=Minimal
+Relevance (1.0-5.0): Direct relevance to Austin priorities. 5=Core priority, 3=Related, 1=Tangential
+Velocity (1.0-10.0): How fast must Austin act? 10=Immediate action, 5=Weeks to prepare, 1=Months available
+Risk (1.0-10.0): Risk of NOT pursuing. 10=Critical funding gap, 5=Missed opportunity, 1=Low stakes
 
 Article Title: {title}
 Source: {source}
@@ -401,13 +426,31 @@ Content: {content}
 
 Respond with JSON:
 {{
-  "summary": "3-5 sentence strategic summary following the structure: problem statement (the core challenge/trend), implications (effects for municipal government), and strategic considerations (actions/decisions for city leaders)",
+  "summary": "3-5 sentence grant opportunity summary: what is being funded, who is eligible, key requirements, and strategic fit for Austin",
   "key_excerpts": ["relevant quote 1", "relevant quote 2"],
 
-  "pillars": ["XX", "XX"],
-  "goals": ["XX.X", "XX.X"],
-  "steep_categories": ["X", "X"],
-  "anchors": ["anchor name"],
+  "pillars": ["XX"],
+  "goals": [],
+  "steep_categories": [],
+  "anchors": [],
+
+  "grant_title": "Official grant title or program name",
+  "grantor": "Funding agency or organization",
+  "grant_type": "federal|state|foundation|local|other",
+  "funding_amount_min": null,
+  "funding_amount_max": null,
+  "deadline": "YYYY-MM-DD or null",
+  "cfda_number": "XX.XXX or null",
+  "eligibility_summary": "Who can apply and key requirements",
+  "match_requirement": "Description of matching funds requirement or null",
+  "grant_lifecycle": "open|closing_soon|closed|awarded|forecasted",
+  "deadline_urgency": "urgent|approaching|planning|null",
+
+  "alignment_score": 0-100,
+  "readiness_score": 0-100,
+  "competition_score": 0-100,
+  "urgency_score": 0-100,
+  "probability_score": 0-100,
 
   "horizon": "H1|H2|H3",
   "suggested_stage": 1-8,
@@ -420,23 +463,21 @@ Respond with JSON:
   "relevance": 1.0-5.0,
   "velocity": 1.0-10.0,
   "risk": 1.0-10.0,
-  "time_to_awareness_months": number,
-  "time_to_prepare_months": number,
 
-  "suggested_card_name": "Concise concept name (2-5 words)",
+  "suggested_card_name": "Concise grant opportunity name (2-6 words)",
   "is_new_concept": true/false,
 
   "entities": [
-    {{"name": "entity name", "type": "technology|organization|concept|person|location", "context": "brief context"}}
+    {{"name": "entity name", "type": "organization|program|regulation", "context": "brief context"}}
   ],
 
-  "reasoning": "Brief explanation of classification choices"
+  "reasoning": "Brief explanation of classification and scoring rationale"
 }}
 """
 
-DEEP_RESEARCH_REPORT_PROMPT = """You are a strategic foresight analyst creating a comprehensive intelligence report for municipal government decision-makers.
+DEEP_RESEARCH_REPORT_PROMPT = """You are a grant analyst creating a comprehensive grant opportunity assessment report for City of Austin decision-makers and grants management staff.
 
-Generate an in-depth strategic analysis report on "{card_name}" for the City of Austin's horizon scanning program.
+Generate an in-depth grant opportunity assessment for "{card_name}" for the City of Austin's grant discovery platform.
 
 CURRENT CARD INFORMATION:
 Summary: {current_summary}
@@ -458,72 +499,88 @@ EXTRACTED ENTITIES:
 
 ---
 
-Create a COMPREHENSIVE strategic intelligence report with the following sections. Be specific, cite examples, and provide actionable insights.
+Create a COMPREHENSIVE grant opportunity assessment report with the following sections. Be specific, cite grant details, and provide actionable guidance for the grants team.
 
-## EXECUTIVE SUMMARY
-(3-4 sentences capturing the most critical findings and strategic implications)
+## GRANT OVERVIEW
+- Official grant/program title and CFDA/ALN number (if applicable)
+- Funding agency and program office
+- Funding range (minimum and maximum award amounts)
+- Application deadline and grant period/duration
+- Grant type (competitive, formula, cooperative agreement, pass-through)
+- Total program funding available
+- Expected number of awards
 
-## TECHNOLOGY/TREND OVERVIEW
-- What it is and how it works
-- Key technical components or approaches
-- Evolution and current state of development
+## STRATEGIC FIT ANALYSIS
+- How this grant aligns with Austin's strategic priorities
+- Which City of Austin departments would benefit (be specific: APH, ATD, AWU, PARD, etc.)
+- Connection to current city initiatives, programs, or capital improvement plans
+- How this funding could advance equity goals and underserved communities
+- Alignment with City Council priorities and City Manager directives
 
-## CURRENT LANDSCAPE ANALYSIS
-- Market maturity and adoption rates
-- Leading organizations and initiatives
-- Geographic distribution of implementations
-- Recent significant developments
+## ELIGIBILITY ASSESSMENT
+- Eligible applicant types and whether City of Austin qualifies
+- Geographic eligibility requirements
+- Population or demographic requirements
+- Required certifications, designations, or prior experience
+- Any disqualifying factors for Austin
+- Whether sub-recipients or partners are permitted/required
 
-## PEER CITY APPROACHES
-- Which peer cities have implemented or piloted this (cite specific cities from the list above)
-- What approaches or vendors did they use
-- What outcomes or results have they reported
-- Lessons learned from peer city implementations
+## BUDGET & MATCH ANALYSIS
+- Funding amount range and typical award size
+- Cost-sharing or matching fund requirements (percentage and type)
+- Allowable and unallowable costs
+- Indirect cost rate considerations
+- Budget period and multi-year funding structure
+- Potential sources for matching funds within Austin's budget
 
-## MUNICIPAL APPLICATIONS
-- Specific use cases for city government
-- Examples of cities implementing this (with details)
-- Relevant city departments and stakeholders
-- Integration with existing city services/infrastructure
+## COMPETITION ANALYSIS
+- Historical award data (number of applicants vs. awards in prior years)
+- Typical success rate for similar applications
+- Known competitors (other Texas cities, peer municipalities)
+- Austin's competitive advantages for this specific grant
+- Austin's competitive disadvantages or gaps to address
+- Whether Austin has previously applied for or received this grant
 
-## IMPLEMENTATION CONSIDERATIONS
-- Technical requirements and infrastructure needs
-- Resource requirements (budget, staff, timeline)
-- Procurement and vendor considerations
-- Potential implementation challenges
+## APPLICATION REQUIREMENTS
+- Key documents and certifications needed
+- Narrative sections and page limits
+- Required partnerships or letters of support
+- Data and evidence requirements
+- Environmental review or other compliance requirements
+- Estimated level of effort to prepare the application (staff hours, timeline)
 
-## VENDOR & ECOSYSTEM ANALYSIS
-- Key technology providers and vendors
-- Open-source alternatives (if any)
-- Partnership and collaboration opportunities
-- Competitive landscape
+## RECOMMENDATIONS
+(Provide a clear GO / CONDITIONAL GO / NO-GO recommendation with detailed reasoning)
 
-## RISK ASSESSMENT
-- Technical risks and limitations
-- Privacy and security concerns
-- Equity and accessibility considerations
-- Regulatory and compliance factors
-- Potential unintended consequences
+For a GO or CONDITIONAL GO recommendation, include:
+1. Lead department(s) and recommended project manager
+2. Application timeline with key milestones
+3. Internal approvals needed (City Manager, Council authorization, etc.)
+4. Partners or co-applicants to engage
+5. Budget and match funding strategy
+6. Specific conditions that must be met (for CONDITIONAL GO)
 
-## STRATEGIC RECOMMENDATIONS
-(Numbered list of 3-5 specific, actionable recommendations for Austin decision-makers. For each recommendation, specify:
-- Which department(s) should lead
-- Timeline: immediate / 6-month / 12-month
-- Next step: pilot, policy review, vendor evaluation, staff briefing, etc.)
+For a NO-GO recommendation, explain:
+1. Primary reasons for not pursuing
+2. Whether to monitor for future cycles
+3. Alternative funding sources to explore instead
 
-## FUTURE OUTLOOK
-- Expected developments in next 12-24 months
-- Signals to watch for
-- Potential disruptions or game-changers
+## NEXT STEPS
+(Numbered list of specific, time-bound actions)
+- Immediate actions (this week)
+- Short-term actions (next 30 days)
+- Pre-submission actions (before deadline)
+- Include specific staff roles, meetings to schedule, and documents to prepare
 
 ---
 
 Important guidelines:
-- Be SPECIFIC with examples, names, dates, and numbers where available
-- Include PEER CITY examples where this has been implemented
-- Map recommendations to SPECIFIC Austin departments and CMO priorities
-- Make recommendations ACTIONABLE for city planners
-- Note UNCERTAINTIES and knowledge gaps
+- Be SPECIFIC with grant details: amounts, dates, CFDA numbers, agency contacts
+- Reference the ACTUAL grant requirements from the source materials
+- Map recommendations to SPECIFIC Austin departments by abbreviation (APH, ATD, etc.)
+- Make next steps ACTIONABLE with clear owners and timelines
+- Note UNCERTAINTIES and information gaps that need to be resolved
+- Include any relevant federal/state compliance requirements (UGG, 2 CFR 200, etc.)
 - Keep the report between 2000-3000 words
 - Use markdown formatting for readability
 - When citing findings from the analyzed sources, reference them by their title in the text
@@ -552,7 +609,7 @@ Respond with JSON:
 }}
 """
 
-SIGNAL_PROFILE_PROMPT = """You are a strategic foresight analyst for the City of Austin's horizon scanning system.
+SIGNAL_PROFILE_PROMPT = """You are a strategic intelligence analyst for the City of Austin's horizon scanning system.
 
 Generate a comprehensive signal profile for the following emerging trend/signal. This profile will be the primary reference document for city officials evaluating this signal.
 
@@ -1019,7 +1076,7 @@ Respond with JSON:
             )
             format_guidance = "Use clear prose paragraphs. Include specific names, dates, and data points."
 
-        prompt = f"""You are enhancing a foresight discovery card based on new research findings.
+        prompt = f"""You are enhancing a strategic discovery card based on new research findings.
 The card tracks an emerging technology, trend, or innovation relevant to municipal government.
 
 CURRENT CARD:
@@ -1098,15 +1155,7 @@ Respond with JSON:
         Returns:
             Markdown formatted profile (500-800 words)
         """
-        pillar_names = {
-            "CH": "Community Health & Sustainability",
-            "EW": "Economic & Workforce Development",
-            "HG": "High-Performing Government",
-            "HH": "Homelessness & Housing",
-            "MC": "Mobility & Critical Infrastructure",
-            "PS": "Public Safety",
-        }
-        pillar_name = pillar_names.get(pillar_id, pillar_id or "General")
+        pillar_name = PILLAR_NAMES.get(pillar_id, pillar_id or "General")
 
         # Build source details for the prompt
         source_details_parts = []

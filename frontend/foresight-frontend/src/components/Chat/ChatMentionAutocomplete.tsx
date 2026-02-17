@@ -202,7 +202,7 @@ export function ChatMentionAutocomplete({
       {showEmpty && (
         <div className="px-3 py-4 text-center">
           <p className="text-xs text-gray-400 dark:text-gray-500">
-            No signals or workstreams found
+            No opportunities or programs found
           </p>
         </div>
       )}
@@ -249,7 +249,7 @@ export function ChatMentionAutocomplete({
                 {result.title}
               </p>
               <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                {result.type === "signal" ? "Signal" : "Workstream"}
+                {result.type === "signal" ? "Opportunity" : "Workstream"}
               </p>
             </div>
           </button>

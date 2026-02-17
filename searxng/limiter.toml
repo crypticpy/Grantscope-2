@@ -1,8 +1,8 @@
 # =============================================================================
-# SearXNG Rate Limiter Configuration for Foresight
+# SearXNG Rate Limiter Configuration for GrantScope
 # =============================================================================
 # Relaxed limits since this is a private instance used only by the
-# Foresight backend. No public traffic to rate-limit.
+# GrantScope backend. No public traffic to rate-limit.
 # =============================================================================
 
 [botdetection.ip_limit]

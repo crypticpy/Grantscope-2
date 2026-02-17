@@ -23,12 +23,10 @@ slowapi>=0.1.9
 # GPT Researcher for deep research functionality
 gpt-researcher>=0.9.0
 tavily-python>=0.3.0
-firecrawl-py>=4.12.0
 
 # Export and reporting functionality
 python-pptx>=0.6.21
 reportlab>=4.0.0
 pandas>=2.0.0
 matplotlib>=3.8.0
-exa-py>=1.0.0
 trafilatura>=2.0.0

@@ -14,7 +14,7 @@ router = APIRouter(tags=["health"])
 @router.get("/")
 async def root():
     """Health check"""
-    return {"status": "ok", "message": "Foresight API is running"}
+    return {"status": "ok", "message": "GrantScope2 API is running"}
 
 
 @router.get("/api/v1/health")
@@ -46,13 +46,16 @@ async def health_check():
     # Crawl4AI (always available, no API key needed)
     capabilities.append("web_crawling")
 
-    # Optional paid APIs
+    # Optional paid API fallbacks
     if os.getenv("TAVILY_API_KEY"):
         capabilities.append("tavily")
     if os.getenv("SERPER_API_KEY"):
         capabilities.append("serper")
-    if os.getenv("EXA_API_KEY"):
-        capabilities.append("exa")
+
+    # Grant opportunity integrations
+    capabilities.append("grants_gov_integration")
+    if os.getenv("SAM_GOV_API_KEY"):
+        capabilities.append("sam_gov_integration")
 
     return {
         "status": "healthy",
@@ -91,7 +94,6 @@ async def debug_gpt_researcher():
             "SET" if os.getenv("AZURE_OPENAI_API_KEY") else "NOT SET"
         ),
         "TAVILY_API_KEY": "SET" if os.getenv("TAVILY_API_KEY") else "NOT SET",
-        "FIRECRAWL_API_KEY": "SET" if os.getenv("FIRECRAWL_API_KEY") else "NOT SET",
         "SERPER_API_KEY": "SET" if os.getenv("SERPER_API_KEY") else "NOT SET",
         "SEARXNG_BASE_URL": os.getenv("SEARXNG_BASE_URL", "NOT SET"),
         "SEARCH_PROVIDER": os.getenv("SEARCH_PROVIDER", "auto"),

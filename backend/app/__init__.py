@@ -1,7 +1,7 @@
 """
-Foresight Backend Application Package
+GrantScope2 Backend Application Package
 
-This package contains the FastAPI backend for the Foresight strategic
+This package contains the FastAPI backend for the GrantScope2 strategic
 intelligence system, including:
 
 - main.py: FastAPI application and API endpoints

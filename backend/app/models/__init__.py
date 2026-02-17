@@ -1,5 +1,5 @@
 """
-Foresight API Models
+GrantScope API Models
 
 Pydantic models for data validation and serialization.
 Re-exports every public symbol from all model sub-modules so that
@@ -134,6 +134,14 @@ from .core import (
     BlockedTopic,
 )
 
+from .grant import (
+    Department,
+    GrantCategory,
+    GrantApplication,
+    GrantApplicationCreate,
+    GrantApplicationUpdate,
+)
+
 from .workstream import (
     Workstream,
     WorkstreamCreate,
@@ -217,6 +225,21 @@ from .briefs_extra import (
     BulkExportRequest,
     BulkBriefCardStatus,
     BulkBriefStatusResponse,
+)
+
+from .wizard import (
+    GrantRequirement,
+    KeyDate,
+    GrantContext,
+    StaffingEntry,
+    BudgetEntry,
+    TimelinePhase,
+    MetricEntry,
+    PlanData,
+    WizardSessionCreate,
+    WizardSessionUpdate,
+    WizardSession,
+    ProcessGrantResponse,
 )
 
 
@@ -382,4 +405,23 @@ __all__ = [
     "BulkExportRequest",
     "BulkBriefCardStatus",
     "BulkBriefStatusResponse",
+    # grant
+    "Department",
+    "GrantCategory",
+    "GrantApplication",
+    "GrantApplicationCreate",
+    "GrantApplicationUpdate",
+    # wizard
+    "GrantRequirement",
+    "KeyDate",
+    "GrantContext",
+    "StaffingEntry",
+    "BudgetEntry",
+    "TimelinePhase",
+    "MetricEntry",
+    "PlanData",
+    "WizardSessionCreate",
+    "WizardSessionUpdate",
+    "WizardSession",
+    "ProcessGrantResponse",
 ]

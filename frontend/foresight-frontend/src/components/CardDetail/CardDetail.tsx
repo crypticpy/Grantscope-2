@@ -117,7 +117,7 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = "" }) => {
   const backLinkText = isReviewMode
     ? "Back to Review Queue"
     : fromPath === "/signals"
-      ? "Back to Signals"
+      ? "Back to Opportunities"
       : fromPath === "/"
         ? "Back to Dashboard"
         : "Back to Discover";
@@ -480,11 +480,86 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = "" }) => {
     { id: "assets" as const, name: "Assets", icon: FolderOpen },
   ];
 
-  // Loading state
+  // Loading state - structured skeleton loader
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-brand-blue" />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Back link skeleton */}
+        <div className="h-4 w-32 bg-gray-200 dark:bg-gray-700 rounded animate-pulse mb-6" />
+
+        {/* Header skeleton */}
+        <div className="bg-white dark:bg-dark-surface/90 rounded-2xl border border-gray-200 dark:border-gray-700/70 shadow-sm overflow-hidden mb-6">
+          <div className="bg-gradient-to-r from-gray-200 to-gray-300 dark:from-gray-700 dark:to-gray-600 h-1.5" />
+          <div className="p-5 sm:p-6 lg:p-8 space-y-4">
+            {/* Badges skeleton */}
+            <div className="flex items-center gap-3">
+              <div className="h-7 w-24 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse" />
+              <div className="h-7 w-20 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse" />
+            </div>
+            {/* Title skeleton */}
+            <div className="h-9 w-3/4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+            {/* Summary skeleton */}
+            <div className="space-y-2">
+              <div className="h-5 w-full bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+              <div className="h-5 w-2/3 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+            </div>
+            {/* Secondary info skeleton */}
+            <div className="flex items-center gap-4 pt-3 border-t border-gray-200/60 dark:border-gray-700/50">
+              <div className="h-6 w-20 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+              <div className="h-6 w-24 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+              <div className="h-4 w-28 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+            </div>
+          </div>
+        </div>
+
+        {/* Tabs skeleton */}
+        <div className="flex gap-6 border-b border-gray-200 dark:border-gray-700 mb-8">
+          {[80, 64, 72, 56, 64, 48, 56].map((w, i) => (
+            <div
+              key={i}
+              className="h-8 rounded animate-pulse mb-2 bg-gray-200 dark:bg-gray-700"
+              style={{ width: `${w}px` }}
+            />
+          ))}
+        </div>
+
+        {/* Content skeleton - 2 column layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
+          <div className="lg:col-span-2 space-y-6">
+            <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-6">
+              <div className="h-5 w-40 bg-gray-200 dark:bg-gray-700 rounded animate-pulse mb-4" />
+              <div className="space-y-2">
+                <div className="h-4 w-full bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+                <div className="h-4 w-full bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+                <div className="h-4 w-3/4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+              </div>
+            </div>
+            <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-6">
+              <div className="h-5 w-48 bg-gray-200 dark:bg-gray-700 rounded animate-pulse mb-4" />
+              <div className="grid grid-cols-2 gap-4">
+                {[1, 2, 3, 4].map((i) => (
+                  <div
+                    key={i}
+                    className="h-16 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="space-y-6">
+            <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-6">
+              <div className="h-5 w-32 bg-gray-200 dark:bg-gray-700 rounded animate-pulse mb-4" />
+              <div className="space-y-3">
+                {[1, 2, 3, 4, 5, 6].map((i) => (
+                  <div key={i} className="flex items-center justify-between">
+                    <div className="h-4 w-20 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+                    <div className="h-6 w-16 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

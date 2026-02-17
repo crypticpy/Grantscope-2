@@ -291,7 +291,7 @@ async def fetch_academic_papers(
                 async with session.get(
                     url,
                     timeout=aiohttp.ClientTimeout(total=timeout),
-                    headers={"User-Agent": "Foresight-App/1.0 (Research Pipeline)"},
+                    headers={"User-Agent": "GrantScope-App/1.0 (Research Pipeline)"},
                 ) as response:
                     if response.status == 200:
                         content = await response.text()

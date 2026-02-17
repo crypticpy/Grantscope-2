@@ -32,6 +32,7 @@ import {
   X,
   ChevronRight,
   Loader2,
+  FileText,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import {
@@ -70,6 +71,12 @@ export interface CardActionsProps {
   onCheckUpdates?: (cardId: string) => Promise<void>;
   /** Callback for generating an executive brief (brief column) */
   onGenerateBrief?: (workstreamCardId: string, cardId: string) => void;
+  /** Callback for evaluating a grant opportunity */
+  onEvaluateGrant?: (cardId: string) => Promise<void>;
+  /** Callback for starting a grant application */
+  onStartApplication?: (cardId: string) => Promise<void>;
+  /** Callback for preparing a proposal */
+  onPrepareProposal?: (cardId: string, cardUuid: string) => void;
 }
 
 // =============================================================================
@@ -218,7 +225,7 @@ const NotesModal = memo(function NotesModal({
         <div className="p-6 space-y-4">
           {/* Card Name Reference */}
           <div className="text-sm text-gray-600 dark:text-gray-400">
-            <span className="font-medium">Signal:</span>{" "}
+            <span className="font-medium">Opportunity:</span>{" "}
             <span className="text-gray-900 dark:text-white">{cardName}</span>
           </div>
 
@@ -236,7 +243,7 @@ const NotesModal = memo(function NotesModal({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Add your notes about this signal..."
+              placeholder="Add your notes about this opportunity..."
               disabled={isSaving}
               rows={6}
               className={cn(
@@ -366,6 +373,9 @@ export const CardActions = memo(function CardActions({
   onExportBrief,
   onCheckUpdates,
   onGenerateBrief,
+  onEvaluateGrant,
+  onStartApplication,
+  onPrepareProposal,
 }: CardActionsProps) {
   const navigate = useNavigate();
 
@@ -385,6 +395,8 @@ export const CardActions = memo(function CardActions({
   const [isQuickUpdating, setIsQuickUpdating] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
+  const [isEvaluatingGrant, setIsEvaluatingGrant] = useState(false);
+  const [isStartingApplication, setIsStartingApplication] = useState(false);
 
   // Screen reader announcement for loading states
   const [srAnnouncement, setSrAnnouncement] = useState("");
@@ -586,6 +598,45 @@ export const CardActions = memo(function CardActions({
     onGenerateBrief(card.id, card.card.id);
   }, [card.id, card.card.id, onGenerateBrief]);
 
+  // Handle evaluate grant (evaluating column)
+  const handleEvaluateGrant = useCallback(async () => {
+    if (!onEvaluateGrant) return;
+    setIsOpen(false);
+    setIsEvaluatingGrant(true);
+    setSrAnnouncement("Evaluating grant opportunity...");
+    try {
+      await onEvaluateGrant(card.id);
+      setSrAnnouncement("Grant evaluation completed");
+    } catch {
+      setSrAnnouncement("Grant evaluation failed");
+    } finally {
+      setIsEvaluatingGrant(false);
+    }
+  }, [card.id, onEvaluateGrant]);
+
+  // Handle start application (applying column)
+  const handleStartApplication = useCallback(async () => {
+    if (!onStartApplication) return;
+    setIsOpen(false);
+    setIsStartingApplication(true);
+    setSrAnnouncement("Starting grant application...");
+    try {
+      await onStartApplication(card.id);
+      setSrAnnouncement("Application draft started");
+    } catch {
+      setSrAnnouncement("Application start failed");
+    } finally {
+      setIsStartingApplication(false);
+    }
+  }, [card.id, onStartApplication]);
+
+  // Handle prepare proposal (applying column)
+  const handlePrepareProposal = useCallback(() => {
+    if (!onPrepareProposal) return;
+    setIsOpen(false);
+    onPrepareProposal(card.id, card.card.id);
+  }, [card.id, card.card.id, onPrepareProposal]);
+
   // Handle move to column
   const handleMoveToColumn = useCallback(
     (status: KanbanStatus) => {
@@ -633,6 +684,15 @@ export const CardActions = memo(function CardActions({
         case "generateBrief":
           handleGenerateBrief();
           break;
+        case "evaluateGrant":
+          await handleEvaluateGrant();
+          break;
+        case "startApplication":
+          await handleStartApplication();
+          break;
+        case "prepareProposal":
+          handlePrepareProposal();
+          break;
       }
     },
     [
@@ -644,12 +704,19 @@ export const CardActions = memo(function CardActions({
       handleNotesClick,
       handleRemove,
       handleGenerateBrief,
+      handleEvaluateGrant,
+      handleStartApplication,
+      handlePrepareProposal,
     ],
   );
 
   // Check if any column action is loading
   const isColumnActionLoading =
-    isQuickUpdating || isExporting || isCheckingUpdates;
+    isQuickUpdating ||
+    isExporting ||
+    isCheckingUpdates ||
+    isEvaluatingGrant ||
+    isStartingApplication;
 
   // Toggle move submenu
   const toggleMoveSubmenu = useCallback((e: React.MouseEvent) => {
@@ -675,7 +742,7 @@ export const CardActions = memo(function CardActions({
             isOpen &&
               "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300",
           )}
-          aria-label="Signal actions"
+          aria-label="Opportunity actions"
           aria-haspopup="true"
           aria-expanded={isOpen}
         >
@@ -703,7 +770,10 @@ export const CardActions = memo(function CardActions({
                     (action.handler === "quickUpdate" && isQuickUpdating) ||
                     (action.handler === "exportPdf" && isExporting) ||
                     (action.handler === "exportPptx" && isExporting) ||
-                    (action.handler === "checkUpdates" && isCheckingUpdates);
+                    (action.handler === "checkUpdates" && isCheckingUpdates) ||
+                    (action.handler === "evaluateGrant" && isEvaluatingGrant) ||
+                    (action.handler === "startApplication" &&
+                      isStartingApplication);
 
                   return (
                     <button
@@ -759,6 +829,18 @@ export const CardActions = memo(function CardActions({
               <StickyNote className="h-4 w-4 text-amber-500" />
               {hasExistingNotes ? "Edit Notes" : "Add Notes"}
             </button>
+
+            {/* Prepare Proposal (only shown when callback is available) */}
+            {onPrepareProposal && (
+              <button
+                onClick={handlePrepareProposal}
+                className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                role="menuitem"
+              >
+                <FileText className="h-4 w-4 text-indigo-500" />
+                Prepare Proposal
+              </button>
+            )}
 
             {/* Divider */}
             <div className="my-1 border-t border-gray-200 dark:border-gray-700" />

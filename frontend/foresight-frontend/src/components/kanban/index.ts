@@ -77,6 +77,8 @@ export type {
   OnDeepDiveCallback,
   OnRemoveCardCallback,
   OnMoveToColumnCallback,
+  OnEvaluateGrantCallback,
+  OnStartApplicationCallback,
   CardActionCallbacks,
 } from "./types";
 

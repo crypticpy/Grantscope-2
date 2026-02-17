@@ -19,6 +19,7 @@ import {
   Sparkles,
   HelpCircle,
   Rss,
+  FileText,
   type LucideIcon,
 } from "lucide-react";
 import { useAuthContext } from "../hooks/useAuthContext";
@@ -146,7 +147,7 @@ const Header: React.FC = () => {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Cmd+K / Ctrl+K global shortcut to navigate to Ask Foresight
+  // Cmd+K / Ctrl+K global shortcut to navigate to Ask GrantScope
   useEffect(() => {
     const handleCmdK = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -167,8 +168,8 @@ const Header: React.FC = () => {
     { name: "Dashboard", href: "/", icon: Home },
     { name: "Ask", href: "/ask", icon: Sparkles },
     { name: "Discover", href: "/discover", icon: Compass },
-    { name: "Signals", href: "/signals", icon: Radio },
-    { name: "Workstreams", href: "/workstreams", icon: FolderOpen },
+    { name: "Opportunities", href: "/signals", icon: Radio },
+    { name: "Programs", href: "/workstreams", icon: FolderOpen },
   ];
 
   // Items in the "More" dropdown
@@ -180,9 +181,9 @@ const Header: React.FC = () => {
 
   // Guide pages in the "More" dropdown
   const guideNavigation = [
-    { name: "Signals Guide", href: "/guide/signals", icon: HelpCircle },
+    { name: "Opportunities Guide", href: "/guide/signals", icon: HelpCircle },
     { name: "Discover Guide", href: "/guide/discover", icon: HelpCircle },
-    { name: "Workstreams Guide", href: "/guide/workstreams", icon: HelpCircle },
+    { name: "Programs Guide", href: "/guide/workstreams", icon: HelpCircle },
   ];
 
   const handleSignOut = async () => {
@@ -209,7 +210,7 @@ const Header: React.FC = () => {
             />
             <div className="hidden sm:flex flex-col">
               <span className="text-sm font-semibold text-brand-blue leading-tight">
-                Foresight
+                GrantScope2
               </span>
               <span className="text-xs text-gray-500 dark:text-gray-400 leading-tight">
                 Strategic Research
@@ -293,6 +294,19 @@ const Header: React.FC = () => {
               )}
             </div>
           </nav>
+
+          {/* Apply CTA */}
+          <Link
+            to="/apply"
+            className={`hidden md:inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-brand-blue hover:bg-brand-dark-blue rounded-lg transition-colors duration-200 shadow-sm hover:shadow-md ${
+              location.pathname.startsWith("/apply")
+                ? "ring-2 ring-brand-blue/50 ring-offset-2 ring-offset-white dark:ring-offset-dark-surface"
+                : ""
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            Apply
+          </Link>
 
           {/* User Menu Dropdown */}
           <div className="hidden md:flex items-center" ref={userDropdownRef}>
@@ -398,6 +412,16 @@ const Header: React.FC = () => {
       {isMenuOpen && (
         <div className="md:hidden animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 bg-white/95 dark:bg-brand-dark-blue/95 backdrop-blur-md border-t border-gray-200/50 dark:border-gray-700/50">
+            {/* Apply CTA for mobile */}
+            <Link
+              to="/apply"
+              onClick={() => setIsMenuOpen(false)}
+              className="flex items-center min-h-[44px] px-3 py-2 text-base font-semibold text-white bg-brand-blue rounded-lg mx-1 mb-2 active:scale-[0.98] transition-all duration-200"
+            >
+              <FileText className="w-5 h-5 mr-3 flex-shrink-0" />
+              <span className="flex-grow">Apply for a Grant</span>
+            </Link>
+
             {/* Main Navigation */}
             {navigation.map((item) => {
               const Icon = item.icon;

@@ -39,6 +39,7 @@ from app.models.processing_metrics import (
     ResearchTaskMetrics,
     ClassificationMetrics,
 )
+from app.taxonomy import PILLAR_NAMES
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["analytics"])
@@ -47,15 +48,8 @@ router = APIRouter(prefix="/api/v1", tags=["analytics"])
 # Constants
 # ============================================================================
 
-# Pillar definitions for analytics (matches database pillars table)
-ANALYTICS_PILLAR_DEFINITIONS = {
-    "CH": "Community Health & Sustainability",
-    "EW": "Economic & Workforce Development",
-    "HG": "High-Performing Government",
-    "HH": "Homelessness & Housing",
-    "MC": "Mobility & Critical Infrastructure",
-    "PS": "Public Safety",
-}
+# Pillar definitions for analytics (canonical source: taxonomy.py)
+ANALYTICS_PILLAR_DEFINITIONS = PILLAR_NAMES
 
 # Stage name mapping
 STAGE_NAMES = {
@@ -77,7 +71,7 @@ HORIZON_LABELS = {
 }
 
 # Strategic Insights Prompt for AI Generation
-INSIGHTS_GENERATION_PROMPT = """You are a strategic foresight analyst for the City of Austin municipal government.
+INSIGHTS_GENERATION_PROMPT = """You are a strategic intelligence analyst for the City of Austin municipal government.
 
 Based on the following top emerging trends from our horizon scanning system, generate concise strategic insights for city leadership.
 

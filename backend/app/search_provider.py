@@ -1,17 +1,17 @@
 """
-Unified search provider for Foresight.
+Unified search provider for GrantScope.
 
-Routes search requests to the configured backend — SearXNG (self-hosted),
-Serper (paid API), or Tavily (paid API) — via a single interface that
-all consumers import instead of importing individual fetchers directly.
+Routes search requests to the configured backend — SearXNG (self-hosted,
+preferred), Serper (paid API fallback), or Tavily (paid API fallback) —
+via a single interface that all consumers import.
 
 Configure via environment variable:
     SEARCH_PROVIDER=searxng | serper | tavily | auto
 
 When set to "auto" (default), the provider tries backends in order:
-    1. SearXNG  (if SEARXNG_BASE_URL is set)
-    2. Serper   (if SERPER_API_KEY is set)
-    3. Tavily   (if TAVILY_API_KEY is set)
+    1. SearXNG  (if SEARXNG_BASE_URL is set)  — preferred, self-hosted
+    2. Serper   (if SERPER_API_KEY is set)     — paid fallback
+    3. Tavily   (if TAVILY_API_KEY is set)     — paid fallback
 
 The first available backend wins. If none are configured, search calls
 return empty results with a warning — the system degrades gracefully
@@ -277,11 +277,7 @@ async def search_web(
     num_results: int = 10,
     date_filter: Optional[str] = None,
 ) -> List[SearchResult]:
-    """
-    Search the web using the configured provider.
-
-    Interface matches serper_fetcher.search_web() for drop-in replacement.
-    """
+    """Search the web using the configured provider (SearXNG preferred, Serper/Tavily fallback)."""
     provider = get_active_provider()
     if provider == "none":
         logger.warning("No search provider configured — returning empty results")
@@ -296,11 +292,7 @@ async def search_news(
     num_results: int = 10,
     date_filter: Optional[str] = None,
 ) -> List[SearchResult]:
-    """
-    Search news using the configured provider.
-
-    Interface matches serper_fetcher.search_news() for drop-in replacement.
-    """
+    """Search news using the configured provider (SearXNG preferred, Serper/Tavily fallback)."""
     provider = get_active_provider()
     if provider == "none":
         logger.warning("No search provider configured — returning empty results")
@@ -317,11 +309,7 @@ async def search_all(
     include_news: bool = True,
     include_web: bool = True,
 ) -> List[SearchResult]:
-    """
-    Run multiple queries across web and news, deduplicating by URL.
-
-    Interface matches serper_fetcher.search_all() for drop-in replacement.
-    """
+    """Run multiple queries across web and news, deduplicating by URL."""
     provider = get_active_provider()
     if provider == "none":
         logger.warning("No search provider configured — returning empty results")

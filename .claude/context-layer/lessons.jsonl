@@ -1,5 +1,0 @@
-{"timestamp":"2025-12-29T01:56:15.149Z","type":"bootstrap","lesson":"Project \"foresight-app\" initialized. Stack: unknown","severity":"low","files":[]}
-{"timestamp":"2025-12-29T04:39:17.602Z","type":"session-summary","lesson":"Fixed DiscoveryQueue infinite re-render crash (React error #301) by fixing useScrollRestoration hook","severity":"medium"}
-{"timestamp":"2025-12-29T04:39:17.603Z","type":"discovery","lesson":"React hooks with default function parameters cause infinite re-renders when those functions are used in useCallback/useEffect dependencies","severity":"medium"}
-{"timestamp":"2025-12-29T04:39:17.603Z","type":"discovery","lesson":"Always define default functions at module level, not inline in destructuring","severity":"medium"}
-{"timestamp":"2025-12-29T04:39:17.603Z","type":"discovery","lesson":"Debug infinite re-renders by stripping component to minimal version, then adding hooks one at a time","severity":"medium"}

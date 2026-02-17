@@ -1,4 +1,4 @@
-"""Shared dependencies for all Foresight API routers.
+"""Shared dependencies for all GrantScope API routers.
 
 Centralises the Supabase client singleton, authentication dependency,
 HTTPBearer scheme, OpenAI alias, rate-limiter reference, and small

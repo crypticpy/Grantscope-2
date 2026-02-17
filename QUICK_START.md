@@ -1,17 +1,19 @@
-# 🎯 Foresight System - Quick Start Guide
+# 🎯 GrantScope2 - Quick Start Guide
 
 ## 🚀 Local Development Setup
 
 ### Prerequisites
+
 - ✅ Python 3.11+ installed
-- ✅ Node.js 18+ and pnpm installed  
+- ✅ Node.js 18+ and pnpm installed
 - ✅ Supabase account created
 - ✅ OpenAI API key obtained
 
 ### Step 1: Database Setup
+
 1. **Create Supabase Project**
    - Go to [supabase.com](https://supabase.com)
-   - Create new project → Name: "foresight-austin"
+   - Create new project → Name: "grantscope-austin"
    - Note your project URL and API keys
 
 2. **Run Database Schema**
@@ -20,8 +22,9 @@
    - Run all migrations to create tables and sample data
 
 ### Step 2: Quick Setup
+
 ```bash
-# Clone/download the Foresight system files
+# Clone/download the GrantScope2 system files
 # Navigate to the project directory
 
 # Run the setup script
@@ -31,9 +34,10 @@ bash setup_local.sh
 ```
 
 ### Step 3: Start the System
+
 ```bash
 # Start both backend and frontend
-bash start_foresight.sh
+bash start_grantscope.sh
 ```
 
 **Frontend**: http://localhost:5173  
@@ -41,6 +45,7 @@ bash start_foresight.sh
 **API Docs**: http://localhost:8000/docs
 
 ### Step 4: Create Test User
+
 ```bash
 # In a new terminal, create a test user
 cd backend
@@ -49,9 +54,10 @@ python create_test_user.py
 ```
 
 ### Step 5: Login and Test
+
 1. Go to http://localhost:5173
 2. Use test credentials:
-   - Email: `test@foresight.austintexas.gov`
+   - Email: `test@grantscope.austintexas.gov`
    - Password: `TestPassword123!`
 
 ## 🎮 Testing the MVP Features
@@ -59,11 +65,13 @@ python create_test_user.py
 ### ✅ What You Can Test Now
 
 **Dashboard**
+
 - View recent intelligence cards
 - See user statistics and following count
 - Browse recent activity
 
 **Discovery Page**
+
 - Filter cards by strategic pillar (CH, MC, HS, EC, ES, CE)
 - Filter by maturity stage (Concept → Mature)
 - Filter by horizon (H1: 0-2yr, H2: 2-5yr, H3: 5+yr)
@@ -72,6 +80,7 @@ python create_test_user.py
 - Follow/unfollow cards
 
 **Card Detail Page**
+
 - View full card information
 - See impact metrics (relevance, velocity, novelty, etc.)
 - Add personal notes
@@ -79,11 +88,13 @@ python create_test_user.py
 - See associated sources
 
 **Workstreams**
+
 - Create custom research streams
 - Set filters by pillar, stage, horizon
 - Add keywords for targeted research
 
 **Settings**
+
 - Update profile information
 - Configure department and role
 - Set notification preferences
@@ -91,6 +102,7 @@ python create_test_user.py
 ### 🧪 Design Testing Checklist
 
 **User Experience**
+
 - [ ] Navigation feels intuitive
 - [ ] Card information is clear and useful
 - [ ] Filtering works as expected
@@ -98,18 +110,21 @@ python create_test_user.py
 - [ ] Loading states feel responsive
 
 **Content Quality**
+
 - [ ] Sample cards show real strategic value
 - [ ] Classifications make sense for Austin context
 - [ ] Scores (relevance, impact, etc.) are meaningful
 - [ ] Timeline tracking is useful
 
 **Workflow**
+
 - [ ] Following system feels natural
 - [ ] Workstream creation is straightforward
 - [ ] Notes feature adds value
 - [ ] Search returns relevant results
 
 **Visual Design**
+
 - [ ] Professional appearance suitable for municipal use
 - [ ] Color coding for strategic pillars works well
 - [ ] Typography is readable
@@ -126,6 +141,7 @@ python create_test_user.py
 ## 🚨 If You Encounter Issues
 
 **Backend won't start**
+
 ```bash
 # Check Python version
 python3 --version
@@ -139,6 +155,7 @@ pip install -r requirements.txt
 ```
 
 **Frontend won't start**
+
 ```bash
 # Clear node modules and reinstall
 cd frontend/foresight-frontend
@@ -147,11 +164,13 @@ pnpm install
 ```
 
 **Database connection issues**
+
 - Verify Supabase URL and keys in both `.env` files
 - Check that database migrations were run successfully
 - Ensure RLS policies are enabled
 
 **Can't login**
+
 - Run `python create_test_user.py` to create test credentials
 - Check that Supabase authentication is enabled
 
@@ -168,11 +187,13 @@ Please pay special attention to:
 ## 📝 What to Look For
 
 **Strengths to Keep:**
+
 - Features that feel intuitive
 - Information that seems genuinely useful
 - Workflows that save time
 
 **Areas to Improve:**
+
 - Confusing navigation or terminology
 - Missing information or features
 - Slow or cumbersome interactions
@@ -181,6 +202,7 @@ Please pay special attention to:
 ## 🚀 Ready for Export
 
 Once you're satisfied with the design and functionality:
+
 1. All code is ready for HuggingFace Spaces deployment
 2. Docker configuration is included
 3. Environment variables are documented

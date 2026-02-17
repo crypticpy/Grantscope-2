@@ -1,4 +1,4 @@
-"""Foresight API - FastAPI backend for Austin Strategic Research System.
+"""GrantScope2 API - FastAPI backend for Austin Strategic Research System.
 
 Slim app-factory module.  All endpoint logic lives in ``app.routers.*``;
 scheduled background jobs live in ``app.scheduler``.
@@ -39,6 +39,8 @@ from app.routers.ai_helpers import router as ai_helpers_router
 from app.routers.pattern_insights import router as pattern_insights_router
 from app.routers.admin import router as admin_router
 from app.routers.feeds import router as feeds_router
+from app.routers.proposals import router as proposals_router
+from app.routers.wizard import router as wizard_router
 
 load_dotenv()
 
@@ -59,9 +61,7 @@ def _build_allowed_origins() -> list[str]:
     environment = os.getenv("ENVIRONMENT", "development").lower()
 
     if environment == "production":
-        default = (
-            "https://foresight.vercel.app,https://foresight-frontend-beta.vercel.app"
-        )
+        default = "https://grantscope2.vercel.app,https://grantscope2-frontend-beta.vercel.app"
         raw = os.getenv("ALLOWED_ORIGINS", default).split(",")
         origins: list[str] = []
         for origin in raw:
@@ -80,7 +80,7 @@ def _build_allowed_origins() -> list[str]:
                 continue
             origins.append(origin)
         if not origins:
-            origins = ["https://foresight.vercel.app"]
+            origins = ["https://grantscope2.vercel.app"]
             print(
                 "[CORS] WARNING: No valid origins configured, using default production origin"
             )
@@ -108,19 +108,19 @@ def _build_allowed_origins() -> list[str]:
 async def lifespan(_app: FastAPI):
     """Manage application lifecycle -- startup and shutdown."""
     enable_scheduler = os.getenv(
-        "FORESIGHT_ENABLE_SCHEDULER", "false"
+        "GRANTSCOPE_ENABLE_SCHEDULER", "false"
     ).strip().lower() in ("1", "true", "yes", "y", "on")
 
     if enable_scheduler:
         start_scheduler()
     else:
         logger.info(
-            "Scheduler disabled (set FORESIGHT_ENABLE_SCHEDULER=true to enable)"
+            "Scheduler disabled (set GRANTSCOPE_ENABLE_SCHEDULER=true to enable)"
         )
 
     # Start embedded worker for processing discovery runs, research tasks, etc.
     worker_task = None
-    enable_worker = os.getenv("FORESIGHT_EMBED_WORKER", "true").strip().lower() in (
+    enable_worker = os.getenv("GRANTSCOPE_EMBED_WORKER", "true").strip().lower() in (
         "1",
         "true",
         "yes",
@@ -129,13 +129,13 @@ async def lifespan(_app: FastAPI):
     )
 
     if enable_worker:
-        from app.worker import ForesightWorker
+        from app.worker import GrantScopeWorker
 
-        _embedded_worker = ForesightWorker()
+        _embedded_worker = GrantScopeWorker()
         worker_task = asyncio.create_task(_embedded_worker.run())
         logger.info("Embedded worker started within web process")
 
-    logger.info("Foresight API started")
+    logger.info("GrantScope2 API started")
     yield
 
     if worker_task and _embedded_worker:
@@ -147,7 +147,7 @@ async def lifespan(_app: FastAPI):
         logger.info("Embedded worker stopped")
 
     shutdown_scheduler()
-    logger.info("Foresight API shutdown complete")
+    logger.info("GrantScope2 API shutdown complete")
 
 
 # ---------------------------------------------------------------------------
@@ -160,7 +160,7 @@ def create_app() -> FastAPI:
     allowed_origins = _build_allowed_origins()
 
     application = FastAPI(
-        title="Foresight API",
+        title="GrantScope2 API",
         description="Austin Strategic Research & Intelligence System",
         version="1.0.0",
         lifespan=lifespan,
@@ -189,6 +189,7 @@ def create_app() -> FastAPI:
     application.include_router(card_subresources_router)
     application.include_router(card_review_router)
     application.include_router(card_export_router)
+    # Workstream routers also serve /me/programs/* aliases for grant-oriented URLs
     application.include_router(workstreams_router)
     application.include_router(workstream_kanban_router)
     application.include_router(workstream_scans_router)
@@ -201,6 +202,8 @@ def create_app() -> FastAPI:
     application.include_router(pattern_insights_router)
     application.include_router(admin_router)
     application.include_router(feeds_router)
+    application.include_router(proposals_router)
+    application.include_router(wizard_router)
 
     return application
 

@@ -153,10 +153,10 @@ const QUICK_START_STEPS: QuickStartStep[] = [
   {
     number: 1,
     title: "Discover",
-    subtitle: "Find emerging trends",
+    subtitle: "Find grant opportunities",
     icon: Compass,
     detail:
-      "Browse the Discover page to explore AI-curated signals across all strategic pillars. The system continuously scans hundreds of sources to surface relevant trends, technologies, and issues for Austin.",
+      "Browse the Discover page to explore AI-curated grant opportunities across all strategic pillars. The system continuously scans hundreds of sources to surface relevant funding opportunities for Austin.",
     linkText: "Go to Discover",
     linkTo: "/discover",
   },
@@ -166,18 +166,18 @@ const QUICK_START_STEPS: QuickStartStep[] = [
     subtitle: "Track what matters",
     icon: Eye,
     detail:
-      "When you find a signal that matters to your work, follow it. Following adds the signal to your personal hub so you receive updates when new sources or analysis become available.",
-    linkText: "Browse signals",
+      "When you find an opportunity that matters to your work, follow it. Following adds the opportunity to your personal hub so you receive updates when new sources or analysis become available.",
+    linkText: "Browse opportunities",
     linkTo: "/discover",
   },
   {
     number: 3,
     title: "Manage",
-    subtitle: "Organize your signals",
+    subtitle: "Organize your opportunities",
     icon: Settings,
     detail:
-      "Use filters, sorting, grouping, and pin/star to organize your signal collection. Group by pillar, horizon, or workstream to see patterns. Pin your highest-priority signals so they always appear first.",
-    linkText: "View My Signals",
+      "Use filters, sorting, grouping, and pin/star to organize your opportunity collection. Group by pillar, horizon, or program to see patterns. Pin your highest-priority opportunities so they always appear first.",
+    linkText: "View My Opportunities",
     linkTo: "/signals",
   },
   {
@@ -186,8 +186,8 @@ const QUICK_START_STEPS: QuickStartStep[] = [
     subtitle: "Go deeper",
     icon: BookOpen,
     detail:
-      "Add signals to workstreams for structured research. The system runs deep research using AI to gather comprehensive analysis, then you can generate executive briefs for stakeholder communication.",
-    linkText: "View Workstreams",
+      "Add opportunities to programs for structured research. The system runs deep research using AI to gather comprehensive analysis, then you can generate executive briefs for stakeholder communication.",
+    linkText: "View Programs",
     linkTo: "/workstreams",
   },
 ];
@@ -233,7 +233,7 @@ const SOURCE_CATEGORIES: SourceCategory[] = [
       "Peer-reviewed research papers and preprints from academic databases. Delivers deep, evidence-based analysis with high source authority scores.",
     examples: ["arXiv (AI, ML, Computers & Society)", "Research databases"],
     bestFor:
-      "Grounding signals in rigorous evidence, especially for technology feasibility and long-range horizon scanning.",
+      "Grounding opportunities in rigorous evidence, especially for technology feasibility and long-range horizon scanning.",
   },
   {
     id: "government",
@@ -269,7 +269,7 @@ const SOURCE_CATEGORIES: SourceCategory[] = [
     bgColor: "bg-amber-50 dark:bg-amber-900/20",
     borderColor: "border-amber-200 dark:border-amber-700/50",
     description:
-      "Your own curated RSS feeds for specialized or niche publications not covered by the default categories. Fully customizable during signal creation.",
+      "Your own curated RSS feeds for specialized or niche publications not covered by the default categories. Fully customizable during opportunity creation.",
     examples: [
       "Municipal blogs",
       "Niche industry feeds",
@@ -300,24 +300,24 @@ const WORKFLOW_STEPS: FlowStep[] = [
   },
   {
     label: "Discover",
-    sublabel: "Browse signals",
+    sublabel: "Browse opportunities",
     icon: Compass,
     color: "bg-blue-500",
   },
   {
     label: "Follow",
-    sublabel: "Track signal",
+    sublabel: "Track opportunity",
     icon: Eye,
     color: "bg-cyan-500",
   },
   {
-    label: "My Signals",
+    label: "My Opportunities",
     sublabel: "Personal hub",
     icon: Radio,
     color: "bg-brand-blue",
   },
   {
-    label: "Workstream",
+    label: "Program",
     sublabel: "Organize",
     icon: Layers,
     color: "bg-violet-500",
@@ -411,7 +411,7 @@ export default function GuideSignals() {
               className="inline-flex items-center gap-1.5 text-sm text-white/70 hover:text-white transition-colors mb-6 no-print"
             >
               <ArrowLeft className="h-4 w-4" />
-              Back to My Signals
+              Back to My Opportunities
             </Link>
 
             <div className="flex items-center gap-3 mb-3">
@@ -419,13 +419,13 @@ export default function GuideSignals() {
                 <Radio className="h-6 w-6 text-white" />
               </div>
               <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">
-                How to Use Signals
+                How to Use Opportunities
               </h1>
             </div>
             <p className="text-white/80 text-lg max-w-2xl leading-relaxed">
-              Your personal intelligence hub for tracking emerging trends,
-              technologies, and strategic issues. Learn how to discover, create,
-              organize, and act on signals that matter to your work.
+              Your personal grant pipeline for tracking funding opportunities
+              and strategic priorities. Learn how to discover, create, organize,
+              and act on opportunities that matter to your work.
             </p>
           </div>
         </div>
@@ -555,24 +555,24 @@ export default function GuideSignals() {
             {/* -------------------------------------------------------------- */}
             <Accordion.Item value="what-are-signals" id="what-are-signals">
               <AccordionTrigger icon={<Radio className="h-5 w-5" />}>
-                What Are Signals?
+                What Are Opportunities?
               </AccordionTrigger>
               <AccordionContent>
                 <p className="mb-4">
-                  Signals are the atomic units of strategic intelligence in
-                  Foresight. Each signal tracks a single emerging trend,
-                  technology, policy shift, or issue that could impact City of
-                  Austin operations. Signals are continuously enriched with new
-                  sources, AI analysis, and quality scoring to keep your
-                  intelligence current.
+                  Opportunities are the atomic units of grant intelligence in
+                  GrantScope2. Each opportunity tracks a single funding source,
+                  grant program, or strategic initiative that could benefit City
+                  of Austin operations. Opportunities are continuously enriched
+                  with new sources, AI analysis, and quality scoring to keep
+                  your pipeline current.
                 </p>
 
                 <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">
                   Strategic Pillars
                 </h4>
                 <p className="text-sm mb-3">
-                  Every signal is classified under one of six strategic pillars
-                  that align with Austin&rsquo;s priorities:
+                  Every opportunity is classified under one of six strategic
+                  pillars that align with Austin&rsquo;s priorities:
                 </p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-5">
                   {[
@@ -601,8 +601,8 @@ export default function GuideSignals() {
                   Time Horizons
                 </h4>
                 <p className="text-sm mb-3">
-                  Horizons indicate when a signal is likely to have its primary
-                  impact:
+                  Horizons indicate when an opportunity is likely to have its
+                  primary impact:
                 </p>
                 <div className="space-y-2 mb-5">
                   {[
@@ -642,13 +642,14 @@ export default function GuideSignals() {
                 </div>
 
                 <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">
-                  Signal Quality Index (SQI)
+                  Opportunity Quality Index (SQI)
                 </h4>
                 <p className="text-sm mb-3">
-                  Every signal receives a quality score from 0 to 100, computed
-                  from five dimensions: source authority, source diversity,
-                  corroboration, recency, and municipal specificity. Higher
-                  scores indicate more credible, well-sourced intelligence.
+                  Every opportunity receives a quality score from 0 to 100,
+                  computed from five dimensions: source authority, source
+                  diversity, corroboration, recency, and municipal specificity.
+                  Higher scores indicate more credible, well-sourced
+                  intelligence.
                 </p>
                 <div className="space-y-3 mb-3">
                   <SqiBar score={85} label="High quality" />
@@ -657,9 +658,9 @@ export default function GuideSignals() {
                 </div>
 
                 <ProTip>
-                  Use the quality score filter on the Signals page to focus on
-                  high-confidence intelligence. A minimum threshold of 60 is a
-                  good starting point for strategic decisions.
+                  Use the quality score filter on the Opportunities page to
+                  focus on high-confidence intelligence. A minimum threshold of
+                  60 is a good starting point for strategic decisions.
                 </ProTip>
               </AccordionContent>
             </Accordion.Item>
@@ -673,34 +674,34 @@ export default function GuideSignals() {
               </AccordionTrigger>
               <AccordionContent>
                 <p className="mb-4">
-                  The My Signals page is your personalized intelligence
-                  dashboard. It brings together signals from three different
-                  sources into one unified view:
+                  The My Opportunities page is your personalized grant
+                  dashboard. It brings together opportunities from three
+                  different sources into one unified view:
                 </p>
 
                 <div className="space-y-3 mb-5">
                   {[
                     {
                       icon: Eye,
-                      title: "Followed Signals",
-                      desc: "Signals you discovered and chose to track from the Discover page. Following a signal adds it to your hub and subscribes you to updates.",
+                      title: "Followed Opportunities",
+                      desc: "Opportunities you discovered and chose to track from the Discover page. Following an opportunity adds it to your hub and subscribes you to updates.",
                       badge: "Followed",
                       badgeClass:
                         "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800",
                     },
                     {
                       icon: PenTool,
-                      title: "Created Signals",
-                      desc: "Signals you created manually or via the quick-create wizard. These track topics you identified that were not yet in the system.",
+                      title: "Created Opportunities",
+                      desc: "Opportunities you created manually or via the quick-create wizard. These track topics you identified that were not yet in the system.",
                       badge: "Created",
                       badgeClass:
                         "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800",
                     },
                     {
                       icon: Layers,
-                      title: "Workstream Signals",
-                      desc: "Signals that have been added to one or more of your research workstreams. These are actively being researched as part of a structured investigation.",
-                      badge: "Workstream",
+                      title: "Program Opportunities",
+                      desc: "Opportunities that have been added to one or more of your research programs. These are actively being researched as part of a structured investigation.",
+                      badge: "Program",
                       badgeClass:
                         "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800",
                     },
@@ -747,8 +748,8 @@ export default function GuideSignals() {
                 <div className="grid grid-cols-2 gap-3 mb-5">
                   {[
                     {
-                      label: "Total Signals",
-                      desc: "Count of all signals in your hub",
+                      label: "Total Opportunities",
+                      desc: "Count of all opportunities in your hub",
                     },
                     {
                       label: "Followed / Created",
@@ -756,11 +757,11 @@ export default function GuideSignals() {
                     },
                     {
                       label: "Updated This Week",
-                      desc: "Signals with fresh activity",
+                      desc: "Opportunities with fresh activity",
                     },
                     {
                       label: "Needs Research",
-                      desc: "Low-source signals to investigate",
+                      desc: "Low-source opportunities to investigate",
                     },
                   ].map((stat) => (
                     <div
@@ -778,9 +779,9 @@ export default function GuideSignals() {
                 </div>
 
                 <ProTip>
-                  The &ldquo;Needs Research&rdquo; stat highlights signals with
-                  few sources. These are good candidates for adding to a
-                  workstream and running a deep research task.
+                  The &ldquo;Needs Research&rdquo; stat highlights opportunities
+                  with few sources. These are good candidates for adding to a
+                  program and running a deep research task.
                 </ProTip>
               </AccordionContent>
             </Accordion.Item>
@@ -790,17 +791,17 @@ export default function GuideSignals() {
             {/* -------------------------------------------------------------- */}
             <Accordion.Item value="creating-signals" id="creating-signals">
               <AccordionTrigger icon={<Plus className="h-5 w-5" />}>
-                Creating Signals
+                Creating Opportunities
               </AccordionTrigger>
               <AccordionContent>
                 <p className="mb-4">
-                  In addition to following signals from the Discover page, you
-                  can create new signals for topics not yet covered by the
-                  automated discovery pipeline. Click the{" "}
+                  In addition to following opportunities from the Discover page,
+                  you can create new opportunities for topics not yet covered by
+                  the automated discovery pipeline. Click the{" "}
                   <span className="font-medium text-gray-900 dark:text-gray-100">
-                    New Signal
+                    New Opportunity
                   </span>{" "}
-                  button on the Signals page to open the creation wizard.
+                  button on the Opportunities page to open the creation wizard.
                 </p>
 
                 <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">
@@ -810,7 +811,7 @@ export default function GuideSignals() {
                 {/* Wizard steps visual */}
                 <div className="flex items-center gap-2 mb-5">
                   {[
-                    { num: 1, label: "Define Signal" },
+                    { num: 1, label: "Define Opportunity" },
                     { num: 2, label: "Source Preferences" },
                     { num: 3, label: "Review & Create" },
                   ].map((s, i) => (
@@ -836,7 +837,7 @@ export default function GuideSignals() {
                     <span className="flex items-center justify-center w-5 h-5 rounded-full bg-brand-blue/10 text-brand-blue dark:text-brand-light-blue text-xs font-bold">
                       1
                     </span>
-                    Define Signal
+                    Define Opportunity
                   </h4>
                   <p className="text-sm mb-3">
                     Choose between two creation modes:
@@ -852,8 +853,8 @@ export default function GuideSignals() {
                       <p className="text-xs text-gray-600 dark:text-gray-400">
                         Enter a topic phrase (e.g., &ldquo;AI-powered traffic
                         signal optimization&rdquo;) and the system generates the
-                        full signal using AI analysis. Optionally assign to a
-                        workstream and get AI-suggested keywords.
+                        full opportunity using AI analysis. Optionally assign to
+                        a program and get AI-suggested keywords.
                       </p>
                     </div>
                     <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 bg-white dark:bg-dark-surface">
@@ -864,9 +865,10 @@ export default function GuideSignals() {
                         </span>
                       </div>
                       <p className="text-xs text-gray-600 dark:text-gray-400">
-                        Full control over signal name, description, strategic
-                        pillar(s), horizon, maturity stage, and seed URLs. Use
-                        this when you have specific classifications in mind.
+                        Full control over opportunity name, description,
+                        strategic pillar(s), horizon, maturity stage, and seed
+                        URLs. Use this when you have specific classifications in
+                        mind.
                       </p>
                     </div>
                   </div>
@@ -939,7 +941,7 @@ export default function GuideSignals() {
 
                 <ProTip>
                   Quick Create with a deep dive is the fastest way to generate a
-                  comprehensive signal. Start with a clear, specific topic
+                  comprehensive opportunity. Start with a clear, specific topic
                   phrase for best results &mdash; for example, &ldquo;autonomous
                   shuttle pilots in mid-size cities&rdquo; rather than just
                   &ldquo;autonomous vehicles.&rdquo;
@@ -956,10 +958,11 @@ export default function GuideSignals() {
               </AccordionTrigger>
               <AccordionContent>
                 <p className="mb-4">
-                  Source preferences determine where Foresight looks for
-                  information about your signal. Configuring these thoughtfully
-                  improves both the relevance and quality of the intelligence
-                  gathered. Click each category below to explore its details.
+                  Source preferences determine where GrantScope2 looks for
+                  information about your opportunity. Configuring these
+                  thoughtfully improves both the relevance and quality of the
+                  intelligence gathered. Click each category below to explore
+                  its details.
                 </p>
 
                 {/* Source Category Explorer */}
@@ -1084,7 +1087,7 @@ export default function GuideSignals() {
                     {
                       icon: Tag,
                       title: "Keywords",
-                      desc: "Define monitoring keywords that the system uses to filter and rank incoming content for relevance to your signal.",
+                      desc: "Define monitoring keywords that the system uses to filter and rank incoming content for relevance to your opportunity.",
                     },
                   ].map((item) => {
                     const Icon = item.icon;
@@ -1109,9 +1112,9 @@ export default function GuideSignals() {
 
                 <ProTip>
                   Enable at least two source categories for better corroboration
-                  scores. Signals with diverse sources score significantly
-                  higher on the Signal Quality Index than those relying on a
-                  single category.
+                  scores. Opportunities with diverse sources score significantly
+                  higher on the Opportunity Quality Index than those relying on
+                  a single category.
                 </ProTip>
               </AccordionContent>
             </Accordion.Item>
@@ -1125,7 +1128,7 @@ export default function GuideSignals() {
               </AccordionTrigger>
               <AccordionContent>
                 <p className="mb-4">
-                  As your signal collection grows, the filtering and
+                  As your opportunity collection grows, the filtering and
                   organization tools help you focus on what matters most. All
                   filters work together and can be combined freely.
                 </p>
@@ -1150,7 +1153,7 @@ export default function GuideSignals() {
                         {
                           filter: "Search",
                           options:
-                            "Free-text search across signal names and summaries",
+                            "Free-text search across opportunity names and summaries",
                         },
                         {
                           filter: "Pillar",
@@ -1164,7 +1167,7 @@ export default function GuideSignals() {
                         {
                           filter: "Source",
                           options:
-                            "All Sources, Followed, Created by Me, In Workstreams",
+                            "All Sources, Followed, Created by Me, In Programs",
                         },
                         {
                           filter: "Quality Score",
@@ -1191,11 +1194,11 @@ export default function GuideSignals() {
                 <ul className="list-disc list-inside space-y-1 mb-5 text-sm">
                   <li>
                     <span className="font-medium">Last Updated</span> &mdash;
-                    Signals with the most recent activity appear first
+                    Opportunities with the most recent activity appear first
                   </li>
                   <li>
                     <span className="font-medium">Date Followed</span> &mdash;
-                    Most recently followed signals first
+                    Most recently followed opportunities first
                   </li>
                   <li>
                     <span className="font-medium">Quality Score</span> &mdash;
@@ -1211,22 +1214,22 @@ export default function GuideSignals() {
                   Grouping
                 </h4>
                 <p className="text-sm mb-3">
-                  Group your signals by one dimension to see clusters and
+                  Group your opportunities by one dimension to see clusters and
                   patterns:
                 </p>
                 <div className="grid grid-cols-3 gap-3 mb-5">
                   {[
                     {
                       label: "By Pillar",
-                      desc: "See signals organized under their strategic pillars",
+                      desc: "See opportunities organized under their strategic pillars",
                     },
                     {
                       label: "By Horizon",
-                      desc: "Separate short, medium, and long-range signals",
+                      desc: "Separate short, medium, and long-range opportunities",
                     },
                     {
                       label: "By Workstream",
-                      desc: "Signals grouped by research workstream",
+                      desc: "Opportunities grouped by research program",
                     },
                   ].map((g) => (
                     <div
@@ -1259,26 +1262,27 @@ export default function GuideSignals() {
                       &mdash; Switch between a card grid layout and a compact
                       list layout depending on your preference. Grid view shows
                       full summaries and badges; list view is denser for
-                      scanning many signals quickly.
+                      scanning many opportunities quickly.
                     </p>
                   </div>
                   <div className="flex items-start gap-3">
                     <Star className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
                     <p className="text-sm text-gray-600 dark:text-gray-400">
                       <span className="font-medium text-gray-800 dark:text-gray-200">
-                        Pin/Star signals
+                        Pin/Star opportunities
                       </span>{" "}
-                      &mdash; Click the star icon on any signal card to pin it
-                      for priority tracking. Pinned signals always appear at the
-                      top of their group, regardless of sort order.
+                      &mdash; Click the star icon on any opportunity card to pin
+                      it for priority tracking. Pinned opportunities always
+                      appear at the top of their group, regardless of sort
+                      order.
                     </p>
                   </div>
                 </div>
 
                 <ProTip>
                   Combine grouping by pillar with sorting by quality score to
-                  quickly identify the strongest signals in each strategic area.
-                  This is especially useful for preparing pillar-specific
+                  quickly identify the strongest opportunities in each strategic
+                  area. This is especially useful for preparing pillar-specific
                   briefings.
                 </ProTip>
               </AccordionContent>
@@ -1293,9 +1297,9 @@ export default function GuideSignals() {
               </AccordionTrigger>
               <AccordionContent>
                 <p className="mb-5">
-                  Signals are designed to flow through a structured workflow
-                  from initial discovery to actionable intelligence. Here is how
-                  each stage connects:
+                  Opportunities are designed to flow through a structured
+                  workflow from initial discovery to actionable intelligence.
+                  Here is how each stage connects:
                 </p>
 
                 {/* Visual flow diagram */}
@@ -1376,27 +1380,27 @@ export default function GuideSignals() {
                   <li>
                     <span className="font-medium">Dashboard</span> &mdash; Your
                     landing page shows aggregate metrics, recent activity, and
-                    top signals across all pillars.
+                    top opportunities across all pillars.
                   </li>
                   <li>
                     <span className="font-medium">Discover</span> &mdash; Browse
-                    the full catalog of AI-curated signals. Filter by pillar,
-                    horizon, and quality. Triage with bulk actions.
+                    the full catalog of AI-curated opportunities. Filter by
+                    pillar, horizon, and quality. Triage with bulk actions.
                   </li>
                   <li>
                     <span className="font-medium">Follow</span> &mdash; Add
-                    promising signals to your personal hub with one click. This
-                    creates a persistent subscription to updates.
+                    promising opportunities to your personal hub with one click.
+                    This creates a persistent subscription to updates.
                   </li>
                   <li>
-                    <span className="font-medium">My Signals</span> &mdash; Your
-                    organized collection. Filter, sort, group, and pin to manage
-                    your intelligence portfolio.
+                    <span className="font-medium">My Opportunities</span>{" "}
+                    &mdash; Your organized collection. Filter, sort, group, and
+                    pin to manage your grant portfolio.
                   </li>
                   <li>
-                    <span className="font-medium">Workstream</span> &mdash; Move
-                    signals into structured research workstreams. Use the kanban
-                    board to track progress through investigation stages.
+                    <span className="font-medium">Program</span> &mdash; Move
+                    opportunities into structured research programs. Use the
+                    kanban board to track progress through investigation stages.
                   </li>
                   <li>
                     <span className="font-medium">Research</span> &mdash; Run
@@ -1405,17 +1409,18 @@ export default function GuideSignals() {
                   </li>
                   <li>
                     <span className="font-medium">Brief</span> &mdash; Generate
-                    executive briefs from your researched signals for
+                    executive briefs from your researched opportunities for
                     stakeholder communication. Export as PDF, PowerPoint, or
                     CSV.
                   </li>
                 </ol>
 
                 <ProTip>
-                  Not every signal needs to complete the full workflow. Some
-                  signals are valuable simply as &ldquo;watch items&rdquo; on
-                  your Signals page. Reserve deep research and briefing for
-                  signals that require active strategic response.
+                  Not every opportunity needs to complete the full workflow.
+                  Some opportunities are valuable simply as &ldquo;watch
+                  items&rdquo; on your Opportunities page. Reserve deep research
+                  and briefing for opportunities that require active strategic
+                  response.
                 </ProTip>
               </AccordionContent>
             </Accordion.Item>
@@ -1451,7 +1456,7 @@ export default function GuideSignals() {
                     {
                       range: "0-39",
                       label: "Needs attention",
-                      desc: "Emerging or under-sourced signals. Good candidates for deep research tasks to gather more evidence.",
+                      desc: "Emerging or under-sourced opportunities. Good candidates for deep research tasks to gather more evidence.",
                       color:
                         "border-red-200/50 bg-red-50/30 dark:bg-red-900/10",
                     },
@@ -1481,17 +1486,17 @@ export default function GuideSignals() {
                 </h4>
                 <ul className="list-disc list-inside space-y-1.5 text-sm mb-5">
                   <li>
-                    <span className="font-medium">H1 signals</span> need the
-                    most frequent attention. Review weekly and consider
-                    immediate workstream assignment for action planning.
+                    <span className="font-medium">H1 opportunities</span> need
+                    the most frequent attention. Review weekly and consider
+                    immediate program assignment for action planning.
                   </li>
                   <li>
-                    <span className="font-medium">H2 signals</span> benefit from
-                    periodic deep research. Review monthly to identify signals
-                    that are accelerating toward H1.
+                    <span className="font-medium">H2 opportunities</span>{" "}
+                    benefit from periodic deep research. Review monthly to
+                    identify opportunities that are accelerating toward H1.
                   </li>
                   <li>
-                    <span className="font-medium">H3 signals</span> are
+                    <span className="font-medium">H3 opportunities</span> are
                     strategic watches. Monitor quarterly and use the quality
                     score trend to detect early acceleration.
                   </li>
@@ -1506,7 +1511,7 @@ export default function GuideSignals() {
                     <div className="flex items-center gap-2 mb-2">
                       <Eye className="h-4 w-4 text-brand-blue" />
                       <span className="text-sm font-semibold text-brand-blue dark:text-brand-light-blue">
-                        Follow a signal when:
+                        Follow an opportunity when:
                       </span>
                     </div>
                     <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
@@ -1524,7 +1529,7 @@ export default function GuideSignals() {
                     <div className="flex items-center gap-2 mb-2">
                       <Plus className="h-4 w-4 text-brand-green" />
                       <span className="text-sm font-semibold text-brand-compliant-green dark:text-brand-green">
-                        Create a signal when:
+                        Create an opportunity when:
                       </span>
                     </div>
                     <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
@@ -1570,23 +1575,23 @@ export default function GuideSignals() {
                   {[
                     {
                       icon: Clock,
-                      tip: "Review your signals weekly. Unfollow or archive signals that are no longer relevant to keep your hub focused.",
+                      tip: "Review your opportunities weekly. Unfollow or archive opportunities that are no longer relevant to keep your hub focused.",
                     },
                     {
                       icon: Layers,
-                      tip: "Add high-priority signals to workstreams early. Structured research yields better briefings than ad-hoc monitoring.",
+                      tip: "Add high-priority opportunities to programs early. Structured research yields better briefings than ad-hoc monitoring.",
                     },
                     {
                       icon: Star,
-                      tip: "Pin no more than 5-7 signals at a time. If everything is a priority, nothing is. Reserve pins for your most active investigations.",
+                      tip: "Pin no more than 5-7 opportunities at a time. If everything is a priority, nothing is. Reserve pins for your most active investigations.",
                     },
                     {
                       icon: Filter,
-                      tip: "Save mental energy by using quality-score filtering. Set a minimum of 40 to reduce noise from under-sourced signals.",
+                      tip: "Save mental energy by using quality-score filtering. Set a minimum of 40 to reduce noise from under-sourced opportunities.",
                     },
                     {
                       icon: Compass,
-                      tip: "Check the Discover page weekly for new signals. The AI continuously adds new intelligence that may be relevant to your work.",
+                      tip: "Check the Discover page weekly for new opportunities. The AI continuously adds new grant intelligence that may be relevant to your work.",
                     },
                   ].map((item, i) => {
                     const Icon = item.icon;
@@ -1621,7 +1626,7 @@ export default function GuideSignals() {
                 Continue Learning
               </h2>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-5">
-                Explore the other guide pages to master the complete Foresight
+                Explore the other guide pages to master the complete GrantScope2
                 workflow.
               </p>
               <div className="grid sm:grid-cols-3 gap-3">
@@ -1635,7 +1640,7 @@ export default function GuideSignals() {
                       How to Use Discover
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                      Browse and triage AI-curated signals
+                      Browse and triage AI-curated opportunities
                     </p>
                   </div>
                   <ArrowRight className="h-4 w-4 text-gray-400 ml-auto" />
@@ -1647,7 +1652,7 @@ export default function GuideSignals() {
                   <FolderOpen className="h-5 w-5 text-brand-green flex-shrink-0" />
                   <div>
                     <p className="font-semibold text-sm text-gray-900 dark:text-white">
-                      How to Use Workstreams
+                      How to Use Programs
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                       Deep research and collaboration
@@ -1675,14 +1680,14 @@ export default function GuideSignals() {
           </section>
 
           <p className="mt-10 text-sm text-gray-400 dark:text-gray-500 text-center no-print">
-            Questions about signals or the methodology behind them?{" "}
+            Questions about opportunities or the methodology behind them?{" "}
             <Link
               to="/methodology"
               className="text-brand-blue dark:text-brand-light-blue hover:underline"
             >
               View the full methodology
             </Link>{" "}
-            or reach out to the Foresight team.
+            or reach out to the GrantScope2 team.
           </p>
         </div>
       </div>

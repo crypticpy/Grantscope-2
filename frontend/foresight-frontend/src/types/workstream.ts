@@ -25,6 +25,20 @@ export interface Workstream {
   auto_add: boolean;
   auto_scan?: boolean;
   created_at: string;
+  /** Grant program type (e.g., "federal", "state", "foundation") */
+  program_type?: string;
+  /** Associated department ID */
+  department_id?: string;
+  /** Budget amount in dollars */
+  budget?: number;
+  /** Fiscal year (e.g., "FY2026") */
+  fiscal_year?: string;
+  /** Total dollar amount of awarded grants */
+  total_awarded?: number;
+  /** Total dollar amount of pending grant applications */
+  total_pending?: number;
+  /** Associated grant category codes */
+  category_ids?: string[];
 }
 
 export interface WorkstreamFormProps {
@@ -49,6 +63,14 @@ export interface FormData {
   is_active: boolean;
   analyze_now: boolean;
   auto_scan: boolean;
+  // Grant program fields
+  department_id: string;
+  program_type: string;
+  budget_range_min: number | null;
+  budget_range_max: number | null;
+  fiscal_year: string;
+  category_ids: string[];
+  grant_types: string[];
 }
 
 export interface FormErrors {
@@ -79,6 +101,7 @@ export async function fetchFilterPreview(
     stage_ids: string[];
     horizon: string;
     keywords: string[];
+    category_ids?: string[];
   },
 ): Promise<FilterPreviewResult> {
   const response = await fetch(`${API_BASE_URL}/api/v1/cards/filter-preview`, {
@@ -93,6 +116,9 @@ export async function fetchFilterPreview(
       stage_ids: filters.stage_ids,
       horizon: filters.horizon === "ALL" ? null : filters.horizon,
       keywords: filters.keywords,
+      ...(filters.category_ids && filters.category_ids.length > 0
+        ? { category_ids: filters.category_ids }
+        : {}),
     }),
   });
 
@@ -121,6 +147,10 @@ export interface WorkstreamTemplate {
     stage_ids: string[];
     horizon: string;
     keywords: string[];
+    // Optional grant-specific template fields
+    category_ids?: string[];
+    program_type?: string;
+    department_id?: string;
   };
 }
 

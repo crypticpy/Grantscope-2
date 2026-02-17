@@ -1,5 +1,5 @@
 """
-Cross-Signal Pattern Detection Service for Foresight Application.
+Cross-Signal Pattern Detection Service for GrantScope2 Application.
 
 This service discovers emergent connections across signals (cards) that span
 different strategic pillars. It uses vector embedding similarity to find
@@ -29,6 +29,7 @@ import numpy as np
 from supabase import Client
 
 from app.openai_provider import get_chat_deployment
+from app.taxonomy import VALID_PILLAR_CODES
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ MAX_INSIGHTS_PER_RUN = 15  # Don't generate more than this many insights per run
 REQUEST_TIMEOUT = 90  # seconds per LLM call
 DEDUP_TITLE_SIMILARITY = 0.85  # Cosine similarity threshold for deduplicating insights
 
-STRATEGIC_PILLARS = ["CH", "MC", "HS", "EC", "ES", "CE"]
+STRATEGIC_PILLARS = sorted(VALID_PILLAR_CODES)
 
 
 # ---------------------------------------------------------------------------
@@ -435,7 +436,7 @@ class PatternDetectionService:
         card_ids = [c.id for c in cluster.cards]
         pillar_list = sorted(cluster.pillars)
 
-        prompt = f"""You are a strategic foresight analyst for the City of Austin.
+        prompt = f"""You are a strategic intelligence analyst for the City of Austin.
 
 These signals come from different strategic pillars but appear connected:
 
@@ -462,7 +463,7 @@ Respond as JSON:
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are a strategic foresight analyst. Respond only with valid JSON.",
+                        "content": "You are a strategic intelligence analyst. Respond only with valid JSON.",
                     },
                     {"role": "user", "content": prompt},
                 ],

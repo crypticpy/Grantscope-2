@@ -70,7 +70,7 @@ const CATEGORY_CONFIG: Record<
 
 export interface ChatPanelProps {
   /** The scope context for this chat session */
-  scope: "signal" | "workstream" | "global";
+  scope: "signal" | "workstream" | "global" | "wizard";
   /** ID of the scoped entity (card_id or workstream_id), if not global */
   scopeId?: string;
   /** Additional CSS classes to apply to the root element */
@@ -93,6 +93,8 @@ export interface ChatPanelProps {
   onConversationChange?: (conversationId: string | null) => void;
   /** Skip auto-restoring the most recent conversation (user clicked "New Chat") */
   forceNew?: boolean;
+  /** Default suggested questions shown in empty state when backend returns none */
+  defaultSuggestedQuestions?: string[];
 }
 
 // ============================================================================
@@ -135,13 +137,14 @@ export function ChatPanel({
   className,
   compact = false,
   initialQuery,
-  placeholder = "Ask Foresight about signals, trends, and strategy...",
-  emptyStateTitle = "Ask Foresight",
-  emptyStateDescription = "Ask questions about signals, emerging trends, strategic priorities, and more. Foresight uses AI to synthesize intelligence from your data.",
+  placeholder = "Ask GrantScope about grants, funding opportunities, and deadlines...",
+  emptyStateTitle = "Ask GrantScope",
+  emptyStateDescription = "Ask questions about grants, funding opportunities, eligibility requirements, and more. GrantScope uses AI to synthesize intelligence from your data.",
   onCitationClick,
   initialConversationId,
   onConversationChange,
   forceNew,
+  defaultSuggestedQuestions = [],
 }: ChatPanelProps) {
   const {
     messages,
@@ -706,10 +709,15 @@ export function ChatPanel({
             </p>
 
             {/* Suggestion chips in empty state */}
-            {suggestedQuestions.length > 0 && (
+            {(suggestedQuestions.length > 0 ||
+              defaultSuggestedQuestions.length > 0) && (
               <div className="mt-6 w-full max-w-lg">
                 <ChatSuggestionChips
-                  suggestions={suggestedQuestions}
+                  suggestions={
+                    suggestedQuestions.length > 0
+                      ? suggestedQuestions
+                      : defaultSuggestedQuestions
+                  }
                   onSelect={handleSuggestionSelect}
                 />
               </div>
@@ -803,7 +811,7 @@ export function ChatPanel({
                     className="h-3.5 w-3.5 animate-spin text-brand-blue"
                     aria-hidden="true"
                   />
-                  <span>Foresight is thinking...</span>
+                  <span>GrantScope is thinking...</span>
                 </div>
               )}
             </div>
@@ -999,7 +1007,7 @@ export function ChatPanel({
               "focus:outline-none",
               "disabled:opacity-50 disabled:cursor-not-allowed",
             )}
-            aria-label="Chat message input. Type @ to mention signals or workstreams."
+            aria-label="Chat message input. Type @ to mention opportunities or workstreams."
           />
 
           <div className="flex items-center gap-1.5 shrink-0">

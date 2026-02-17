@@ -1,9 +1,9 @@
 # =============================================================================
-# Foresight API - Production Dockerfile
+# GrantScope API - Production Dockerfile
 # =============================================================================
 # Hardened container image for Railway / Azure Container Apps deployment.
 # Security: Non-root user, minimal attack surface, health checks.
-# Supports web server and background worker via FORESIGHT_PROCESS_TYPE env var.
+# Supports web server and background worker via GRANTSCOPE_PROCESS_TYPE env var.
 # Pair with docker-compose.yml for full stack including SearXNG search.
 # =============================================================================
 
@@ -12,8 +12,8 @@ FROM python:3.11-slim
 # =============================================================================
 # Metadata Labels
 # =============================================================================
-LABEL maintainer="Foresight Team"
-LABEL description="Foresight API - FastAPI backend for Austin Strategic Research System"
+LABEL maintainer="GrantScope Team"
+LABEL description="GrantScope API - FastAPI backend for Austin Strategic Research System"
 LABEL version="1.0.0"
 
 # =============================================================================
@@ -69,7 +69,7 @@ COPY --chown=appuser:appgroup backend/app/ ./app/
 # Copy branding assets for PDF exports (City of Austin logo, etc.)
 COPY --chown=appuser:appgroup branding/ ./branding/
 
-# Copy entrypoint (supports web vs worker via FORESIGHT_PROCESS_TYPE)
+# Copy entrypoint (supports web vs worker via GRANTSCOPE_PROCESS_TYPE)
 COPY --chown=appuser:appgroup backend/entrypoint.sh /app/entrypoint.sh
 RUN chmod 755 /app/entrypoint.sh
 

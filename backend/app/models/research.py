@@ -1,4 +1,4 @@
-"""Research models for Foresight API.
+"""Research models for GrantScope API.
 
 Models for research task creation, status tracking,
 and related constants.

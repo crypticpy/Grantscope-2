@@ -229,7 +229,7 @@ export const DiscoverCard = memo(function DiscoverCard({
                 ? "text-red-500 hover:text-red-600"
                 : "text-gray-400 hover:text-red-500",
             )}
-            title={isFollowing ? "Unfollow signal" : "Follow signal"}
+            title={isFollowing ? "Unfollow opportunity" : "Follow opportunity"}
             aria-pressed={isFollowing}
           >
             <Heart

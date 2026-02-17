@@ -51,7 +51,7 @@ export function ChatTabContent({
       compact
       placeholder={`Ask about ${cardName}...`}
       emptyStateTitle={`Chat about ${cardName}`}
-      emptyStateDescription="Ask questions about this signal's sources, implications, and strategic relevance."
+      emptyStateDescription="Ask questions about this opportunity's sources, implications, and strategic relevance."
       className="h-[calc(100vh-20rem)]"
     />
   );

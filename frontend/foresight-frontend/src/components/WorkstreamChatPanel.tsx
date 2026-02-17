@@ -122,7 +122,7 @@ export function WorkstreamChatPanel({
             compact
             placeholder={`Ask about ${workstreamName}...`}
             emptyStateTitle="Chat with this workstream"
-            emptyStateDescription="Ask questions about the signals, trends, and strategic themes in this research stream."
+            emptyStateDescription="Ask questions about the opportunities, trends, and strategic themes in this research stream."
           />
         </div>
       </div>

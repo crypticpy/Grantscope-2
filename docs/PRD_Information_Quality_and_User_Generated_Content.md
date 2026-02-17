@@ -2,7 +2,7 @@
 
 **Version:** 1.1
 **Date:** February 2025
-**Product:** Foresight — AI-Powered Strategic Horizon Scanning System
+**Product:** GrantScope2 — AI-Powered Strategic Horizon Scanning System
 **Owner:** City of Austin Innovation Office
 **Status:** Draft for Review
 
@@ -28,7 +28,7 @@
 
 ## 1. Executive Summary
 
-Users have expressed concern about information quality: they cannot confidently explain to leadership how Foresight ensures high-quality, credible data enters the platform. This PRD defines a set of features that address information quality transparency, source credibility, user feedback mechanisms, and user-generated content capabilities.
+Users have expressed concern about information quality: they cannot confidently explain to leadership how GrantScope2 ensures high-quality, credible data enters the platform. This PRD defines a set of features that address information quality transparency, source credibility, user feedback mechanisms, and user-generated content capabilities.
 
 **Key deliverables:**
 
@@ -46,7 +46,7 @@ Users have expressed concern about information quality: they cannot confidently 
 
 ### 2.1 User Concerns
 
-City of Austin staff using Foresight need to present findings to council members and the mayor. They face these challenges:
+City of Austin staff using GrantScope2 need to present findings to council members and the mayor. They face these challenges:
 
 1. **Accountability gap:** Users cannot explain _how_ the AI determines information quality. When asked "How do you know this is reliable?", they have no concrete answer beyond "the AI scored it."
 
@@ -291,7 +291,7 @@ Cards that don't align with existing pillars receive special handling:
 
 ### 6.4 User Stories
 
-**US-UC-1:** As a strategic analyst, I want to create a card for a topic that emerged in a leadership meeting so that I can begin tracking it in Foresight immediately, even if it doesn't fit our current strategic pillars.
+**US-UC-1:** As a strategic analyst, I want to create a card for a topic that emerged in a leadership meeting so that I can begin tracking it in GrantScope2 immediately, even if it doesn't fit our current strategic pillars.
 
 **Acceptance Criteria:**
 
@@ -302,7 +302,7 @@ Cards that don't align with existing pillars receive special handling:
 - Card appears in the Discover page and is searchable immediately
 - If no pillar fits, card is labeled "Exploratory" with a distinct visual badge
 
-**US-UC-2:** As a department director preparing for a council meeting on forensics, I want to create a card with specific URLs I've already found so that those sources are analyzed and scored within the Foresight framework.
+**US-UC-2:** As a department director preparing for a council meeting on forensics, I want to create a card with specific URLs I've already found so that those sources are analyzed and scored within the GrantScope2 framework.
 
 **Acceptance Criteria:**
 
@@ -415,7 +415,7 @@ Example:
 
 ### 8.1 Overview
 
-A public-facing page within the app that explains how Foresight discovers, verifies, and scores information. This enables users to confidently explain the system's methodology to leadership.
+A public-facing page within the app that explains how GrantScope2 discovers, verifies, and scores information. This enables users to confidently explain the system's methodology to leadership.
 
 ### 8.2 Page Sections
 
@@ -469,7 +469,7 @@ A public-facing page within the app that explains how Foresight discovers, verif
 
 ### 8.3 User Stories
 
-**US-TP-1:** As a department director presenting to council, I want to access a clear methodology page so that I can explain how Foresight ensures information quality when asked.
+**US-TP-1:** As a department director presenting to council, I want to access a clear methodology page so that I can explain how GrantScope2 ensures information quality when asked.
 
 **Acceptance Criteria:**
 
@@ -818,8 +818,8 @@ All features in this PRD will be implemented by AI coding agents operating auton
 
 ### Qualitative
 
-- Users report increased confidence in presenting Foresight findings to council
-- Leadership accepts Foresight data as credible for decision-making
+- Users report increased confidence in presenting GrantScope2 findings to council
+- Leadership accepts GrantScope2 data as credible for decision-making
 - Users actively rate sources (indicating engagement with quality)
 - New topics (like forensics) are successfully tracked end-to-end within the platform
 - Methodology page is referenced in council presentations
@@ -831,7 +831,7 @@ All features in this PRD will be implemented by AI coding agents operating auton
 | Term                       | Definition                                                                       |
 | -------------------------- | -------------------------------------------------------------------------------- |
 | **SQI**                    | Source Quality Index — composite score (0-100) measuring information reliability |
-| **Card**                   | Atomic unit of strategic intelligence in Foresight                               |
+| **Card**                   | Atomic unit of strategic intelligence in GrantScope2                             |
 | **Pillar**                 | Strategic category (CH, EW, HG, HH, MC, PS) aligned with Austin's framework      |
 | **Triage**                 | Fast AI relevance check that filters content before full analysis                |
 | **Domain Reputation**      | Credibility score assigned to a source's publishing domain                       |

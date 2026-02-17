@@ -1,12 +1,15 @@
-# Foresight System Architecture
+# GrantScope2 System Architecture
+
 ## Austin Municipal Strategic Research & Monitoring Platform
 
 ### Executive Summary
-The Foresight System is an AI-powered strategic research platform designed to automate the discovery, analysis, and monitoring of emerging technologies and trends relevant to municipal governance. Built around Austin's five strategic pillars, the system will provide proactive intelligence to support strategic decision-making and policy development.
+
+The GrantScope2 System is an AI-powered strategic research platform designed to automate the discovery, analysis, and monitoring of emerging technologies and trends relevant to municipal governance. Built around Austin's five strategic pillars, the system will provide proactive intelligence to support strategic decision-making and policy development.
 
 ## 1. System Overview & Core Components
 
 ### 1.1 Primary Objectives
+
 - **Automated Research Discovery**: Nightly scanning of technology and innovation publications
 - **Strategic Alignment**: Categorization against Austin's 5 strategic pillars and key themes
 - **User-Centric Monitoring**: Personalized research streams based on departmental roles and interests
@@ -17,7 +20,7 @@ The Foresight System is an AI-powered strategic research platform designed to au
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    FORESIGHT SYSTEM                         │
+│                    GRANTSCOPE2 SYSTEM                       │
 ├─────────────────────────────────────────────────────────────┤
 │  Frontend Layer                                            │
 │  ├─ User Dashboard    ├─ Workstream Manager  ├─ Card System │
@@ -46,6 +49,7 @@ The Foresight System is an AI-powered strategic research platform designed to au
 The system will categorize all research findings against Austin's strategic framework:
 
 **Primary Strategic Anchors:**
+
 - **Equity**: Technologies that promote fairness, accessibility, and inclusive service delivery
 - **Innovation**: Emerging technologies, digital transformation, and novel approaches
 - **Proactive Prevention**: Predictive technologies, early warning systems, preventive measures
@@ -53,6 +57,7 @@ The system will categorize all research findings against Austin's strategic fram
 - **Adaptive & Resilient Governance**: Technologies supporting agility, crisis response, and resilience
 
 **Secondary Research Domains:**
+
 - Affordability & Cost Optimization
 - Mobility & Transportation
 - Public Safety & Emergency Response
@@ -67,9 +72,11 @@ The system will categorize all research findings against Austin's strategic fram
 ### 2.1 Hybrid Database Architecture
 
 #### Vector Database (Primary Research Intelligence)
+
 **Technology**: Azure AI Search + Azure Cosmos DB with vector indexing
 **Purpose**: Semantic search and similarity matching for research content
 **Structure**:
+
 ```
 Research_Content Table:
 ├── content_id (UUID)
@@ -84,9 +91,11 @@ Research_Content Table:
 ```
 
 #### Graph Database (Relationship Mapping)
+
 **Technology**: Azure Cosmos DB (Gremlin API) or Neo4j
 **Purpose**: Map relationships between concepts, users, topics, and strategic themes
 **Key Relationships**:
+
 ```
 Nodes:
 ├── Research Topic (concept discovered)
@@ -107,9 +116,11 @@ Edges:
 ```
 
 #### Relational Database (User & System Data)
+
 **Technology**: Azure SQL Database
 **Purpose**: User management, system configuration, operational data
 **Core Tables**:
+
 ```
 Users:
 ├── user_id, department, role, clearance_level
@@ -132,6 +143,7 @@ Cards (Followed Topics):
 ### 2.2 Search & Indexing Strategy
 
 **Multi-Modal Search Capabilities**:
+
 - **Semantic Search**: Vector similarity for concept-based discovery
 - **Keyword Search**: Traditional text search with stemming and synonyms
 - **Graph Traversal**: Relationship-based exploration and discovery
@@ -143,6 +155,7 @@ Cards (Followed Topics):
 ### 3.1 User Personas & Role-Based Access
 
 **Primary User Types**:
+
 - **Strategic Planners**: Access to all pillars, deep analytics, trend forecasting
 - **Department Heads**: Focus on relevant pillars, budget impact analysis
 - **Analysts**: Content creation, research coordination, detailed analysis
@@ -151,6 +164,7 @@ Cards (Followed Topics):
 ### 3.2 Core Interface Components
 
 #### Daily Research Dashboard
+
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  📊 Daily Intelligence Feed - Dec 23, 2025             │
@@ -175,6 +189,7 @@ Cards (Followed Topics):
 ```
 
 #### Workstream Management Interface
+
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  🔄 Active Workstreams                                  │
@@ -192,6 +207,7 @@ Cards (Followed Topics):
 ```
 
 #### Card Collection System
+
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  🃏 My Research Cards (47 active)                       │
@@ -208,6 +224,7 @@ Cards (Followed Topics):
 ```
 
 ### 3.3 Mobile-Responsive Design
+
 - Progressive Web App (PWA) capabilities
 - Offline reading of saved cards and summaries
 - Push notifications for high-priority updates
@@ -218,6 +235,7 @@ Cards (Followed Topics):
 ### 4.1 Content Discovery & Collection
 
 **Data Sources**:
+
 ```
 Primary Sources:
 ├── Academic & Research: IEEE, ACM, arXiv, Google Scholar
@@ -246,6 +264,7 @@ Content Ingestion → Deduplication → Classification → Analysis → Storage
 ```
 
 #### Azure OpenAI Integration
+
 - **Content Analysis**: GPT-4 for deep content understanding and categorization
 - **Summarization**: GPT-4 Turbo for generating executive summaries
 - **Classification**: Fine-tuned models for strategic pillar classification
@@ -253,6 +272,7 @@ Content Ingestion → Deduplication → Classification → Analysis → Storage
 - **Trend Analysis**: Temporal pattern recognition across research streams
 
 #### Automated Classification Workflow
+
 ```
 1. Content Ingestion → Clean and normalize text
 2. Initial Classification → Multi-label pillar classification
@@ -293,6 +313,7 @@ Content Ingestion → Deduplication → Classification → Analysis → Storage
 ### 5.1 Azure Cloud Infrastructure
 
 **Core Services**:
+
 - **Azure App Service**: Frontend hosting and API gateway
 - **Azure Container Instances**: AI processing workloads
 - **Azure SQL Database**: Primary relational data store
@@ -305,6 +326,7 @@ Content Ingestion → Deduplication → Classification → Analysis → Storage
 ### 5.2 Security & Access Control
 
 **Authentication & Authorization**:
+
 - Azure Active Directory integration
 - Role-based access control (RBAC)
 - Multi-factor authentication required
@@ -312,6 +334,7 @@ Content Ingestion → Deduplication → Classification → Analysis → Storage
 - Audit logging for all system access
 
 **Data Security**:
+
 - Encryption at rest (AES-256)
 - Encryption in transit (TLS 1.3)
 - Regular security assessments
@@ -321,6 +344,7 @@ Content Ingestion → Deduplication → Classification → Analysis → Storage
 ### 5.3 Monitoring & Analytics
 
 **System Health Monitoring**:
+
 - API response times and availability
 - Database performance and query optimization
 - AI processing queue status
@@ -328,6 +352,7 @@ Content Ingestion → Deduplication → Classification → Analysis → Storage
 - Content quality metrics and accuracy
 
 **Business Intelligence**:
+
 - Strategic pillar coverage analytics
 - User engagement patterns
 - Research relevance scores
@@ -337,24 +362,28 @@ Content Ingestion → Deduplication → Classification → Analysis → Storage
 ## 6. Implementation Phases
 
 ### Phase 1: Foundation (Months 1-3)
+
 - Core database architecture implementation
 - Basic AI pipeline development
 - User authentication and authorization
 - Simple dashboard for content browsing
 
 ### Phase 2: Intelligence (Months 4-6)
+
 - Advanced AI classification and analysis
 - Workstream management features
 - Card collection system
 - Automated notification system
 
 ### Phase 3: Optimization (Months 7-9)
+
 - Graph relationship mapping
 - Advanced search capabilities
 - Mobile responsiveness
 - Performance optimization
 
 ### Phase 4: Enhancement (Months 10-12)
+
 - Predictive analytics
 - Trend forecasting
 - Advanced personalization
@@ -363,6 +392,7 @@ Content Ingestion → Deduplication → Classification → Analysis → Storage
 ## 7. Success Metrics & ROI
 
 ### Quantitative Metrics
+
 - **Research Coverage**: % of relevant municipal technology trends discovered
 - **User Engagement**: Daily active users, time spent in system
 - **Content Relevance**: Average relevance scores for consumed content
@@ -370,10 +400,11 @@ Content Ingestion → Deduplication → Classification → Analysis → Storage
 - **Strategic Impact**: Number of insights that influenced policy or planning
 
 ### Qualitative Benefits
+
 - Enhanced strategic thinking capacity
 - Proactive identification of emerging technologies
 - Improved cross-departmental collaboration
 - Data-driven decision making support
 - Future-ready governance capabilities
 
-This architecture provides a comprehensive foundation for the Foresight System, balancing technical sophistication with practical municipal government needs while maintaining scalability and security standards appropriate for a city government application.
+This architecture provides a comprehensive foundation for the GrantScope2 System, balancing technical sophistication with practical municipal government needs while maintaining scalability and security standards appropriate for a city government application.

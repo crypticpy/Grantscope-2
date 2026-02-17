@@ -1,5 +1,5 @@
 """
-Security Module for Foresight API
+Security Module for GrantScope2 API
 
 Implements production-grade security hardening including:
 - Rate limiting (IP-based using slowapi)
@@ -53,6 +53,7 @@ IS_PRODUCTION = ENVIRONMENT.lower() == "production"
 # Rate Limiter Setup
 # =============================================================================
 
+
 def _is_valid_ip(ip_str: str) -> bool:
     """Validate that a string is a valid IP address (IPv4 or IPv6)."""
     if not ip_str or len(ip_str) > 45:  # Max length for IPv6
@@ -90,9 +91,7 @@ def get_client_ip(request: Request) -> str:
     direct_ip = request.client.host if request.client else None
 
     if forwarded_for := request.headers.get("X-Forwarded-For"):
-        if ips := [
-            ip.strip() for ip in forwarded_for.split(",") if ip.strip()
-        ]:
+        if ips := [ip.strip() for ip in forwarded_for.split(",") if ip.strip()]:
             # Use rightmost non-trusted IP approach:
             # - The rightmost IPs are added by our trusted proxies
             # - The IP just before our proxies is the real client
@@ -112,7 +111,7 @@ def get_client_ip(request: Request) -> str:
             else:
                 logger.warning(
                     f"Invalid IP in X-Forwarded-For header: {client_ip[:50]!r}",
-                    extra={"direct_ip": direct_ip}
+                    extra={"direct_ip": direct_ip},
                 )
                 # Fall through to use direct IP
 
@@ -123,7 +122,7 @@ def get_client_ip(request: Request) -> str:
         else:
             logger.warning(
                 f"Invalid X-Real-IP header: {real_ip[:50]!r}",
-                extra={"direct_ip": direct_ip}
+                extra={"direct_ip": direct_ip},
             )
 
     # Fallback to direct client connection IP
@@ -147,6 +146,7 @@ def get_rate_limiter() -> Limiter:
 # =============================================================================
 # Security Headers Middleware
 # =============================================================================
+
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """
@@ -197,7 +197,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         # Prevent caching of API responses with sensitive data
         if not response.headers.get("Cache-Control"):
-            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+            response.headers["Cache-Control"] = (
+                "no-store, no-cache, must-revalidate, private"
+            )
 
         # Calculate and log request duration
         duration = time.time() - request.state.start_time
@@ -213,6 +215,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 # =============================================================================
 # Request Size Limit Middleware
 # =============================================================================
+
 
 class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
     """
@@ -233,8 +236,8 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
                         status_code=413,
                         content={
                             "detail": f"Request body too large. Maximum size is {MAX_REQUEST_SIZE_MB}MB.",
-                            "code": "REQUEST_TOO_LARGE"
-                        }
+                            "code": "REQUEST_TOO_LARGE",
+                        },
                     )
             except ValueError:
                 # Invalid content-length header
@@ -242,8 +245,8 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
                     status_code=400,
                     content={
                         "detail": "Invalid Content-Length header",
-                        "code": "INVALID_CONTENT_LENGTH"
-                    }
+                        "code": "INVALID_CONTENT_LENGTH",
+                    },
                 )
 
         return await call_next(request)
@@ -252,6 +255,7 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
 # =============================================================================
 # Secure Error Handler
 # =============================================================================
+
 
 def create_secure_exception_handler(allowed_origins: list[str]) -> Callable:
     """
@@ -266,7 +270,9 @@ def create_secure_exception_handler(allowed_origins: list[str]) -> Callable:
     - Full error details are returned for debugging
     """
 
-    async def secure_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    async def secure_exception_handler(
+        request: Request, exc: Exception
+    ) -> JSONResponse:
         """Handle all unhandled exceptions with secure error responses."""
         # Get request ID for logging correlation
         request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
@@ -285,7 +291,7 @@ def create_secure_exception_handler(allowed_origins: list[str]) -> Callable:
             f"Unhandled exception: {type(exc).__name__}: {str(exc)} "
             f"request_id={request_id} path={request.url.path} "
             f"method={request.method} client_ip={get_client_ip(request)}",
-            exc_info=True
+            exc_info=True,
         )
 
         # Determine error response based on environment
@@ -296,9 +302,9 @@ def create_secure_exception_handler(allowed_origins: list[str]) -> Callable:
                 content={
                     "detail": "An internal server error occurred. Please try again later.",
                     "code": "INTERNAL_ERROR",
-                    "request_id": request_id
+                    "request_id": request_id,
                 },
-                headers=headers
+                headers=headers,
             )
         else:
             # Development: Return full error details
@@ -307,9 +313,9 @@ def create_secure_exception_handler(allowed_origins: list[str]) -> Callable:
                 content={
                     "detail": str(exc),
                     "error_type": type(exc).__name__,
-                    "request_id": request_id
+                    "request_id": request_id,
                 },
-                headers=headers
+                headers=headers,
             )
 
     return secure_exception_handler
@@ -320,14 +326,16 @@ def create_rate_limit_exceeded_handler(allowed_origins: list[str]) -> Callable:
     Create a custom rate limit exceeded handler with CORS support.
     """
 
-    async def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    async def rate_limit_handler(
+        request: Request, exc: RateLimitExceeded
+    ) -> JSONResponse:
         """Handle rate limit exceeded errors."""
         request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
         origin = request.headers.get("origin", "")
 
         headers = {
             "X-Request-ID": request_id,
-            "Retry-After": "60"  # Suggest retry after 60 seconds
+            "Retry-After": "60",  # Suggest retry after 60 seconds
         }
         if origin in allowed_origins:
             headers["Access-Control-Allow-Origin"] = origin
@@ -345,9 +353,9 @@ def create_rate_limit_exceeded_handler(allowed_origins: list[str]) -> Callable:
                 "detail": "Rate limit exceeded. Please slow down your requests.",
                 "code": "RATE_LIMIT_EXCEEDED",
                 "retry_after_seconds": 60,
-                "request_id": request_id
+                "request_id": request_id,
             },
-            headers=headers
+            headers=headers,
         )
 
     return rate_limit_handler
@@ -357,12 +365,15 @@ def create_rate_limit_exceeded_handler(allowed_origins: list[str]) -> Callable:
 # HTTP Exception Handler (for 4xx errors)
 # =============================================================================
 
+
 def create_http_exception_handler(allowed_origins: list[str]) -> Callable:
     """
     Create an HTTP exception handler that maintains CORS and adds security.
     """
 
-    async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    async def http_exception_handler(
+        request: Request, exc: HTTPException
+    ) -> JSONResponse:
         """Handle HTTP exceptions with proper security measures."""
         request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
         origin = request.headers.get("origin", "")
@@ -386,11 +397,8 @@ def create_http_exception_handler(allowed_origins: list[str]) -> Callable:
 
         return JSONResponse(
             status_code=exc.status_code,
-            content={
-                "detail": exc.detail,
-                "request_id": request_id
-            },
-            headers=headers
+            content={"detail": exc.detail, "request_id": request_id},
+            headers=headers,
         )
 
     return http_exception_handler
@@ -399,6 +407,7 @@ def create_http_exception_handler(allowed_origins: list[str]) -> Callable:
 # =============================================================================
 # Security Setup Function
 # =============================================================================
+
 
 def setup_security(app: FastAPI, allowed_origins: list[str]) -> None:
     """
@@ -428,16 +437,13 @@ def setup_security(app: FastAPI, allowed_origins: list[str]) -> None:
 
     # Register exception handlers
     app.add_exception_handler(
-        RateLimitExceeded,
-        create_rate_limit_exceeded_handler(allowed_origins)
+        RateLimitExceeded, create_rate_limit_exceeded_handler(allowed_origins)
     )
     app.add_exception_handler(
-        Exception,
-        create_secure_exception_handler(allowed_origins)
+        Exception, create_secure_exception_handler(allowed_origins)
     )
     app.add_exception_handler(
-        HTTPException,
-        create_http_exception_handler(allowed_origins)
+        HTTPException, create_http_exception_handler(allowed_origins)
     )
 
     logger.info(
@@ -477,10 +483,9 @@ def rate_limit_discovery():
 # Audit Logging Utilities
 # =============================================================================
 
+
 def log_security_event(
-    event_type: str,
-    request: Request,
-    details: Optional[dict] = None
+    event_type: str, request: Request, details: Optional[dict] = None
 ) -> None:
     """
     Log a security-relevant event for audit purposes.

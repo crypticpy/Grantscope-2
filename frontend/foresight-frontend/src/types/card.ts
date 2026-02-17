@@ -41,6 +41,20 @@ export interface BaseCard {
   signal_quality_score?: number | null;
   velocity_trend?: string | null;
   trend_direction?: string | null;
+
+  // Grant-specific fields
+  deadline?: string | null;
+  funding_amount_min?: number | null;
+  funding_amount_max?: number | null;
+  grantor?: string | null;
+  eligibility_text?: string | null;
+  grant_type?: string | null;
+  source_url?: string | null;
+  cfda_number?: string | null;
+  category_id?: string | null;
+  alignment_score?: number | null;
+  grants_gov_id?: string | null;
+  sam_opportunity_id?: string | null;
 }
 
 /**

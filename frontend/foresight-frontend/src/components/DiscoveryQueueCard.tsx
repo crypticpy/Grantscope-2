@@ -611,7 +611,7 @@ export const DiscoveryQueueCard = memo(function DiscoveryQueueCard({
               }}
               disabled={isLoading}
               className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 px-3 sm:px-3 py-2 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50 disabled:opacity-50 transition-colors active:scale-95"
-              title="Approve this signal"
+              title="Approve this opportunity"
             >
               <CheckCircle className="h-5 w-5 sm:h-4 sm:w-4 sm:mr-1.5" />
               <span className="hidden sm:inline ml-1.5">Approve</span>
@@ -634,7 +634,7 @@ export const DiscoveryQueueCard = memo(function DiscoveryQueueCard({
               }}
               disabled={isLoading}
               className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 px-3 sm:px-3 py-2 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50 disabled:opacity-50 transition-colors active:scale-95"
-              title="Reject this signal"
+              title="Reject this opportunity"
             >
               <XCircle className="h-5 w-5 sm:h-4 sm:w-4 sm:mr-1.5" />
               <span className="hidden sm:inline ml-1.5">Reject</span>

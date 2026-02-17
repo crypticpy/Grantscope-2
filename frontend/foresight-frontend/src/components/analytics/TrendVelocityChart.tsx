@@ -335,7 +335,7 @@ export const TrendVelocityChart: React.FC<TrendVelocityChartProps> = ({
           <Line
             type="monotone"
             dataKey="count"
-            name="Signal Count"
+            name="Opportunity Count"
             stroke="#009F4D"
             strokeWidth={2}
             dot={{ fill: "#009F4D", strokeWidth: 2, r: 3 }}

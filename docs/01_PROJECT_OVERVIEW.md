@@ -1,8 +1,8 @@
-# Foresight: Project Overview
+# GrantScope2: Project Overview
 
-## What Is Foresight?
+## What Is GrantScope2?
 
-Foresight is a strategic horizon scanning system for the City of Austin. It automates the discovery, analysis, and tracking of emerging trends, technologies, and issues that could impact municipal operations 6-36 months in the future.
+GrantScope2 is a strategic horizon scanning system for the City of Austin. It automates the discovery, analysis, and tracking of emerging trends, technologies, and issues that could impact municipal operations 6-36 months in the future.
 
 ## The Problem
 
@@ -11,6 +11,7 @@ City employees are in reactive mode—fighting daily fires with no capacity for 
 ## The Solution
 
 An AI-powered system that:
+
 1. **Scans** news, research, and publications nightly for relevant emerging issues
 2. **Synthesizes** findings into digestible "Cards" (atomic units of intelligence)
 3. **Tracks** how topics evolve through maturity stages over time
@@ -19,9 +20,10 @@ An AI-powered system that:
 
 ## Core Concept: Cards
 
-Everything in Foresight is a **Card**. A card represents a single emerging concept, technology, or trend.
+Everything in GrantScope2 is a **Card**. A card represents a single emerging concept, technology, or trend.
 
 Cards have:
+
 - A name and AI-generated summary
 - Classification (pillar, horizon, maturity stage)
 - Source lineage (all articles that informed it)
@@ -39,11 +41,12 @@ Think of cards like "Pokémon cards for strategic intelligence"—users collect 
 
 ## Alignment
 
-Foresight aligns with:
+GrantScope2 aligns with:
+
 - City of Austin Citywide Strategic Plan (CSP)
 - CMO's Top 25 Priorities
-- Budget & Organizational Excellence (BOE) 2025 Foresight Roadmap
-- Framework Foresight methodology (Hines & Bishop)
+- Budget & Organizational Excellence (BOE) 2025 GrantScope2 Roadmap
+- Framework GrantScope2 methodology (Hines & Bishop)
 
 ## Success Metrics
 
@@ -61,5 +64,5 @@ Foresight aligns with:
 
 ---
 
-*Document Version: 1.0*
-*Last Updated: December 2024*
+_Document Version: 1.0_
+_Last Updated: December 2024_

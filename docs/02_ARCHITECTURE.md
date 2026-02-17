@@ -1,4 +1,4 @@
-# Foresight: System Architecture
+# GrantScope2: System Architecture
 
 ## High-Level Architecture
 
@@ -29,12 +29,14 @@
 ## Components
 
 ### 1. Frontend (React + TypeScript)
+
 - Single-page application
 - Hosted as static files (Vercel, Netlify, or HF Spaces)
 - Communicates with backend via REST API
 - Real-time updates via Supabase subscriptions
 
 ### 2. Backend (FastAPI + Python)
+
 - REST API for all operations
 - Authentication via Supabase JWT
 - Business logic and orchestration
@@ -42,6 +44,7 @@
 - Hosted on HuggingFace Spaces (Docker)
 
 ### 3. Database (Supabase)
+
 - PostgreSQL for relational data
 - pgvector extension for embeddings
 - Row-level security for multi-user access
@@ -49,11 +52,13 @@
 - Built-in authentication
 
 ### 4. AI Layer (Azure OpenAI)
+
 - GPT-4o for analysis and synthesis
 - text-embedding-ada-002 for vector embeddings
 - Configurable to swap models
 
 ### 5. Nightly Pipeline
+
 - Scheduled job (cron or APScheduler)
 - Fetches from configured sources
 - Processes and creates/updates cards
@@ -173,6 +178,7 @@
 ## Future Scaling Path
 
 When pilot proves value:
+
 1. Move backend to Azure Container Apps
 2. Add Neo4j Aura for graph relationships
 3. Add Redis for caching
@@ -181,5 +187,5 @@ When pilot proves value:
 
 ---
 
-*Document Version: 1.0*
-*Last Updated: December 2024*
+_Document Version: 1.0_
+_Last Updated: December 2024_

@@ -16,11 +16,11 @@ GPT Researcher was returning `LLM Response: None` causing research to fail with 
 
 GPT Researcher requires specific environment variable formats that differ from our app's configuration:
 
-| Our App Uses | GPT Researcher Expects |
-|--------------|------------------------|
-| `AZURE_OPENAI_KEY` | `AZURE_OPENAI_API_KEY` |
-| `AZURE_OPENAI_API_VERSION` | `OPENAI_API_VERSION` |
-| `AZURE_OPENAI_DEPLOYMENT_CHAT=gpt-41` | `SMART_LLM=azure_openai:gpt-41` |
+| Our App Uses                                    | GPT Researcher Expects              |
+| ----------------------------------------------- | ----------------------------------- |
+| `AZURE_OPENAI_KEY`                              | `AZURE_OPENAI_API_KEY`              |
+| `AZURE_OPENAI_API_VERSION`                      | `OPENAI_API_VERSION`                |
+| `AZURE_OPENAI_DEPLOYMENT_CHAT=gpt-41`           | `SMART_LLM=azure_openai:gpt-41`     |
 | `AZURE_OPENAI_DEPLOYMENT_CHAT_MINI=gpt-41-mini` | `FAST_LLM=azure_openai:gpt-41-mini` |
 
 The critical missing piece was the **`azure_openai:` prefix** in the SMART_LLM and FAST_LLM values.
@@ -38,6 +38,7 @@ GPTResearcher(..., scraper="firecrawl")
 However, in current GPT Researcher versions (e.g. `0.14.x`), `GPTResearcher.__init__` does **not** accept a `scraper` parameter. Extra kwargs are stored and then forwarded into internal LLM calls, which can break AzureChatOpenAI/OpenAI requests with "unknown parameter" errors.
 
 This manifests as:
+
 - `LLM Response: None`
 - `Error in reading JSON ... NoneType`
 - `expected string or bytes-like object, got 'NoneType'`
@@ -54,10 +55,12 @@ Added `_configure_gpt_researcher_for_azure()` function in `backend/app/research_
 4. Also sets `AZURE_OPENAI_API_VERSION` because GPT Researcher embeddings read it directly
 
 Updated GPT Researcher initialization to:
+
 - **Stop passing `scraper=` kwarg** (prevents forwarding into LLM calls)
 - Configure scraper via env (`SCRAPER=firecrawl` or `SCRAPER=bs`) instead
 
 **Files Modified**:
+
 - `backend/app/research_service.py` - Added auto-config function
 - `backend/.env.example` - Documented the translation
 
@@ -68,6 +71,7 @@ Updated GPT Researcher initialization to:
 **Problem**: Railway is not auto-deploying git pushes.
 
 Three commits have been pushed but the production app is still running old code:
+
 - `ef2c6c9` - Debug endpoint (Dec 27)
 - `606312a` - GPT Researcher fix (Dec 27)
 
@@ -80,7 +84,7 @@ Three commits have been pushed but the production app is still running old code:
 ### Step 1: Manually Trigger Railway Deploy
 
 1. Go to Railway dashboard
-2. Select the `foresight-api` service
+2. Select the `grantscope-api` service
 3. Go to **Deployments** tab
 4. Click **Redeploy** on the latest commit (`606312a`)
 5. Wait for build to complete (~2-3 min)
@@ -88,11 +92,13 @@ Three commits have been pushed but the production app is still running old code:
 ### Step 2: Verify Debug Endpoint
 
 After deploy, hit:
+
 ```
-https://foresight-api-production.up.railway.app/api/v1/debug/gpt-researcher
+https://grantscope-api-production.up.railway.app/api/v1/debug/gpt-researcher
 ```
 
 Expected response (if fix works):
+
 ```json
 {
   "env_vars": {
@@ -136,6 +142,7 @@ Check Railway logs for the exact error. Possible issues:
 ## Rollback
 
 If this fix causes issues:
+
 ```bash
 git revert 606312a
 git push

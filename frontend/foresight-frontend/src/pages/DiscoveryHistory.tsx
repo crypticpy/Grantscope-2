@@ -438,7 +438,7 @@ const RunRow: React.FC<{
           {createdCardIds.length > 0 && (
             <div className="mb-3">
               <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
-                Created Signals
+                Created Opportunities
               </div>
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm text-gray-700 dark:text-gray-300">
@@ -713,13 +713,13 @@ const DiscoveryHistory: React.FC = () => {
               color="bg-gray-50 dark:bg-dark-surface border-gray-200 dark:border-gray-700"
             />
             <StatCard
-              label="Signals Created"
+              label="Opportunities Created"
               value={stats.totalCardsCreated}
               icon={<Zap className="w-5 h-5 text-green-600" />}
               color="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
             />
             <StatCard
-              label="Signals Updated"
+              label="Opportunities Updated"
               value={stats.totalCardsUpdated}
               icon={<RefreshCw className="w-5 h-5 text-blue-600" />}
               color="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800"
@@ -804,7 +804,7 @@ const DiscoveryHistory: React.FC = () => {
               <p className="text-sm text-blue-800 dark:text-blue-200 mt-1">
                 Discovery runs automatically every Sunday at 2:00 AM UTC. The
                 system searches for emerging trends aligned with Austin's
-                strategic priorities and creates new signals for review.
+                strategic priorities and creates new opportunities for review.
               </p>
             </div>
           </div>
