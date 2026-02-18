@@ -82,31 +82,12 @@ def upgrade() -> None:
     op.create_index("idx_card_documents_uploaded_by", "card_documents", ["uploaded_by"])
 
     # Enable RLS
-    op.execute("ALTER TABLE card_documents ENABLE ROW LEVEL SECURITY")
-    op.execute(
-        "CREATE POLICY card_documents_authenticated_select ON card_documents "
-        "FOR SELECT TO authenticated USING (true)"
-    )
-    op.execute(
-        "CREATE POLICY card_documents_authenticated_insert ON card_documents "
-        "FOR INSERT TO authenticated WITH CHECK (true)"
-    )
-    op.execute(
-        "CREATE POLICY card_documents_authenticated_delete ON card_documents "
-        "FOR DELETE TO authenticated USING (uploaded_by = auth.uid())"
-    )
+    # Note: RLS policies are NOT used on Azure PostgreSQL (no auth.uid()).
+    # Access control is enforced at the application layer via FastAPI
+    # dependencies (get_current_user + ownership checks in card_subresources.py).
 
 
 def downgrade() -> None:
-    op.execute(
-        "DROP POLICY IF EXISTS card_documents_authenticated_delete ON card_documents"
-    )
-    op.execute(
-        "DROP POLICY IF EXISTS card_documents_authenticated_insert ON card_documents"
-    )
-    op.execute(
-        "DROP POLICY IF EXISTS card_documents_authenticated_select ON card_documents"
-    )
     op.drop_index("idx_card_documents_uploaded_by", table_name="card_documents")
     op.drop_index("idx_card_documents_card_id", table_name="card_documents")
     op.drop_table("card_documents")

@@ -240,7 +240,7 @@ async def _build_grant_context_from_card(db: AsyncSession, card_id: str) -> dict
                     f"[{doc.document_type.upper()}] {doc.original_filename}:\n{doc.extracted_text[:10000]}"
                 )
     except Exception as e:
-        logger.warning("Failed to fetch card documents for wizard: %s", card_id, e)
+        logger.warning("Failed to fetch card documents for wizard: %s: %s", card_id, e)
 
     # Load latest deep research report
     try:

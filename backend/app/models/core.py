@@ -17,6 +17,50 @@ class UserProfile(BaseModel):
     department: Optional[str] = None
     role: Optional[str] = None
     preferences: Dict[str, Any] = {}
+    department_id: Optional[str] = None
+    title: Optional[str] = None
+    bio: Optional[str] = None
+    program_name: Optional[str] = None
+    program_mission: Optional[str] = None
+    team_size: Optional[str] = None
+    budget_range: Optional[str] = None
+    grant_experience: Optional[str] = None
+    grant_categories: List[str] = []
+    funding_range_min: Optional[int] = None
+    funding_range_max: Optional[int] = None
+    strategic_pillars: List[str] = []
+    priorities: List[str] = []
+    custom_priorities: Optional[str] = None
+    help_wanted: List[str] = []
+    update_frequency: Optional[str] = None
+    profile_completed_at: Optional[str] = None
+    profile_step: int = 0
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class ProfileSetupUpdate(BaseModel):
+    """Payload for profile wizard step saves. All fields optional for partial updates."""
+
+    display_name: Optional[str] = None
+    department_id: Optional[str] = None
+    title: Optional[str] = None
+    bio: Optional[str] = None
+    program_name: Optional[str] = None
+    program_mission: Optional[str] = None
+    team_size: Optional[str] = None
+    budget_range: Optional[str] = None
+    grant_experience: Optional[str] = None
+    grant_categories: Optional[List[str]] = None
+    funding_range_min: Optional[int] = None
+    funding_range_max: Optional[int] = None
+    strategic_pillars: Optional[List[str]] = None
+    priorities: Optional[List[str]] = None
+    custom_priorities: Optional[str] = None
+    help_wanted: Optional[List[str]] = None
+    update_frequency: Optional[str] = None
+    profile_step: Optional[int] = None
+    # profile_completed_at is computed server-side, not client-settable
 
 
 class Card(BaseModel):

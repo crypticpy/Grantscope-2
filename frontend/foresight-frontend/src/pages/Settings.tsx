@@ -1,8 +1,19 @@
 import React, { useState, useEffect } from "react";
-import { User, Bell, Shield, Database, Mail } from "lucide-react";
+import { Link } from "react-router-dom";
+import {
+  User,
+  Bell,
+  Shield,
+  Database,
+  Mail,
+  UserCog,
+  CheckCircle,
+  ArrowRight,
+} from "lucide-react";
 import { useAuthContext } from "../hooks/useAuthContext";
 import { LoadingButton } from "../components/ui/LoadingButton";
 import { API_BASE_URL } from "../lib/config";
+import { clearProfileWizardSkip } from "../lib/onboarding-state";
 
 const Settings: React.FC = () => {
   const { user, signOut } = useAuthContext();
@@ -177,6 +188,62 @@ const Settings: React.FC = () => {
 
       {/* Settings Sections */}
       <div className="space-y-6">
+        {/* Profile Completion */}
+        <div className="bg-white dark:bg-dark-surface rounded-lg shadow">
+          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center">
+              <UserCog className="h-5 w-5 text-gray-400 mr-2" />
+              <h2 className="text-lg font-medium text-gray-900 dark:text-white">
+                Profile Setup
+              </h2>
+            </div>
+          </div>
+          <div className="p-6">
+            {user?.profile_completed_at ? (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <CheckCircle className="h-5 w-5 text-green-500" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">
+                      Profile Complete
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Your profile is set up for personalized grant
+                      recommendations.
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  to="/profile-setup"
+                  onClick={() => clearProfileWizardSkip()}
+                  className="inline-flex items-center gap-1.5 text-sm text-brand-blue hover:underline"
+                >
+                  Edit Profile <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">
+                    Profile Incomplete
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Complete your profile to unlock personalized grant
+                    recommendations and alignment scoring.
+                  </p>
+                </div>
+                <Link
+                  to="/profile-setup"
+                  onClick={() => clearProfileWizardSkip()}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-brand-blue text-white text-sm font-medium rounded-md hover:bg-brand-dark-blue transition-colors"
+                >
+                  Complete Profile <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Profile Settings */}
         <div className="bg-white dark:bg-dark-surface rounded-lg shadow">
           <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">

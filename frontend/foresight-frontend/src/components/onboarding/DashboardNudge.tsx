@@ -10,7 +10,7 @@
 
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { X, FolderOpen, Search, FileText } from "lucide-react";
+import { X, FolderOpen, Search, FileText, UserCog } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { isNudgeDismissed, dismissNudge } from "../../lib/onboarding-state";
 import type { LucideIcon } from "lucide-react";
@@ -20,6 +20,7 @@ interface DashboardNudgeProps {
     following: number;
     workstreams: number;
   };
+  profileCompleted?: boolean;
   className?: string;
 }
 
@@ -32,7 +33,11 @@ interface NudgeConfig {
   icon: LucideIcon;
 }
 
-export function DashboardNudge({ stats, className }: DashboardNudgeProps) {
+export function DashboardNudge({
+  stats,
+  profileCompleted,
+  className,
+}: DashboardNudgeProps) {
   const navigate = useNavigate();
   // Tracks locally-dismissed nudge types within this render lifecycle,
   // so dismissing a nudge triggers an immediate re-render.
@@ -40,6 +45,19 @@ export function DashboardNudge({ stats, className }: DashboardNudgeProps) {
 
   const activeNudge = useMemo(() => {
     const nudges: NudgeConfig[] = [];
+
+    // Priority 0 (top): Incomplete profile
+    if (!profileCompleted && !isNudgeDismissed("complete-profile")) {
+      nudges.push({
+        type: "complete-profile",
+        priority: 0,
+        message:
+          "Complete your profile to get personalized grant recommendations tailored to your department and interests.",
+        cta: "Complete Profile",
+        href: "/profile-setup",
+        icon: UserCog,
+      });
+    }
 
     // Priority 3 (lowest): Following grants but no programs
     if (stats.following > 0 && stats.workstreams === 0) {
@@ -86,7 +104,7 @@ export function DashboardNudge({ stats, className }: DashboardNudgeProps) {
       nudges.find((n) => !isNudgeDismissed(n.type) && !dismissed.has(n.type)) ??
       null
     );
-  }, [stats.following, stats.workstreams, dismissed]);
+  }, [stats.following, stats.workstreams, profileCompleted, dismissed]);
 
   if (!activeNudge) return null;
 

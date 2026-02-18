@@ -37,8 +37,10 @@ import {
   isGettingStartedDismissed,
   dismissGettingStarted,
   markStepCompleted,
+  hasSkippedProfileWizard,
 } from "../lib/onboarding-state";
 import { STAT_EXPLANATIONS } from "../lib/onboarding-content";
+import { API_BASE_URL } from "../lib/config";
 import type { BaseCard } from "../types/card";
 
 type Card = BaseCard;
@@ -49,11 +51,9 @@ interface FollowingCard {
   cards: Card;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || "";
-
 /** Fetch the consolidated dashboard payload from the backend. */
 async function fetchDashboardData(token: string) {
-  const res = await fetch(`${API_URL}/api/v1/me/dashboard`, {
+  const res = await fetch(`${API_BASE_URL}/api/v1/me/dashboard`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Dashboard API ${res.status}`);
@@ -160,6 +160,28 @@ const Dashboard: React.FC = () => {
   const animatedWorkstreams = useCountUp(stats.workstreams);
   const animatedDeadlinesThisWeek = useCountUp(stats.deadlinesThisWeek);
   const animatedPipelineValue = useCountUp(stats.pipelineValue);
+
+  const handleChecklistStepClick = useCallback(
+    (href: string) => {
+      if (href === "/discover") markStepCompleted("explore-library");
+      if (href === "/ask") markStepCompleted("ask-question");
+      if (href === "/apply") markStepCompleted("start-application");
+      navigate(href);
+    },
+    [navigate],
+  );
+
+  const handleDismissChecklist = useCallback(() => {
+    dismissGettingStarted();
+    setShowChecklist(false);
+  }, []);
+
+  // Redirect to profile setup on first login if profile is incomplete
+  useEffect(() => {
+    if (user && !user.profile_completed_at && !hasSkippedProfileWizard()) {
+      navigate("/profile-setup");
+    }
+  }, [user, navigate]);
 
   useEffect(() => {
     loadDashboardData();
@@ -317,21 +339,6 @@ const Dashboard: React.FC = () => {
     );
   }
 
-  const handleChecklistStepClick = useCallback(
-    (href: string) => {
-      if (href === "/discover") markStepCompleted("explore-library");
-      if (href === "/ask") markStepCompleted("ask-question");
-      if (href === "/apply") markStepCompleted("start-application");
-      navigate(href);
-    },
-    [navigate],
-  );
-
-  const handleDismissChecklist = useCallback(() => {
-    dismissGettingStarted();
-    setShowChecklist(false);
-  }, []);
-
   const isNewUser = stats.following === 0 && stats.workstreams === 0;
   const userName = user?.email?.split("@")[0];
 
@@ -399,6 +406,7 @@ const Dashboard: React.FC = () => {
           following: stats.following,
           workstreams: stats.workstreams,
         }}
+        profileCompleted={!!user?.profile_completed_at}
         className="mb-6"
       />
 
