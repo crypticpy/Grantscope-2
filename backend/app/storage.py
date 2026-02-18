@@ -51,7 +51,7 @@ def _require_blob(connection_string: str | None = None) -> None:
             "azure-storage-blob is not installed. "
             "Run: pip install azure-storage-blob>=12.19.0"
         )
-    if connection_string is not None and not connection_string:
+    if not connection_string:
         raise RuntimeError(
             "AZURE_STORAGE_CONNECTION_STRING is not set. "
             "File upload/download requires Azure Blob Storage configuration."

@@ -934,7 +934,7 @@ class DocxExportService:
     def generate_program_summary_docx(
         summary_data: dict,
         profile_data: dict | None = None,
-    ) -> io.BytesIO:
+    ) -> bytes:
         """Generate a DOCX program summary document.
 
         Args:
@@ -1054,7 +1054,7 @@ class DocxExportService:
         buffer = io.BytesIO()
         doc.save(buffer)
         buffer.seek(0)
-        return buffer
+        return buffer.getvalue()
 
     # ------------------------------------------------------------------
     # Project Plan DOCX
@@ -1065,7 +1065,7 @@ class DocxExportService:
         plan_data: dict,
         grant_context: dict | None = None,
         profile_data: dict | None = None,
-    ) -> io.BytesIO:
+    ) -> bytes:
         """Generate a DOCX project plan document.
 
         Args:
@@ -1313,9 +1313,7 @@ class DocxExportService:
                 row = table.add_row()
                 row.cells[0].text = str(entry.get("metric", ""))
                 row.cells[1].text = str(entry.get("target", ""))
-                row.cells[2].text = str(
-                    entry.get("how_measured") or entry.get("measurement", "")
-                )
+                row.cells[2].text = str(entry.get("measurement_method", ""))
 
             doc.add_paragraph("")
 
@@ -1336,4 +1334,4 @@ class DocxExportService:
         buffer = io.BytesIO()
         doc.save(buffer)
         buffer.seek(0)
-        return buffer
+        return buffer.getvalue()

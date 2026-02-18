@@ -104,13 +104,19 @@ async def submit_validation_label(
                 detail="Validation already exists for this card by this reviewer",
             )
 
+        # Guard: reject validation for unclassified cards
+        if not predicted_pillar:
+            raise HTTPException(
+                status_code=400,
+                detail="Card has no AI classification yet; cannot validate.",
+            )
+
         # Create validation record
-        pred = predicted_pillar or ""
         validation = ClassificationValidation(
             card_id=submission.card_id,
             ground_truth_pillar=submission.ground_truth_pillar,
-            predicted_pillar=pred,
-            is_correct=(pred == submission.ground_truth_pillar),
+            predicted_pillar=predicted_pillar,
+            is_correct=(predicted_pillar == submission.ground_truth_pillar),
             reviewer_id=submission.reviewer_id,
             notes=submission.notes,
         )

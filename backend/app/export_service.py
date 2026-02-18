@@ -172,6 +172,20 @@ def hex_to_rl_color(hex_color: str) -> rl_colors.Color:
     return rl_colors.Color(r, g, b)
 
 
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    """Safely convert a value to float, handling formatted strings."""
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        # Strip currency symbols, commas, whitespace
+        cleaned = str(value).replace("$", "").replace(",", "").strip()
+        return float(cleaned) if cleaned else default
+    except (ValueError, TypeError):
+        return default
+
+
 # PDF color palette using GrantScope colors
 PDF_COLORS = {
     "primary": hex_to_rl_color(GRANTSCOPE_COLORS["primary"]),
@@ -4285,7 +4299,7 @@ class ExportService:
                         if len(justification) > 80:
                             justification = justification[:77] + "..."
 
-                        amount_val = float(amount) if amount else 0
+                        amount_val = _safe_float(amount)
                         total_amount += amount_val
 
                         table_data.append(
@@ -4463,9 +4477,9 @@ class ExportService:
                 display_name = profile_data.get("display_name", "")
                 prof_dept = profile_data.get("department", "")
                 if display_name:
-                    author_parts = [display_name]
+                    author_parts = [md_parser.escape_xml(display_name)]
                     if prof_dept:
-                        author_parts.append(prof_dept)
+                        author_parts.append(md_parser.escape_xml(prof_dept))
                     elements.append(
                         Paragraph(
                             f"Prepared by {', '.join(author_parts)}",
@@ -4617,9 +4631,9 @@ class ExportService:
                 display_name = profile_data.get("display_name", "")
                 prof_dept = profile_data.get("department", "")
                 if display_name:
-                    author_parts = [display_name]
+                    author_parts = [md_parser.escape_xml(display_name)]
                     if prof_dept:
-                        author_parts.append(prof_dept)
+                        author_parts.append(md_parser.escape_xml(prof_dept))
                     elements.append(
                         Paragraph(
                             f"Prepared by {', '.join(author_parts)}",
@@ -4674,15 +4688,15 @@ class ExportService:
                 funding_max = grant_context.get("funding_amount_max")
                 if funding_min and funding_max:
                     gc_items.append(
-                        f"<b>Funding Range:</b> ${float(funding_min):,.0f} - ${float(funding_max):,.0f}"
+                        f"<b>Funding Range:</b> ${_safe_float(funding_min):,.0f} - ${_safe_float(funding_max):,.0f}"
                     )
                 elif funding_max:
                     gc_items.append(
-                        f"<b>Funding Amount:</b> Up to ${float(funding_max):,.0f}"
+                        f"<b>Funding Amount:</b> Up to ${_safe_float(funding_max):,.0f}"
                     )
                 elif funding_min:
                     gc_items.append(
-                        f"<b>Funding Amount:</b> From ${float(funding_min):,.0f}"
+                        f"<b>Funding Amount:</b> From ${_safe_float(funding_min):,.0f}"
                     )
 
                 for item in gc_items:
@@ -4715,7 +4729,7 @@ class ExportService:
                     role = md_parser.escape_xml(str(entry.get("role", "")))
                     fte = str(entry.get("fte", ""))
                     salary = entry.get("salary") or entry.get("salary_estimate")
-                    salary_str = f"${float(salary):,.0f}" if salary else ""
+                    salary_str = f"${_safe_float(salary):,.0f}" if salary else ""
                     responsibilities = md_parser.escape_xml(
                         str(entry.get("responsibilities", ""))
                     )
@@ -4776,7 +4790,7 @@ class ExportService:
                         continue
                     category = md_parser.escape_xml(str(entry.get("category", "")))
                     amount = entry.get("amount", 0)
-                    amount_val = float(amount) if amount else 0
+                    amount_val = _safe_float(amount)
                     total_amount += amount_val
                     justification = md_parser.escape_xml(
                         str(entry.get("justification", ""))
