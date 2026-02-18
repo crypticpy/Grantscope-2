@@ -4,6 +4,7 @@ Provides endpoints for creating, managing, and progressing through wizard
 sessions that walk users through grant applications via AI-powered interviews.
 """
 
+import inspect
 import io
 import json
 import logging
@@ -11,7 +12,7 @@ import os
 import uuid as _uuid
 from datetime import datetime, date, timezone
 from decimal import Decimal
-from typing import Literal, Optional
+from typing import Any, Callable, Literal, Optional, Union
 
 try:
     import fitz  # PyMuPDF -- for PDF text extraction from uploaded files
@@ -41,7 +42,6 @@ from app.models.db.chat import ChatConversation, ChatMessage
 from app.models.db.proposal import Proposal as ProposalDB
 from app.models.db.research import ResearchTask
 from app.models.db.source import Source
-from app.models.db.user import User
 from app.models.db.wizard_session import WizardSession as WizardSessionDB
 from app.models.db.workstream import Workstream as WorkstreamDB
 from app.models.wizard import (
@@ -92,6 +92,28 @@ def _row_to_dict(obj, skip_cols=None) -> dict:
     return result
 
 
+def _enrich_session_dict(session_dict: dict) -> dict:
+    """Populate top-level program_summary and profile_context from interview_data.
+
+    The WizardSession Pydantic model has ``program_summary`` and
+    ``profile_context`` as top-level fields, but the DB stores them nested
+    inside ``interview_data``.  This helper promotes them so the API response
+    always includes them at both levels.
+    """
+    interview_data = session_dict.get("interview_data") or {}
+    if "program_summary" in interview_data and not session_dict.get("program_summary"):
+        session_dict["program_summary"] = interview_data["program_summary"]
+    if "profile_context" in interview_data and not session_dict.get("profile_context"):
+        session_dict["profile_context"] = interview_data["profile_context"]
+    return session_dict
+
+
+def _session_row_to_dict(obj) -> dict:
+    """Convert a WizardSession ORM row to a dict with enriched top-level fields."""
+    d = _row_to_dict(obj)
+    return _enrich_session_dict(d)
+
+
 async def _verify_session_ownership(
     session_id: str, user_id: str, db: AsyncSession
 ) -> dict:
@@ -127,7 +149,7 @@ async def _verify_session_ownership(
             detail="Wizard session not found",
         )
 
-    session = _row_to_dict(session_obj)
+    session = _session_row_to_dict(session_obj)
 
     if session["user_id"] != user_id:
         raise HTTPException(
@@ -396,42 +418,10 @@ async def create_wizard_session(
         ) from e
 
     # 4. Inject profile context from user profile
-    profile_context = {}
-    try:
-        user_result = await db.execute(
-            select(User).where(User.id == _uuid.UUID(user_id))
-        )
-        user_obj = user_result.scalar_one_or_none()
-        if user_obj:
-            for field in [
-                "display_name",
-                "department",
-                "department_id",
-                "program_name",
-                "program_mission",
-                "team_size",
-                "budget_range",
-                "grant_experience",
-                "grant_categories",
-                "strategic_pillars",
-                "bio",
-                "title",
-            ]:
-                val = getattr(user_obj, field, None)
-                if val:
-                    profile_context[field] = (
-                        val if not isinstance(val, list) else list(val)
-                    )
-        if profile_context:
-            existing_interview = session_obj.interview_data or {}
-            existing_interview["profile_context"] = profile_context
-            session_obj.interview_data = existing_interview
-            await db.flush()
-            await db.refresh(session_obj)
-    except Exception as e:
-        logger.warning("Failed to load profile context: %s", e)
+    service = WizardService()
+    await service.enrich_session_with_profile(db, session_obj, user_id)
 
-    return WizardSession(**_row_to_dict(session_obj))
+    return WizardSession(**_session_row_to_dict(session_obj))
 
 
 @router.get("/me/wizard/sessions", response_model=list[WizardSession])
@@ -469,7 +459,7 @@ async def list_wizard_sessions(
             detail=_safe_error("listing wizard sessions", e),
         ) from e
 
-    return [WizardSession(**_row_to_dict(row)) for row in rows]
+    return [WizardSession(**_session_row_to_dict(row)) for row in rows]
 
 
 @router.get("/me/wizard/sessions/{session_id}", response_model=WizardSession)
@@ -556,7 +546,7 @@ async def update_wizard_session(
             detail=_safe_error("wizard session update", e),
         ) from e
 
-    return WizardSession(**_row_to_dict(session_obj))
+    return WizardSession(**_session_row_to_dict(session_obj))
 
 
 # ---------------------------------------------------------------------------
@@ -948,91 +938,17 @@ async def match_grants(
     user_id = current_user["id"]
     session = await _verify_session_ownership(session_id, user_id, db)
 
-    # Build search context from interview data and profile
     interview_data = session.get("interview_data") or {}
     profile_context = interview_data.get("profile_context", {})
 
-    # Build query text from available data
     service = WizardService()
-    search_query = service.build_grant_search_query(
-        interview_data=interview_data,
-        profile_context=profile_context,
-    )
-
-    if not search_query:
+    try:
+        return await service.match_grants(db, interview_data, profile_context)
+    except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Not enough information to search for grants. Complete more of the interview first.",
-        )
-
-    # Use vector search if embeddings are available, otherwise fall back to text search
-    from app.helpers.db_utils import vector_search_cards
-    from app.openai_provider import (
-        azure_openai_async_embedding_client,
-        get_embedding_deployment,
-    )
-
-    try:
-        embed_response = await azure_openai_async_embedding_client.embeddings.create(
-            model=get_embedding_deployment(),
-            input=search_query[:8000],
-        )
-        embedding = embed_response.data[0].embedding
-        results = await vector_search_cards(
-            db,
-            embedding,
-            match_threshold=0.5,
-            match_count=10,
-            require_active=True,
-        )
-    except Exception as e:
-        logger.warning("Vector search failed, falling back to text search: %s", e)
-        # Fallback: simple text search on cards
-        try:
-            from sqlalchemy import or_
-
-            # Escape LIKE wildcards to prevent pattern manipulation
-            escaped_q = (
-                search_query[:50]
-                .replace("\\", "\\\\")
-                .replace("%", "\\%")
-                .replace("_", "\\_")
-            )
-            search_result = await db.execute(
-                select(Card)
-                .where(
-                    or_(
-                        Card.name.ilike(f"%{escaped_q}%"),
-                        Card.summary.ilike(f"%{escaped_q}%"),
-                    ),
-                    Card.status == "active",
-                )
-                .limit(10)
-            )
-            rows = search_result.scalars().all()
-            results = [_row_to_dict(r) for r in rows]
-        except Exception as e2:
-            logger.error("Text search also failed: %s", e2)
-            results = []
-
-    # Format results
-    matched_grants = []
-    for card in results:
-        matched_grants.append(
-            {
-                "card_id": str(card.get("id", "")),
-                "grant_name": card.get("name", ""),
-                "grantor": card.get("grantor", ""),
-                "summary": card.get("summary", ""),
-                "deadline": card.get("deadline"),
-                "funding_amount_min": card.get("funding_amount_min"),
-                "funding_amount_max": card.get("funding_amount_max"),
-                "grant_type": card.get("grant_type"),
-                "similarity": card.get("similarity", 0),
-            }
-        )
-
-    return {"grants": matched_grants, "query_used": search_query[:200]}
+            detail=str(e),
+        ) from e
 
 
 @router.post("/me/wizard/sessions/{session_id}/attach-grant")
@@ -1074,7 +990,7 @@ async def attach_grant(
             detail=_safe_error("attaching grant to session", e),
         ) from e
 
-    return WizardSession(**_row_to_dict(session_obj))
+    return WizardSession(**_session_row_to_dict(session_obj))
 
 
 # ---------------------------------------------------------------------------
@@ -1371,6 +1287,99 @@ async def export_session_pdf(
 # ---------------------------------------------------------------------------
 
 
+async def _export_artifact(
+    *,
+    session: dict,
+    session_id: str,
+    fmt: Literal["pdf", "docx"],
+    artifact_name: str,
+    artifact_data: Union[dict, None],
+    base_filename: str,
+    docx_fn: Callable[..., Any],
+    pdf_fn: Callable[..., Any],
+    db: AsyncSession,
+) -> Union[FileResponse, StreamingResponse]:
+    """Shared export control flow for summary, plan, and proposal artifacts.
+
+    Branches on *fmt* to generate either a DOCX (returned as a
+    ``StreamingResponse``) or a PDF (returned as a ``FileResponse`` with
+    a background cleanup task).
+
+    Args:
+        session: Verified session dict.
+        session_id: UUID of the wizard session (used in filenames).
+        fmt: Export format - ``"pdf"`` or ``"docx"``.
+        artifact_name: Human-readable artifact name for error messages.
+        artifact_data: The data to export (e.g. summary dict, plan dict).
+            If ``None``, an HTTPException 400 is raised.
+        base_filename: Base filename without extension (e.g. ``"Program_Summary"``).
+        docx_fn: Callable that generates a DOCX.  May return ``BytesIO`` or
+            raw ``bytes``.
+        pdf_fn: Callable that generates a PDF.  May be sync (returns path)
+            or async (returns awaitable path).
+        db: Async database session (passed through for PDF generation).
+
+    Returns:
+        A ``StreamingResponse`` (DOCX) or ``FileResponse`` (PDF).
+
+    Raises:
+        HTTPException 400: If *artifact_data* is ``None``.
+        HTTPException 500: If export generation fails.
+    """
+    if not artifact_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No {artifact_name} found. Generate it first.",
+        )
+
+    filename_stem = f"{base_filename}_{session_id[:8]}"
+
+    if fmt == "docx":
+        try:
+            result = docx_fn()
+            # Normalise to a BytesIO stream
+            if isinstance(result, (bytes, bytearray)):
+                buf = io.BytesIO(result)
+            else:
+                buf = result
+        except Exception as e:
+            logger.error("DOCX generation failed for %s: %s", artifact_name, e)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=_safe_error(f"{artifact_name} DOCX generation", e),
+            ) from e
+
+        return StreamingResponse(
+            buf,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename_stem}.docx"'
+            },
+        )
+
+    # PDF path
+    try:
+        pdf_result = pdf_fn()
+        # Support both sync and async pdf generators
+        if inspect.isawaitable(pdf_result):
+            pdf_path = await pdf_result
+        else:
+            pdf_path = pdf_result
+    except Exception as e:
+        logger.error("PDF generation failed for %s: %s", artifact_name, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error(f"{artifact_name} PDF generation", e),
+        ) from e
+
+    return FileResponse(
+        path=pdf_path,
+        filename=f"{filename_stem}.pdf",
+        media_type="application/pdf",
+        background=BackgroundTask(os.unlink, pdf_path),
+    )
+
+
 @router.get("/me/wizard/sessions/{session_id}/export/summary/{fmt}")
 async def export_session_summary(
     session_id: str,
@@ -1384,37 +1393,24 @@ async def export_session_summary(
 
     interview_data = session.get("interview_data") or {}
     summary_data = interview_data.get("program_summary")
-    if not summary_data:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No program summary found. Synthesize a summary first.",
-        )
-
     profile_data = interview_data.get("profile_context")
-    safe_name = "Program_Summary"
+    export_service = ExportService(db)
 
-    if fmt == "docx":
-        buf = DocxExportService.generate_program_summary_docx(
+    return await _export_artifact(
+        session=session,
+        session_id=session_id,
+        fmt=fmt,
+        artifact_name="program summary",
+        artifact_data=summary_data,
+        base_filename="Program_Summary",
+        docx_fn=lambda: DocxExportService.generate_program_summary_docx(
             summary_data, profile_data
-        )
-        return StreamingResponse(
-            buf,
-            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            headers={
-                "Content-Disposition": f'attachment; filename="{safe_name}_{session_id[:8]}.docx"'
-            },
-        )
-    else:  # pdf
-        export_service = ExportService(db)
-        pdf_path = export_service.generate_program_summary_pdf(
+        ),
+        pdf_fn=lambda: export_service.generate_program_summary_pdf(
             summary_data, profile_data
-        )
-        return FileResponse(
-            path=pdf_path,
-            filename=f"{safe_name}_{session_id[:8]}.pdf",
-            media_type="application/pdf",
-            background=BackgroundTask(os.unlink, pdf_path),
-        )
+        ),
+        db=db,
+    )
 
 
 @router.get("/me/wizard/sessions/{session_id}/export/plan/{fmt}")
@@ -1429,39 +1425,26 @@ async def export_session_plan(
     session = await _verify_session_ownership(session_id, user_id, db)
 
     plan_data = session.get("plan_data")
-    if not plan_data:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No project plan found. Synthesize a plan first.",
-        )
-
     grant_context = session.get("grant_context")
     interview_data = session.get("interview_data") or {}
     profile_data = interview_data.get("profile_context")
-    safe_name = "Project_Plan"
+    export_service = ExportService(db)
 
-    if fmt == "docx":
-        buf = DocxExportService.generate_project_plan_docx(
+    return await _export_artifact(
+        session=session,
+        session_id=session_id,
+        fmt=fmt,
+        artifact_name="project plan",
+        artifact_data=plan_data,
+        base_filename="Project_Plan",
+        docx_fn=lambda: DocxExportService.generate_project_plan_docx(
             plan_data, grant_context, profile_data
-        )
-        return StreamingResponse(
-            buf,
-            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            headers={
-                "Content-Disposition": f'attachment; filename="{safe_name}_{session_id[:8]}.docx"'
-            },
-        )
-    else:  # pdf
-        export_service = ExportService(db)
-        pdf_path = export_service.generate_project_plan_pdf(
+        ),
+        pdf_fn=lambda: export_service.generate_project_plan_pdf(
             plan_data, grant_context, profile_data
-        )
-        return FileResponse(
-            path=pdf_path,
-            filename=f"{safe_name}_{session_id[:8]}.pdf",
-            media_type="application/pdf",
-            background=BackgroundTask(os.unlink, pdf_path),
-        )
+        ),
+        db=db,
+    )
 
 
 @router.get("/me/wizard/sessions/{session_id}/export/proposal/{fmt}")
@@ -1504,27 +1487,20 @@ async def export_session_proposal(
 
     title = proposal.get("title", "proposal")
     safe_title = "".join(c if c.isalnum() or c in " -_" else "_" for c in title)[:40]
+    export_service = ExportService(db)
 
-    if fmt == "docx":
-        docx_bytes = DocxExportService.generate_proposal_docx(proposal)
-        buf = io.BytesIO(docx_bytes)
-        return StreamingResponse(
-            buf,
-            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            headers={
-                "Content-Disposition": f'attachment; filename="Proposal_{safe_title}_{session_id[:8]}.docx"'
-            },
-        )
-    else:  # pdf
-        export_service = ExportService(db)
-        pdf_path = await export_service.generate_proposal_pdf(
+    return await _export_artifact(
+        session=session,
+        session_id=session_id,
+        fmt=fmt,
+        artifact_name="proposal",
+        artifact_data=proposal,
+        base_filename=f"Proposal_{safe_title}",
+        docx_fn=lambda: DocxExportService.generate_proposal_docx(proposal),
+        pdf_fn=lambda: export_service.generate_proposal_pdf(
             proposal_data=proposal,
             grant_context=grant_context,
             plan_data=plan_data,
-        )
-        return FileResponse(
-            path=pdf_path,
-            filename=f"Proposal_{safe_title}_{session_id[:8]}.pdf",
-            media_type="application/pdf",
-            background=BackgroundTask(os.unlink, pdf_path),
-        )
+        ),
+        db=db,
+    )

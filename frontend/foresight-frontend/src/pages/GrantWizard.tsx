@@ -405,6 +405,36 @@ const GrantWizard: React.FC = () => {
     </div>
   );
 
+  /**
+   * Step 4 branches between GrantMatching (build_program path without a
+   * grant attached) and ProposalPreview (default).
+   */
+  const renderStep4 = () => {
+    if (entryPath === "build_program" && !sessionData?.card_id) {
+      return (
+        <Suspense fallback={suspenseFallback}>
+          <GrantMatching
+            sessionId={sessionId!}
+            onGrantAttached={handleGrantAttached}
+            onSkip={goNext}
+            onBack={goBack}
+          />
+        </Suspense>
+      );
+    }
+    return (
+      <Suspense fallback={suspenseFallback}>
+        <ProposalPreview
+          sessionId={sessionId!}
+          proposalId={sessionData?.proposal_id ?? null}
+          grantContext={sessionData?.grant_context ?? null}
+          onComplete={goNext}
+          onBack={goBack}
+        />
+      </Suspense>
+    );
+  };
+
   const renderStepContent = () => {
     switch (currentStep) {
       case 0:
@@ -471,33 +501,8 @@ const GrantWizard: React.FC = () => {
           </Suspense>
         );
 
-      case 4: {
-        // For build_program path without a grant attached, show grant matching
-        if (entryPath === "build_program" && !sessionData?.card_id) {
-          return (
-            <Suspense fallback={suspenseFallback}>
-              <GrantMatching
-                sessionId={sessionId!}
-                onGrantAttached={handleGrantAttached}
-                onSkip={goNext}
-                onBack={goBack}
-              />
-            </Suspense>
-          );
-        }
-        // Default: show proposal preview
-        return (
-          <Suspense fallback={suspenseFallback}>
-            <ProposalPreview
-              sessionId={sessionId!}
-              proposalId={sessionData?.proposal_id ?? null}
-              grantContext={sessionData?.grant_context ?? null}
-              onComplete={goNext}
-              onBack={goBack}
-            />
-          </Suspense>
-        );
-      }
+      case 4:
+        return renderStep4();
 
       case 5:
         return (

@@ -927,6 +927,120 @@ class DocxExportService:
         return buffer.getvalue()
 
     # ------------------------------------------------------------------
+    # Shared DOCX helpers (program summary / project plan)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _add_cover_page(
+        doc: Document,
+        title: str,
+        subtitle: str | None = None,
+        author: str | None = None,
+    ) -> None:
+        """Add a standard cover page: padding, title, subtitle, author, date, HR, page break.
+
+        Args:
+            doc: python-docx Document to append to.
+            title: Document title (bold, 18pt, brand color, centered).
+            subtitle: Optional subtitle (14pt, gray, centered).
+            author: Optional "Prepared by ..." line (12pt, gray, centered).
+        """
+        # Top padding
+        for _ in range(4):
+            doc.add_paragraph("")
+
+        # Title
+        title_para = doc.add_paragraph()
+        title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        title_run = title_para.add_run(title)
+        title_run.bold = True
+        title_run.font.size = Pt(18)
+        title_run.font.color.rgb = _BRAND_COLOR
+
+        doc.add_paragraph("")
+
+        # Subtitle
+        if subtitle:
+            subtitle_para = doc.add_paragraph()
+            subtitle_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            subtitle_run = subtitle_para.add_run(subtitle)
+            subtitle_run.font.size = Pt(14)
+            subtitle_run.font.color.rgb = RGBColor(0x44, 0x44, 0x44)
+
+        # Author
+        if author:
+            author_para = doc.add_paragraph()
+            author_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            author_run = author_para.add_run(f"Prepared by {author}")
+            author_run.font.size = Pt(12)
+            author_run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+
+        # Date
+        date_para = doc.add_paragraph()
+        date_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        date_run = date_para.add_run(datetime.now(timezone.utc).strftime("%B %d, %Y"))
+        date_run.font.size = Pt(12)
+        date_run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+
+        # Horizontal rule
+        doc.add_paragraph("")
+        hr_para = doc.add_paragraph()
+        hr_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        hr_run = hr_para.add_run("_" * 60)
+        hr_run.font.color.rgb = RGBColor(0xCC, 0xCC, 0xCC)
+
+        doc.add_page_break()
+
+    @staticmethod
+    def _render_paragraph_section(
+        doc: Document,
+        heading: str,
+        text: str,
+    ) -> None:
+        """Add a heading followed by paragraph text (split on double-newlines).
+
+        Args:
+            doc: python-docx Document to append to.
+            heading: Section heading text (rendered at level 1).
+            text: Body text; if empty/whitespace-only the section is skipped.
+        """
+        text = str(text).strip()
+        if not text:
+            return
+
+        doc.add_heading(heading, level=1)
+        paragraphs = text.split("\n\n")
+        for para_text in paragraphs:
+            stripped = para_text.strip()
+            if stripped:
+                doc.add_paragraph(stripped)
+
+    @staticmethod
+    def _render_bullet_section(
+        doc: Document,
+        heading: str,
+        items: list,
+    ) -> None:
+        """Add a heading followed by a bulleted list of items.
+
+        Args:
+            doc: python-docx Document to append to.
+            heading: Section heading text (rendered at level 1).
+            items: List of items to render as "List Bullet" paragraphs.
+                Empty/whitespace-only items are silently skipped.
+        """
+        if not items:
+            return
+
+        cleaned = [str(i).strip() for i in items if str(i).strip()]
+        if not cleaned:
+            return
+
+        doc.add_heading(heading, level=1)
+        for item_text in cleaned:
+            doc.add_paragraph(item_text, style="List Bullet")
+
+    # ------------------------------------------------------------------
     # Program Summary DOCX
     # ------------------------------------------------------------------
 
@@ -959,57 +1073,25 @@ class DocxExportService:
         svc._add_page_headers_and_footers(doc, department=department)
 
         # ---- Cover / Title Area ----
-        for _ in range(4):
-            doc.add_paragraph("")
-
-        title_para = doc.add_paragraph()
-        title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        title_run = title_para.add_run("Program Summary")
-        title_run.bold = True
-        title_run.font.size = Pt(18)
-        title_run.font.color.rgb = _BRAND_COLOR
-
-        doc.add_paragraph("")
-
         program_name = summary_data.get("program_name", "")
-        if program_name:
-            subtitle_para = doc.add_paragraph()
-            subtitle_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            subtitle_run = subtitle_para.add_run(program_name)
-            subtitle_run.font.size = Pt(14)
-            subtitle_run.font.color.rgb = RGBColor(0x44, 0x44, 0x44)
 
-        # Author line from profile_data
+        # Build author string from profile_data
+        author_str = None
         if profile_data:
             display_name = profile_data.get("display_name", "")
-            prof_dept = profile_data.get("department", "")
             if display_name:
                 author_parts = [display_name]
+                prof_dept = profile_data.get("department", "")
                 if prof_dept:
                     author_parts.append(prof_dept)
-                author_para = doc.add_paragraph()
-                author_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                author_run = author_para.add_run(
-                    f"Prepared by {', '.join(author_parts)}"
-                )
-                author_run.font.size = Pt(12)
-                author_run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+                author_str = ", ".join(author_parts)
 
-        # Date
-        date_para = doc.add_paragraph()
-        date_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        date_run = date_para.add_run(datetime.now(timezone.utc).strftime("%B %d, %Y"))
-        date_run.font.size = Pt(12)
-        date_run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-
-        # Horizontal rule
-        doc.add_paragraph("")
-        hr_para = doc.add_paragraph()
-        hr_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        hr_run = hr_para.add_run("_" * 60)
-        hr_run.font.color.rgb = RGBColor(0xCC, 0xCC, 0xCC)
-
-        doc.add_page_break()
+        svc._add_cover_page(
+            doc,
+            title="Program Summary",
+            subtitle=program_name or None,
+            author=author_str,
+        )
 
         # ---- Sections (only include if data is non-empty) ----
         _summary_sections = [
@@ -1031,24 +1113,11 @@ class DocxExportService:
             # Key Needs is rendered as a bulleted list
             if key == "key_needs":
                 if isinstance(value, list) and len(value) > 0:
-                    doc.add_heading(heading, level=1)
-                    for item in value:
-                        item_text = str(item).strip()
-                        if item_text:
-                            doc.add_paragraph(item_text, style="List Bullet")
+                    svc._render_bullet_section(doc, heading, value)
                 continue
 
             # Everything else is paragraph text
-            text = str(value).strip()
-            if not text:
-                continue
-
-            doc.add_heading(heading, level=1)
-            paragraphs = text.split("\n\n")
-            for para_text in paragraphs:
-                stripped = para_text.strip()
-                if stripped:
-                    doc.add_paragraph(stripped)
+            svc._render_paragraph_section(doc, heading, str(value))
 
         # ---- Save to BytesIO ----
         buffer = io.BytesIO()
@@ -1092,18 +1161,6 @@ class DocxExportService:
         svc._add_page_headers_and_footers(doc, department=department)
 
         # ---- Cover / Title Area ----
-        for _ in range(4):
-            doc.add_paragraph("")
-
-        title_para = doc.add_paragraph()
-        title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        title_run = title_para.add_run("Project Plan")
-        title_run.bold = True
-        title_run.font.size = Pt(18)
-        title_run.font.color.rgb = _BRAND_COLOR
-
-        doc.add_paragraph("")
-
         # Subtitle: first line of program_overview or profile_data program_name
         subtitle_text = ""
         overview = plan_data.get("program_overview", "")
@@ -1112,47 +1169,26 @@ class DocxExportService:
         if not subtitle_text and profile_data:
             subtitle_text = profile_data.get("program_name", "")
 
-        if subtitle_text:
-            # Truncate long subtitles
-            if len(subtitle_text) > 120:
-                subtitle_text = subtitle_text[:117] + "..."
-            subtitle_para = doc.add_paragraph()
-            subtitle_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            subtitle_run = subtitle_para.add_run(subtitle_text)
-            subtitle_run.font.size = Pt(14)
-            subtitle_run.font.color.rgb = RGBColor(0x44, 0x44, 0x44)
+        if subtitle_text and len(subtitle_text) > 120:
+            subtitle_text = subtitle_text[:117] + "..."
 
-        # Author line from profile_data
+        # Build author string from profile_data
+        author_str = None
         if profile_data:
             display_name = profile_data.get("display_name", "")
             if display_name:
-                author_para = doc.add_paragraph()
-                author_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                prof_dept = profile_data.get("department", "")
                 author_parts = [display_name]
+                prof_dept = profile_data.get("department", "")
                 if prof_dept:
                     author_parts.append(prof_dept)
-                author_run = author_para.add_run(
-                    f"Prepared by {', '.join(author_parts)}"
-                )
-                author_run.font.size = Pt(12)
-                author_run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+                author_str = ", ".join(author_parts)
 
-        # Date
-        date_para = doc.add_paragraph()
-        date_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        date_run = date_para.add_run(datetime.now(timezone.utc).strftime("%B %d, %Y"))
-        date_run.font.size = Pt(12)
-        date_run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-
-        # Horizontal rule
-        doc.add_paragraph("")
-        hr_para = doc.add_paragraph()
-        hr_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        hr_run = hr_para.add_run("_" * 60)
-        hr_run.font.color.rgb = RGBColor(0xCC, 0xCC, 0xCC)
-
-        doc.add_page_break()
+        svc._add_cover_page(
+            doc,
+            title="Project Plan",
+            subtitle=subtitle_text or None,
+            author=author_str,
+        )
 
         # ---- Grant Opportunity (if grant_context provided) ----
         if grant_context:
@@ -1195,13 +1231,7 @@ class DocxExportService:
 
         # ---- Program Narrative ----
         narrative = plan_data.get("program_overview", "")
-        if narrative and str(narrative).strip():
-            doc.add_heading("Program Narrative", level=1)
-            paragraphs = str(narrative).split("\n\n")
-            for para_text in paragraphs:
-                stripped = para_text.strip()
-                if stripped:
-                    doc.add_paragraph(stripped)
+        svc._render_paragraph_section(doc, "Program Narrative", narrative)
 
         # ---- Staffing Plan Table ----
         staffing = plan_data.get("staffing_plan")
@@ -1293,11 +1323,7 @@ class DocxExportService:
         # ---- Deliverables ----
         deliverables = plan_data.get("deliverables")
         if deliverables and isinstance(deliverables, list) and len(deliverables) > 0:
-            doc.add_heading("Deliverables", level=1)
-            for item in deliverables:
-                item_text = str(item).strip()
-                if item_text:
-                    doc.add_paragraph(item_text, style="List Bullet")
+            svc._render_bullet_section(doc, "Deliverables", deliverables)
 
         # ---- Success Metrics Table ----
         metrics = plan_data.get("metrics")
@@ -1323,14 +1349,9 @@ class DocxExportService:
         partnerships = plan_data.get("partnerships")
         if partnerships:
             if isinstance(partnerships, list) and len(partnerships) > 0:
-                doc.add_heading("Partnerships", level=1)
-                for item in partnerships:
-                    item_text = str(item).strip()
-                    if item_text:
-                        doc.add_paragraph(item_text, style="List Bullet")
+                svc._render_bullet_section(doc, "Partnerships", partnerships)
             elif isinstance(partnerships, str) and partnerships.strip():
-                doc.add_heading("Partnerships", level=1)
-                doc.add_paragraph(partnerships.strip())
+                svc._render_paragraph_section(doc, "Partnerships", partnerships)
 
         # ---- Save to BytesIO ----
         buffer = io.BytesIO()

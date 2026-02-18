@@ -33,6 +33,17 @@ import {
 import { DownloadButton } from "./DownloadButton";
 
 // ============================================================================
+// Auth Helper
+// ============================================================================
+
+/**
+ * Retrieves the current session access token from localStorage.
+ */
+function getToken(): string | null {
+  return localStorage.getItem("gs2_token") || null;
+}
+
+// ============================================================================
 // Types
 // ============================================================================
 
@@ -324,6 +335,7 @@ const WizardInterview: React.FC<WizardInterviewProps> = ({
   const [inputValue, setInputValue] = useState("");
   const [mobileProgressOpen, setMobileProgressOpen] = useState(false);
   const [summaryDownloading, setSummaryDownloading] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
 
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -372,8 +384,13 @@ const WizardInterview: React.FC<WizardInterviewProps> = ({
 
   const handleDownloadSummary = useCallback(
     async (format: ExportFormat) => {
-      const token = localStorage.getItem("gs2_token");
-      if (!token) return;
+      setSummaryError(null);
+
+      const token = getToken();
+      if (!token) {
+        setSummaryError("Not authenticated. Please sign in and try again.");
+        return;
+      }
 
       setSummaryDownloading(true);
       try {
@@ -391,7 +408,9 @@ const WizardInterview: React.FC<WizardInterviewProps> = ({
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
       } catch (err) {
-        console.error("Failed to download summary:", err);
+        const message =
+          err instanceof Error ? err.message : "Failed to download summary";
+        setSummaryError(message);
       } finally {
         setSummaryDownloading(false);
       }
@@ -466,6 +485,16 @@ const WizardInterview: React.FC<WizardInterviewProps> = ({
           loading={summaryDownloading}
           size="sm"
         />
+      )}
+
+      {/* Summary download error */}
+      {summaryError && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+          <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+          <span className="text-xs text-red-700 dark:text-red-300">
+            {summaryError}
+          </span>
+        </div>
       )}
 
       {/* Deadline warning */}

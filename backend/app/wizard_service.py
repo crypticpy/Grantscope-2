@@ -457,7 +457,7 @@ class WizardService:
             if summary.get("target_population"):
                 parts.append(f"Target population: {summary['target_population']}")
             if summary.get("key_needs"):
-                parts.append("Needs: " + ", ".join(summary["key_needs"]))
+                parts.append("Needs: " + ", ".join(map(str, summary["key_needs"])))
 
         # From profile context
         if profile_context:
@@ -468,16 +468,204 @@ class WizardService:
             if profile_context.get("grant_categories"):
                 cats = profile_context["grant_categories"]
                 if isinstance(cats, list):
-                    parts.append("Grant categories: " + ", ".join(cats))
+                    parts.append("Grant categories: " + ", ".join(map(str, cats)))
             if profile_context.get("strategic_pillars"):
                 pillars = profile_context["strategic_pillars"]
                 if isinstance(pillars, list):
-                    parts.append("Strategic pillars: " + ", ".join(pillars))
+                    parts.append("Strategic pillars: " + ", ".join(map(str, pillars)))
 
         # Combine and truncate
         query = " ".join(parts)
         # Truncate to reasonable length for embedding
         return query[:2000]
+
+    # -- Profile enrichment -------------------------------------------------
+
+    async def enrich_session_with_profile(
+        self,
+        db: AsyncSession,
+        session_obj,
+        user_id: str,
+    ) -> None:
+        """Load user profile fields and store them in session interview_data.
+
+        Queries the User table for profile fields (department, program info,
+        grant preferences, etc.) and stores them in
+        ``session_obj.interview_data["profile_context"]``.
+
+        Args:
+            db: AsyncSession instance.
+            session_obj: The WizardSession ORM object to enrich (mutated in place).
+            user_id: UUID string of the authenticated user.
+        """
+        import uuid as _uuid
+
+        from sqlalchemy import select as sa_select
+
+        from app.models.db.user import User
+
+        profile_context: Dict[str, Any] = {}
+        try:
+            user_result = await db.execute(
+                sa_select(User).where(User.id == _uuid.UUID(user_id))
+            )
+            user_obj = user_result.scalar_one_or_none()
+            if user_obj:
+                for field in [
+                    "display_name",
+                    "department",
+                    "department_id",
+                    "program_name",
+                    "program_mission",
+                    "team_size",
+                    "budget_range",
+                    "grant_experience",
+                    "grant_categories",
+                    "strategic_pillars",
+                    "bio",
+                    "title",
+                ]:
+                    val = getattr(user_obj, field, None)
+                    if val:
+                        profile_context[field] = (
+                            val if not isinstance(val, list) else list(val)
+                        )
+            if profile_context:
+                existing_interview = session_obj.interview_data or {}
+                existing_interview["profile_context"] = profile_context
+                session_obj.interview_data = existing_interview
+                await db.flush()
+                await db.refresh(session_obj)
+        except Exception as e:
+            logger.warning("Failed to load profile context: %s", e)
+
+    # -- Grant matching -----------------------------------------------------
+
+    async def match_grants(
+        self,
+        db: AsyncSession,
+        interview_data: dict,
+        profile_context: dict,
+    ) -> dict:
+        """Find matching grants from the cards table based on program description.
+
+        Builds a search query from interview data, embeds it for vector search,
+        and falls back to text search if vector search fails.
+
+        Args:
+            db: AsyncSession instance.
+            interview_data: Interview data dict from the wizard session.
+            profile_context: Profile context dict from the session.
+
+        Returns:
+            Dict with "grants" list and "query_used" string.
+
+        Raises:
+            ValueError: If there's not enough data to build a search query.
+        """
+        from sqlalchemy import select as sa_select, or_
+
+        from app.helpers.db_utils import vector_search_cards
+        from app.openai_provider import (
+            azure_openai_async_embedding_client,
+            get_embedding_deployment,
+        )
+
+        search_query = self.build_grant_search_query(
+            interview_data=interview_data,
+            profile_context=profile_context,
+        )
+
+        if not search_query:
+            raise ValueError(
+                "Not enough information to search for grants. "
+                "Complete more of the interview first."
+            )
+
+        # Try vector search first, fall back to text search
+        try:
+            embed_response = (
+                await azure_openai_async_embedding_client.embeddings.create(
+                    model=get_embedding_deployment(),
+                    input=search_query[:8000],
+                )
+            )
+            embedding = embed_response.data[0].embedding
+            results = await vector_search_cards(
+                db,
+                embedding,
+                match_threshold=0.5,
+                match_count=10,
+                require_active=True,
+            )
+        except Exception as e:
+            logger.warning("Vector search failed, falling back to text search: %s", e)
+            # Fallback: simple text search on cards
+            try:
+                # Escape LIKE wildcards to prevent pattern manipulation
+                escaped_q = (
+                    search_query[:50]
+                    .replace("\\", "\\\\")
+                    .replace("%", "\\%")
+                    .replace("_", "\\_")
+                )
+                search_result = await db.execute(
+                    sa_select(Card)
+                    .where(
+                        or_(
+                            Card.name.ilike(f"%{escaped_q}%"),
+                            Card.summary.ilike(f"%{escaped_q}%"),
+                        ),
+                        Card.status == "active",
+                    )
+                    .limit(10)
+                )
+                rows = search_result.scalars().all()
+                results = []
+                for r in rows:
+                    results.append(
+                        {
+                            "id": str(r.id),
+                            "name": r.name,
+                            "summary": r.summary,
+                            "grantor": r.grantor,
+                            "deadline": r.deadline.isoformat() if r.deadline else None,
+                            "funding_amount_min": (
+                                float(r.funding_amount_min)
+                                if r.funding_amount_min is not None
+                                else None
+                            ),
+                            "funding_amount_max": (
+                                float(r.funding_amount_max)
+                                if r.funding_amount_max is not None
+                                else None
+                            ),
+                            "grant_type": r.grant_type,
+                            "similarity": 0,
+                        }
+                    )
+            except Exception as e2:
+                logger.error("Text search also failed: %s", e2)
+                results = []
+
+        # Format results
+        matched_grants = []
+        for card in results:
+            matched_grants.append(
+                {
+                    "card_id": str(card.get("id", "")),
+                    "grant_name": card.get("name", ""),
+                    "grantor": card.get("grantor", ""),
+                    "summary": card.get("summary", ""),
+                    "deadline": card.get("deadline"),
+                    "funding_amount_min": card.get("funding_amount_min"),
+                    "funding_amount_max": card.get("funding_amount_max"),
+                    "grant_type": card.get("grant_type"),
+                    "similarity": card.get("similarity", 0),
+                }
+            )
+
+        return {"grants": matched_grants, "query_used": search_query[:200]}
 
     # -- Card creation ------------------------------------------------------
 

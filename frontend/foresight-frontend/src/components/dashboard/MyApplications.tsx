@@ -10,150 +10,13 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
-import {
-  FileText,
-  Plus,
-  ArrowRight,
-  Clock,
-  AlertTriangle,
-  ClipboardList,
-} from "lucide-react";
+import { FileText, Plus, ClipboardList } from "lucide-react";
 import { listWizardSessions } from "../../lib/wizard-api";
 import type { WizardSession } from "../../lib/wizard-api";
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const STEP_LABELS = [
-  "Welcome",
-  "Grant Details",
-  "Interview",
-  "Plan Review",
-  "Proposal",
-  "Export",
-];
-
-const TOTAL_STEPS = STEP_LABELS.length;
-const MAX_VISIBLE = 6;
+import { MAX_VISIBLE } from "./myApplicationsUtils";
+import { MyApplicationsCard } from "./MyApplicationsCard";
 
 type FilterTab = "in_progress" | "completed" | "all";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function getPhaseInfo(session: WizardSession): {
-  label: string;
-  classes: string;
-} {
-  if (session.status === "completed" || session.current_step >= 5) {
-    return {
-      label: "Complete",
-      classes:
-        "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
-    };
-  }
-  if (session.current_step === 4) {
-    return {
-      label: "Proposal",
-      classes:
-        "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
-    };
-  }
-  if (session.current_step === 3) {
-    return {
-      label: "Planning",
-      classes:
-        "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-    };
-  }
-  if (session.current_step === 2) {
-    return {
-      label: "Interview",
-      classes:
-        "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-    };
-  }
-  return {
-    label: "Getting Started",
-    classes: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300",
-  };
-}
-
-function getSessionTitle(session: WizardSession): string {
-  if (session.grant_context?.grant_name) {
-    return session.grant_context.grant_name;
-  }
-  if (session.entry_path === "build_program") {
-    return "Program Draft";
-  }
-  return "Grant Application";
-}
-
-function getEntryPathLabel(entryPath: string): {
-  label: string;
-  classes: string;
-} {
-  if (entryPath === "build_program") {
-    return {
-      label: "Program Development",
-      classes:
-        "bg-brand-blue/10 text-brand-blue dark:bg-brand-blue/20 dark:text-blue-300",
-    };
-  }
-  return {
-    label: "Grant Application",
-    classes:
-      "bg-extended-purple/10 text-extended-purple dark:bg-extended-purple/20 dark:text-purple-300",
-  };
-}
-
-function relativeTime(dateStr: string | null): string {
-  if (!dateStr) return "";
-  const now = Date.now();
-  const then = new Date(dateStr).getTime();
-  const diffMs = now - then;
-  const diffMin = Math.floor(diffMs / 60_000);
-  if (diffMin < 1) return "Just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHrs = Math.floor(diffMin / 60);
-  if (diffHrs < 24) return `${diffHrs}h ago`;
-  const diffDays = Math.floor(diffHrs / 24);
-  if (diffDays === 1) return "Yesterday";
-  if (diffDays < 30) return `${diffDays}d ago`;
-  const diffMonths = Math.floor(diffDays / 30);
-  return `${diffMonths}mo ago`;
-}
-
-function deadlineWarning(
-  deadline: string | null,
-): { label: string; classes: string } | null {
-  if (!deadline) return null;
-  const now = Date.now();
-  const dl = new Date(deadline).getTime();
-  const daysLeft = Math.ceil((dl - now) / (1000 * 60 * 60 * 24));
-  if (daysLeft < 0) {
-    return {
-      label: "Past due",
-      classes: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-    };
-  }
-  if (daysLeft <= 7) {
-    return {
-      label: `${daysLeft}d left`,
-      classes: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-    };
-  }
-  if (daysLeft <= 30) {
-    return {
-      label: `${daysLeft}d left`,
-      classes:
-        "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-    };
-  }
-  return null;
-}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -287,12 +150,9 @@ export function MyApplications({ token }: MyApplicationsProps) {
         </div>
         <div className="flex items-center gap-3">
           {hasMore && (
-            <Link
-              to="/apply"
-              className="text-sm text-brand-blue hover:underline"
-            >
-              View All
-            </Link>
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              (showing {MAX_VISIBLE} of {filtered.length})
+            </span>
           )}
           <Link
             to="/apply"
@@ -329,83 +189,13 @@ export function MyApplications({ token }: MyApplicationsProps) {
         </p>
       ) : (
         <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
-          {visible.map((session, index) => {
-            const phase = getPhaseInfo(session);
-            const title = getSessionTitle(session);
-            const entryPath = getEntryPathLabel(session.entry_path);
-            const deadline = deadlineWarning(
-              session.grant_context?.deadline ?? null,
-            );
-            const updated = relativeTime(session.updated_at);
-
-            return (
-              <Link
-                key={session.id}
-                to={`/apply/${session.id}`}
-                className="flex-shrink-0 w-72 bg-white dark:bg-dark-surface rounded-xl shadow p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg group"
-                style={{
-                  animationDelay: `${Math.min(index, 5) * 50}ms`,
-                  animationFillMode: "both",
-                }}
-              >
-                {/* Top row: entry path + deadline warning */}
-                <div className="flex items-center justify-between mb-3">
-                  <span
-                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${entryPath.classes}`}
-                  >
-                    {entryPath.label}
-                  </span>
-                  {deadline && (
-                    <span
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${deadline.classes}`}
-                    >
-                      <AlertTriangle className="h-3 w-3" />
-                      {deadline.label}
-                    </span>
-                  )}
-                </div>
-
-                {/* Title */}
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2 line-clamp-2 group-hover:text-brand-blue transition-colors">
-                  {title}
-                </h3>
-
-                {/* Phase badge + step progress */}
-                <div className="flex items-center gap-2 mb-3">
-                  <span
-                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${phase.classes}`}
-                  >
-                    {phase.label}
-                  </span>
-                  <span className="text-[11px] text-gray-500 dark:text-gray-400">
-                    Step {Math.min(session.current_step + 1, TOTAL_STEPS)} of{" "}
-                    {TOTAL_STEPS}
-                  </span>
-                </div>
-
-                {/* Progress bar */}
-                <div className="w-full h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full mb-3">
-                  <div
-                    className="h-full bg-brand-blue rounded-full transition-all duration-300"
-                    style={{
-                      width: `${Math.min(((session.current_step + 1) / TOTAL_STEPS) * 100, 100)}%`,
-                    }}
-                  />
-                </div>
-
-                {/* Footer: updated time + arrow */}
-                <div className="flex items-center justify-between">
-                  {updated && (
-                    <span className="flex items-center gap-1 text-[11px] text-gray-400 dark:text-gray-500">
-                      <Clock className="h-3 w-3" />
-                      {updated}
-                    </span>
-                  )}
-                  <ArrowRight className="h-4 w-4 text-gray-300 dark:text-gray-600 group-hover:text-brand-blue group-hover:translate-x-0.5 transition-all" />
-                </div>
-              </Link>
-            );
-          })}
+          {visible.map((session, index) => (
+            <MyApplicationsCard
+              key={session.id}
+              session={session}
+              index={index}
+            />
+          ))}
         </div>
       )}
     </div>
