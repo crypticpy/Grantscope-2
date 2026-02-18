@@ -1,6 +1,6 @@
 """Create card_documents table for uploading documents to cards.
 
-Revision ID: 0010_card_docs
+Revision ID: 0011_card_docs
 Revises: 0010_profile_cols
 Create Date: 2026-02-18
 """
@@ -11,7 +11,7 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
-revision: str = "0010_card_docs"
+revision: str = "0011_card_docs"
 down_revision: Union[str, None] = "0010_profile_cols"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
