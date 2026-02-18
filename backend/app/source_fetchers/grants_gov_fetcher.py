@@ -34,6 +34,7 @@ Usage:
 
 import asyncio
 import logging
+import ssl
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
@@ -421,15 +422,19 @@ async def _search_grants_gov(
     Returns:
         Parsed JSON response dict, or empty dict on failure
     """
-    opp_statuses = "posted" if posted_only else "forecasted|posted"
-
+    # Note: The Grants.gov API has a known issue where combining keyword
+    # search with oppStatuses="posted" returns 0 results. As a workaround,
+    # we omit the status filter when searching by keyword and filter on our
+    # side after fetching results.
     payload = {
         "keyword": keyword,
-        "oppStatuses": opp_statuses,
         "sortBy": "openDate",
         "rows": min(rows, MAX_RESULTS_PER_PAGE),
         "offset": offset,
     }
+    if not keyword:
+        # Only add status filter when not searching by keyword
+        payload["oppStatuses"] = "posted" if posted_only else "forecasted|posted"
 
     for attempt in range(MAX_RETRIES):
         try:
@@ -443,7 +448,8 @@ async def _search_grants_gov(
             ) as response:
                 if response.status == 200:
                     data = await response.json()
-                    return data
+                    # API wraps results under "data" key
+                    return data.get("data", data)
 
                 if response.status == 429:
                     wait_time = RETRY_BASE_DELAY * (2**attempt)
@@ -528,8 +534,12 @@ async def fetch_grants_gov_opportunities(
     total_api_results = 0
 
     timeout = aiohttp.ClientTimeout(total=DEFAULT_TIMEOUT)
+    # Grants.gov API requires an explicit SSL context; without it, Python's
+    # default aiohttp SSL handling causes the API to return empty results.
+    ssl_ctx = ssl.create_default_context()
+    connector = aiohttp.TCPConnector(ssl=ssl_ctx)
 
-    async with aiohttp.ClientSession(timeout=timeout) as session:
+    async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
         for topic in topics:
             if len(all_opportunities) >= max_results:
                 break
@@ -557,7 +567,7 @@ async def fetch_grants_gov_opportunities(
                     errors.append(f"Empty response for keyword '{topic}'")
                     break
 
-                hits = data.get("hits", 0)
+                hits = data.get("hitCount", data.get("hits", 0))
                 total_api_results += hits
                 opp_hits = data.get("oppHits", [])
 
@@ -565,6 +575,12 @@ async def fetch_grants_gov_opportunities(
                     break
 
                 for raw_opp in opp_hits:
+                    # Client-side status filtering (API keyword+status combo is broken)
+                    if posted_only:
+                        opp_status = (raw_opp.get("oppStatus") or "").lower()
+                        if opp_status and opp_status != "posted":
+                            continue
+
                     opp = _parse_opportunity(raw_opp)
 
                     if opp.id in seen_ids:
@@ -723,3 +739,313 @@ async def fetch_and_convert_opportunities(
         )
 
     return sources, "grants_gov"
+
+
+# ============================================================================
+# Opportunity Detail + Attachment Fetching
+# ============================================================================
+
+FETCH_OPPORTUNITY_URL = "https://api.grants.gov/v1/api/fetchOpportunity"
+ATTACHMENT_DOWNLOAD_URL = (
+    "https://apply07.grants.gov/grantsws/rest/opportunity/att/download/{att_id}"
+)
+
+
+async def fetch_opportunity_details(opportunity_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Fetch full opportunity details from Grants.gov, including synopsis,
+    attachment folders, CFDA numbers, and agency contact info.
+
+    Uses POST https://api.grants.gov/v1/api/fetchOpportunity with
+    body {"opportunityId": <int>}. No authentication required.
+
+    Args:
+        opportunity_id: Grants.gov numeric opportunity ID
+
+    Returns:
+        Full opportunity data dict, or None on failure
+    """
+    timeout = aiohttp.ClientTimeout(total=DEFAULT_TIMEOUT)
+    ssl_ctx = ssl.create_default_context()
+    connector = aiohttp.TCPConnector(ssl=ssl_ctx)
+
+    async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
+        for attempt in range(MAX_RETRIES):
+            try:
+                async with session.post(
+                    FETCH_OPPORTUNITY_URL,
+                    json={"opportunityId": int(opportunity_id)},
+                    headers={
+                        "Content-Type": "application/json",
+                        "User-Agent": USER_AGENT,
+                    },
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        if data.get("errorcode") == 0:
+                            detail = data.get("data", {})
+                            # Check for "no record found" errors
+                            errors = detail.get("errorMessages", [])
+                            if errors and any(
+                                "no record" in str(e).lower() for e in errors
+                            ):
+                                logger.info(
+                                    f"No detail record for opportunity {opportunity_id}"
+                                )
+                                return None
+                            return detail
+                        logger.warning(
+                            f"Grants.gov fetchOpportunity error: {data.get('msg')}"
+                        )
+                        return None
+
+                    if response.status == 429:
+                        wait_time = RETRY_BASE_DELAY * (2**attempt)
+                        logger.warning(
+                            f"Grants.gov rate limited, waiting {wait_time:.1f}s"
+                        )
+                        await asyncio.sleep(wait_time)
+                        continue
+
+                    if response.status >= 500:
+                        wait_time = RETRY_BASE_DELAY * (2**attempt)
+                        await asyncio.sleep(wait_time)
+                        continue
+
+                    logger.error(f"Grants.gov fetchOpportunity HTTP {response.status}")
+                    return None
+
+            except asyncio.TimeoutError:
+                if attempt < MAX_RETRIES - 1:
+                    await asyncio.sleep(RETRY_BASE_DELAY * (2**attempt))
+            except aiohttp.ClientError as exc:
+                logger.warning(f"Grants.gov detail connection error: {exc}")
+                if attempt < MAX_RETRIES - 1:
+                    await asyncio.sleep(RETRY_BASE_DELAY * (2**attempt))
+            except (ValueError, TypeError) as exc:
+                logger.error(f"Invalid opportunity ID '{opportunity_id}': {exc}")
+                return None
+
+    logger.error(
+        f"Failed to fetch opportunity details after {MAX_RETRIES} attempts "
+        f"(id={opportunity_id})"
+    )
+    return None
+
+
+def extract_nofo_attachment_urls(detail: Dict[str, Any]) -> List[Dict[str, str]]:
+    """
+    Extract NOFO PDF attachment download URLs from opportunity detail data.
+
+    Looks for attachments in "Full Announcement" and "Revised Full Announcement"
+    folders, which typically contain the NOFO PDF. Falls back to
+    "Other Supporting Documents" if no full announcement is found.
+
+    Args:
+        detail: Raw opportunity detail dict from fetch_opportunity_details()
+
+    Returns:
+        List of dicts with keys: url, filename, mime_type, folder_type
+    """
+    attachments = []
+    folders = detail.get("synopsisAttachmentFolders", [])
+
+    # Priority order: Revised Full Announcement > Full Announcement > Other
+    priority_order = [
+        "Revised Full Announcement",
+        "Full Announcement",
+        "Other Supporting Documents",
+    ]
+
+    sorted_folders = sorted(
+        folders,
+        key=lambda f: (
+            priority_order.index(f.get("folderType", ""))
+            if f.get("folderType", "") in priority_order
+            else 99
+        ),
+    )
+
+    for folder in sorted_folders:
+        folder_type = folder.get("folderType", "Unknown")
+        for att in folder.get("synopsisAttachments", []):
+            att_id = att.get("id")
+            filename = att.get("fileName", "")
+            mime_type = att.get("mimeType", "")
+
+            if not att_id:
+                continue
+
+            # Only include PDFs and Word docs
+            if mime_type not in (
+                "application/pdf",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "application/msword",
+            ):
+                continue
+
+            attachments.append(
+                {
+                    "url": ATTACHMENT_DOWNLOAD_URL.format(att_id=att_id),
+                    "filename": filename,
+                    "mime_type": mime_type,
+                    "folder_type": folder_type,
+                }
+            )
+
+    return attachments
+
+
+def format_opportunity_detail(detail: Dict[str, Any]) -> str:
+    """
+    Format raw opportunity detail JSON into structured text for AI analysis.
+
+    Extracts synopsis, eligibility, funding, agency contacts, and CFDA info
+    into a comprehensive text block suitable for research pipeline ingestion.
+
+    Args:
+        detail: Raw opportunity detail dict from fetch_opportunity_details()
+
+    Returns:
+        Formatted text content string
+    """
+    parts = []
+
+    title = detail.get("opportunityTitle", "Unknown Opportunity")
+    opp_number = detail.get("opportunityNumber", "N/A")
+    parts.append(f"# {title}")
+    parts.append(f"Opportunity Number: {opp_number}")
+
+    # Agency info
+    agency = detail.get("agencyDetails", {})
+    top_agency = detail.get("topAgencyDetails", {})
+    if top_agency.get("agencyName"):
+        parts.append(f"Agency: {top_agency['agencyName']}")
+    if agency.get("agencyName") and agency["agencyName"] != top_agency.get(
+        "agencyName"
+    ):
+        parts.append(f"Sub-Agency: {agency['agencyName']}")
+
+    # Category
+    cat = detail.get("opportunityCategory", {})
+    if isinstance(cat, dict) and cat.get("description"):
+        parts.append(f"Category: {cat['description']}")
+
+    # CFDA/ALN numbers
+    cfdas = detail.get("cfdas", [])
+    if cfdas:
+        for cfda in cfdas:
+            parts.append(
+                f"CFDA/ALN: {cfda.get('cfdaNumber', 'N/A')} - "
+                f"{cfda.get('programTitle', '')}"
+            )
+
+    # Synopsis or Forecast description
+    synopsis = detail.get("synopsis") or detail.get("forecast") or {}
+    desc = synopsis.get("synopsisDesc") or synopsis.get("forecastDesc") or ""
+    # Strip HTML tags
+    if desc:
+        import re as _re
+
+        desc_clean = _re.sub(r"<[^>]+>", "", desc).strip()
+        parts.append(f"\n## Description\n{desc_clean}")
+
+    # Funding info
+    funding_parts = []
+    est_funding = synopsis.get("estimatedFunding")
+    if est_funding:
+        try:
+            funding_parts.append(f"Estimated Total Funding: ${int(est_funding):,}")
+        except (ValueError, TypeError):
+            funding_parts.append(f"Estimated Total Funding: {est_funding}")
+    ceiling = synopsis.get("awardCeiling")
+    if ceiling and str(ceiling) != "0":
+        try:
+            funding_parts.append(f"Award Ceiling: ${int(ceiling):,}")
+        except (ValueError, TypeError):
+            pass
+    floor = synopsis.get("awardFloor")
+    if floor and str(floor) != "0":
+        try:
+            funding_parts.append(f"Award Floor: ${int(floor):,}")
+        except (ValueError, TypeError):
+            pass
+    num_awards = synopsis.get("numberOfAwards")
+    if num_awards:
+        funding_parts.append(f"Expected Number of Awards: {num_awards}")
+    cost_sharing = synopsis.get("costSharing")
+    if cost_sharing is not None:
+        funding_parts.append(
+            f"Cost Sharing Required: {'Yes' if cost_sharing else 'No'}"
+        )
+    if funding_parts:
+        parts.append("\n## Funding Information\n" + "\n".join(funding_parts))
+
+    # Eligible applicant types
+    applicant_types = synopsis.get("applicantTypes", [])
+    if applicant_types:
+        types_list = [
+            at.get("description", "") for at in applicant_types if at.get("description")
+        ]
+        if types_list:
+            parts.append(
+                "\n## Eligible Applicant Types\n"
+                + "\n".join(f"- {t}" for t in types_list)
+            )
+
+    # Funding instruments
+    instruments = synopsis.get("fundingInstruments", [])
+    if instruments:
+        inst_list = [
+            i.get("description", "") for i in instruments if i.get("description")
+        ]
+        if inst_list:
+            parts.append(f"Funding Instrument: {', '.join(inst_list)}")
+
+    # Key dates
+    date_parts = []
+    posting = synopsis.get("postingDate")
+    if posting:
+        date_parts.append(f"Posting Date: {posting}")
+    response_date = synopsis.get("responseDateDesc") or synopsis.get(
+        "estApplicationResponseDate"
+    )
+    if response_date:
+        date_parts.append(f"Application Deadline: {response_date}")
+    est_award = synopsis.get("estAwardDate")
+    if est_award:
+        date_parts.append(f"Estimated Award Date: {est_award}")
+    est_start = synopsis.get("estProjectStartDate")
+    if est_start:
+        date_parts.append(f"Estimated Project Start: {est_start}")
+    archive = synopsis.get("archiveDate")
+    if archive:
+        date_parts.append(f"Archive Date: {archive}")
+    if date_parts:
+        parts.append("\n## Key Dates\n" + "\n".join(date_parts))
+
+    # Agency contact
+    contact_parts = []
+    contact_name = synopsis.get("agencyContactName")
+    if contact_name:
+        contact_parts.append(f"Contact: {contact_name}")
+    contact_phone = synopsis.get("agencyContactPhone")
+    if contact_phone:
+        contact_parts.append(f"Phone: {contact_phone}")
+    contact_email = synopsis.get("agencyContactEmail")
+    if contact_email:
+        contact_parts.append(f"Email: {contact_email}")
+    if contact_parts:
+        parts.append("\n## Agency Contact\n" + "\n".join(contact_parts))
+
+    # Eligibility description
+    elig_desc = synopsis.get("applicantEligibilityDesc")
+    if elig_desc and elig_desc.strip() and elig_desc.strip() != "N/A":
+        parts.append(f"\n## Eligibility Details\n{elig_desc}")
+
+    # Modification comments
+    mod_comments = detail.get("modifiedComments")
+    if mod_comments and mod_comments.strip():
+        parts.append(f"\n## Recent Modifications\n{mod_comments.strip()}")
+
+    return "\n".join(parts)

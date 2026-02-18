@@ -86,6 +86,23 @@ class GrantContext(BaseModel):
     summary: Optional[str] = Field(
         None, description="AI-generated summary of the grant opportunity"
     )
+    description: Optional[str] = Field(
+        None, description="Detailed description of the grant"
+    )
+    source_url: Optional[str] = Field(
+        None, description="URL to the grant listing (e.g. Grants.gov)"
+    )
+    grants_gov_id: Optional[str] = Field(None, description="Grants.gov opportunity ID")
+    research_report: Optional[str] = Field(
+        None, description="Deep research report (markdown) from prior analysis"
+    )
+    source_documents: List[str] = Field(
+        default_factory=list,
+        description="Summaries/excerpts from sources attached to this card",
+    )
+    card_id: Optional[str] = Field(
+        None, description="ID of the card this context was derived from"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -167,6 +184,10 @@ class WizardSessionCreate(BaseModel):
 
     entry_path: Literal["have_grant", "find_grant"] = Field(
         ..., description="How the user is entering the wizard"
+    )
+    card_id: Optional[str] = Field(
+        None,
+        description="Card/opportunity ID to pre-populate grant context from",
     )
 
 

@@ -270,7 +270,11 @@ const WizardInterview: React.FC<WizardInterviewProps> = ({
   onComplete,
   onBack: _onBack,
 }) => {
-  const interview = useWizardInterview({ sessionId, conversationId });
+  const interview = useWizardInterview({
+    sessionId,
+    conversationId,
+    grantName: grantContext?.grant_name ?? undefined,
+  });
   const {
     messages,
     isStreaming,

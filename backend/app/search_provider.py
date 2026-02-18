@@ -104,7 +104,10 @@ def get_provider_info() -> dict:
 
 
 async def _searxng_search_web(
-    query: str, num_results: int, date_filter: Optional[str]
+    query: str,
+    num_results: int,
+    date_filter: Optional[str],
+    search_depth: str = "basic",
 ) -> List[SearchResult]:
     from .source_fetchers.searxng_fetcher import search_web as sx_search_web
 
@@ -123,7 +126,10 @@ async def _searxng_search_web(
 
 
 async def _searxng_search_news(
-    query: str, num_results: int, date_filter: Optional[str]
+    query: str,
+    num_results: int,
+    date_filter: Optional[str],
+    search_depth: str = "basic",
 ) -> List[SearchResult]:
     from .source_fetchers.searxng_fetcher import search_news as sx_search_news
 
@@ -147,7 +153,10 @@ async def _searxng_search_news(
 
 
 async def _serper_search_web(
-    query: str, num_results: int, date_filter: Optional[str]
+    query: str,
+    num_results: int,
+    date_filter: Optional[str],
+    search_depth: str = "basic",
 ) -> List[SearchResult]:
     from .source_fetchers.serper_fetcher import search_web as sp_search_web
 
@@ -166,7 +175,10 @@ async def _serper_search_web(
 
 
 async def _serper_search_news(
-    query: str, num_results: int, date_filter: Optional[str]
+    query: str,
+    num_results: int,
+    date_filter: Optional[str],
+    search_depth: str = "basic",
 ) -> List[SearchResult]:
     from .source_fetchers.serper_fetcher import search_news as sp_search_news
 
@@ -190,7 +202,10 @@ async def _serper_search_news(
 
 
 async def _tavily_search_web(
-    query: str, num_results: int, date_filter: Optional[str]
+    query: str,
+    num_results: int,
+    date_filter: Optional[str],
+    search_depth: str = "basic",
 ) -> List[SearchResult]:
     api_key = os.getenv("TAVILY_API_KEY", "")
     if not api_key:
@@ -204,7 +219,7 @@ async def _tavily_search_web(
             client.search,
             query=query,
             max_results=num_results,
-            search_depth="basic",
+            search_depth=search_depth,
         )
         return [
             SearchResult(
@@ -223,7 +238,10 @@ async def _tavily_search_web(
 
 
 async def _tavily_search_news(
-    query: str, num_results: int, date_filter: Optional[str]
+    query: str,
+    num_results: int,
+    date_filter: Optional[str],
+    search_depth: str = "basic",
 ) -> List[SearchResult]:
     # Tavily doesn't have a separate news endpoint — use topic=news
     api_key = os.getenv("TAVILY_API_KEY", "")
@@ -239,6 +257,7 @@ async def _tavily_search_news(
             query=query,
             max_results=num_results,
             topic="news",
+            search_depth=search_depth,
         )
         return [
             SearchResult(
@@ -276,6 +295,7 @@ async def search_web(
     query: str,
     num_results: int = 10,
     date_filter: Optional[str] = None,
+    search_depth: str = "basic",
 ) -> List[SearchResult]:
     """Search the web using the configured provider (SearXNG preferred, Serper/Tavily fallback)."""
     provider = get_active_provider()
@@ -284,13 +304,14 @@ async def search_web(
         return []
 
     fn_web, _ = _DISPATCH[provider]
-    return await fn_web(query, num_results, date_filter)
+    return await fn_web(query, num_results, date_filter, search_depth=search_depth)
 
 
 async def search_news(
     query: str,
     num_results: int = 10,
     date_filter: Optional[str] = None,
+    search_depth: str = "basic",
 ) -> List[SearchResult]:
     """Search news using the configured provider (SearXNG preferred, Serper/Tavily fallback)."""
     provider = get_active_provider()
@@ -299,7 +320,7 @@ async def search_news(
         return []
 
     _, fn_news = _DISPATCH[provider]
-    return await fn_news(query, num_results, date_filter)
+    return await fn_news(query, num_results, date_filter, search_depth=search_depth)
 
 
 async def search_all(
@@ -308,6 +329,7 @@ async def search_all(
     date_filter: Optional[str] = "qdr:w",
     include_news: bool = True,
     include_web: bool = True,
+    search_depth: str = "basic",
 ) -> List[SearchResult]:
     """Run multiple queries across web and news, deduplicating by URL."""
     provider = get_active_provider()
@@ -320,9 +342,17 @@ async def search_all(
 
     for query in queries:
         if include_web:
-            tasks.append(fn_web(query, num_results_per_query, date_filter))
+            tasks.append(
+                fn_web(
+                    query, num_results_per_query, date_filter, search_depth=search_depth
+                )
+            )
         if include_news:
-            tasks.append(fn_news(query, num_results_per_query, date_filter))
+            tasks.append(
+                fn_news(
+                    query, num_results_per_query, date_filter, search_depth=search_depth
+                )
+            )
 
     if not tasks:
         return []

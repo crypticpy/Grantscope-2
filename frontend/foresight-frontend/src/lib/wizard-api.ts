@@ -254,10 +254,13 @@ const BASE = "/api/v1/me/wizard/sessions";
 export async function createWizardSession(
   token: string,
   entryPath: EntryPath,
+  cardId?: string,
 ): Promise<WizardSession> {
+  const payload: Record<string, string> = { entry_path: entryPath };
+  if (cardId) payload.card_id = cardId;
   return apiRequest<WizardSession>(BASE, token, {
     method: "POST",
-    body: JSON.stringify({ entry_path: entryPath }),
+    body: JSON.stringify(payload),
   });
 }
 

@@ -130,6 +130,54 @@ class AttachmentStorage:
             await blob_client.delete_blob(delete_snapshots="include")
         logger.info("Deleted blob: %s", blob_path)
 
+    def _card_document_blob_path(self, card_id: str, filename: str) -> str:
+        """Build a unique blob path for card documents: cards/{card_id}/{uuid}_{filename}."""
+        unique = uuid.uuid4().hex[:8]
+        safe_name = filename.replace("/", "_").replace("\\", "_")
+        return f"cards/{card_id}/{unique}_{safe_name}"
+
+    async def upload_card_document(
+        self,
+        card_id: str,
+        filename: str,
+        data: bytes,
+        content_type: str,
+    ) -> str:
+        """Upload a card document to Azure Blob Storage.
+
+        Uses a ``cards/`` prefix instead of ``applications/`` to keep card
+        documents organized separately.
+
+        Returns the blob path (not the full URL) for storage in the DB.
+        Raises ValueError if file exceeds MAX_FILE_SIZE_BYTES.
+        """
+        _require_blob()
+        if len(data) > MAX_FILE_SIZE_BYTES:
+            raise ValueError(
+                f"File size {len(data)} bytes exceeds maximum of "
+                f"{MAX_FILE_SIZE_BYTES} bytes ({MAX_FILE_SIZE_BYTES // (1024*1024)} MB)"
+            )
+
+        blob_path = self._card_document_blob_path(card_id, filename)
+        async with BlobServiceClient.from_connection_string(
+            self.connection_string
+        ) as client:
+            blob_client = client.get_blob_client(
+                container=self.container, blob=blob_path
+            )
+            await blob_client.upload_blob(
+                data,
+                content_settings={"content_type": content_type},
+                overwrite=True,
+            )
+        logger.info(
+            "Uploaded card document %s (%d bytes) to %s",
+            filename,
+            len(data),
+            blob_path,
+        )
+        return blob_path
+
     async def generate_sas_url(self, blob_path: str, expiry_hours: int = 1) -> str:
         """Generate a time-limited SAS URL for secure file download.
 

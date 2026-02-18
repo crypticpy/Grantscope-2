@@ -20,6 +20,8 @@ export interface UseWizardInterviewOptions {
   sessionId: string;
   /** Existing conversation to resume, or null for a new interview */
   conversationId: string | null;
+  /** Grant context for context-aware greeting (optional) */
+  grantName?: string;
 }
 
 export interface UseWizardInterviewReturn extends Omit<
@@ -100,7 +102,7 @@ function stripTopicMarkers(content: string): string {
 export function useWizardInterview(
   options: UseWizardInterviewOptions,
 ): UseWizardInterviewReturn {
-  const { sessionId, conversationId } = options;
+  const { sessionId, conversationId, grantName } = options;
 
   // Wrap useChat with wizard scope + session-specific scopeId
   const chat = useChat({
@@ -158,7 +160,10 @@ export function useWizardInterview(
         !chat.isStreaming
       ) {
         greetingSentRef.current = true;
-        chat.sendMessage("Hello, I need help preparing a grant application.");
+        const greeting = grantName
+          ? `Hello, I need help preparing a grant application for "${grantName}". I've already gathered research and details about this opportunity — please use that context to guide our interview.`
+          : "Hello, I need help preparing a grant application.";
+        chat.sendMessage(greeting);
       }
     }, 500);
 
