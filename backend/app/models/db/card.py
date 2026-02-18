@@ -75,11 +75,18 @@ class Card(Base):
     stage_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     horizon: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    # ── AI-generated scores (INTEGER 0-100, from base creation) ──────────
-    novelty_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # ── AI-generated scores ──────────────────────────────────────────────
+    # novelty/impact/relevance are NUMERIC(3,2) in prod DB (002_schema_fixes)
+    novelty_score: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(3, 2), nullable=True
+    )
     maturity_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    impact_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    relevance_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    impact_score: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(3, 2), nullable=True
+    )
+    relevance_score: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(3, 2), nullable=True
+    )
     velocity_score: Mapped[Optional[Decimal]] = mapped_column(
         Numeric(5, 2), server_default="0", nullable=True
     )

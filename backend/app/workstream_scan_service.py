@@ -1177,7 +1177,7 @@ Example: ["query 1", "query 2", ...]"""
                     )
                     await self.db.execute(
                         text(
-                            "UPDATE cards SET embedding = :emb::vector WHERE id = :cid"
+                            "UPDATE cards SET embedding = CAST(:emb AS vector) WHERE id = :cid"
                         ),
                         {"emb": embedding_str, "cid": card_id},
                     )
@@ -1201,9 +1201,9 @@ Example: ["query 1", "query 2", ...]"""
                     await self.db.execute(
                         text(
                             "INSERT INTO card_embeddings (card_id, embedding, created_at) "
-                            "VALUES (:card_id, :emb::vector, :created_at) "
+                            "VALUES (:card_id, CAST(:emb AS vector), :created_at) "
                             "ON CONFLICT (card_id) DO UPDATE SET "
-                            "embedding = :emb::vector, updated_at = :updated_at"
+                            "embedding = CAST(:emb AS vector), updated_at = :updated_at"
                         ),
                         {
                             "card_id": card_id,

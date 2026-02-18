@@ -139,18 +139,21 @@ const GrantWizard: React.FC = () => {
     }
 
     try {
-      const data = await createWizardSession(token, "have_grant");
+      // Pass card_id so the backend pre-populates grant context from card data,
+      // sources, and deep research reports.
+      const data = await createWizardSession(
+        token,
+        "have_grant",
+        cardId ?? undefined,
+      );
       setSessionData(data);
       setSessionId(data.id);
-      // With a card_id, skip welcome and go to interview (step 2)
-      setCurrentStep(2);
-      prevStep.current = 2;
-
-      // Update the session with the card linkage and current step
-      const updated = await updateWizardSession(token, data.id, {
-        current_step: 2,
-      });
-      setSessionData(updated);
+      // Backend sets current_step=2 when card context is loaded; use that.
+      const step = data.current_step ?? 2;
+      setCurrentStep(step);
+      prevStep.current = step;
+      // Update URL for bookmarking/resume
+      navigate(`/apply/${data.id}`, { replace: true });
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to create wizard session",
@@ -158,7 +161,7 @@ const GrantWizard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [cardId, navigate]);
 
   useEffect(() => {
     const init = async () => {

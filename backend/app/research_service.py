@@ -25,7 +25,14 @@ from typing import Optional, Dict, Any, List, Tuple
 from dataclasses import dataclass
 from gpt_researcher import GPTResearcher
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update as sa_update, delete as sa_delete, func, and_, or_
+from sqlalchemy import (
+    select,
+    update as sa_update,
+    delete as sa_delete,
+    func,
+    and_,
+    or_,
+)
 import openai
 
 from .ai_service import AIService, AnalysisResult, TriageResult
@@ -35,7 +42,11 @@ from app.models.db.card_extras import CardSnapshot, CardTimeline, Entity
 from app.models.db.source import Source
 from app.models.db.research import ResearchTask
 from app.models.db.workstream import Workstream
-from app.helpers.db_utils import vector_search_cards, increment_deep_research_count
+from app.helpers.db_utils import (
+    vector_search_cards,
+    increment_deep_research_count,
+    store_card_embedding,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -104,9 +115,18 @@ def _configure_gpt_researcher_for_azure():
                     else f"GPT Researcher config: {key}={value}"
                 )
 
-    # Configure GPT Researcher to use SearXNG instead of Tavily for search
-    os.environ["RETRIEVER"] = os.getenv("RETRIEVER", "searx")
-    os.environ["SEARX_URL"] = os.getenv("SEARXNG_BASE_URL", "http://searxng:8080")
+    # Configure GPT Researcher search retriever.
+    # Honour RETRIEVER if set; otherwise map from SEARCH_PROVIDER (our env var).
+    retriever = os.getenv("RETRIEVER") or os.getenv("SEARCH_PROVIDER", "tavily")
+    os.environ["RETRIEVER"] = retriever
+    if retriever == "searx":
+        os.environ["SEARX_URL"] = os.getenv("SEARXNG_BASE_URL", "http://searxng:8080")
+    elif retriever == "tavily":
+        # Ensure TAVILY_API_KEY is propagated (some container configs set it
+        # with a different naming convention).
+        tavily_key = os.getenv("TAVILY_API_KEY", "")
+        if tavily_key:
+            os.environ["TAVILY_API_KEY"] = tavily_key
 
     logger.info(
         f"GPT Researcher configured for Azure OpenAI: SMART_LLM={gptr_config['SMART_LLM']}, FAST_LLM={gptr_config['FAST_LLM']}, RETRIEVER={os.environ['RETRIEVER']}"
@@ -194,6 +214,29 @@ Context: {summary}
 
 Prioritize sources from government publications, academic research, and reputable technology news.
 Include specific examples from cities like Austin, Denver, Seattle, Boston, or similar municipalities.
+"""
+
+GRANT_RESEARCH_QUERY_TEMPLATE = """
+Comprehensive research on the federal grant opportunity "{name}" for municipal grant application:
+
+1. PROGRAM OVERVIEW: Full NOFO details, CFDA/ALN number, funding agency, program office, total funding
+2. ELIGIBILITY: Eligible applicant types, geographic requirements, disqualifying factors for municipalities
+3. FUNDING & MATCH: Award amounts, cost-sharing requirements, allowable costs, indirect cost rates
+4. APPLICATION REQUIREMENTS: Required documents, narrative sections, page limits, partnerships needed
+5. COMPETITIVE LANDSCAPE: Historical award data, success rates, number of applicants vs awards, winning profiles
+6. PEER EXPERIENCE: Have Austin, Denver, Seattle, Portland, Nashville, or similar cities received this grant?
+7. TIMELINE: Application deadline, grant period, key milestones, review timeline
+8. COMPLIANCE: 2 CFR 200 (Uniform Guidance), SAM.gov registration, audit requirements
+
+Context: {summary}
+
+Grantor: {grantor}
+CFDA/ALN: {cfda_number}
+Deadline: {deadline}
+Funding Range: {funding_range}
+
+Prioritize sources from grants.gov, SAM.gov, federal register, agency program offices,
+and reports from cities that have previously received this grant.
 """
 
 WORKSTREAM_QUERY_TEMPLATE = """
@@ -350,11 +393,7 @@ class ResearchService:
 
             embedding = await self.ai_service.generate_embedding(embed_text)
 
-            await self.db.execute(
-                sa_update(Card)
-                .where(Card.id == _to_uuid(card_id))
-                .values(embedding=embedding)
-            )
+            await store_card_embedding(self.db, card_id, embedding)
             await self.db.flush()
 
             logger.info(f"Card {card_id}: embedding updated ({len(embed_text)} chars)")
@@ -426,7 +465,7 @@ class ResearchService:
         researcher = GPTResearcher(
             query=query,
             report_type=report_type,
-            max_subtopics=10,
+            max_subtopics=15 if report_type == "detailed_report" else 10,
             source_urls=existing_source_urls or None,
             complement_source_urls=bool(existing_source_urls),
             verbose=False,
@@ -520,7 +559,7 @@ class ResearchService:
         # Supplement with SearXNG search for additional high-quality sources
         try:
             supplementary_sources = await self._search_supplementary(
-                query, num_results=10
+                query, num_results=15, search_depth="advanced"
             )
             for src in supplementary_sources:
                 if src.url not in seen_urls:
@@ -538,7 +577,7 @@ class ResearchService:
         return sources, report, costs
 
     async def _search_supplementary(
-        self, query: str, num_results: int = 5
+        self, query: str, num_results: int = 5, search_depth: str = "basic"
     ) -> List[RawSource]:
         """
         Search with SearXNG + crawler for supplementary sources.
@@ -549,6 +588,7 @@ class ResearchService:
         Args:
             query: Search query
             num_results: Max number of results to return
+            search_depth: Tavily search depth ("basic" or "advanced")
 
         Returns:
             List of RawSource with content included
@@ -567,8 +607,12 @@ class ResearchService:
         sources = []
         try:
             # Search web and news
-            web_results = await search_web(query, num_results=num_results)
-            news_results = await search_news(query, num_results=num_results)
+            web_results = await search_web(
+                query, num_results=num_results, search_depth=search_depth
+            )
+            news_results = await search_news(
+                query, num_results=num_results, search_depth=search_depth
+            )
 
             # Deduplicate by URL
             seen_urls = set()
@@ -702,6 +746,18 @@ class ResearchService:
             # Must have a URL
             if not source.url:
                 skipped_no_url += 1
+                continue
+
+            # Auto-pass uploaded documents — user explicitly provided them
+            if source.source_type == "uploaded_document":
+                auto_passed += 1
+                uploaded_triage = TriageResult(
+                    is_relevant=True,
+                    confidence=0.99,
+                    primary_pillar=None,
+                    reason="User-uploaded document — auto-passed as high-priority source",
+                )
+                relevant.append((source, uploaded_triage))
                 continue
 
             # If no content, auto-pass with default relevance
@@ -1313,6 +1369,130 @@ class ResearchService:
             logger.warning(f"Connection discovery failed for card {card_id}: {e}")
 
     # ========================================================================
+    # Deep Research Helpers
+    # ========================================================================
+
+    async def _collect_uploaded_document_sources(self, card_id: str) -> List[RawSource]:
+        """Collect user-uploaded card documents as high-priority research sources.
+
+        Queries ``CardDocument`` for completed extractions and returns them as
+        ``RawSource`` objects with ``source_type="uploaded_document"``.
+        """
+        uploaded_doc_sources: List[RawSource] = []
+        try:
+            from app.models.db.card_document import CardDocument
+
+            doc_result = await self.db.execute(
+                select(
+                    CardDocument.filename,
+                    CardDocument.original_filename,
+                    CardDocument.extracted_text,
+                    CardDocument.document_type,
+                )
+                .where(
+                    CardDocument.card_id == _to_uuid(card_id),
+                    CardDocument.extraction_status == "completed",
+                )
+                .order_by(CardDocument.created_at.desc())
+                .limit(5)
+            )
+            doc_rows = doc_result.all()
+            for doc in doc_rows:
+                if doc.extracted_text and len(doc.extracted_text) > 50:
+                    uploaded_doc_sources.append(
+                        RawSource(
+                            url=f"uploaded://card/{card_id}/{doc.filename}",
+                            title=f"[Uploaded] {doc.original_filename}",
+                            content=doc.extracted_text[:15000],
+                            source_name="User Upload",
+                            relevance=0.98,
+                            source_type="uploaded_document",
+                        )
+                    )
+            if uploaded_doc_sources:
+                logger.info(
+                    f"Collected {len(uploaded_doc_sources)} uploaded documents for research"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to fetch card documents for research: {e}")
+        return uploaded_doc_sources
+
+    async def _collect_grant_detail_sources(
+        self, card: Dict[str, Any], existing_source_urls: List[str]
+    ) -> List[RawSource]:
+        """Fetch Grants.gov NOFO details and attachment URLs for a grant card.
+
+        Returns high-relevance ``RawSource`` objects built from the Grants.gov
+        API response.  As a side-effect, NOFO attachment URLs are appended to
+        *existing_source_urls* so the crawler picks them up later.
+        """
+        grant_detail_sources: List[RawSource] = []
+        if not card.get("grants_gov_id"):
+            return grant_detail_sources
+        try:
+            from .source_fetchers.grants_gov_fetcher import (
+                fetch_opportunity_details,
+                extract_nofo_attachment_urls,
+                format_opportunity_detail,
+            )
+
+            detail = await fetch_opportunity_details(card["grants_gov_id"])
+            if detail:
+                # Create a high-relevance source from the full detail
+                detail_text = format_opportunity_detail(detail)
+                if detail_text and len(detail_text) > 100:
+                    grant_detail_sources.append(
+                        RawSource(
+                            url=f"https://www.grants.gov/search-results-detail/{card['grants_gov_id']}",
+                            title=f"Grants.gov NOFO: {card['name']}",
+                            content=detail_text,
+                            source_name="Grants.gov",
+                            relevance=0.95,
+                            source_type="grants_gov",
+                        )
+                    )
+                    logger.info(
+                        f"Grants.gov detail fetched for opportunity {card['grants_gov_id']} "
+                        f"({len(detail_text)} chars)"
+                    )
+
+                # Extract NOFO PDF attachment URLs and add to existing_source_urls
+                # The crawler will download and extract text from these PDFs
+                attachments = extract_nofo_attachment_urls(detail)
+                for att in attachments[:3]:  # Limit to 3 PDFs
+                    existing_source_urls.append(att["url"])
+                    logger.info(
+                        f"Added Grants.gov attachment: {att['filename']} "
+                        f"({att['folder_type']})"
+                    )
+        except Exception as e:
+            logger.warning(f"Grants.gov detail fetch failed: {e}")
+        return grant_detail_sources
+
+    async def _run_supplementary_search(
+        self,
+        label: str,
+        query: str,
+        target_sources: List[RawSource],
+        num_results: int,
+        search_depth: str = "basic",
+    ) -> None:
+        """Run a supplementary search and append results to *target_sources*.
+
+        Wraps :meth:`_search_supplementary` with the common try/except/log
+        pattern used throughout ``execute_deep_research``.
+        """
+        try:
+            results = await self._search_supplementary(
+                query, num_results=num_results, search_depth=search_depth
+            )
+            if results:
+                target_sources.extend(results)
+                logger.info(f"{label} added {len(results)} sources")
+        except Exception as e:
+            logger.warning(f"{label} failed: {e}")
+
+    # ========================================================================
     # Main Entry Points
     # ========================================================================
 
@@ -1517,9 +1697,26 @@ class ResearchService:
         card = _card_to_dict(card_obj)
 
         # Step 1: Build comprehensive query
-        query = DEEP_RESEARCH_QUERY_TEMPLATE.format(
-            name=card["name"], summary=card.get("summary", "")
+        # Detect if this is a grant card
+        is_grant_card = bool(
+            card.get("grant_type")
+            or card.get("grants_gov_id")
+            or card.get("cfda_number")
         )
+
+        if is_grant_card:
+            query = GRANT_RESEARCH_QUERY_TEMPLATE.format(
+                name=card["name"],
+                summary=card.get("summary", ""),
+                grantor=card.get("grantor") or "Unknown",
+                cfda_number=card.get("cfda_number") or "N/A",
+                deadline=card.get("deadline") or "Not specified",
+                funding_range=f"${card.get('funding_amount_min') or 'N/A'} - ${card.get('funding_amount_max') or 'N/A'}",
+            )
+        else:
+            query = DEEP_RESEARCH_QUERY_TEMPLATE.format(
+                name=card["name"], summary=card.get("summary", "")
+            )
 
         if source_prefs := card.get("source_preferences") or {}:
             steer_parts = []
@@ -1571,12 +1768,27 @@ class ResearchService:
         except Exception as e:
             logger.warning(f"Failed to fetch existing sources: {e}")
 
+        # Step 1b2: Collect user-uploaded card documents for research
+        uploaded_doc_sources = await self._collect_uploaded_document_sources(card_id)
+
+        # Step 1c: For grant cards, fetch NOFO details from Grants.gov API
+        grant_detail_sources: List[RawSource] = []
+        if is_grant_card:
+            grant_detail_sources = await self._collect_grant_detail_sources(
+                card, existing_source_urls
+            )
+
         # Step 2: Discover sources (GPT Researcher + supplementary search - detailed report for more depth)
         sources, report, cost = await self._discover_sources(
             query=query,
             report_type="detailed_report",
             existing_source_urls=existing_source_urls or None,
         )
+
+        # Prepend high-priority sources (uploaded docs + Grants.gov detail)
+        priority_sources = uploaded_doc_sources + grant_detail_sources
+        if priority_sources:
+            sources = priority_sources + sources
 
         # Step 2b: Peer city benchmarking queries
         try:
@@ -1587,14 +1799,45 @@ class ResearchService:
                 peer_query = (
                     f'"{card["name"]}" ({" OR ".join(peer_cities)}) city implementation'
                 )
-                peer_sources = await self._search_supplementary(
-                    peer_query, num_results=5
+                await self._run_supplementary_search(
+                    label="Peer city search",
+                    query=peer_query,
+                    target_sources=sources,
+                    num_results=8,
+                    search_depth="advanced",
                 )
-                if peer_sources:
-                    sources.extend(peer_sources)
-                    logger.info(f"Peer city search added {len(peer_sources)} sources")
         except Exception as e:
             logger.warning(f"Peer city benchmarking search failed: {e}")
+
+        # Step 2c: Grant-specific supplementary searches
+        if is_grant_card:
+            try:
+                grant_queries = []
+                cfda = card.get("cfda_number", "")
+                grantor = card.get("grantor", "")
+
+                if cfda:
+                    grant_queries.append(
+                        f'CFDA "{cfda}" award recipients city municipality'
+                    )
+                    grant_queries.append(
+                        f'"{cfda}" grant application tips success factors'
+                    )
+                if grantor:
+                    grant_queries.append(f'"{grantor}" grant program guidance FAQ')
+
+                grant_queries.append(f'"{card["name"]}" grant application city Texas')
+
+                for gq in grant_queries[:3]:
+                    await self._run_supplementary_search(
+                        label=f"Grant search '{gq[:50]}'",
+                        query=gq,
+                        target_sources=sources,
+                        num_results=5,
+                        search_depth="advanced",
+                    )
+            except Exception as e:
+                logger.warning(f"Grant supplementary search failed: {e}")
 
         # Step 3: Backfill missing content via unified crawler
         sources = await self._backfill_content(sources)
@@ -1629,7 +1872,7 @@ class ResearchService:
                         f'"{q}"' for q in follow_up_queries[:3]
                     )
                     round_2_sources = await self._search_supplementary(
-                        combined_query, num_results=10
+                        combined_query, num_results=15, search_depth="advanced"
                     )
                     if round_2_sources:
                         round_2_sources = await self._backfill_content(round_2_sources)

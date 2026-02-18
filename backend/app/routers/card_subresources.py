@@ -1,8 +1,9 @@
-"""Card sub-resource router -- sources, timeline, history, related, follow, notes, assets, velocity.
+"""Card sub-resource router -- sources, timeline, history, related, follow, notes, assets, velocity, documents.
 
 Migrated from Supabase PostgREST to SQLAlchemy 2.0 async.
 """
 
+import io
 import logging
 import re
 import uuid as _uuid
@@ -10,7 +11,16 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Dict, Any, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
 from pydantic import BaseModel
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1065,3 +1075,533 @@ async def get_card_velocity(
             detail="Card not found or velocity data unavailable.",
         )
     return summary
+
+
+# ============================================================================
+# Card Documents
+# ============================================================================
+
+# -- Constants ---------------------------------------------------------------
+
+_DOC_MAX_FILE_SIZE = 25 * 1024 * 1024  # 25 MB
+_DOC_MAX_EXTRACTED_TEXT = 100_000  # Truncate extracted text to avoid DB bloat
+
+_DOC_ALLOWED_EXTENSIONS: set[str] = {"pdf", "docx", "doc", "txt", "pptx", "xlsx"}
+
+_DOC_ALLOWED_MIME_TYPES: set[str] = {
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/msword",
+    "text/plain",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
+
+_DOC_VALID_TYPES: set[str] = {
+    "nofo",
+    "budget",
+    "narrative",
+    "letter_of_support",
+    "application_guide",
+    "other",
+}
+
+
+# -- Pydantic response models -----------------------------------------------
+
+
+class CardDocumentResponse(BaseModel):
+    """Representation of a card document (excludes extracted_text for brevity)."""
+
+    id: str
+    card_id: str
+    uploaded_by: str
+    filename: str
+    original_filename: str
+    blob_path: str
+    content_type: str
+    file_size_bytes: int
+    extraction_status: str
+    document_type: str
+    description: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class CardDocumentListResponse(BaseModel):
+    documents: List[CardDocumentResponse]
+    total: int
+
+
+class CardDocumentUploadResponse(BaseModel):
+    document: CardDocumentResponse
+    message: str
+
+
+class CardDocumentDownloadUrlResponse(BaseModel):
+    url: str
+    expires_in_hours: int
+
+
+# -- Helpers -----------------------------------------------------------------
+
+
+def _doc_to_response(doc) -> CardDocumentResponse:
+    """Convert a CardDocument ORM instance to the API response model."""
+    return CardDocumentResponse(
+        id=str(doc.id),
+        card_id=str(doc.card_id),
+        uploaded_by=str(doc.uploaded_by),
+        filename=doc.filename,
+        original_filename=doc.original_filename,
+        blob_path=doc.blob_path,
+        content_type=doc.content_type,
+        file_size_bytes=doc.file_size_bytes,
+        extraction_status=doc.extraction_status,
+        document_type=doc.document_type,
+        description=doc.description,
+        metadata=doc.extra_metadata,
+        created_at=doc.created_at.isoformat() if doc.created_at else None,
+        updated_at=doc.updated_at.isoformat() if doc.updated_at else None,
+    )
+
+
+def _extract_text(
+    data: bytes, content_type: str, original_filename: str
+) -> tuple[str, str]:
+    """Attempt text extraction from file bytes.
+
+    Returns:
+        Tuple of (extracted_text or empty string, extraction_status).
+        extraction_status is one of: 'completed', 'failed'.
+    """
+    ext = (
+        original_filename.rsplit(".", 1)[-1].lower() if "." in original_filename else ""
+    )
+
+    try:
+        if ext == "pdf" or content_type == "application/pdf":
+            return _extract_text_from_pdf(data)
+
+        if ext == "txt" or content_type == "text/plain":
+            return _extract_text_from_txt(data)
+
+        if ext == "docx" or content_type == (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        ):
+            return _extract_text_from_docx(data)
+
+        # Unsupported formats (pptx, xlsx, doc): skip extraction
+        return "", "failed"
+
+    except Exception as exc:
+        logger.warning("Text extraction failed for %s: %s", original_filename, exc)
+        return "", "failed"
+
+
+def _extract_text_from_pdf(data: bytes) -> tuple[str, str]:
+    """Extract text from PDF bytes using PyMuPDF (fitz)."""
+    try:
+        import fitz  # PyMuPDF
+    except ImportError:
+        logger.warning(
+            "PyMuPDF (fitz) not installed -- PDF text extraction unavailable"
+        )
+        return "", "failed"
+
+    doc = fitz.open(stream=data, filetype="pdf")
+    try:
+        text_parts: list[str] = []
+        max_pages = min(len(doc), 50)
+        for page_idx in range(max_pages):
+            page = doc[page_idx]
+            page_text = page.get_text("text")
+            if page_text and page_text.strip():
+                text_parts.append(page_text.strip())
+
+        if not text_parts:
+            return "", "failed"
+
+        full_text = "\n\n".join(text_parts)
+        return full_text[:_DOC_MAX_EXTRACTED_TEXT], "completed"
+    finally:
+        doc.close()
+
+
+def _extract_text_from_txt(data: bytes) -> tuple[str, str]:
+    """Decode plain text, trying UTF-8 first with Latin-1 fallback."""
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        text = data.decode("latin-1")
+
+    text = text.strip()
+    if not text:
+        return "", "failed"
+    return text[:_DOC_MAX_EXTRACTED_TEXT], "completed"
+
+
+def _extract_text_from_docx(data: bytes) -> tuple[str, str]:
+    """Extract text from DOCX bytes using python-docx."""
+    try:
+        from docx import Document as DocxDocument
+    except ImportError:
+        logger.warning("python-docx not installed -- DOCX text extraction unavailable")
+        return "", "failed"
+
+    doc = DocxDocument(io.BytesIO(data))
+    text_parts = [p.text for p in doc.paragraphs if p.text and p.text.strip()]
+    if not text_parts:
+        return "", "failed"
+
+    full_text = "\n\n".join(text_parts)
+    return full_text[:_DOC_MAX_EXTRACTED_TEXT], "completed"
+
+
+# -- Endpoints ---------------------------------------------------------------
+
+
+@router.post(
+    "/cards/{card_id}/documents",
+    response_model=CardDocumentUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_card_document(
+    card_id: str,
+    file: UploadFile = File(...),
+    document_type: str = Form("other"),
+    description: Optional[str] = Form(None),
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload a document to a card.
+
+    Accepts a multipart form with the file and optional metadata.
+    Supported formats: pdf, docx, doc, txt, pptx, xlsx (max 25 MB).
+    Text is automatically extracted from PDF, TXT, and DOCX files.
+
+    Args:
+        card_id: UUID of the card.
+        file: The document file (multipart).
+        document_type: One of nofo, budget, narrative, letter_of_support,
+                       application_guide, other (default 'other').
+        description: Optional human-readable description.
+
+    Returns:
+        CardDocumentUploadResponse with the created document metadata.
+    """
+    from app.models.db.card_document import CardDocument
+    from app.storage import attachment_storage
+
+    # Verify card exists
+    try:
+        card_result = await db.execute(select(Card.id).where(Card.id == card_id))
+        if card_result.scalar_one_or_none() is None:
+            raise HTTPException(status_code=404, detail="Card not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("card lookup", e),
+        ) from e
+
+    # Validate file
+    original_filename = file.filename or "unnamed_file"
+    ext = (
+        original_filename.rsplit(".", 1)[-1].lower() if "." in original_filename else ""
+    )
+    if ext not in _DOC_ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"File type '.{ext}' is not allowed. "
+                f"Accepted types: {', '.join(sorted(_DOC_ALLOWED_EXTENSIONS))}"
+            ),
+        )
+
+    content_type = (
+        (file.content_type or "application/octet-stream")
+        .lower()
+        .split(";", 1)[0]
+        .strip()
+    )
+    if content_type not in _DOC_ALLOWED_MIME_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"MIME type '{content_type}' is not allowed. "
+                f"Accepted types: {', '.join(sorted(_DOC_ALLOWED_MIME_TYPES))}"
+            ),
+        )
+
+    data = await file.read()
+    file_size_bytes = len(data)
+
+    if file_size_bytes == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file is empty.",
+        )
+    if file_size_bytes > _DOC_MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"File size ({file_size_bytes:,} bytes) exceeds the "
+                f"{_DOC_MAX_FILE_SIZE // (1024 * 1024)} MB limit."
+            ),
+        )
+
+    # Validate document_type
+    safe_document_type = document_type if document_type in _DOC_VALID_TYPES else "other"
+
+    # Generate unique stored filename
+    unique_prefix = _uuid.uuid4().hex[:8]
+    stored_filename = f"{unique_prefix}_{original_filename}"
+
+    try:
+        # Upload to blob storage
+        blob_path = await attachment_storage.upload_card_document(
+            card_id=card_id,
+            filename=stored_filename,
+            data=data,
+            content_type=content_type,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("document upload", e),
+        ) from e
+
+    # Extract text
+    extracted_text, extraction_status = _extract_text(
+        data, content_type, original_filename
+    )
+
+    # Create DB record
+    try:
+        doc_record = CardDocument(
+            card_id=_uuid.UUID(card_id),
+            uploaded_by=_uuid.UUID(current_user["id"]),
+            filename=stored_filename,
+            original_filename=original_filename,
+            blob_path=blob_path,
+            content_type=content_type,
+            file_size_bytes=file_size_bytes,
+            extracted_text=extracted_text or None,
+            extraction_status=extraction_status,
+            document_type=safe_document_type,
+            description=description,
+        )
+        db.add(doc_record)
+        await db.flush()
+        await db.refresh(doc_record)
+    except Exception as e:
+        # Best-effort cleanup of uploaded blob on DB failure
+        try:
+            await attachment_storage.delete(blob_path)
+        except Exception:
+            logger.warning("Failed to clean up blob %s after DB error", blob_path)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("document record creation", e),
+        ) from e
+
+    logger.info(
+        "Uploaded card document %s (%s, %d bytes, extraction=%s) for card %s",
+        doc_record.id,
+        original_filename,
+        file_size_bytes,
+        extraction_status,
+        card_id,
+    )
+
+    return CardDocumentUploadResponse(
+        document=_doc_to_response(doc_record),
+        message=f"Document '{original_filename}' uploaded successfully.",
+    )
+
+
+@router.get(
+    "/cards/{card_id}/documents",
+    response_model=CardDocumentListResponse,
+)
+async def list_card_documents(
+    card_id: str,
+    document_type: Optional[str] = Query(None, description="Filter by document type"),
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all documents for a card.
+
+    Returns document metadata without the full extracted_text field
+    to keep responses compact.
+
+    Args:
+        card_id: UUID of the card.
+        document_type: Optional filter by document type.
+
+    Returns:
+        CardDocumentListResponse with list of documents and total count.
+    """
+    from app.models.db.card_document import CardDocument
+
+    try:
+        # Verify card exists
+        card_result = await db.execute(select(Card.id).where(Card.id == card_id))
+        if card_result.scalar_one_or_none() is None:
+            raise HTTPException(status_code=404, detail="Card not found")
+
+        stmt = (
+            select(CardDocument)
+            .where(CardDocument.card_id == card_id)
+            .order_by(CardDocument.created_at.desc())
+        )
+
+        if document_type and document_type in _DOC_VALID_TYPES:
+            stmt = stmt.where(CardDocument.document_type == document_type)
+
+        result = await db.execute(stmt)
+        docs = result.scalars().all()
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("card documents listing", e),
+        ) from e
+
+    responses = [_doc_to_response(d) for d in docs]
+    return CardDocumentListResponse(documents=responses, total=len(responses))
+
+
+@router.delete(
+    "/cards/{card_id}/documents/{document_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_card_document(
+    card_id: str,
+    document_id: str,
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a document from a card.
+
+    Removes the file from blob storage and the database record.
+
+    Args:
+        card_id: UUID of the card.
+        document_id: UUID of the document.
+
+    Raises:
+        HTTPException 404: Document not found or does not belong to this card.
+    """
+    from app.models.db.card_document import CardDocument
+    from app.storage import attachment_storage
+
+    try:
+        result = await db.execute(
+            select(CardDocument).where(
+                CardDocument.id == document_id,
+                CardDocument.card_id == card_id,
+            )
+        )
+        doc = result.scalar_one_or_none()
+        if not doc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Document not found",
+            )
+
+        # Only the uploader may delete a document
+        if str(doc.uploaded_by) != current_user["id"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only delete documents you uploaded",
+            )
+
+        blob_path = doc.blob_path
+
+        # Delete DB record first
+        await db.delete(doc)
+        await db.flush()
+
+        # Delete from blob storage
+        try:
+            await attachment_storage.delete(blob_path)
+        except Exception as blob_err:
+            logger.warning(
+                "Failed to delete blob %s (DB record already removed): %s",
+                blob_path,
+                blob_err,
+            )
+
+        logger.info(
+            "Deleted card document %s (blob: %s) by user %s",
+            document_id,
+            blob_path,
+            current_user["id"],
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("document deletion", e),
+        ) from e
+
+
+@router.get(
+    "/cards/{card_id}/documents/{document_id}/download",
+    response_model=CardDocumentDownloadUrlResponse,
+)
+async def get_card_document_download_url(
+    card_id: str,
+    document_id: str,
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get a time-limited download URL for a card document.
+
+    Generates a SAS URL valid for 1 hour.
+
+    Args:
+        card_id: UUID of the card.
+        document_id: UUID of the document.
+
+    Returns:
+        CardDocumentDownloadUrlResponse with the SAS URL and expiry info.
+
+    Raises:
+        HTTPException 404: Document not found or does not belong to this card.
+    """
+    from app.models.db.card_document import CardDocument
+    from app.storage import attachment_storage
+
+    try:
+        result = await db.execute(
+            select(CardDocument).where(
+                CardDocument.id == document_id,
+                CardDocument.card_id == card_id,
+            )
+        )
+        doc = result.scalar_one_or_none()
+        if not doc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Document not found",
+            )
+
+        url = await attachment_storage.generate_sas_url(doc.blob_path)
+        return CardDocumentDownloadUrlResponse(url=url, expires_in_hours=1)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("document download URL generation", e),
+        ) from e

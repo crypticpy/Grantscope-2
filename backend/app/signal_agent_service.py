@@ -1455,7 +1455,9 @@ class SignalAgentService:
                 centroid = _compute_centroid(source_embeddings)
                 embedding_str = "[" + ",".join(str(v) for v in centroid) + "]"
                 await self.db.execute(
-                    text("UPDATE cards SET embedding = :emb::vector WHERE id = :cid"),
+                    text(
+                        "UPDATE cards SET embedding = CAST(:emb AS vector) WHERE id = :cid"
+                    ),
                     {"emb": embedding_str, "cid": card_id},
                 )
                 await self.db.flush()

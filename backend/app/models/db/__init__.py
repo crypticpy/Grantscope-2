@@ -91,6 +91,7 @@ from app.models.db.milestone import (  # noqa: F401
     ApplicationMilestone,
     ApplicationStatusHistory,
 )
+from app.models.db.card_document import CardDocument  # noqa: F401
 
 __all__ = [
     "Base",
@@ -153,6 +154,7 @@ __all__ = [
     "ApplicationComment",
     "ApplicationMilestone",
     "ApplicationStatusHistory",
+    "CardDocument",
     # Migration additions
     "CardEmbedding",
     "ClassificationValidation",

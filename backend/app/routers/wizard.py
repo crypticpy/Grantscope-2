@@ -30,6 +30,8 @@ from app.export_service import ExportService
 from app.models.db.card import Card
 from app.models.db.chat import ChatConversation, ChatMessage
 from app.models.db.proposal import Proposal as ProposalDB
+from app.models.db.research import ResearchTask
+from app.models.db.source import Source
 from app.models.db.wizard_session import WizardSession as WizardSessionDB
 from app.models.db.workstream import Workstream as WorkstreamDB
 from app.models.wizard import (
@@ -41,6 +43,8 @@ from app.models.wizard import (
 )
 from app.proposal_service import ProposalService
 from app.wizard_service import WizardService
+
+from sqlalchemy import desc as sa_desc
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["wizard"])
@@ -146,6 +150,121 @@ def _extract_text_from_pdf_bytes(pdf_bytes: bytes) -> str:
         doc.close()
 
 
+async def _build_grant_context_from_card(db: AsyncSession, card_id: str) -> dict:
+    """Load a card + its sources + latest deep research and return a GrantContext dict.
+
+    This ensures the wizard interview AI has full context about the grant
+    when the user enters the application workflow from a card detail page.
+    """
+    # Load the card
+    result = await db.execute(select(Card).where(Card.id == _uuid.UUID(card_id)))
+    card = result.scalar_one_or_none()
+    if not card:
+        return {}
+
+    # Build base context from card fields
+    ctx: dict = {
+        "card_id": str(card.id),
+        "grant_name": card.name,
+        "grantor": card.grantor,
+        "cfda_number": card.cfda_number,
+        "grants_gov_id": card.grants_gov_id,
+        "grant_type": card.grant_type,
+        "eligibility_text": card.eligibility_text,
+        "match_requirement": card.match_requirement,
+        "source_url": card.source_url,
+        "summary": card.summary,
+        "description": (card.description or "")[:3000],
+    }
+
+    # Deadline
+    if card.deadline:
+        ctx["deadline"] = card.deadline.strftime("%B %d, %Y")
+
+    # Funding amounts
+    if card.funding_amount_min is not None:
+        ctx["funding_amount_min"] = float(card.funding_amount_min)
+    if card.funding_amount_max is not None:
+        ctx["funding_amount_max"] = float(card.funding_amount_max)
+
+    # Load sources attached to this card (summaries + titles)
+    try:
+        src_result = await db.execute(
+            select(Source)
+            .where(Source.card_id == _uuid.UUID(card_id))
+            .order_by(Source.created_at.desc())
+            .limit(20)
+        )
+        sources = src_result.scalars().all()
+        source_docs = []
+        for s in sources:
+            parts = []
+            if s.title:
+                parts.append(f"Title: {s.title}")
+            if s.url:
+                parts.append(f"URL: {s.url}")
+            if getattr(s, "ai_summary", None):
+                parts.append(f"Summary: {s.ai_summary}")
+            elif getattr(s, "content", None):
+                parts.append(f"Content: {s.content[:500]}")
+            if parts:
+                source_docs.append(" | ".join(parts))
+        ctx["source_documents"] = source_docs
+    except Exception as e:
+        logger.warning("Failed to load sources for card %s: %s", card_id, e)
+
+    # Also fetch user-uploaded card documents
+    try:
+        from app.models.db.card_document import CardDocument
+
+        doc_result = await db.execute(
+            select(
+                CardDocument.original_filename,
+                CardDocument.extracted_text,
+                CardDocument.document_type,
+            )
+            .where(
+                CardDocument.card_id == _uuid.UUID(card_id),
+                CardDocument.extraction_status == "completed",
+            )
+            .order_by(CardDocument.created_at.desc())
+            .limit(5)
+        )
+        doc_rows = doc_result.all()
+        for doc in doc_rows:
+            if doc.extracted_text:
+                # Ensure source_documents list exists (may not if sources query failed)
+                if "source_documents" not in ctx:
+                    ctx["source_documents"] = []
+                ctx["source_documents"].append(
+                    f"[{doc.document_type.upper()}] {doc.original_filename}:\n{doc.extracted_text[:10000]}"
+                )
+    except Exception as e:
+        logger.warning("Failed to fetch card documents for wizard: %s", card_id, e)
+
+    # Load latest deep research report
+    try:
+        rt_result = await db.execute(
+            select(ResearchTask)
+            .where(
+                ResearchTask.card_id == _uuid.UUID(card_id),
+                ResearchTask.task_type == "deep_research",
+                ResearchTask.status == "completed",
+            )
+            .order_by(sa_desc(ResearchTask.completed_at))
+            .limit(1)
+        )
+        research = rt_result.scalar_one_or_none()
+        if research and research.result_summary:
+            report = research.result_summary.get("report_preview", "")
+            if report:
+                ctx["research_report"] = report[:8000]
+    except Exception as e:
+        logger.warning("Failed to load research for card %s: %s", card_id, e)
+
+    return ctx
+
+
 # ---------------------------------------------------------------------------
 # Session CRUD Endpoints
 # ---------------------------------------------------------------------------
@@ -176,13 +295,30 @@ async def create_wizard_session(
     user_id = current_user["id"]
     now = datetime.now(timezone.utc)
 
+    # If card_id is provided, pre-populate grant context from the card
+    grant_context: dict = {}
+    if body.card_id:
+        try:
+            grant_context = await _build_grant_context_from_card(db, body.card_id)
+            logger.info(
+                "Pre-populated grant context from card %s (%d fields)",
+                body.card_id,
+                len([v for v in grant_context.values() if v]),
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to build grant context from card %s: %s", body.card_id, e
+            )
+
     # 1. Create the wizard session first (without conversation_id)
+    card_uuid = _uuid.UUID(body.card_id) if grant_context and body.card_id else None
     session_obj = WizardSessionDB(
         user_id=_uuid.UUID(user_id),
         entry_path=body.entry_path,
-        current_step=0,
+        current_step=2 if grant_context else 0,
         status="in_progress",
-        grant_context={},
+        grant_context=grant_context,
+        card_id=card_uuid,
         interview_data={},
         plan_data={},
         created_at=now,

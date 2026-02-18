@@ -45,7 +45,15 @@ from enum import Enum
 import uuid
 
 import openai
-from sqlalchemy import select, update as sa_update, delete as sa_delete, func, and_, or_
+from sqlalchemy import (
+    select,
+    update as sa_update,
+    delete as sa_delete,
+    func,
+    and_,
+    or_,
+    text,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .query_generator import QueryGenerator, QueryConfig
@@ -3442,23 +3450,21 @@ class DiscoveryService:
             card_id = str(card_obj.id)
 
             # Store embedding on the card for Related Trends feature
+            # pgvector NullType column requires raw SQL with CAST
             try:
-                if source.embedding:
-                    await self.db.execute(
-                        sa_update(Card)
-                        .where(Card.id == card_obj.id)
-                        .values(embedding=source.embedding)
-                    )
-                else:
-                    # Generate fresh embedding from card text
+                emb_data = source.embedding
+                if not emb_data:
                     embed_text = f"{analysis.suggested_card_name} {analysis.summary}"
-                    embedding = await self.ai_service.generate_embedding(embed_text)
+                    emb_data = await self.ai_service.generate_embedding(embed_text)
+                if emb_data:
+                    vec_str = "[" + ",".join(str(v) for v in emb_data) + "]"
                     await self.db.execute(
-                        sa_update(Card)
-                        .where(Card.id == card_obj.id)
-                        .values(embedding=embedding)
+                        text(
+                            "UPDATE cards SET embedding = CAST(:vec AS vector) WHERE id = CAST(:cid AS uuid)"
+                        ),
+                        {"vec": vec_str, "cid": card_id},
                     )
-                await self.db.flush()
+                    await self.db.flush()
             except Exception as e:
                 logger.warning(f"Failed to store embedding on card {card_id}: {e}")
 

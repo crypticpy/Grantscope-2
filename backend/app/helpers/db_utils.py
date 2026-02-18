@@ -15,6 +15,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 logger = logging.getLogger(__name__)
 
 
+async def store_card_embedding(
+    db: AsyncSession,
+    card_id: str,
+    embedding: list[float],
+) -> None:
+    """Persist a pgvector embedding on a card using raw SQL CAST.
+
+    Centralises the pgvector NullType workaround so callers don't need
+    to know about the ``CAST(:vec AS vector)`` idiom.
+    """
+    vec_str = "[" + ",".join(str(v) for v in embedding) + "]"
+    await db.execute(
+        text(
+            "UPDATE cards SET embedding = CAST(:vec AS vector) "
+            "WHERE id = CAST(:cid AS uuid)"
+        ),
+        {"vec": vec_str, "cid": card_id},
+    )
+
+
 async def vector_search_cards(
     db: AsyncSession,
     query_embedding: list[float],
@@ -58,14 +78,14 @@ async def vector_search_cards(
         f"""
         SELECT
             c.id, c.name, c.summary, c.pillar_id, c.horizon,
-            1 - (c.embedding <=> :embedding::vector) AS similarity
+            1 - (c.embedding <=> CAST(:embedding AS vector)) AS similarity
         FROM cards c
         WHERE
             c.embedding IS NOT NULL
             {status_clause}
             {exclude_clause}
-            AND 1 - (c.embedding <=> :embedding::vector) > :threshold
-        ORDER BY c.embedding <=> :embedding::vector
+            AND 1 - (c.embedding <=> CAST(:embedding AS vector)) > :threshold
+        ORDER BY c.embedding <=> CAST(:embedding AS vector)
         LIMIT :limit
     """
     )
@@ -117,14 +137,14 @@ async def vector_search_sources(
         f"""
         SELECT
             s.id, s.url, s.title, s.card_id, s.ai_summary,
-            (1 - (s.embedding <=> :embedding::vector))::float AS similarity
+            CAST(1 - (s.embedding <=> CAST(:embedding AS vector)) AS float) AS similarity
         FROM sources s
         WHERE
             s.embedding IS NOT NULL
             AND s.duplicate_of IS NULL
             {card_clause}
-            AND (1 - (s.embedding <=> :embedding::vector)) > :threshold
-        ORDER BY s.embedding <=> :embedding::vector
+            AND (1 - (s.embedding <=> CAST(:embedding AS vector))) > :threshold
+        ORDER BY s.embedding <=> CAST(:embedding AS vector)
         LIMIT :limit
     """
     )
@@ -195,14 +215,14 @@ async def hybrid_search_cards(
         vec AS (
             SELECT
                 c.id,
-                ROW_NUMBER() OVER (ORDER BY c.embedding <=> :embedding::vector) AS rank_pos,
-                1 - (c.embedding <=> :embedding::vector) AS vector_similarity
+                ROW_NUMBER() OVER (ORDER BY c.embedding <=> CAST(:embedding AS vector)) AS rank_pos,
+                1 - (c.embedding <=> CAST(:embedding AS vector)) AS vector_similarity
             FROM cards c
             WHERE
                 c.embedding IS NOT NULL
                 AND c.status = :status_filter
                 {scope_clause_vec}
-            ORDER BY c.embedding <=> :embedding::vector
+            ORDER BY c.embedding <=> CAST(:embedding AS vector)
             LIMIT :match_count * 2
         ),
         rrf AS (
@@ -281,13 +301,13 @@ async def hybrid_search_sources(
         vec AS (
             SELECT
                 s.id,
-                ROW_NUMBER() OVER (ORDER BY s.embedding <=> :embedding::vector) AS rank_pos,
-                1 - (s.embedding <=> :embedding::vector) AS vector_similarity
+                ROW_NUMBER() OVER (ORDER BY s.embedding <=> CAST(:embedding AS vector)) AS rank_pos,
+                1 - (s.embedding <=> CAST(:embedding AS vector)) AS vector_similarity
             FROM sources s
             WHERE
                 s.embedding IS NOT NULL
                 {scope_clause_vec}
-            ORDER BY s.embedding <=> :embedding::vector
+            ORDER BY s.embedding <=> CAST(:embedding AS vector)
             LIMIT :match_count * 2
         ),
         rrf AS (
