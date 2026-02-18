@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, Text, func, text
+from sqlalchemy import ARRAY, DateTime, Integer, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -36,6 +36,36 @@ class User(Base):
     # Grant schema additions (20260216000002)
     department_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     title: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Profile wizard fields
+    bio: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    program_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    program_mission: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    team_size: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    budget_range: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    grant_experience: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    grant_categories: Mapped[Optional[list[str]]] = mapped_column(
+        ARRAY(Text), server_default="{}", nullable=True
+    )
+    funding_range_min: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    funding_range_max: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    strategic_pillars: Mapped[Optional[list[str]]] = mapped_column(
+        ARRAY(Text), server_default="{}", nullable=True
+    )
+    priorities: Mapped[Optional[list[str]]] = mapped_column(
+        ARRAY(Text), server_default="{}", nullable=True
+    )
+    custom_priorities: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    help_wanted: Mapped[Optional[list[str]]] = mapped_column(
+        ARRAY(Text), server_default="{}", nullable=True
+    )
+    update_frequency: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    profile_completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    profile_step: Mapped[Optional[int]] = mapped_column(
+        Integer, server_default="0", nullable=True
+    )
 
     # Timestamps
     created_at: Mapped[Optional[datetime]] = mapped_column(

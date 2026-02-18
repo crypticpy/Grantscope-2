@@ -11,6 +11,7 @@ import { TooltipProvider } from "@radix-ui/react-tooltip";
 import Header from "./components/Header";
 import { AuthContextProvider } from "./hooks/useAuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { API_BASE_URL } from "./lib/config";
 
 // Synchronous imports for critical path components (login + landing page)
 import Dashboard from "./pages/Dashboard";
@@ -37,6 +38,9 @@ const ProposalEditor = lazy(() => import("./pages/ProposalEditor"));
 // Grant Application Wizard
 const GrantWizard = lazy(() => import("./pages/GrantWizard"));
 
+// Profile Setup Wizard
+const ProfileSetup = lazy(() => import("./pages/ProfileSetup"));
+
 // Standalone pages
 const Settings = lazy(() => import("./pages/Settings"));
 const Analytics = lazy(() => import("./pages/AnalyticsV2"));
@@ -60,6 +64,11 @@ export interface GS2User {
   department: string;
   role: string;
   created_at?: string;
+  department_id?: string;
+  title?: string;
+  bio?: string;
+  profile_completed_at?: string | null;
+  profile_step?: number;
 }
 
 export interface AuthContextType {
@@ -72,7 +81,7 @@ export interface AuthContextType {
 // ---------------------------------------------------------------------------
 // Auth helpers
 // ---------------------------------------------------------------------------
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_URL = API_BASE_URL;
 const TOKEN_KEY = "gs2_token";
 const USER_KEY = "gs2_user";
 
@@ -475,6 +484,17 @@ function App() {
                     <ProtectedRoute
                       element={<ProposalEditor />}
                       loadingMessage="Loading proposal editor..."
+                    />
+                  }
+                />
+
+                {/* Profile Setup Wizard */}
+                <Route
+                  path="/profile-setup"
+                  element={
+                    <ProtectedRoute
+                      element={<ProfileSetup />}
+                      loadingMessage="Loading profile setup..."
                     />
                   }
                 />

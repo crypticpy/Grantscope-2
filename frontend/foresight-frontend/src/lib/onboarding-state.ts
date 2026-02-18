@@ -12,6 +12,7 @@ const KEYS = {
   gettingStartedDismissed: "grantscope:getting-started:dismissed",
   completedSteps: "grantscope:getting-started:completed",
   nudgeDismissed: "grantscope:nudge:dismissed",
+  profileWizardSkipped: "grantscope:profile-wizard:skipped",
 } as const;
 
 /** Known feature intro keys for type safety */
@@ -117,6 +118,22 @@ export function dismissNudge(nudgeType: string): void {
   }
   dismissed[nudgeType] = true;
   safeSetItem(KEYS.nudgeDismissed, JSON.stringify(dismissed));
+}
+
+export function hasSkippedProfileWizard(): boolean {
+  return safeGetItem(KEYS.profileWizardSkipped) === "true";
+}
+
+export function markProfileWizardSkipped(): void {
+  safeSetItem(KEYS.profileWizardSkipped, "true");
+}
+
+export function clearProfileWizardSkip(): void {
+  try {
+    localStorage.removeItem(KEYS.profileWizardSkipped);
+  } catch {
+    // localStorage unavailable
+  }
 }
 
 export function resetAllOnboarding(): void {

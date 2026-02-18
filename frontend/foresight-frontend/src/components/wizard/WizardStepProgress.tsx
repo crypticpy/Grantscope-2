@@ -10,11 +10,13 @@ import { Check } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 interface WizardStepProgressProps {
-  /** Current step index (0-5) */
+  /** Current step index (0-based) */
   currentStep: number;
+  /** Custom step labels (defaults to grant wizard labels) */
+  labels?: string[];
 }
 
-const STEP_LABELS = [
+const DEFAULT_LABELS = [
   "Welcome",
   "Grant Details",
   "Interview",
@@ -23,9 +25,12 @@ const STEP_LABELS = [
   "Export",
 ];
 
-const TOTAL_STEPS = STEP_LABELS.length;
-
-export function WizardStepProgress({ currentStep }: WizardStepProgressProps) {
+export function WizardStepProgress({
+  currentStep,
+  labels,
+}: WizardStepProgressProps) {
+  const STEP_LABELS = labels || DEFAULT_LABELS;
+  const TOTAL_STEPS = STEP_LABELS.length;
   return (
     <div className="px-6 py-5 border-b border-gray-200 dark:border-gray-700">
       {/* Step counter text */}
