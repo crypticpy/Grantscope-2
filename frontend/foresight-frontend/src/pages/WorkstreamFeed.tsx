@@ -429,7 +429,10 @@ const WorkstreamFeed: React.FC = () => {
         return;
       }
 
-      let fetchedCards: Card[] = await response.json();
+      const rawCardData = await response.json();
+      let fetchedCards: Card[] = Array.isArray(rawCardData)
+        ? rawCardData
+        : rawCardData.cards || [];
 
       // Client-side keyword filtering (if keywords exist)
       if (workstream.keywords && workstream.keywords.length > 0) {

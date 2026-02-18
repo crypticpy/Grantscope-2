@@ -189,7 +189,9 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = "" }) => {
       if (!cardResponse.ok)
         throw new Error(`API error: ${cardResponse.status}`);
       const cardsData = await cardResponse.json();
-      const cardData = Array.isArray(cardsData) ? cardsData[0] : cardsData;
+      const cardData = Array.isArray(cardsData)
+        ? cardsData[0]
+        : (cardsData.cards?.[0] ?? cardsData);
 
       if (cardData) {
         setCard(cardData);

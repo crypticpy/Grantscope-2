@@ -143,6 +143,9 @@ const Discover: React.FC = () => {
   const [pillars, setPillars] = useState<Pillar[]>([]);
   const [stages, setStages] = useState<Stage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedPillar, setSelectedPillar] = useState("");
@@ -481,7 +484,10 @@ const Discover: React.FC = () => {
           );
           if (!response.ok) throw new Error(`API error: ${response.status}`);
           const data = await response.json();
-          setCards(data || []);
+          const followCards = Array.isArray(data) ? data : data.cards || [];
+          setCards(followCards);
+          setTotalCount(data.total_count ?? followCards.length);
+          setHasMore(data.has_more ?? false);
         }
         setLoading(false);
         return;
@@ -580,6 +586,8 @@ const Discover: React.FC = () => {
           });
 
           setCards(mappedCards);
+          setTotalCount(mappedCards.length);
+          setHasMore(false);
           recordSearch(currentQueryConfig, mappedCards.length);
           setLoading(false);
           return;
@@ -643,11 +651,17 @@ const Discover: React.FC = () => {
       );
       if (!response.ok) throw new Error(`API error: ${response.status}`);
       const data = await response.json();
+      const fetchedCards = Array.isArray(data) ? data : data.cards || [];
 
-      setCards(data || []);
+      setCards(fetchedCards);
+      setTotalCount(data.total_count ?? fetchedCards.length);
+      setHasMore(data.has_more ?? false);
 
       if (!quickFilter) {
-        recordSearch(currentQueryConfig, (data || []).length);
+        recordSearch(
+          currentQueryConfig,
+          data.total_count ?? fetchedCards.length,
+        );
       }
     } catch (err) {
       const errorMessage =
@@ -673,6 +687,45 @@ const Discover: React.FC = () => {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMoreCards = async () => {
+    if (!hasMore || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const token = localStorage.getItem("gs2_token");
+      if (!token) return;
+
+      const params = new URLSearchParams();
+      params.append("offset", String(cards.length));
+      params.append("limit", "50");
+      if (selectedPillar) params.append("pillar_id", selectedPillar);
+      if (selectedStage) params.append("stage_id", selectedStage);
+      if (selectedHorizon) params.append("horizon", selectedHorizon);
+      if (debouncedFilters.searchTerm)
+        params.append("search", debouncedFilters.searchTerm);
+      if (debouncedFilters.grantType)
+        params.append("grant_type", debouncedFilters.grantType);
+
+      const sortConfig = getSortConfig(sortOption);
+      params.append("sort_by", sortConfig.column);
+      params.append("sort_asc", String(sortConfig.ascending));
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/cards?${params.toString()}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!response.ok) throw new Error(`API error: ${response.status}`);
+      const data = await response.json();
+      const moreCards = Array.isArray(data) ? data : data.cards || [];
+
+      setCards((prev) => [...prev, ...moreCards]);
+      setHasMore(data.has_more ?? false);
+    } catch (err) {
+      console.error("Error loading more cards:", err);
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -1920,7 +1973,9 @@ const Discover: React.FC = () => {
             <div className="flex items-center gap-2">
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 Showing {filteredCards.length}
-                {qualityFilter !== "all" ? ` of ${cards.length}` : ""}{" "}
+                {totalCount > filteredCards.length
+                  ? ` of ${totalCount.toLocaleString()}`
+                  : ""}{" "}
                 opportunities
               </p>
               {isFilterPending && (
@@ -2236,6 +2291,26 @@ const Discover: React.FC = () => {
             </div>
           )
         ) : null}
+
+        {/* Load More */}
+        {hasMore && !loading && filteredCards.length > 0 && (
+          <div className="mt-8 flex justify-center">
+            <button
+              onClick={loadMoreCards}
+              disabled={loadingMore}
+              className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-medium text-brand-blue bg-white dark:bg-dark-surface border border-brand-blue/30 rounded-lg hover:bg-brand-light-blue dark:hover:bg-brand-blue/10 transition-colors disabled:opacity-50"
+            >
+              {loadingMore ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading...
+                </>
+              ) : (
+                <>Load More ({totalCount - cards.length} remaining)</>
+              )}
+            </button>
+          </div>
+        )}
 
         {/* Save Search Modal */}
         <SaveSearchModal

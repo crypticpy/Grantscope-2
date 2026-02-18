@@ -90,33 +90,80 @@ def _card_to_dict(card: Card) -> dict[str, Any]:
 # ============================================================================
 
 
-@router.get("/cards", response_model=List[CardSchema])
+@router.get("/cards")
 async def get_cards(
-    limit: int = 20,
+    limit: int = 50,
     offset: int = 0,
     pillar_id: Optional[str] = None,
     stage_id: Optional[str] = None,
     horizon: Optional[str] = None,
     search: Optional[str] = None,
+    grant_type: Optional[str] = None,
+    sort_by: Optional[str] = None,
+    sort_asc: Optional[bool] = None,
+    slug: Optional[str] = None,
+    status: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
-    """Get cards with filtering"""
+    """Get cards with filtering and pagination.
+
+    Returns { cards: [...], total_count, limit, offset, has_more }.
+    """
     try:
-        stmt = select(Card).where(Card.status == "active")
+        active_status = status or "active"
+        base = select(Card).where(Card.status == active_status)
 
+        if slug:
+            base = base.where(Card.slug == slug)
         if pillar_id:
-            stmt = stmt.where(Card.pillar_id == pillar_id)
+            base = base.where(Card.pillar_id == pillar_id)
         if stage_id:
-            stmt = stmt.where(Card.stage_id == stage_id)
+            base = base.where(Card.stage_id == stage_id)
         if horizon:
-            stmt = stmt.where(Card.horizon == horizon)
+            base = base.where(Card.horizon == horizon)
+        if grant_type:
+            base = base.where(Card.grant_type == grant_type)
+        if search:
+            pattern = f"%{search}%"
+            base = base.where(
+                or_(Card.name.ilike(pattern), Card.summary.ilike(pattern))
+            )
 
-        stmt = stmt.order_by(Card.created_at.desc()).offset(offset).limit(limit)
+        # Total count (before pagination)
+        count_result = await db.execute(
+            select(func.count()).select_from(base.subquery())
+        )
+        total_count = count_result.scalar() or 0
 
+        # Sorting
+        sort_column = Card.created_at
+        if sort_by == "name":
+            sort_column = Card.name
+        elif sort_by == "deadline":
+            sort_column = Card.deadline
+        elif sort_by == "funding_amount_max":
+            sort_column = Card.funding_amount_max
+        elif sort_by == "relevance_score":
+            sort_column = Card.relevance_score
+        elif sort_by == "opportunity_score":
+            sort_column = Card.opportunity_score
+
+        if sort_asc:
+            base = base.order_by(sort_column.asc().nulls_last())
+        else:
+            base = base.order_by(sort_column.desc().nulls_last())
+
+        stmt = base.offset(offset).limit(limit)
         result = await db.execute(stmt)
         cards = result.scalars().all()
 
-        return [CardSchema(**_card_to_dict(c)) for c in cards]
+        return {
+            "cards": [_card_to_dict(c) for c in cards],
+            "total_count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "has_more": (offset + limit) < total_count,
+        }
     except HTTPException:
         raise
     except Exception as e:
