@@ -108,7 +108,23 @@ export type WizardStatus = "in_progress" | "completed" | "abandoned";
 /**
  * Valid wizard entry path values.
  */
-export type EntryPath = "have_grant" | "find_grant";
+export type EntryPath = "have_grant" | "find_grant" | "build_program";
+
+/**
+ * AI-generated program summary from interview conversation.
+ */
+export interface ProgramSummary {
+  program_name: string;
+  department: string;
+  problem_statement: string;
+  program_description: string;
+  target_population: string;
+  key_needs: string[];
+  estimated_budget: string;
+  team_overview: string;
+  timeline_overview: string;
+  strategic_alignment: string;
+}
 
 /**
  * A wizard session record.
@@ -125,6 +141,8 @@ export interface WizardSession {
   grant_context: GrantContext | null;
   interview_data: Record<string, unknown> | null;
   plan_data: PlanData | null;
+  program_summary: ProgramSummary | null;
+  profile_context: Record<string, unknown> | null;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -147,6 +165,34 @@ export interface WizardSessionUpdateRequest {
   plan_data?: Partial<PlanData>;
   status?: WizardStatus;
 }
+
+/**
+ * A matched grant returned from the grant matching endpoint.
+ */
+export interface MatchedGrant {
+  card_id: string;
+  grant_name: string;
+  grantor: string;
+  summary: string;
+  deadline: string | null;
+  funding_amount_min: number | null;
+  funding_amount_max: number | null;
+  grant_type: string | null;
+  similarity: number;
+}
+
+/**
+ * Response from the match-grants endpoint.
+ */
+export interface MatchGrantsResponse {
+  grants: MatchedGrant[];
+  query_used: string;
+}
+
+/**
+ * Valid export format types.
+ */
+export type ExportFormat = "pdf" | "docx";
 
 // ============================================================================
 // Helper Functions
@@ -403,4 +449,110 @@ export async function exportWizardPdf(
   sessionId: string,
 ): Promise<Blob> {
   return apiRequestBlob(`${BASE}/${sessionId}/export/pdf`, token);
+}
+
+/**
+ * Synthesizes a program summary from the interview conversation.
+ *
+ * @param token - Bearer authentication token
+ * @param sessionId - Wizard session UUID
+ * @returns The synthesized program summary
+ */
+export async function synthesizeProgramSummary(
+  token: string,
+  sessionId: string,
+): Promise<ProgramSummary> {
+  return apiRequest<ProgramSummary>(
+    `${BASE}/${sessionId}/synthesize-summary`,
+    token,
+    { method: "POST" },
+  );
+}
+
+/**
+ * Finds matching grants based on program description and profile.
+ *
+ * @param token - Bearer authentication token
+ * @param sessionId - Wizard session UUID
+ * @returns Matched grants and the search query used
+ */
+export async function matchGrants(
+  token: string,
+  sessionId: string,
+): Promise<MatchGrantsResponse> {
+  return apiRequest<MatchGrantsResponse>(
+    `${BASE}/${sessionId}/match-grants`,
+    token,
+    { method: "POST" },
+  );
+}
+
+/**
+ * Attaches a grant (card) to a wizard session.
+ *
+ * @param token - Bearer authentication token
+ * @param sessionId - Wizard session UUID
+ * @param cardId - Card UUID to attach
+ * @returns The updated wizard session
+ */
+export async function attachGrant(
+  token: string,
+  sessionId: string,
+  cardId: string,
+): Promise<WizardSession> {
+  return apiRequest<WizardSession>(`${BASE}/${sessionId}/attach-grant`, token, {
+    method: "POST",
+    body: JSON.stringify({ card_id: cardId }),
+  });
+}
+
+/**
+ * Exports the program summary as PDF or DOCX.
+ *
+ * @param token - Bearer authentication token
+ * @param sessionId - Wizard session UUID
+ * @param format - Export format (pdf or docx)
+ * @returns File as a Blob
+ */
+export async function exportWizardSummary(
+  token: string,
+  sessionId: string,
+  format: ExportFormat = "pdf",
+): Promise<Blob> {
+  return apiRequestBlob(`${BASE}/${sessionId}/export/summary/${format}`, token);
+}
+
+/**
+ * Exports the project plan as PDF or DOCX.
+ *
+ * @param token - Bearer authentication token
+ * @param sessionId - Wizard session UUID
+ * @param format - Export format (pdf or docx)
+ * @returns File as a Blob
+ */
+export async function exportWizardPlan(
+  token: string,
+  sessionId: string,
+  format: ExportFormat = "pdf",
+): Promise<Blob> {
+  return apiRequestBlob(`${BASE}/${sessionId}/export/plan/${format}`, token);
+}
+
+/**
+ * Exports the proposal as PDF or DOCX.
+ *
+ * @param token - Bearer authentication token
+ * @param sessionId - Wizard session UUID
+ * @param format - Export format (pdf or docx)
+ * @returns File as a Blob
+ */
+export async function exportWizardProposal(
+  token: string,
+  sessionId: string,
+  format: ExportFormat = "pdf",
+): Promise<Blob> {
+  return apiRequestBlob(
+    `${BASE}/${sessionId}/export/proposal/${format}`,
+    token,
+  );
 }

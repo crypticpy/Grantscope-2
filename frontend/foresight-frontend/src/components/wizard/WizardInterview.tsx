@@ -20,10 +20,28 @@ import {
   Loader2,
   Clock,
   Calendar,
+  X,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useWizardInterview } from "../../hooks/useWizardInterview";
-import type { GrantContext } from "../../lib/wizard-api";
+import {
+  synthesizeProgramSummary,
+  exportWizardSummary,
+  type ExportFormat,
+  type GrantContext,
+} from "../../lib/wizard-api";
+import { DownloadButton } from "./DownloadButton";
+
+// ============================================================================
+// Auth Helper
+// ============================================================================
+
+/**
+ * Retrieves the current session access token from localStorage.
+ */
+function getToken(): string | null {
+  return localStorage.getItem("gs2_token") || null;
+}
 
 // ============================================================================
 // Types
@@ -36,6 +54,8 @@ export interface WizardInterviewProps {
   conversationId: string | null;
   /** Pre-loaded grant context for display */
   grantContext?: GrantContext;
+  /** Entry path for the wizard session (e.g. "have_grant", "build_program") */
+  entryPath?: string;
   /** Called when user is ready to move to the plan review step */
   onComplete: () => void;
   /** Called when user navigates back to the previous step */
@@ -259,6 +279,27 @@ function daysUntilDeadline(deadline: string): number | null {
   }
 }
 
+/**
+ * Banner shown when resuming a previous interview session.
+ */
+function WelcomeBackBanner() {
+  const [dismissed, setDismissed] = useState(false);
+  if (dismissed) return null;
+  return (
+    <div className="flex items-center justify-between px-4 py-2 mb-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+      <span className="text-xs text-blue-700 dark:text-blue-300">
+        Welcome back! Your progress is saved. Pick up where you left off.
+      </span>
+      <button
+        onClick={() => setDismissed(true)}
+        className="text-blue-400 hover:text-blue-600 dark:hover:text-blue-200 ml-2"
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
 // ============================================================================
 // Main Component
 // ============================================================================
@@ -267,6 +308,7 @@ const WizardInterview: React.FC<WizardInterviewProps> = ({
   sessionId,
   conversationId,
   grantContext,
+  entryPath,
   onComplete,
   onBack: _onBack,
 }) => {
@@ -292,6 +334,8 @@ const WizardInterview: React.FC<WizardInterviewProps> = ({
   // Local state
   const [inputValue, setInputValue] = useState("");
   const [mobileProgressOpen, setMobileProgressOpen] = useState(false);
+  const [summaryDownloading, setSummaryDownloading] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
 
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -336,6 +380,42 @@ const WizardInterview: React.FC<WizardInterviewProps> = ({
       }
     },
     [handleSend],
+  );
+
+  const handleDownloadSummary = useCallback(
+    async (format: ExportFormat) => {
+      setSummaryError(null);
+
+      const token = getToken();
+      if (!token) {
+        setSummaryError("Not authenticated. Please sign in and try again.");
+        return;
+      }
+
+      setSummaryDownloading(true);
+      try {
+        // First synthesize the summary (saves to backend)
+        await synthesizeProgramSummary(token, sessionId);
+        // Then download the export
+        const blob = await exportWizardSummary(token, sessionId, format);
+        const ext = format === "pdf" ? "pdf" : "docx";
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `program-summary-${sessionId.slice(0, 8)}.${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to download summary";
+        setSummaryError(message);
+      } finally {
+        setSummaryDownloading(false);
+      }
+    },
+    [sessionId],
   );
 
   // Deadline reminder
@@ -397,6 +477,26 @@ const WizardInterview: React.FC<WizardInterviewProps> = ({
         </div>
       </div>
 
+      {/* Download summary button - visible when 2+ topics are complete */}
+      {topicProgress >= 2 && (
+        <DownloadButton
+          label="Download Summary"
+          onDownload={handleDownloadSummary}
+          loading={summaryDownloading}
+          size="sm"
+        />
+      )}
+
+      {/* Summary download error */}
+      {summaryError && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+          <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+          <span className="text-xs text-red-700 dark:text-red-300">
+            {summaryError}
+          </span>
+        </div>
+      )}
+
       {/* Deadline warning */}
       {showDeadlineWarning && (
         <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
@@ -421,7 +521,9 @@ const WizardInterview: React.FC<WizardInterviewProps> = ({
         )}
       >
         {isInterviewComplete
-          ? "Review my plan"
+          ? entryPath === "build_program"
+            ? "Build my project plan"
+            : "Review my plan"
           : "Complete core topics to continue"}
       </button>
 
@@ -470,10 +572,15 @@ const WizardInterview: React.FC<WizardInterviewProps> = ({
       {/* Left panel: Chat */}
       <div className="flex-1 flex flex-col bg-white dark:bg-dark-surface rounded-lg lg:rounded-r-none border border-gray-200 dark:border-gray-700 overflow-hidden min-w-0">
         {/* Grant context header */}
-        {grantContext && <GrantContextCard context={grantContext} />}
+        {grantContext && entryPath !== "build_program" && (
+          <GrantContextCard context={grantContext} />
+        )}
 
         {/* Messages area */}
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+          {/* Resume banner - shown when resuming a previous session */}
+          {conversationId && messages.length > 0 && <WelcomeBackBanner />}
+
           {messages.map((msg) => (
             <div
               key={msg.id}

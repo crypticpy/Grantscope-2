@@ -25,6 +25,7 @@ import React, {
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { Loader2, XCircle } from "lucide-react";
 import { WizardStepProgress } from "../components/wizard/WizardStepProgress";
+import { WizardSaveExit } from "../components/wizard/WizardSaveExit";
 import {
   getWizardSession,
   createWizardSession,
@@ -49,6 +50,7 @@ const ProposalPreview = lazy(
 const ExportComplete = lazy(
   () => import("../components/wizard/ExportComplete"),
 );
+const GrantMatching = lazy(() => import("../components/wizard/GrantMatching"));
 
 // =============================================================================
 // Constants
@@ -90,8 +92,10 @@ const GrantWizard: React.FC = () => {
     routeSessionId || null,
   );
   const [sessionData, setSessionData] = useState<WizardSession | null>(null);
+  const [entryPath, setEntryPath] = useState<EntryPath | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Track if initial load has completed to avoid double-saves
   const initialLoadDone = useRef(false);
@@ -120,6 +124,7 @@ const GrantWizard: React.FC = () => {
       setSessionData(data);
       setSessionId(data.id);
       setCurrentStep(data.current_step);
+      setEntryPath(data.entry_path);
       prevStep.current = data.current_step;
     } catch (err) {
       setError(
@@ -214,6 +219,7 @@ const GrantWizard: React.FC = () => {
       const token = await getToken();
       if (!token) return;
 
+      setIsSaving(true);
       try {
         const updated = await updateWizardSession(token, sessionId, {
           current_step: currentStep,
@@ -222,6 +228,8 @@ const GrantWizard: React.FC = () => {
       } catch {
         // Auto-save failures are non-critical; don't disrupt the user
         console.warn("Auto-save failed for wizard step", currentStep);
+      } finally {
+        setIsSaving(false);
       }
     };
 
@@ -256,9 +264,15 @@ const GrantWizard: React.FC = () => {
         const newSession = await createWizardSession(token, path);
         setSessionId(newSession.id);
         setSessionData(newSession);
+        setEntryPath(path);
         // Update URL to include session ID for bookmarking/resume
         navigate(`/apply/${newSession.id}`, { replace: true });
-        goNext();
+        // For build_program, backend sets current_step=2 (skip grant details)
+        const nextStep =
+          newSession.current_step > 0 ? newSession.current_step : 1;
+        setCurrentStep(nextStep);
+        // Do NOT set prevStep.current here — let the auto-save effect
+        // detect the change (0 → nextStep) and persist it to the backend.
       } catch (err) {
         setError(
           err instanceof Error
@@ -267,7 +281,7 @@ const GrantWizard: React.FC = () => {
         );
       }
     },
-    [navigate, goNext],
+    [navigate],
   );
 
   /**
@@ -325,6 +339,26 @@ const GrantWizard: React.FC = () => {
     setSessionData((prev) => (prev ? { ...prev, plan_data: plan } : prev));
   }, []);
 
+  /**
+   * Called when GrantMatching attaches a grant to the session.
+   * Reloads session data to pick up the new grant_context and card_id.
+   * Stays on step 4 so renderStep4 re-renders as ProposalPreview
+   * (since card_id is now set).
+   */
+  const handleGrantAttached = useCallback(async () => {
+    if (!sessionId) return;
+    const token = await getToken();
+    if (!token) return;
+    try {
+      const updated = await getWizardSession(token, sessionId);
+      setSessionData(updated);
+    } catch {
+      // Non-critical — grant was attached server-side, proceed anyway
+    }
+    // Do NOT call goNext() — stay on step 4 so the user sees
+    // ProposalPreview now that card_id is attached.
+  }, [sessionId]);
+
   // ---------------------------------------------------------------------------
   // Render: Loading
   // ---------------------------------------------------------------------------
@@ -379,6 +413,36 @@ const GrantWizard: React.FC = () => {
     </div>
   );
 
+  /**
+   * Step 4 branches between GrantMatching (build_program path without a
+   * grant attached) and ProposalPreview (default).
+   */
+  const renderStep4 = () => {
+    if (entryPath === "build_program" && !sessionData?.card_id) {
+      return (
+        <Suspense fallback={suspenseFallback}>
+          <GrantMatching
+            sessionId={sessionId!}
+            onGrantAttached={handleGrantAttached}
+            onSkip={goNext}
+            onBack={goBack}
+          />
+        </Suspense>
+      );
+    }
+    return (
+      <Suspense fallback={suspenseFallback}>
+        <ProposalPreview
+          sessionId={sessionId!}
+          proposalId={sessionData?.proposal_id ?? null}
+          grantContext={sessionData?.grant_context ?? null}
+          onComplete={goNext}
+          onBack={goBack}
+        />
+      </Suspense>
+    );
+  };
+
   const renderStepContent = () => {
     switch (currentStep) {
       case 0:
@@ -423,6 +487,7 @@ const GrantWizard: React.FC = () => {
               sessionId={sessionId!}
               conversationId={sessionData?.conversation_id ?? null}
               grantContext={sessionData?.grant_context ?? undefined}
+              entryPath={entryPath ?? undefined}
               onComplete={goNext}
               onBack={goBack}
             />
@@ -436,6 +501,7 @@ const GrantWizard: React.FC = () => {
               sessionId={sessionId!}
               planData={sessionData?.plan_data ?? null}
               grantContext={sessionData?.grant_context ?? null}
+              entryPath={entryPath ?? undefined}
               onComplete={goNext}
               onBack={goBack}
               onPlanUpdated={handlePlanUpdated}
@@ -444,17 +510,7 @@ const GrantWizard: React.FC = () => {
         );
 
       case 4:
-        return (
-          <Suspense fallback={suspenseFallback}>
-            <ProposalPreview
-              sessionId={sessionId!}
-              proposalId={sessionData?.proposal_id ?? null}
-              grantContext={sessionData?.grant_context ?? null}
-              onComplete={goNext}
-              onBack={goBack}
-            />
-          </Suspense>
-        );
+        return renderStep4();
 
       case 5:
         return (
@@ -463,6 +519,8 @@ const GrantWizard: React.FC = () => {
               sessionId={sessionId!}
               proposalId={sessionData?.proposal_id ?? null}
               grantContext={sessionData?.grant_context ?? null}
+              entryPath={entryPath ?? undefined}
+              hasPlan={!!sessionData?.plan_data}
             />
           </Suspense>
         );
@@ -479,11 +537,19 @@ const GrantWizard: React.FC = () => {
   return (
     <div className="min-h-screen bg-brand-faded-white dark:bg-brand-dark-blue">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Step progress - hidden on welcome step */}
+        {/* Step progress + save bar - hidden on welcome step */}
         {currentStep > 0 && (
-          <div className="bg-white dark:bg-dark-surface rounded-lg border border-gray-200 dark:border-gray-700 mb-6">
-            <WizardStepProgress currentStep={currentStep} />
-          </div>
+          <>
+            <div className="bg-white dark:bg-dark-surface rounded-lg border border-gray-200 dark:border-gray-700 mb-4">
+              <WizardStepProgress currentStep={currentStep} />
+            </div>
+            <div className="mb-6 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
+              <WizardSaveExit
+                saving={isSaving}
+                lastSaved={sessionData?.updated_at ?? null}
+              />
+            </div>
+          </>
         )}
 
         {/* Step content */}

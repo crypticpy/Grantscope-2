@@ -1,11 +1,14 @@
 /**
  * ExportComplete - Step 6 (final) of the Grant Application Wizard
  *
- * Celebration / success screen after the proposal has been generated.
- * Provides PDF download, summary of the grant, and next-step guidance.
+ * Celebration / success screen after the proposal or plan has been generated.
+ * Provides PDF and DOCX download, summary of the grant, and next-step guidance.
+ * Adapts content based on whether the user has a proposal, plan, or just a
+ * program summary (build_program path without a grant).
  *
  * Features:
- * - PDF download via wizard export endpoint
+ * - PDF + DOCX download via wizard export endpoints
+ * - Conditional hero text based on entry path and available artifacts
  * - Grant context summary card (name, deadline, funding)
  * - Next steps guidance
  * - Navigation links to Proposal Editor and new wizard session
@@ -21,9 +24,17 @@ import {
   ExternalLink,
   Loader2,
   ArrowRight,
+  Search,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { exportWizardPdf, type GrantContext } from "../../lib/wizard-api";
+import {
+  exportWizardPdf,
+  exportWizardSummary,
+  exportWizardPlan,
+  exportWizardProposal,
+  type GrantContext,
+  type ExportFormat,
+} from "../../lib/wizard-api";
 
 // =============================================================================
 // Types
@@ -33,6 +44,10 @@ interface ExportCompleteProps {
   sessionId: string;
   proposalId: string | null;
   grantContext?: GrantContext | null;
+  /** Which wizard entry path the user took */
+  entryPath?: string;
+  /** Whether the session has a synthesized plan */
+  hasPlan?: boolean;
 }
 
 // =============================================================================
@@ -63,42 +78,117 @@ export const ExportComplete: React.FC<ExportCompleteProps> = ({
   sessionId,
   proposalId,
   grantContext,
+  entryPath,
+  hasPlan,
 }) => {
   const navigate = useNavigate();
   const [downloading, setDownloading] = useState(false);
+  const [downloadFormat, setDownloadFormat] = useState<"pdf" | "docx" | null>(
+    null,
+  );
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
-  // ---- PDF Download ----
+  // ---- Determine what artifact to export ----
+  const hasProposal = !!proposalId;
+  const isProgramPath = entryPath === "build_program";
+
+  // ---- Generic download handler ----
+  const handleDownload = useCallback(
+    async (format: ExportFormat) => {
+      const token = await getToken();
+      if (!token) {
+        setDownloadError("Not authenticated. Please sign in and try again.");
+        return;
+      }
+
+      setDownloading(true);
+      setDownloadFormat(format === "pdf" ? "pdf" : "docx");
+      setDownloadError(null);
+
+      // Determine which export function and filename to use
+      let exportFn: (
+        token: string,
+        sessionId: string,
+        format: ExportFormat,
+      ) => Promise<Blob>;
+      let filenamePrefix: string;
+
+      if (hasProposal) {
+        exportFn = exportWizardProposal;
+        filenamePrefix = "proposal";
+      } else if (hasPlan) {
+        exportFn = exportWizardPlan;
+        filenamePrefix = "project-plan";
+      } else {
+        exportFn = exportWizardSummary;
+        filenamePrefix = "program-summary";
+      }
+
+      try {
+        const blob = await exportFn(token, sessionId, format);
+
+        // Create a temporary download link
+        const ext = format === "pdf" ? "pdf" : "docx";
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${filenamePrefix}-${sessionId.slice(0, 8)}.${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        setDownloadError(
+          err instanceof Error
+            ? err.message
+            : `Failed to download ${format.toUpperCase()}`,
+        );
+      } finally {
+        setDownloading(false);
+        setDownloadFormat(null);
+      }
+    },
+    [sessionId, hasProposal, hasPlan],
+  );
+
+  // ---- Legacy PDF-only download for backward compatibility ----
   const handleDownloadPdf = useCallback(async () => {
-    const token = await getToken();
-    if (!token) {
-      setDownloadError("Not authenticated. Please sign in and try again.");
+    // If the session has a proposal and was created before the new export
+    // endpoints existed, fall back to the original PDF endpoint.
+    if (hasProposal && !isProgramPath) {
+      const token = await getToken();
+      if (!token) {
+        setDownloadError("Not authenticated. Please sign in and try again.");
+        return;
+      }
+
+      setDownloading(true);
+      setDownloadFormat("pdf");
+      setDownloadError(null);
+
+      try {
+        const blob = await exportWizardPdf(token, sessionId);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `grant-application-${sessionId.slice(0, 8)}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        setDownloadError(
+          err instanceof Error ? err.message : "Failed to download PDF",
+        );
+      } finally {
+        setDownloading(false);
+        setDownloadFormat(null);
+      }
       return;
     }
 
-    setDownloading(true);
-    setDownloadError(null);
-
-    try {
-      const blob = await exportWizardPdf(token, sessionId);
-
-      // Create a temporary download link
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `grant-application-${sessionId.slice(0, 8)}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      setDownloadError(
-        err instanceof Error ? err.message : "Failed to download PDF",
-      );
-    } finally {
-      setDownloading(false);
-    }
-  }, [sessionId]);
+    handleDownload("pdf");
+  }, [sessionId, hasProposal, isProgramPath, handleDownload]);
 
   // ---- Funding range display ----
   const fundingDisplay = (() => {
@@ -113,6 +203,24 @@ export const ExportComplete: React.FC<ExportCompleteProps> = ({
     return null;
   })();
 
+  // ---- Determine hero content ----
+  let heroTitle: string;
+  let heroDescription: string;
+
+  if (hasProposal) {
+    heroTitle = "Your grant application package is ready!";
+    heroDescription =
+      "Your proposal has been generated with all six sections. Download the PDF or Word document to review offline or share with colleagues.";
+  } else if (hasPlan) {
+    heroTitle = "Your project plan is ready!";
+    heroDescription =
+      "Your project plan has been synthesized from your interview responses. Download it to share with your team or use it for future grant applications.";
+  } else {
+    heroTitle = "Your program summary is ready!";
+    heroDescription =
+      "We've compiled a program summary from your interview. Download it and use it as a foundation for grant applications.";
+  }
+
   // ===========================================================================
   // Render
   // ===========================================================================
@@ -125,15 +233,14 @@ export const ExportComplete: React.FC<ExportCompleteProps> = ({
           <CheckCircle2 className="h-9 w-9 text-green-600 dark:text-green-400" />
         </div>
         <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2">
-          Your grant application package is ready!
+          {heroTitle}
         </h2>
         <p className="text-sm sm:text-base text-gray-500 dark:text-gray-400 max-w-lg mx-auto">
-          Your proposal has been generated with all six sections. Download the
-          PDF to review offline or share with colleagues.
+          {heroDescription}
         </p>
 
-        {/* Download button */}
-        <div className="mt-8">
+        {/* Download buttons */}
+        <div className="flex items-center justify-center gap-3 mt-8">
           <button
             onClick={handleDownloadPdf}
             disabled={downloading}
@@ -142,17 +249,37 @@ export const ExportComplete: React.FC<ExportCompleteProps> = ({
               "bg-brand-blue hover:bg-brand-dark-blue disabled:opacity-60",
             )}
           >
-            {downloading ? (
+            {downloading && downloadFormat === "pdf" ? (
               <Loader2 className="h-5 w-5 animate-spin" />
             ) : (
               <Download className="h-5 w-5" />
             )}
-            {downloading ? "Preparing PDF..." : "Download PDF"}
+            {downloading && downloadFormat === "pdf"
+              ? "Preparing PDF..."
+              : "Download PDF"}
           </button>
-          {downloadError && (
-            <p className="mt-3 text-sm text-red-500">{downloadError}</p>
-          )}
+          <button
+            onClick={() => handleDownload("docx")}
+            disabled={downloading}
+            className={cn(
+              "inline-flex items-center gap-2 px-6 py-3 text-base font-medium rounded-lg transition-colors",
+              "text-brand-blue border border-brand-blue/30 dark:border-brand-blue/40",
+              "hover:bg-brand-blue/5 dark:hover:bg-brand-blue/10 disabled:opacity-60",
+            )}
+          >
+            {downloading && downloadFormat === "docx" ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <FileText className="h-5 w-5" />
+            )}
+            {downloading && downloadFormat === "docx"
+              ? "Preparing Word..."
+              : "Download Word"}
+          </button>
         </div>
+        {downloadError && (
+          <p className="mt-3 text-sm text-red-500">{downloadError}</p>
+        )}
       </div>
 
       {/* Grant summary card */}
@@ -206,39 +333,80 @@ export const ExportComplete: React.FC<ExportCompleteProps> = ({
           Next Steps
         </h3>
         <ul className="space-y-3 text-sm text-gray-600 dark:text-gray-400">
-          <li className="flex items-start gap-2">
-            <span className="mt-0.5 h-5 w-5 bg-brand-blue/10 dark:bg-brand-blue/20 text-brand-blue rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
-              1
-            </span>
-            <span>
-              <strong className="text-gray-800 dark:text-gray-200">
-                Review your proposal
-              </strong>{" "}
-              -- Read through all sections and make any final edits.
-            </span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="mt-0.5 h-5 w-5 bg-brand-blue/10 dark:bg-brand-blue/20 text-brand-blue rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
-              2
-            </span>
-            <span>
-              <strong className="text-gray-800 dark:text-gray-200">
-                Submit through the grant portal
-              </strong>{" "}
-              -- Use the funder's official submission portal or method.
-            </span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="mt-0.5 h-5 w-5 bg-brand-blue/10 dark:bg-brand-blue/20 text-brand-blue rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
-              3
-            </span>
-            <span>
-              <strong className="text-gray-800 dark:text-gray-200">
-                Share with your grant advisor
-              </strong>{" "}
-              -- Get a second pair of eyes before final submission.
-            </span>
-          </li>
+          {hasProposal ? (
+            <>
+              <li className="flex items-start gap-2">
+                <span className="mt-0.5 h-5 w-5 bg-brand-blue/10 dark:bg-brand-blue/20 text-brand-blue rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
+                  1
+                </span>
+                <span>
+                  <strong className="text-gray-800 dark:text-gray-200">
+                    Review your proposal
+                  </strong>{" "}
+                  -- Read through all sections and make any final edits.
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-0.5 h-5 w-5 bg-brand-blue/10 dark:bg-brand-blue/20 text-brand-blue rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
+                  2
+                </span>
+                <span>
+                  <strong className="text-gray-800 dark:text-gray-200">
+                    Submit through the grant portal
+                  </strong>{" "}
+                  -- Use the funder's official submission portal or method.
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-0.5 h-5 w-5 bg-brand-blue/10 dark:bg-brand-blue/20 text-brand-blue rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
+                  3
+                </span>
+                <span>
+                  <strong className="text-gray-800 dark:text-gray-200">
+                    Share with your grant advisor
+                  </strong>{" "}
+                  -- Get a second pair of eyes before final submission.
+                </span>
+              </li>
+            </>
+          ) : (
+            <>
+              <li className="flex items-start gap-2">
+                <span className="mt-0.5 h-5 w-5 bg-brand-blue/10 dark:bg-brand-blue/20 text-brand-blue rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
+                  1
+                </span>
+                <span>
+                  <strong className="text-gray-800 dark:text-gray-200">
+                    Review your {hasPlan ? "project plan" : "program summary"}
+                  </strong>{" "}
+                  -- Make sure the details accurately reflect your program.
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-0.5 h-5 w-5 bg-brand-blue/10 dark:bg-brand-blue/20 text-brand-blue rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
+                  2
+                </span>
+                <span>
+                  <strong className="text-gray-800 dark:text-gray-200">
+                    Find a matching grant
+                  </strong>{" "}
+                  -- Browse available grants or let us search for you.
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-0.5 h-5 w-5 bg-brand-blue/10 dark:bg-brand-blue/20 text-brand-blue rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
+                  3
+                </span>
+                <span>
+                  <strong className="text-gray-800 dark:text-gray-200">
+                    Start a new application
+                  </strong>{" "}
+                  -- Use the wizard with a specific grant to generate a full
+                  proposal.
+                </span>
+              </li>
+            </>
+          )}
         </ul>
       </div>
 
@@ -257,6 +425,30 @@ export const ExportComplete: React.FC<ExportCompleteProps> = ({
             View in Proposal Editor
           </button>
         )}
+        {!hasProposal && isProgramPath && (
+          <button
+            onClick={() => navigate("/signals")}
+            className={cn(
+              "inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors",
+              "text-brand-blue border border-brand-blue/30 dark:border-brand-blue/40",
+              "hover:bg-brand-blue/5 dark:hover:bg-brand-blue/10",
+            )}
+          >
+            <Search className="h-4 w-4" />
+            Find a Grant
+          </button>
+        )}
+        <button
+          onClick={() => navigate("/")}
+          className={cn(
+            "inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors",
+            "text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600",
+            "hover:bg-gray-50 dark:hover:bg-gray-800",
+          )}
+        >
+          View Dashboard
+          <ArrowRight className="h-4 w-4" />
+        </button>
         <button
           onClick={() => navigate("/apply")}
           className={cn(

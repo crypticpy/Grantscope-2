@@ -121,6 +121,12 @@ export function useWizardInterview(
   const greetingSentRef = useRef(false);
   const initialLoadCheckedRef = useRef(false);
 
+  // Stable ref for sendMessage to avoid redundant resets from unstable memoized function
+  const sendMessageRef = useRef(chat.sendMessage);
+  useEffect(() => {
+    sendMessageRef.current = chat.sendMessage;
+  }, [chat.sendMessage]);
+
   // ---------------------------------------------------------------------------
   // Scan all messages for topic markers whenever messages change
   // ---------------------------------------------------------------------------
@@ -154,6 +160,12 @@ export function useWizardInterview(
     const timer = setTimeout(() => {
       initialLoadCheckedRef.current = true;
 
+      // If we have an existing conversation (resuming), skip greeting
+      if (conversationId) {
+        greetingSentRef.current = true;
+        return;
+      }
+
       if (
         !greetingSentRef.current &&
         chat.messages.length === 0 &&
@@ -163,12 +175,12 @@ export function useWizardInterview(
         const greeting = grantName
           ? `Hello, I need help preparing a grant application for "${grantName}". I've already gathered research and details about this opportunity — please use that context to guide our interview.`
           : "Hello, I need help preparing a grant application.";
-        chat.sendMessage(greeting);
+        sendMessageRef.current(greeting);
       }
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [chat.messages.length, chat.isStreaming, chat.sendMessage, grantName]);
+  }, [chat.messages.length, chat.isStreaming, grantName, conversationId]);
 
   // ---------------------------------------------------------------------------
   // Strip topic markers from messages for display

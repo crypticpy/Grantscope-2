@@ -19,6 +19,36 @@ from docx.shared import Cm, Inches, Pt, RGBColor
 
 logger = logging.getLogger(__name__)
 
+
+# ---------------------------------------------------------------------------
+# Utility helpers
+# ---------------------------------------------------------------------------
+
+
+def _safe_float(val: Any, default: float = 0.0) -> float:
+    """Safely parse a value to float, stripping common currency chars.
+
+    Handles values like "$50k", "TBD", "$1,000,000", etc.
+    Returns default on failure.
+    """
+    if val is None:
+        return default
+    if isinstance(val, (int, float)):
+        return float(val)
+    s = str(val).strip().replace(",", "").replace("$", "")
+    multiplier = 1.0
+    if s.lower().endswith("k"):
+        s = s[:-1]
+        multiplier = 1000.0
+    elif s.lower().endswith("m"):
+        s = s[:-1]
+        multiplier = 1_000_000.0
+    try:
+        return float(s) * multiplier
+    except (ValueError, TypeError):
+        return default
+
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -920,6 +950,442 @@ class DocxExportService:
             summary_run.bold = True
         else:
             doc.add_paragraph("No checklist items have been defined.")
+
+        # ---- Save to bytes ----
+        buffer = io.BytesIO()
+        doc.save(buffer)
+        return buffer.getvalue()
+
+    # ------------------------------------------------------------------
+    # Shared DOCX helpers (program summary / project plan)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _add_cover_page(
+        doc: Document,
+        title: str,
+        subtitle: str | None = None,
+        author: str | None = None,
+    ) -> None:
+        """Add a standard cover page: padding, title, subtitle, author, date, HR, page break.
+
+        Args:
+            doc: python-docx Document to append to.
+            title: Document title (bold, 18pt, brand color, centered).
+            subtitle: Optional subtitle (14pt, gray, centered).
+            author: Optional "Prepared by ..." line (12pt, gray, centered).
+        """
+        # Top padding
+        for _ in range(4):
+            doc.add_paragraph("")
+
+        # Title
+        title_para = doc.add_paragraph()
+        title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        title_run = title_para.add_run(title)
+        title_run.bold = True
+        title_run.font.size = Pt(18)
+        title_run.font.color.rgb = _BRAND_COLOR
+
+        doc.add_paragraph("")
+
+        # Subtitle
+        if subtitle:
+            subtitle_para = doc.add_paragraph()
+            subtitle_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            subtitle_run = subtitle_para.add_run(subtitle)
+            subtitle_run.font.size = Pt(14)
+            subtitle_run.font.color.rgb = RGBColor(0x44, 0x44, 0x44)
+
+        # Author
+        if author:
+            author_para = doc.add_paragraph()
+            author_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            author_run = author_para.add_run(f"Prepared by {author}")
+            author_run.font.size = Pt(12)
+            author_run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+
+        # Date
+        date_para = doc.add_paragraph()
+        date_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        date_run = date_para.add_run(datetime.now(timezone.utc).strftime("%B %d, %Y"))
+        date_run.font.size = Pt(12)
+        date_run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+
+        # Horizontal rule
+        doc.add_paragraph("")
+        hr_para = doc.add_paragraph()
+        hr_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        hr_run = hr_para.add_run("_" * 60)
+        hr_run.font.color.rgb = RGBColor(0xCC, 0xCC, 0xCC)
+
+        doc.add_page_break()
+
+    @staticmethod
+    def _render_paragraph_section(
+        doc: Document,
+        heading: str,
+        text: str,
+    ) -> None:
+        """Add a heading followed by paragraph text (split on double-newlines).
+
+        Args:
+            doc: python-docx Document to append to.
+            heading: Section heading text (rendered at level 1).
+            text: Body text; if empty/whitespace-only the section is skipped.
+        """
+        text = str(text).strip()
+        if not text:
+            return
+
+        doc.add_heading(heading, level=1)
+        paragraphs = text.split("\n\n")
+        for para_text in paragraphs:
+            stripped = para_text.strip()
+            if stripped:
+                doc.add_paragraph(stripped)
+
+    @staticmethod
+    def _render_bullet_section(
+        doc: Document,
+        heading: str,
+        items: list,
+    ) -> None:
+        """Add a heading followed by a bulleted list of items.
+
+        Args:
+            doc: python-docx Document to append to.
+            heading: Section heading text (rendered at level 1).
+            items: List of items to render as "List Bullet" paragraphs.
+                Empty/whitespace-only items are silently skipped.
+        """
+        if not items:
+            return
+
+        cleaned = [str(i).strip() for i in items if str(i).strip()]
+        if not cleaned:
+            return
+
+        doc.add_heading(heading, level=1)
+        for item_text in cleaned:
+            doc.add_paragraph(item_text, style="List Bullet")
+
+    # ------------------------------------------------------------------
+    # Program Summary DOCX
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def generate_program_summary_docx(
+        summary_data: dict,
+        profile_data: dict | None = None,
+    ) -> bytes:
+        """Generate a DOCX program summary document.
+
+        Args:
+            summary_data: ProgramSummary fields (program_name, department,
+                problem_statement, program_description, target_population,
+                key_needs, estimated_budget, team_overview, timeline_overview,
+                strategic_alignment)
+            profile_data: Optional user profile context for author info
+
+        Returns:
+            bytes containing the DOCX file
+        """
+        doc = Document()
+        svc = DocxExportService
+
+        svc._set_margins(doc, inches=1.0)
+        svc._set_default_font(doc, name="Times New Roman", size=12)
+
+        department = (
+            summary_data.get("department", "City of Austin") or "City of Austin"
+        )
+        svc._add_page_headers_and_footers(doc, department=department)
+
+        # ---- Cover / Title Area ----
+        program_name = summary_data.get("program_name", "")
+
+        # Build author string from profile_data
+        author_str = None
+        if profile_data:
+            display_name = profile_data.get("display_name", "")
+            if display_name:
+                author_parts = [display_name]
+                prof_dept = profile_data.get("department", "")
+                if prof_dept:
+                    author_parts.append(prof_dept)
+                author_str = ", ".join(author_parts)
+
+        svc._add_cover_page(
+            doc,
+            title="Program Summary",
+            subtitle=program_name or None,
+            author=author_str,
+        )
+
+        # ---- Sections (only include if data is non-empty) ----
+        _summary_sections = [
+            ("Problem Statement", "problem_statement"),
+            ("Program Description", "program_description"),
+            ("Target Population", "target_population"),
+            ("Key Needs", "key_needs"),
+            ("Budget Overview", "estimated_budget"),
+            ("Team Overview", "team_overview"),
+            ("Timeline", "timeline_overview"),
+            ("Strategic Alignment", "strategic_alignment"),
+        ]
+
+        for heading, key in _summary_sections:
+            value = summary_data.get(key)
+            if not value:
+                continue
+
+            # Key Needs is rendered as a bulleted list
+            if key == "key_needs":
+                if isinstance(value, list) and len(value) > 0:
+                    svc._render_bullet_section(doc, heading, value)
+                    continue
+                # Fall through to render as paragraph if it's a string
+
+            # Everything else is paragraph text
+            svc._render_paragraph_section(doc, heading, str(value))
+
+        # ---- Save to bytes ----
+        buffer = io.BytesIO()
+        doc.save(buffer)
+        return buffer.getvalue()
+
+    # ------------------------------------------------------------------
+    # Project Plan DOCX
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def generate_project_plan_docx(
+        plan_data: dict,
+        grant_context: dict | None = None,
+        profile_data: dict | None = None,
+    ) -> bytes:
+        """Generate a DOCX project plan document.
+
+        Args:
+            plan_data: PlanData fields (program_overview, staffing_plan, budget,
+                timeline, deliverables, metrics, partnerships)
+            grant_context: Optional grant context for header info
+            profile_data: Optional user profile context
+
+        Returns:
+            bytes containing the DOCX file
+        """
+        doc = Document()
+        svc = DocxExportService
+
+        svc._set_margins(doc, inches=1.0)
+        svc._set_default_font(doc, name="Times New Roman", size=12)
+
+        department = "City of Austin"
+        if grant_context and grant_context.get("department"):
+            department = grant_context["department"]
+        elif profile_data and profile_data.get("department"):
+            department = profile_data["department"]
+
+        svc._add_page_headers_and_footers(doc, department=department)
+
+        # ---- Cover / Title Area ----
+        # Subtitle: first line of program_overview or profile_data program_name
+        subtitle_text = ""
+        overview = plan_data.get("program_overview", "")
+        if overview:
+            subtitle_text = str(overview).split("\n")[0].strip()
+        if not subtitle_text and profile_data:
+            subtitle_text = profile_data.get("program_name", "")
+
+        if subtitle_text and len(subtitle_text) > 120:
+            subtitle_text = subtitle_text[:117] + "..."
+
+        # Build author string from profile_data
+        author_str = None
+        if profile_data:
+            display_name = profile_data.get("display_name", "")
+            if display_name:
+                author_parts = [display_name]
+                prof_dept = profile_data.get("department", "")
+                if prof_dept:
+                    author_parts.append(prof_dept)
+                author_str = ", ".join(author_parts)
+
+        svc._add_cover_page(
+            doc,
+            title="Project Plan",
+            subtitle=subtitle_text or None,
+            author=author_str,
+        )
+
+        # ---- Grant Opportunity (if grant_context provided) ----
+        if grant_context:
+            doc.add_heading("Grant Opportunity", level=1)
+
+            gc_fields = [
+                (
+                    "Grant Name",
+                    grant_context.get("grant_name") or grant_context.get("name"),
+                ),
+                ("Grantor", grant_context.get("grantor")),
+                ("Deadline", grant_context.get("deadline")),
+            ]
+
+            # Funding range
+            funding_min = grant_context.get("funding_amount_min")
+            funding_max = grant_context.get("funding_amount_max")
+            funding_min_val = (
+                _safe_float(funding_min) if funding_min is not None else None
+            )
+            funding_max_val = (
+                _safe_float(funding_max) if funding_max is not None else None
+            )
+            if funding_min_val is not None and funding_max_val is not None:
+                gc_fields.append(
+                    (
+                        "Funding Range",
+                        f"${funding_min_val:,.0f} \u2013 ${funding_max_val:,.0f}",
+                    )
+                )
+            elif funding_max_val is not None:
+                gc_fields.append(("Funding Amount", f"Up to ${funding_max_val:,.0f}"))
+            elif funding_min_val is not None:
+                gc_fields.append(("Funding Amount", f"From ${funding_min_val:,.0f}"))
+
+            for label, value in gc_fields:
+                if value:
+                    para = doc.add_paragraph()
+                    label_run = para.add_run(f"{label}: ")
+                    label_run.bold = True
+                    para.add_run(str(value))
+
+            doc.add_paragraph("")
+
+        # ---- Program Narrative ----
+        narrative = plan_data.get("program_overview", "")
+        svc._render_paragraph_section(doc, "Program Narrative", narrative)
+
+        # ---- Staffing Plan Table ----
+        staffing = plan_data.get("staffing_plan")
+        if staffing and isinstance(staffing, list) and len(staffing) > 0:
+            doc.add_heading("Staffing Plan", level=1)
+            headers = ["Role", "FTE", "Salary Estimate", "Responsibilities"]
+            widths = [1.8, 0.7, 1.3, 3.0]
+            table = svc._add_table_with_header(doc, headers, widths)
+
+            for entry in staffing:
+                if not isinstance(entry, dict):
+                    continue
+                row = table.add_row()
+                row.cells[0].text = str(entry.get("role", ""))
+                row.cells[1].text = str(entry.get("fte", ""))
+                row.cells[2].text = svc._format_currency(
+                    entry.get("salary") or entry.get("salary_estimate")
+                )
+                row.cells[3].text = str(entry.get("responsibilities", ""))
+
+            doc.add_paragraph("")
+
+        # ---- Budget Breakdown Table ----
+        budget = plan_data.get("budget")
+        if budget and isinstance(budget, list) and len(budget) > 0:
+            doc.add_heading("Budget Breakdown", level=1)
+            headers = ["Category", "Amount ($)", "Justification"]
+            widths = [2.0, 1.3, 3.5]
+            table = svc._add_table_with_header(doc, headers, widths)
+
+            total_amount = 0.0
+            for entry in budget:
+                if not isinstance(entry, dict):
+                    continue
+                row = table.add_row()
+                row.cells[0].text = str(entry.get("category", ""))
+                amount = entry.get("amount", 0)
+                amount_val = _safe_float(amount)
+                total_amount += amount_val
+                row.cells[1].text = svc._format_currency(amount_val)
+                row.cells[2].text = str(entry.get("justification", ""))
+
+            # Total row (bold)
+            total_row = table.add_row()
+            total_row.cells[0].text = "TOTAL"
+            total_row.cells[1].text = svc._format_currency(total_amount)
+            total_row.cells[2].text = ""
+            for cell in total_row.cells:
+                for para in cell.paragraphs:
+                    for run in para.runs:
+                        run.bold = True
+
+            doc.add_paragraph("")
+
+        # ---- Timeline ----
+        timeline = plan_data.get("timeline")
+        if timeline and isinstance(timeline, list) and len(timeline) > 0:
+            doc.add_heading("Timeline", level=1)
+
+            for phase in timeline:
+                if not isinstance(phase, dict):
+                    continue
+
+                phase_name = phase.get("phase") or phase.get("name", "Phase")
+                start = phase.get("start", "")
+                end = phase.get("end", "")
+                date_range = ""
+                if start and end:
+                    date_range = f" ({start} \u2013 {end})"
+                elif start:
+                    date_range = f" (from {start})"
+                elif end:
+                    date_range = f" (until {end})"
+
+                doc.add_heading(f"{phase_name}{date_range}", level=2)
+
+                milestones = phase.get("milestones", [])
+                if isinstance(milestones, list):
+                    for ms in milestones:
+                        ms_text = str(ms).strip()
+                        if ms_text:
+                            doc.add_paragraph(ms_text, style="List Bullet")
+
+                # Also handle a description field if present
+                desc = phase.get("description", "")
+                if desc and str(desc).strip():
+                    doc.add_paragraph(str(desc).strip())
+
+        # ---- Deliverables ----
+        deliverables = plan_data.get("deliverables")
+        if deliverables and isinstance(deliverables, list) and len(deliverables) > 0:
+            svc._render_bullet_section(doc, "Deliverables", deliverables)
+
+        # ---- Success Metrics Table ----
+        metrics = plan_data.get("metrics")
+        if metrics and isinstance(metrics, list) and len(metrics) > 0:
+            doc.add_heading("Success Metrics", level=1)
+            headers = ["Metric", "Target", "How Measured"]
+            widths = [2.5, 1.5, 3.0]
+            table = svc._add_table_with_header(doc, headers, widths)
+
+            for entry in metrics:
+                if not isinstance(entry, dict):
+                    continue
+                row = table.add_row()
+                row.cells[0].text = str(entry.get("metric", ""))
+                row.cells[1].text = str(entry.get("target", ""))
+                row.cells[2].text = str(
+                    entry.get("how_measured") or entry.get("measurement", "")
+                )
+
+            doc.add_paragraph("")
+
+        # ---- Partnerships (if present) ----
+        partnerships = plan_data.get("partnerships")
+        if partnerships:
+            if isinstance(partnerships, list) and len(partnerships) > 0:
+                svc._render_bullet_section(doc, "Partnerships", partnerships)
+            elif isinstance(partnerships, str) and partnerships.strip():
+                svc._render_paragraph_section(doc, "Partnerships", partnerships)
 
         # ---- Save to bytes ----
         buffer = io.BytesIO()
