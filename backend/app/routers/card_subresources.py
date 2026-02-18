@@ -1161,7 +1161,7 @@ def _doc_to_response(doc) -> CardDocumentResponse:
         extraction_status=doc.extraction_status,
         document_type=doc.document_type,
         description=doc.description,
-        metadata=doc.metadata,
+        metadata=doc.extra_metadata,
         created_at=doc.created_at.isoformat() if doc.created_at else None,
         updated_at=doc.updated_at.isoformat() if doc.updated_at else None,
     )
@@ -1321,7 +1321,12 @@ async def upload_card_document(
             ),
         )
 
-    content_type = (file.content_type or "application/octet-stream").lower()
+    content_type = (
+        (file.content_type or "application/octet-stream")
+        .lower()
+        .split(";", 1)[0]
+        .strip()
+    )
     if content_type not in _DOC_ALLOWED_MIME_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
