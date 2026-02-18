@@ -52,8 +52,8 @@ import {
   DollarSign,
   Tag,
 } from "lucide-react";
-import { supabase } from "../../App";
 import { useAuthContext } from "../../hooks/useAuthContext";
+import { API_BASE_URL } from "../../lib/config";
 import { useDebouncedValue } from "../../hooks/useDebounce";
 import { useScrollRestoration } from "../../hooks/useScrollRestoration";
 import { SaveSearchModal } from "../../components/SaveSearchModal";
@@ -390,17 +390,17 @@ const Discover: React.FC = () => {
 
   const loadDiscoverData = async () => {
     try {
-      const { data: pillarsData } = await supabase
-        .from("pillars")
-        .select("*")
-        .order("name");
-      const { data: stagesData } = await supabase
-        .from("stages")
-        .select("*")
-        .order("sort_order");
+      const token = localStorage.getItem("gs2_token");
+      if (!token) return;
 
-      setPillars(pillarsData || []);
-      setStages(stagesData || []);
+      const response = await fetch(`${API_BASE_URL}/api/v1/taxonomy`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error(`API error: ${response.status}`);
+      const taxonomy = await response.json();
+
+      setPillars(taxonomy.pillars || []);
+      setStages(taxonomy.stages || []);
     } catch (error) {
       console.error("Error loading discover data:", error);
     }
@@ -409,12 +409,21 @@ const Discover: React.FC = () => {
   const loadFollowedCards = async () => {
     if (!user?.id) return;
     try {
-      const { data } = await supabase
-        .from("card_follows")
-        .select("card_id")
-        .eq("user_id", user.id);
-      if (data) {
-        setFollowedCardIds(new Set(data.map((f) => f.card_id)));
+      const token = localStorage.getItem("gs2_token");
+      if (!token) return;
+
+      const response = await fetch(`${API_BASE_URL}/api/v1/me/following`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error(`API error: ${response.status}`);
+      const data = await response.json();
+      // API may return array of card objects or card IDs
+      if (Array.isArray(data)) {
+        const ids = data.map(
+          (item: { id?: string; card_id?: string }) =>
+            item.card_id || item.id || item,
+        );
+        setFollowedCardIds(new Set(ids.filter(Boolean)));
       }
     } catch (error) {
       console.error("Error loading followed cards:", error);
@@ -433,46 +442,43 @@ const Discover: React.FC = () => {
           return;
         }
 
-        let query = supabase
-          .from("cards")
-          .select("*")
-          .eq("status", "active")
-          .in("id", Array.from(followedCardIds));
+        // Use the cards API with followed card IDs
+        const token = localStorage.getItem("gs2_token");
+        if (token) {
+          const params = new URLSearchParams();
+          params.append("status", "active");
+          if (selectedPillar) params.append("pillar_id", selectedPillar);
+          if (selectedStage) params.append("stage_id", selectedStage);
+          if (selectedHorizon) params.append("horizon", selectedHorizon);
+          if (debouncedFilters.searchTerm)
+            params.append("search", debouncedFilters.searchTerm);
+          if (debouncedFilters.grantType)
+            params.append("grant_type", debouncedFilters.grantType);
+          if (debouncedFilters.deadlineAfter)
+            params.append("deadline_after", debouncedFilters.deadlineAfter);
+          if (debouncedFilters.deadlineBefore)
+            params.append("deadline_before", debouncedFilters.deadlineBefore);
+          if (debouncedFilters.fundingMin != null)
+            params.append("funding_min", String(debouncedFilters.fundingMin));
+          if (debouncedFilters.fundingMax != null)
+            params.append("funding_max", String(debouncedFilters.fundingMax));
+          if (debouncedFilters.grantCategory)
+            params.append("category_id", debouncedFilters.grantCategory);
+          params.append("following_only", "true");
+          const sortConfig = getSortConfig(sortOption);
+          params.append("sort_by", sortConfig.column);
+          params.append("sort_asc", String(sortConfig.ascending));
 
-        if (debouncedFilters.searchTerm) {
-          query = query.or(
-            `name.ilike.%${debouncedFilters.searchTerm}%,summary.ilike.%${debouncedFilters.searchTerm}%`,
+          const response = await fetch(
+            `${API_BASE_URL}/api/v1/cards?${params.toString()}`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            },
           );
+          if (!response.ok) throw new Error(`API error: ${response.status}`);
+          const data = await response.json();
+          setCards(data || []);
         }
-        if (selectedPillar) query = query.eq("pillar_id", selectedPillar);
-        if (selectedStage) query = query.eq("stage_id", selectedStage);
-        if (selectedHorizon) query = query.eq("horizon", selectedHorizon);
-        if (debouncedFilters.impactMin > 0)
-          query = query.gte("impact_score", debouncedFilters.impactMin);
-        if (debouncedFilters.relevanceMin > 0)
-          query = query.gte("relevance_score", debouncedFilters.relevanceMin);
-        if (debouncedFilters.noveltyMin > 0)
-          query = query.gte("novelty_score", debouncedFilters.noveltyMin);
-        if (dateFrom) query = query.gte("created_at", dateFrom);
-        if (dateTo) query = query.lte("created_at", dateTo);
-        if (debouncedFilters.grantType)
-          query = query.eq("grant_type", debouncedFilters.grantType);
-        if (debouncedFilters.deadlineAfter)
-          query = query.gte("deadline", debouncedFilters.deadlineAfter);
-        if (debouncedFilters.deadlineBefore)
-          query = query.lte("deadline", debouncedFilters.deadlineBefore);
-        if (debouncedFilters.fundingMin != null)
-          query = query.gte("funding_amount_min", debouncedFilters.fundingMin);
-        if (debouncedFilters.fundingMax != null)
-          query = query.lte("funding_amount_max", debouncedFilters.fundingMax);
-        if (debouncedFilters.grantCategory)
-          query = query.eq("category_id", debouncedFilters.grantCategory);
-
-        const sortConfig = getSortConfig(sortOption);
-        const { data } = await query.order(sortConfig.column, {
-          ascending: sortConfig.ascending,
-        });
-        setCards(data || []);
         setLoading(false);
         return;
       }
@@ -576,54 +582,63 @@ const Discover: React.FC = () => {
         }
       }
 
-      // Standard Supabase query
-      let query = supabase.from("cards").select("*").eq("status", "active");
+      // Standard API query
+      const token = localStorage.getItem("gs2_token");
+      if (!token) throw new Error("Not authenticated");
+
+      const params = new URLSearchParams();
+      params.append("status", "active");
 
       if (quickFilter === "new") {
         const oneWeekAgo = new Date();
         oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-        query = query.gte("created_at", oneWeekAgo.toISOString());
+        params.append("created_after", oneWeekAgo.toISOString());
       }
 
       if (quickFilter === "updated") {
         const oneWeekAgo = new Date();
         oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-        query = query.gte("updated_at", oneWeekAgo.toISOString());
+        params.append("updated_after", oneWeekAgo.toISOString());
       }
 
-      if (selectedPillar) query = query.eq("pillar_id", selectedPillar);
-      if (selectedStage) query = query.eq("stage_id", selectedStage);
-      if (selectedHorizon) query = query.eq("horizon", selectedHorizon);
-      if (debouncedFilters.searchTerm) {
-        query = query.or(
-          `name.ilike.%${debouncedFilters.searchTerm}%,summary.ilike.%${debouncedFilters.searchTerm}%`,
-        );
-      }
+      if (selectedPillar) params.append("pillar_id", selectedPillar);
+      if (selectedStage) params.append("stage_id", selectedStage);
+      if (selectedHorizon) params.append("horizon", selectedHorizon);
+      if (debouncedFilters.searchTerm)
+        params.append("search", debouncedFilters.searchTerm);
       if (debouncedFilters.impactMin > 0)
-        query = query.gte("impact_score", debouncedFilters.impactMin);
+        params.append("impact_min", String(debouncedFilters.impactMin));
       if (debouncedFilters.relevanceMin > 0)
-        query = query.gte("relevance_score", debouncedFilters.relevanceMin);
+        params.append("relevance_min", String(debouncedFilters.relevanceMin));
       if (debouncedFilters.noveltyMin > 0)
-        query = query.gte("novelty_score", debouncedFilters.noveltyMin);
-      if (dateFrom) query = query.gte("created_at", dateFrom);
-      if (dateTo) query = query.lte("created_at", dateTo);
+        params.append("novelty_min", String(debouncedFilters.noveltyMin));
+      if (dateFrom) params.append("created_after", dateFrom);
+      if (dateTo) params.append("created_before", dateTo);
       if (debouncedFilters.grantType)
-        query = query.eq("grant_type", debouncedFilters.grantType);
+        params.append("grant_type", debouncedFilters.grantType);
       if (debouncedFilters.deadlineAfter)
-        query = query.gte("deadline", debouncedFilters.deadlineAfter);
+        params.append("deadline_after", debouncedFilters.deadlineAfter);
       if (debouncedFilters.deadlineBefore)
-        query = query.lte("deadline", debouncedFilters.deadlineBefore);
+        params.append("deadline_before", debouncedFilters.deadlineBefore);
       if (debouncedFilters.fundingMin != null)
-        query = query.gte("funding_amount_min", debouncedFilters.fundingMin);
+        params.append("funding_min", String(debouncedFilters.fundingMin));
       if (debouncedFilters.fundingMax != null)
-        query = query.lte("funding_amount_max", debouncedFilters.fundingMax);
+        params.append("funding_max", String(debouncedFilters.fundingMax));
       if (debouncedFilters.grantCategory)
-        query = query.eq("category_id", debouncedFilters.grantCategory);
+        params.append("category_id", debouncedFilters.grantCategory);
 
       const sortConfig = getSortConfig(sortOption);
-      const { data } = await query.order(sortConfig.column, {
-        ascending: sortConfig.ascending,
-      });
+      params.append("sort_by", sortConfig.column);
+      params.append("sort_asc", String(sortConfig.ascending));
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/cards?${params.toString()}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      if (!response.ok) throw new Error(`API error: ${response.status}`);
+      const data = await response.json();
 
       setCards(data || []);
 
@@ -675,16 +690,22 @@ const Discover: React.FC = () => {
       });
 
       try {
+        const token = localStorage.getItem("gs2_token");
+        if (!token) throw new Error("Not authenticated");
+
         if (isFollowing) {
-          await supabase
-            .from("card_follows")
-            .delete()
-            .eq("user_id", user.id)
-            .eq("card_id", cardId);
+          await fetch(`${API_BASE_URL}/api/v1/cards/${cardId}/follow`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
+          });
         } else {
-          await supabase
-            .from("card_follows")
-            .insert({ user_id: user.id, card_id: cardId, priority: "medium" });
+          await fetch(`${API_BASE_URL}/api/v1/cards/${cardId}/follow`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          });
         }
       } catch (error) {
         console.error("Error toggling card follow:", error);

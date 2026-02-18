@@ -15,7 +15,7 @@ Pipeline:
 6. Store new insights in pattern_insights table
 
 Usage:
-    service = PatternDetectionService(supabase, openai_client)
+    service = PatternDetectionService(db, openai_client)
     results = await service.run_detection()
 """
 
@@ -26,8 +26,11 @@ from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, field
 
 import numpy as np
-from supabase import Client
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.db.card import Card
+from app.models.db.analytics import PatternInsight as PatternInsightModel
 from app.openai_provider import get_chat_deployment
 from app.taxonomy import VALID_PILLAR_CODES
 
@@ -106,8 +109,8 @@ class PatternInsight:
 class PatternDetectionService:
     """Detects emergent cross-pillar patterns across strategic signals."""
 
-    def __init__(self, supabase_client: Client, openai_client: Any) -> None:
-        self.supabase = supabase_client
+    def __init__(self, db: AsyncSession, openai_client: Any) -> None:
+        self.db = db
         self.openai = openai_client
 
     # -----------------------------------------------------------------------
@@ -125,7 +128,7 @@ class PatternDetectionService:
         logger.info("Pattern detection run starting")
 
         # Step 1: Fetch cards
-        cards = self._fetch_cards_with_embeddings()
+        cards = await self._fetch_cards_with_embeddings()
         if len(cards) < MIN_CLUSTER_SIZE:
             logger.info(
                 "Not enough cards with embeddings for pattern detection (%d)",
@@ -165,11 +168,11 @@ class PatternDetectionService:
         logger.info("Generated %d pattern insights", len(insights))
 
         # Step 5: Deduplicate against existing insights
-        new_insights = self._deduplicate_insights(insights)
+        new_insights = await self._deduplicate_insights(insights)
         logger.info("After dedup: %d new insights", len(new_insights))
 
         # Step 6: Store in database
-        stored_count = self._store_insights(new_insights)
+        stored_count = await self._store_insights(new_insights)
 
         duration = time.time() - start
         summary = {
@@ -188,27 +191,33 @@ class PatternDetectionService:
     # Step 1: Fetch cards
     # -----------------------------------------------------------------------
 
-    def _fetch_cards_with_embeddings(self) -> List[CardSignal]:
+    async def _fetch_cards_with_embeddings(self) -> List[CardSignal]:
         """Fetch active cards that have embeddings, limited to MAX_CARDS_PER_RUN."""
         try:
-            result = (
-                self.supabase.table("cards")
-                .select("id, name, summary, pillar_id, stage_id, horizon, embedding")
-                .eq("status", "active")
-                .neq("review_status", "rejected")
-                .not_.is_("embedding", "null")
-                .not_.is_("pillar_id", "null")
+            result = await self.db.execute(
+                select(
+                    Card.id,
+                    Card.name,
+                    Card.summary,
+                    Card.pillar_id,
+                    Card.stage_id,
+                    Card.horizon,
+                    Card.embedding,
+                )
+                .where(Card.status == "active")
+                .where(Card.review_status != "rejected")
+                .where(Card.embedding.isnot(None))
+                .where(Card.pillar_id.isnot(None))
                 .limit(MAX_CARDS_PER_RUN)
-                .execute()
             )
-            cards_data = result.data or []
+            cards_data = result.all()
         except Exception as e:
             logger.error("Failed to fetch cards for pattern detection: %s", e)
             return []
 
         cards: List[CardSignal] = []
         for row in cards_data:
-            embedding = row.get("embedding")
+            embedding = row.embedding
             if not embedding:
                 continue
             # Embedding may come as a list or a string representation
@@ -220,12 +229,12 @@ class PatternDetectionService:
 
             cards.append(
                 CardSignal(
-                    id=row["id"],
-                    name=row["name"],
-                    summary=row.get("summary", ""),
-                    pillar_id=row.get("pillar_id", ""),
-                    stage_id=row.get("stage_id"),
-                    horizon=row.get("horizon"),
+                    id=str(row.id),
+                    name=row.name,
+                    summary=row.summary or "",
+                    pillar_id=row.pillar_id or "",
+                    stage_id=row.stage_id,
+                    horizon=row.horizon,
                     embedding=embedding,
                 )
             )
@@ -521,7 +530,7 @@ Respond as JSON:
     # Step 5: Deduplication
     # -----------------------------------------------------------------------
 
-    def _deduplicate_insights(
+    async def _deduplicate_insights(
         self, insights: List[PatternInsight]
     ) -> List[PatternInsight]:
         """
@@ -533,14 +542,24 @@ Respond as JSON:
 
         # Fetch existing active insights
         try:
-            existing = (
-                self.supabase.table("pattern_insights")
-                .select("id, pattern_title, related_card_ids")
-                .eq("status", "active")
-                .execute()
-                .data
-                or []
+            result = await self.db.execute(
+                select(
+                    PatternInsightModel.id,
+                    PatternInsightModel.pattern_title,
+                    PatternInsightModel.related_card_ids,
+                ).where(PatternInsightModel.status == "active")
             )
+            existing_rows = result.all()
+            existing = [
+                {
+                    "id": str(row.id),
+                    "pattern_title": row.pattern_title,
+                    "related_card_ids": [
+                        str(cid) for cid in (row.related_card_ids or [])
+                    ],
+                }
+                for row in existing_rows
+            ]
         except Exception as e:
             logger.warning("Could not fetch existing insights for dedup: %s", e)
             existing = []
@@ -574,22 +593,23 @@ Respond as JSON:
     # Step 6: Storage
     # -----------------------------------------------------------------------
 
-    def _store_insights(self, insights: List[PatternInsight]) -> int:
+    async def _store_insights(self, insights: List[PatternInsight]) -> int:
         """Store pattern insights in the database. Returns count of stored insights."""
         stored = 0
         for insight in insights:
             try:
-                row = {
-                    "pattern_title": insight.pattern_title,
-                    "pattern_summary": insight.pattern_summary,
-                    "opportunity": insight.opportunity,
-                    "confidence": insight.confidence,
-                    "affected_pillars": insight.affected_pillars,
-                    "urgency": insight.urgency,
-                    "related_card_ids": insight.related_card_ids,
-                    "status": "active",
-                }
-                self.supabase.table("pattern_insights").insert(row).execute()
+                obj = PatternInsightModel(
+                    pattern_title=insight.pattern_title,
+                    pattern_summary=insight.pattern_summary,
+                    opportunity=insight.opportunity,
+                    confidence=insight.confidence,
+                    affected_pillars=insight.affected_pillars,
+                    urgency=insight.urgency,
+                    related_card_ids=insight.related_card_ids,
+                    status="active",
+                )
+                self.db.add(obj)
+                await self.db.flush()
                 stored += 1
             except Exception as e:
                 logger.error(

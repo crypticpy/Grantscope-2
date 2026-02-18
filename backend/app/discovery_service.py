@@ -26,7 +26,7 @@ Key Features:
 Usage:
     from app.discovery_service import DiscoveryService, DiscoveryConfig
 
-    service = DiscoveryService(supabase_client, openai_client)
+    service = DiscoveryService(db_session, openai_client)
     config = DiscoveryConfig(
         max_queries_per_run=50,
         max_sources_total=200,
@@ -44,8 +44,9 @@ from typing import List, Optional, Dict, Any, Tuple
 from enum import Enum
 import uuid
 
-from supabase import Client
 import openai
+from sqlalchemy import select, update as sa_update, delete as sa_delete, func, and_, or_
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from .query_generator import QueryGenerator, QueryConfig
 from .ai_service import AIService, AnalysisResult, TriageResult
@@ -53,6 +54,14 @@ from .research_service import RawSource, ProcessedSource
 from .source_validator import SourceValidator
 from .story_clustering_service import cluster_sources, get_cluster_count
 from . import domain_reputation_service
+
+# SQLAlchemy ORM models
+from app.models.db.card import Card
+from app.models.db.source import Source, DiscoveredSource
+from app.models.db.card_extras import CardTimeline
+from app.models.db.discovery import DiscoveryRun, DiscoveryBlock
+from app.models.db.workstream import Workstream, WorkstreamCard
+from app.helpers.db_utils import vector_search_cards
 
 # Import multi-source content fetchers (7 categories)
 from .source_fetchers import (
@@ -805,7 +814,7 @@ class DiscoveryService:
 
     def __init__(
         self,
-        supabase: Client,
+        db: AsyncSession,
         openai_client: openai.OpenAI,
         triggered_by_user_id: Optional[str] = None,
     ):
@@ -813,11 +822,11 @@ class DiscoveryService:
         Initialize discovery service.
 
         Args:
-            supabase: Supabase client for database operations
+            db: SQLAlchemy async session for database operations
             openai_client: OpenAI client for AI operations
             triggered_by_user_id: Optional user ID to attribute created cards to
         """
-        self.supabase = supabase
+        self.db = db
         self.openai_client = openai_client
         self.triggered_by_user_id = triggered_by_user_id
         self.ai_service = AIService(openai_client)
@@ -827,7 +836,7 @@ class DiscoveryService:
         # Using dynamic import to avoid circular dependencies
         from .research_service import ResearchService
 
-        self.research_service = ResearchService(supabase, openai_client)
+        self.research_service = ResearchService(db, openai_client)
 
     # ========================================================================
     # Main Entry Point
@@ -1063,30 +1072,37 @@ class DiscoveryService:
                 "sources_after_validation": len(validated_sources),
             }
             try:
-                existing = (
-                    self.supabase.table("discovery_runs")
-                    .select("summary_report")
-                    .eq("id", run_id)
-                    .single()
-                    .execute()
+                result_dr = await self.db.execute(
+                    select(DiscoveryRun).where(
+                        DiscoveryRun.id == uuid.UUID(run_id)
+                        if isinstance(run_id, str)
+                        else run_id
+                    )
                 )
+                dr_row = result_dr.scalar_one_or_none()
                 report = (
-                    existing.data.get("summary_report") if existing.data else {}
+                    dr_row.summary_report if dr_row and dr_row.summary_report else {}
                 ) or {}
                 if not isinstance(report, dict):
                     report = {}
                 report["quality_stats"] = quality_stats
-                self.supabase.table("discovery_runs").update(
-                    {"summary_report": report}
-                ).eq("id", run_id).execute()
+                await self.db.execute(
+                    sa_update(DiscoveryRun)
+                    .where(
+                        DiscoveryRun.id
+                        == (uuid.UUID(run_id) if isinstance(run_id, str) else run_id)
+                    )
+                    .values(summary_report=report)
+                )
+                await self.db.flush()
             except Exception as e:
                 logger.warning(f"Failed to persist quality_stats: {e}")
 
             # Step 2e: Preload domain reputation cache (Task 2.7)
             try:
                 source_urls = [s.url for s in validated_sources if s.url]
-                domain_reputation_service.get_reputation_batch(
-                    self.supabase, source_urls
+                await domain_reputation_service.get_reputation_batch(
+                    self.db, source_urls
                 )
                 logger.info(
                     "Domain reputation cache preloaded for %d source URLs",
@@ -1179,7 +1195,7 @@ class DiscoveryService:
                 )
 
                 signal_agent = SignalAgentService(
-                    supabase=self.supabase,
+                    db=self.db,
                     run_id=run_id,
                     triggered_by_user_id=self.triggered_by_user_id,
                 )
@@ -1263,15 +1279,15 @@ class DiscoveryService:
             # Persist story_cluster_count to quality_stats
             if card_result.story_cluster_count > 0:
                 try:
-                    existing = (
-                        self.supabase.table("discovery_runs")
-                        .select("summary_report")
-                        .eq("id", run_id)
-                        .single()
-                        .execute()
+                    _run_id = uuid.UUID(run_id) if isinstance(run_id, str) else run_id
+                    result_dr = await self.db.execute(
+                        select(DiscoveryRun).where(DiscoveryRun.id == _run_id)
                     )
+                    dr_row = result_dr.scalar_one_or_none()
                     report = (
-                        existing.data.get("summary_report") if existing.data else {}
+                        dr_row.summary_report
+                        if dr_row and dr_row.summary_report
+                        else {}
                     ) or {}
                     if not isinstance(report, dict):
                         report = {}
@@ -1280,9 +1296,12 @@ class DiscoveryService:
                         qs = {}
                     qs["story_cluster_count"] = card_result.story_cluster_count
                     report["quality_stats"] = qs
-                    self.supabase.table("discovery_runs").update(
-                        {"summary_report": report}
-                    ).eq("id", run_id).execute()
+                    await self.db.execute(
+                        sa_update(DiscoveryRun)
+                        .where(DiscoveryRun.id == _run_id)
+                        .values(summary_report=report)
+                    )
+                    await self.db.flush()
                 except Exception as e:
                     logger.warning(f"Failed to persist story_cluster_count: {e}")
 
@@ -1383,24 +1402,25 @@ class DiscoveryService:
                 progress["stats"] = stats
 
             # Read current summary_report
-            result = (
-                self.supabase.table("discovery_runs")
-                .select("summary_report")
-                .eq("id", run_id)
-                .single()
-                .execute()
+            _run_id = uuid.UUID(run_id) if isinstance(run_id, str) else run_id
+            result_dr = await self.db.execute(
+                select(DiscoveryRun).where(DiscoveryRun.id == _run_id)
             )
+            dr_row = result_dr.scalar_one_or_none()
             current_report = (
-                result.data.get("summary_report", {}) if result.data else {}
-            )
+                dr_row.summary_report if dr_row and dr_row.summary_report else {}
+            ) or {}
 
             # Merge progress into summary_report
             updated_report = {**current_report, "progress": progress}
 
             # Update the record
-            self.supabase.table("discovery_runs").update(
-                {"summary_report": updated_report}
-            ).eq("id", run_id).execute()
+            await self.db.execute(
+                sa_update(DiscoveryRun)
+                .where(DiscoveryRun.id == _run_id)
+                .values(summary_report=updated_report)
+            )
+            await self.db.flush()
 
             logger.debug(f"Progress update: {stage} - {message}")
         except Exception as e:
@@ -1450,35 +1470,37 @@ class DiscoveryService:
             # Look up domain reputation ID (Task 2.7)
             _domain_rep_id = None
             try:
-                if _rep := domain_reputation_service.get_reputation(
-                    self.supabase, source.url or ""
+                if _rep := await domain_reputation_service.get_reputation(
+                    self.db, source.url or ""
                 ):
                     _domain_rep_id = _rep.get("id")
             except Exception:
                 pass  # Non-fatal
 
-            record = {
-                "discovery_run_id": run_id,
-                "url": source.url,
-                "title": source.title,
-                "content_snippet": (source.content or "")[:2000],
-                "full_content": source.content,
-                "published_at": source.published_at,
-                "source_type": source.source_type,
-                "domain": domain,
-                "search_query": query.query_text if query else None,
-                "query_pillar": query.pillar_code if query else None,
-                "query_priority": query.priority_id if query else None,
-                "processing_status": "discovered",
-            }
+            obj = DiscoveredSource(
+                discovery_run_id=(
+                    uuid.UUID(run_id) if isinstance(run_id, str) else run_id
+                ),
+                url=source.url,
+                title=source.title,
+                content_snippet=(source.content or "")[:2000],
+                full_content=source.content,
+                published_at=source.published_at,
+                source_type=source.source_type,
+                domain=domain,
+                search_query=query.query_text if query else None,
+                query_pillar=query.pillar_code if query else None,
+                query_priority=query.priority_id if query else None,
+                processing_status="discovered",
+            )
 
-            # Add domain_reputation_id if available (Task 2.7)
-            if _domain_rep_id:
-                record["domain_reputation_id"] = _domain_rep_id
+            # Note: domain_reputation_id is not on DiscoveredSource model;
+            # it will be set on the Source record when the source is stored to a card.
 
-            result = self.supabase.table("discovered_sources").insert(record).execute()
-            if result.data:
-                return result.data[0]["id"]
+            self.db.add(obj)
+            await self.db.flush()
+            await self.db.refresh(obj)
+            return str(obj.id)
         except Exception as e:
             logger.warning(f"Could not persist discovered source: {e}")
         return None
@@ -1488,16 +1510,20 @@ class DiscoveryService:
     ) -> None:
         """Update source with triage results."""
         try:
-            self.supabase.table("discovered_sources").update(
-                {
-                    "triage_is_relevant": triage.is_relevant,
-                    "triage_confidence": triage.confidence,
-                    "triage_primary_pillar": triage.primary_pillar,
-                    "triage_reason": triage.reason,
-                    "triaged_at": datetime.now(timezone.utc).isoformat(),
-                    "processing_status": "triaged" if passed else "filtered_triage",
-                }
-            ).eq("id", source_id).execute()
+            _sid = uuid.UUID(source_id) if isinstance(source_id, str) else source_id
+            await self.db.execute(
+                sa_update(DiscoveredSource)
+                .where(DiscoveredSource.id == _sid)
+                .values(
+                    triage_is_relevant=triage.is_relevant,
+                    triage_confidence=triage.confidence,
+                    triage_primary_pillar=triage.primary_pillar,
+                    triage_reason=triage.reason,
+                    triaged_at=datetime.now(timezone.utc),
+                    processing_status="triaged" if passed else "filtered_triage",
+                )
+            )
+            await self.db.flush()
         except Exception as e:
             logger.warning(f"Could not update source triage: {e}")
 
@@ -1511,32 +1537,36 @@ class DiscoveryService:
                 for e in (analysis.entities or [])
             ]
 
-            self.supabase.table("discovered_sources").update(
-                {
-                    "analysis_summary": analysis.summary,
-                    "analysis_key_excerpts": analysis.key_excerpts,
-                    "analysis_pillars": analysis.pillars,
-                    "analysis_goals": analysis.goals,
-                    "analysis_steep_categories": analysis.steep_categories,
-                    "analysis_anchors": analysis.anchors,
-                    "analysis_horizon": analysis.horizon,
-                    "analysis_suggested_stage": analysis.suggested_stage,
-                    "analysis_triage_score": analysis.triage_score,
-                    "analysis_credibility": analysis.credibility,
-                    "analysis_novelty": analysis.novelty,
-                    "analysis_likelihood": analysis.likelihood,
-                    "analysis_impact": analysis.impact,
-                    "analysis_relevance": analysis.relevance,
-                    "analysis_time_to_awareness_months": analysis.time_to_awareness_months,
-                    "analysis_time_to_prepare_months": analysis.time_to_prepare_months,
-                    "analysis_suggested_card_name": analysis.suggested_card_name,
-                    "analysis_is_new_concept": analysis.is_new_concept,
-                    "analysis_reasoning": analysis.reasoning,
-                    "analysis_entities": entities_json,
-                    "analyzed_at": datetime.now(timezone.utc).isoformat(),
-                    "processing_status": "analyzed",
-                }
-            ).eq("id", source_id).execute()
+            _sid = uuid.UUID(source_id) if isinstance(source_id, str) else source_id
+            await self.db.execute(
+                sa_update(DiscoveredSource)
+                .where(DiscoveredSource.id == _sid)
+                .values(
+                    analysis_summary=analysis.summary,
+                    analysis_key_excerpts=analysis.key_excerpts,
+                    analysis_pillars=analysis.pillars,
+                    analysis_goals=analysis.goals,
+                    analysis_steep_categories=analysis.steep_categories,
+                    analysis_anchors=analysis.anchors,
+                    analysis_horizon=analysis.horizon,
+                    analysis_suggested_stage=analysis.suggested_stage,
+                    analysis_triage_score=analysis.triage_score,
+                    analysis_credibility=analysis.credibility,
+                    analysis_novelty=analysis.novelty,
+                    analysis_likelihood=analysis.likelihood,
+                    analysis_impact=analysis.impact,
+                    analysis_relevance=analysis.relevance,
+                    analysis_time_to_awareness_months=analysis.time_to_awareness_months,
+                    analysis_time_to_prepare_months=analysis.time_to_prepare_months,
+                    analysis_suggested_card_name=analysis.suggested_card_name,
+                    analysis_is_new_concept=analysis.is_new_concept,
+                    analysis_reasoning=analysis.reasoning,
+                    analysis_entities=entities_json,
+                    analyzed_at=datetime.now(timezone.utc),
+                    processing_status="analyzed",
+                )
+            )
+            await self.db.flush()
         except Exception as e:
             logger.warning(f"Could not update source analysis: {e}")
 
@@ -1555,15 +1585,24 @@ class DiscoveryService:
                 "enrichment_candidate": "deduplicated",
             }.get(status, "deduplicated")
 
-            self.supabase.table("discovered_sources").update(
-                {
-                    "dedup_status": status,
-                    "dedup_matched_card_id": matched_card_id,
-                    "dedup_similarity_score": similarity,
-                    "deduplicated_at": datetime.now(timezone.utc).isoformat(),
-                    "processing_status": processing_status,
-                }
-            ).eq("id", source_id).execute()
+            _sid = uuid.UUID(source_id) if isinstance(source_id, str) else source_id
+            _matched_card = (
+                uuid.UUID(matched_card_id)
+                if matched_card_id and isinstance(matched_card_id, str)
+                else matched_card_id
+            )
+            await self.db.execute(
+                sa_update(DiscoveredSource)
+                .where(DiscoveredSource.id == _sid)
+                .values(
+                    dedup_status=status,
+                    dedup_matched_card_id=_matched_card,
+                    dedup_similarity_score=similarity,
+                    deduplicated_at=datetime.now(timezone.utc),
+                    processing_status=processing_status,
+                )
+            )
+            await self.db.flush()
         except Exception as e:
             logger.warning(f"Could not update source dedup: {e}")
 
@@ -1578,18 +1617,30 @@ class DiscoveryService:
     ) -> None:
         """Update source with final outcome."""
         try:
-            update = {
+            _sid = uuid.UUID(source_id) if isinstance(source_id, str) else source_id
+            values: Dict[str, Any] = {
                 "processing_status": status,
-                "resulting_card_id": card_id,
-                "resulting_source_id": source_record_id,
+                "resulting_card_id": (
+                    uuid.UUID(card_id)
+                    if card_id and isinstance(card_id, str)
+                    else card_id
+                ),
+                "resulting_source_id": (
+                    uuid.UUID(source_record_id)
+                    if source_record_id and isinstance(source_record_id, str)
+                    else source_record_id
+                ),
             }
             if error_message:
-                update["error_message"] = error_message
-                update["error_stage"] = error_stage
+                values["error_message"] = error_message
+                values["error_stage"] = error_stage
 
-            self.supabase.table("discovered_sources").update(update).eq(
-                "id", source_id
-            ).execute()
+            await self.db.execute(
+                sa_update(DiscoveredSource)
+                .where(DiscoveredSource.id == _sid)
+                .values(**values)
+            )
+            await self.db.flush()
         except Exception as e:
             logger.warning(f"Could not update source outcome: {e}")
 
@@ -1621,16 +1672,15 @@ class DiscoveryService:
             "enriched" if matched to existing card, "new" if new concept
         """
         # Fetch cards with embeddings (non-rejected only)
-        cards_result = (
-            self.supabase.table("cards")
-            .select("id, name, summary, pillar_id, horizon, embedding")
-            .neq("review_status", "rejected")
-            .not_.is_("embedding", "null")
+        result_cards = await self.db.execute(
+            select(Card)
+            .where(Card.review_status != "rejected")
+            .where(Card.embedding.isnot(None))
             .limit(100)
-            .execute()
         )
+        cards_with_emb = result_cards.scalars().all()
 
-        if not cards_result.data:
+        if not cards_with_emb:
             logger.info("PYTHON FALLBACK: No cards with embeddings found - NEW CONCEPT")
             new_concept_candidates.append(source)
             if source.discovered_source_id:
@@ -1641,8 +1691,8 @@ class DiscoveryService:
         best_match = None
         best_similarity = 0.0
 
-        for card in cards_result.data:
-            card_embedding = card.get("embedding")
+        for card in cards_with_emb:
+            card_embedding = card.embedding
             if not card_embedding:
                 continue
 
@@ -1655,15 +1705,15 @@ class DiscoveryService:
         if best_match and best_similarity >= config.similarity_threshold:
             # Strong match - enrich existing card
             logger.info(
-                f"PYTHON FALLBACK MATCH (strong): '{suggested_name}' -> '{best_match.get('name', 'unknown')}' "
+                f"PYTHON FALLBACK MATCH (strong): '{suggested_name}' -> '{best_match.name}' "
                 f"(similarity: {best_similarity:.3f}) - ENRICHING"
             )
-            enrichment_candidates.append((source, best_match["id"], best_similarity))
+            enrichment_candidates.append((source, str(best_match.id), best_similarity))
             if source.discovered_source_id:
                 await self._update_source_dedup(
                     source.discovered_source_id,
                     "enrichment_candidate",
-                    best_match["id"],
+                    str(best_match.id),
                     best_similarity,
                 )
             return "enriched"
@@ -1673,29 +1723,29 @@ class DiscoveryService:
             decision = await self.ai_service.check_card_match(
                 source_summary=source.analysis.summary,
                 source_card_name=source.analysis.suggested_card_name,
-                existing_card_name=best_match["name"],
-                existing_card_summary=best_match.get("summary", ""),
+                existing_card_name=best_match.name,
+                existing_card_summary=best_match.summary or "",
             )
 
             if decision.get("is_match") and decision.get("confidence", 0) >= 0.6:
                 logger.info(
-                    f"PYTHON FALLBACK + LLM MATCH: '{suggested_name}' -> '{best_match['name']}' "
+                    f"PYTHON FALLBACK + LLM MATCH: '{suggested_name}' -> '{best_match.name}' "
                     f"(similarity: {best_similarity:.3f}, llm_conf: {decision.get('confidence', 0):.2f}) - ENRICHING"
                 )
                 enrichment_candidates.append(
-                    (source, best_match["id"], best_similarity)
+                    (source, str(best_match.id), best_similarity)
                 )
                 if source.discovered_source_id:
                     await self._update_source_dedup(
                         source.discovered_source_id,
                         "enrichment_candidate",
-                        best_match["id"],
+                        str(best_match.id),
                         best_similarity,
                     )
                 return "enriched"
             else:
                 logger.info(
-                    f"PYTHON FALLBACK + LLM NO MATCH: '{suggested_name}' vs '{best_match['name']}' "
+                    f"PYTHON FALLBACK + LLM NO MATCH: '{suggested_name}' vs '{best_match.name}' "
                     f"(reason: {decision.get('reasoning', 'unknown')[:80]}) - NEW CONCEPT"
                 )
                 new_concept_candidates.append(source)
@@ -1732,26 +1782,26 @@ class DiscoveryService:
         run_id = str(uuid.uuid4())
 
         try:
-            self.supabase.table("discovery_runs").insert(
-                {
-                    "id": run_id,
-                    "status": DiscoveryStatus.RUNNING.value,
-                    "triggered_by": "manual",
-                    "pillars_scanned": config.pillars_filter or [],
-                    "priorities_scanned": config.horizons_filter or [],
-                    "started_at": datetime.now(timezone.utc).isoformat(),
-                    "summary_report": {
-                        "config": {
-                            "max_queries_per_run": config.max_queries_per_run,
-                            "max_sources_per_query": config.max_sources_per_query,
-                            "max_sources_total": config.max_sources_total,
-                            "auto_approve_threshold": config.auto_approve_threshold,
-                            "similarity_threshold": config.similarity_threshold,
-                            "dry_run": config.dry_run,
-                        }
-                    },
-                }
-            ).execute()
+            obj = DiscoveryRun(
+                id=uuid.UUID(run_id),
+                status=DiscoveryStatus.RUNNING.value,
+                triggered_by="manual",
+                pillars_scanned=config.pillars_filter or [],
+                priorities_scanned=config.horizons_filter or [],
+                started_at=datetime.now(timezone.utc),
+                summary_report={
+                    "config": {
+                        "max_queries_per_run": config.max_queries_per_run,
+                        "max_sources_per_query": config.max_sources_per_query,
+                        "max_sources_total": config.max_sources_total,
+                        "auto_approve_threshold": config.auto_approve_threshold,
+                        "similarity_threshold": config.similarity_threshold,
+                        "dry_run": config.dry_run,
+                    }
+                },
+            )
+            self.db.add(obj)
+            await self.db.flush()
         except Exception as e:
             # Log but don't fail - table might not exist yet
             logger.warning(f"Could not create run record (table may not exist): {e}")
@@ -2267,8 +2317,8 @@ class DiscoveryService:
 
                 # Domain reputation confidence adjustment (Task 2.7)
                 try:
-                    reputation = domain_reputation_service.get_reputation(
-                        self.supabase, source.url or ""
+                    reputation = await domain_reputation_service.get_reputation(
+                        self.db, source.url or ""
                     )
                     adj = domain_reputation_service.get_confidence_adjustment(
                         reputation
@@ -2294,8 +2344,8 @@ class DiscoveryService:
                     from urllib.parse import urlparse as _urlparse
 
                     if _domain := _urlparse(source.url or "").netloc:
-                        domain_reputation_service.record_triage_result(
-                            self.supabase, _domain, passed=passed_triage
+                        await domain_reputation_service.record_triage_result(
+                            self.db, _domain, passed=passed_triage
                         )
                 except Exception as e:
                     logger.debug(f"Domain triage recording failed (non-fatal): {e}")
@@ -2413,8 +2463,8 @@ class DiscoveryService:
 
                 # Domain reputation confidence adjustment (Task 2.7)
                 try:
-                    reputation = domain_reputation_service.get_reputation(
-                        self.supabase, source.url or ""
+                    reputation = await domain_reputation_service.get_reputation(
+                        self.db, source.url or ""
                     )
                     domain_rep_stats["domain_reputation_lookups"] += 1
 
@@ -2457,8 +2507,8 @@ class DiscoveryService:
                     from urllib.parse import urlparse as _urlparse
 
                     if _domain := _urlparse(source.url or "").netloc:
-                        domain_reputation_service.record_triage_result(
-                            self.supabase, _domain, passed=passed_triage
+                        await domain_reputation_service.record_triage_result(
+                            self.db, _domain, passed=passed_triage
                         )
                 except Exception as e:
                     logger.debug(f"Domain triage recording failed (non-fatal): {e}")
@@ -2513,24 +2563,29 @@ class DiscoveryService:
         try:
             # We need to get run_id from the caller context; use the _current_run_id if available
             if hasattr(self, "_current_run_id") and self._current_run_id:
-                existing = (
-                    self.supabase.table("discovery_runs")
-                    .select("summary_report")
-                    .eq("id", self._current_run_id)
-                    .single()
-                    .execute()
+                _run_id = (
+                    uuid.UUID(self._current_run_id)
+                    if isinstance(self._current_run_id, str)
+                    else self._current_run_id
                 )
+                result_dr = await self.db.execute(
+                    select(DiscoveryRun).where(DiscoveryRun.id == _run_id)
+                )
+                dr_row = result_dr.scalar_one_or_none()
                 report = (
-                    existing.data.get("summary_report") if existing.data else {}
+                    dr_row.summary_report if dr_row and dr_row.summary_report else {}
                 ) or {}
                 if not isinstance(report, dict):
                     report = {}
                 qs = report.get("quality_stats", {})
                 qs.update(domain_rep_stats)
                 report["quality_stats"] = qs
-                self.supabase.table("discovery_runs").update(
-                    {"summary_report": report}
-                ).eq("id", self._current_run_id).execute()
+                await self.db.execute(
+                    sa_update(DiscoveryRun)
+                    .where(DiscoveryRun.id == _run_id)
+                    .values(summary_report=report)
+                )
+                await self.db.flush()
         except Exception as e:
             logger.debug(f"Failed to persist domain reputation stats: {e}")
 
@@ -2554,22 +2609,20 @@ class DiscoveryService:
         """
         try:
             # Get blocked topics from database
-            result = (
-                self.supabase.table("discovery_blocks")
-                .select("topic_name, block_type, keywords")
-                .eq("is_active", True)
-                .execute()
+            result_blocks = await self.db.execute(
+                select(DiscoveryBlock).where(DiscoveryBlock.is_active == True)
             )
+            blocks = result_blocks.scalars().all()
 
-            if not result.data:
+            if not blocks:
                 return sources, 0
 
             blocked_keywords = set()
-            for block in result.data:
-                keywords = block.get("keywords", [])
+            for block in blocks:
+                keywords = block.keywords or []
                 if isinstance(keywords, list):
                     blocked_keywords.update(kw.lower() for kw in keywords)
-                if topic := block.get("topic_name", ""):
+                if topic := (block.topic_name or ""):
                     blocked_keywords.add(topic.lower())
 
             if not blocked_keywords:
@@ -2632,15 +2685,14 @@ class DiscoveryService:
 
         # Pre-fetch existing card names for name-based matching
         try:
-            existing_cards = (
-                self.supabase.table("cards")
-                .select("id, name, summary")
-                .neq("review_status", "rejected")
-                .execute()
+            result_cards = await self.db.execute(
+                select(Card).where(Card.review_status != "rejected")
             )
-            card_name_map = (
-                {c["id"]: c for c in existing_cards.data} if existing_cards.data else {}
-            )
+            existing_card_objs = result_cards.scalars().all()
+            card_name_map = {
+                str(c.id): {"id": str(c.id), "name": c.name, "summary": c.summary}
+                for c in existing_card_objs
+            }
             logger.info(f"Loaded {len(card_name_map)} existing cards for deduplication")
         except Exception as e:
             logger.warning(f"Could not load existing cards for name matching: {e}")
@@ -2656,14 +2708,12 @@ class DiscoveryService:
                 )
 
                 # STEP 1: Check for existing URL first
-                url_check = (
-                    self.supabase.table("sources")
-                    .select("id")
-                    .eq("url", source.raw.url)
-                    .execute()
+                url_result = await self.db.execute(
+                    select(Source.id).where(Source.url == source.raw.url)
                 )
+                url_existing = url_result.scalars().first()
 
-                if url_check.data:
+                if url_existing:
                     duplicate_count += 1
                     logger.info(f"URL duplicate found: {source.raw.url[:60]}")
                     if source.discovered_source_id:
@@ -2701,17 +2751,15 @@ class DiscoveryService:
 
                 # STEP 3: Vector similarity search against existing cards
                 try:
-                    match_result = self.supabase.rpc(
-                        "find_similar_cards",
-                        {
-                            "query_embedding": source.embedding,
-                            "match_threshold": config.weak_match_threshold,
-                            "match_count": 5,  # Get more candidates for better matching
-                        },
-                    ).execute()
+                    match_data = await vector_search_cards(
+                        self.db,
+                        query_embedding=source.embedding,
+                        match_threshold=config.weak_match_threshold,
+                        match_count=5,
+                    )
 
-                    if match_result.data:
-                        top_match = match_result.data[0]
+                    if match_data:
+                        top_match = match_data[0]
                         similarity = top_match.get("similarity", 0)
 
                         if similarity >= config.similarity_threshold:
@@ -2732,20 +2780,19 @@ class DiscoveryService:
                                 )
                         elif similarity >= config.weak_match_threshold:
                             # Weak match - use LLM to decide (biased toward enrichment)
-                            card = (
-                                self.supabase.table("cards")
-                                .select("name, summary")
-                                .eq("id", top_match["id"])
-                                .single()
-                                .execute()
+                            card_result_q = await self.db.execute(
+                                select(Card).where(
+                                    Card.id == uuid.UUID(top_match["id"])
+                                )
                             )
+                            card_obj = card_result_q.scalar_one_or_none()
 
-                            if card.data:
+                            if card_obj:
                                 decision = await self.ai_service.check_card_match(
                                     source_summary=source.analysis.summary,
                                     source_card_name=source.analysis.suggested_card_name,
-                                    existing_card_name=card.data["name"],
-                                    existing_card_summary=card.data.get("summary", ""),
+                                    existing_card_name=card_obj.name,
+                                    existing_card_summary=card_obj.summary or "",
                                 )
 
                                 # Lower threshold from 0.7 to 0.6 - prefer enrichment
@@ -2754,7 +2801,7 @@ class DiscoveryService:
                                     and decision.get("confidence", 0) >= 0.6
                                 ):
                                     logger.info(
-                                        f"LLM MATCH: '{suggested_name}' -> '{card.data['name']}' "
+                                        f"LLM MATCH: '{suggested_name}' -> '{card_obj.name}' "
                                         f"(vector: {similarity:.3f}, llm_conf: {decision.get('confidence', 0):.2f}) - ENRICHING"
                                     )
                                     enrichment_candidates.append(
@@ -2769,7 +2816,7 @@ class DiscoveryService:
                                         )
                                 else:
                                     logger.info(
-                                        f"LLM NO MATCH: '{suggested_name}' vs '{card.data['name']}' "
+                                        f"LLM NO MATCH: '{suggested_name}' vs '{card_obj.name}' "
                                         f"(reason: {decision.get('reasoning', 'unknown')[:80]}) - NEW CONCEPT"
                                     )
                                     new_concept_candidates.append(source)
@@ -2804,10 +2851,8 @@ class DiscoveryService:
                             )
 
                 except Exception as e:
-                    # Vector search RPC failed - use Python fallback
-                    logger.warning(
-                        f"Vector search RPC failed for '{suggested_name}': {e}"
-                    )
+                    # Vector search failed - use Python fallback
+                    logger.warning(f"Vector search failed for '{suggested_name}': {e}")
                     logger.info("Falling back to Python-based similarity search...")
 
                     # Python fallback: fetch cards with embeddings and calculate similarity locally
@@ -2870,30 +2915,26 @@ class DiscoveryService:
         for source in sources:
             try:
                 # Check for existing URL first
-                url_check = (
-                    self.supabase.table("sources")
-                    .select("id")
-                    .eq("url", source.raw.url)
-                    .execute()
+                url_result = await self.db.execute(
+                    select(Source.id).where(Source.url == source.raw.url)
                 )
+                url_existing = url_result.scalars().first()
 
-                if url_check.data:
+                if url_existing:
                     duplicate_count += 1
                     continue
 
                 # Vector similarity search against existing cards
                 try:
-                    match_result = self.supabase.rpc(
-                        "find_similar_cards",
-                        {
-                            "query_embedding": source.embedding,
-                            "match_threshold": config.weak_match_threshold,
-                            "match_count": 3,
-                        },
-                    ).execute()
+                    match_data = await vector_search_cards(
+                        self.db,
+                        query_embedding=source.embedding,
+                        match_threshold=config.weak_match_threshold,
+                        match_count=3,
+                    )
 
-                    if match_result.data:
-                        top_match = match_result.data[0]
+                    if match_data:
+                        top_match = match_data[0]
                         similarity = top_match.get("similarity", 0)
 
                         if similarity >= config.similarity_threshold:
@@ -2903,23 +2944,22 @@ class DiscoveryService:
                             )
                         elif similarity >= config.weak_match_threshold:
                             # Weak match - use LLM to decide
-                            card = (
-                                self.supabase.table("cards")
-                                .select("name, summary")
-                                .eq("id", top_match["id"])
-                                .single()
-                                .execute()
+                            card_result_q = await self.db.execute(
+                                select(Card).where(
+                                    Card.id == uuid.UUID(top_match["id"])
+                                )
                             )
+                            card_obj = card_result_q.scalar_one_or_none()
 
-                            if card.data:
+                            if card_obj:
                                 decision = await self.ai_service.check_card_match(
                                     source_summary=source.analysis.summary,
                                     source_card_name=source.analysis.suggested_card_name,
-                                    existing_card_name=card.data["name"],
-                                    existing_card_summary=card.data.get("summary", ""),
+                                    existing_card_name=card_obj.name,
+                                    existing_card_summary=card_obj.summary or "",
                                 )
                                 # Estimate tokens for card match check
-                                input_text = f"{source.analysis.summary} {source.analysis.suggested_card_name} {card.data['name']} {card.data.get('summary', '')}"
+                                input_text = f"{source.analysis.summary} {source.analysis.suggested_card_name} {card_obj.name} {card_obj.summary or ''}"
                                 total_tokens += (
                                     len(input_text) // 4 + 100
                                 )  # input + output estimate
@@ -3163,7 +3203,7 @@ class DiscoveryService:
         story_cluster_count = 0
         if all_stored_source_ids:
             try:
-                cluster_result = cluster_sources(self.supabase, all_stored_source_ids)
+                cluster_result = cluster_sources(self.db, all_stored_source_ids)
                 story_cluster_count = cluster_result.get("cluster_count", 0)
                 logger.info(
                     f"Story clustering: {len(all_stored_source_ids)} sources -> "
@@ -3342,8 +3382,8 @@ class DiscoveryService:
         slug = "-".join(slug.split())[:50]
 
         # Ensure unique slug
-        existing = self.supabase.table("cards").select("id").eq("slug", slug).execute()
-        if existing.data:
+        slug_result = await self.db.execute(select(Card.id).where(Card.slug == slug))
+        if slug_result.scalars().first():
             slug = f"{slug}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
 
         # Convert stage number to stage_id (foreign key)
@@ -3351,7 +3391,7 @@ class DiscoveryService:
 
         goal_id = convert_goal_id(analysis.goals[0]) if analysis.goals else None
         try:
-            now = datetime.now(timezone.utc).isoformat()
+            now = datetime.now(timezone.utc)
             ai_confidence = None
             if confidence is not None:
                 try:
@@ -3359,78 +3399,77 @@ class DiscoveryService:
                 except Exception:
                     ai_confidence = None
 
-            result = (
-                self.supabase.table("cards")
-                .insert(
-                    {
-                        "name": analysis.suggested_card_name,
-                        "slug": slug,
-                        "summary": analysis.summary,
-                        "horizon": analysis.horizon,
-                        "stage_id": stage_id,  # Use mapped stage_id, not integer
-                        "pillar_id": (
-                            convert_pillar_id(analysis.pillars[0])
-                            if analysis.pillars
-                            else None
-                        ),
-                        "goal_id": goal_id,  # Use converted goal_id
-                        # Scoring (4-dimensional: Impact, Velocity, Novelty, Risk)
-                        "maturity_score": int(analysis.credibility * 20),
-                        "novelty_score": int(analysis.novelty * 20),
-                        "impact_score": int(analysis.impact * 20),
-                        "relevance_score": int(analysis.relevance * 20),
-                        "velocity_score": int(
-                            analysis.velocity * 10
-                        ),  # 1-10 scale to 0-100
-                        "risk_score": int(analysis.risk * 10),  # 1-10 scale to 0-100
-                        "status": "draft",  # New cards start as draft (review queue)
-                        "review_status": "pending_review",
-                        "discovered_at": now,
-                        "discovery_run_id": run_id,
-                        "ai_confidence": ai_confidence,
-                        "discovery_metadata": {
-                            "source_url": source.raw.url,
-                            "source_title": source.raw.title,
-                            "source_name": source.raw.source_name,
-                        },
-                        # Note: removed discovery_source - column doesn't exist in schema
-                        "created_by": self.triggered_by_user_id,
-                        "created_at": now,
-                        "updated_at": now,
-                    }
-                )
-                .execute()
+            card_obj = Card(
+                name=analysis.suggested_card_name,
+                slug=slug,
+                summary=analysis.summary,
+                horizon=analysis.horizon,
+                stage_id=stage_id,
+                pillar_id=(
+                    convert_pillar_id(analysis.pillars[0]) if analysis.pillars else None
+                ),
+                goal_id=goal_id,
+                maturity_score=int(analysis.credibility * 20),
+                novelty_score=int(analysis.novelty * 20),
+                impact_score=int(analysis.impact * 20),
+                relevance_score=int(analysis.relevance * 20),
+                velocity_score=int(analysis.velocity * 10),
+                risk_score=int(analysis.risk * 10),
+                status="draft",
+                review_status="pending_review",
+                discovered_at=now,
+                discovery_run_id=(
+                    uuid.UUID(run_id) if isinstance(run_id, str) else run_id
+                ),
+                ai_confidence=ai_confidence,
+                discovery_metadata={
+                    "source_url": source.raw.url,
+                    "source_title": source.raw.title,
+                    "source_name": source.raw.source_name,
+                },
+                created_by=(
+                    uuid.UUID(self.triggered_by_user_id)
+                    if self.triggered_by_user_id
+                    else None
+                ),
+                created_at=now,
+                updated_at=now,
+            )
+            self.db.add(card_obj)
+            await self.db.flush()
+            await self.db.refresh(card_obj)
+
+            card_id = str(card_obj.id)
+
+            # Store embedding on the card for Related Trends feature
+            try:
+                if source.embedding:
+                    await self.db.execute(
+                        sa_update(Card)
+                        .where(Card.id == card_obj.id)
+                        .values(embedding=source.embedding)
+                    )
+                else:
+                    # Generate fresh embedding from card text
+                    embed_text = f"{analysis.suggested_card_name} {analysis.summary}"
+                    embedding = await self.ai_service.generate_embedding(embed_text)
+                    await self.db.execute(
+                        sa_update(Card)
+                        .where(Card.id == card_obj.id)
+                        .values(embedding=embedding)
+                    )
+                await self.db.flush()
+            except Exception as e:
+                logger.warning(f"Failed to store embedding on card {card_id}: {e}")
+
+            # Create timeline event
+            await self._create_timeline_event(
+                card_id=card_id,
+                event_type="discovered",
+                description="Card discovered via automated scan",
             )
 
-            if result.data:
-                card_id = result.data[0]["id"]
-
-                # Store embedding on the card for Related Trends feature
-                try:
-                    if source.embedding:
-                        self.supabase.table("cards").update(
-                            {"embedding": source.embedding}
-                        ).eq("id", card_id).execute()
-                    else:
-                        # Generate fresh embedding from card text
-                        embed_text = (
-                            f"{analysis.suggested_card_name} {analysis.summary}"
-                        )
-                        embedding = await self.ai_service.generate_embedding(embed_text)
-                        self.supabase.table("cards").update(
-                            {"embedding": embedding}
-                        ).eq("id", card_id).execute()
-                except Exception as e:
-                    logger.warning(f"Failed to store embedding on card {card_id}: {e}")
-
-                # Create timeline event
-                await self._create_timeline_event(
-                    card_id=card_id,
-                    event_type="discovered",
-                    description="Card discovered via automated scan",
-                )
-
-                return card_id
+            return card_id
 
         except Exception as e:
             logger.error(f"Failed to create card: {e}")
@@ -3459,7 +3498,7 @@ class DiscoveryService:
             from app.deduplication import check_duplicate
 
             dedup_result = await check_duplicate(
-                supabase=self.supabase,
+                db=self.db,
                 card_id=card_id,
                 content=source.raw.content or "",
                 url=source.raw.url or "",
@@ -3477,8 +3516,8 @@ class DiscoveryService:
             # Look up domain reputation ID for this source (Task 2.7)
             _domain_reputation_id = None
             try:
-                if _rep := domain_reputation_service.get_reputation(
-                    self.supabase, source.raw.url or ""
+                if _rep := await domain_reputation_service.get_reputation(
+                    self.db, source.raw.url or ""
                 ):
                     _domain_reputation_id = _rep.get("id")
             except Exception:
@@ -3486,76 +3525,81 @@ class DiscoveryService:
 
             from app.source_quality import extract_domain
 
-            source_record = {
-                "card_id": card_id,
-                "url": source.raw.url,
-                "title": (source.raw.title or "Untitled")[:500],
-                "publication": (
+            _is_peer_reviewed = (
+                False
+                if getattr(source.raw, "is_preprint", False)
+                else (
+                    True
+                    if getattr(source.raw, "source_type", None) == "academic"
+                    else None
+                )
+            )
+
+            source_obj = Source(
+                card_id=uuid.UUID(card_id) if isinstance(card_id, str) else card_id,
+                url=source.raw.url,
+                title=(source.raw.title or "Untitled")[:500],
+                publication=(
                     (source.raw.source_name or "")[:200]
                     if source.raw.source_name
                     else None
                 ),
-                "full_text": (
-                    source.raw.content[:10000] if source.raw.content else None
-                ),
-                "ai_summary": (source.analysis.summary if source.analysis else None),
-                "key_excerpts": (
+                full_text=(source.raw.content[:10000] if source.raw.content else None),
+                ai_summary=(source.analysis.summary if source.analysis else None),
+                key_excerpts=(
                     source.analysis.key_excerpts[:5]
                     if source.analysis and source.analysis.key_excerpts
                     else []
                 ),
-                "relevance_to_card": (
+                relevance_to_card=(
                     source.analysis.relevance if source.analysis else 0.5
                 ),
-                # Pre-print / peer-review status (Task 2.6)
-                "is_peer_reviewed": (
-                    False
-                    if getattr(source.raw, "is_preprint", False)
-                    else (
-                        True
-                        if getattr(source.raw, "source_type", None) == "academic"
-                        else None
-                    )
-                ),
-                "api_source": "discovery_scan",
-                "domain": extract_domain(source.raw.url or ""),
-                "ingested_at": datetime.now(timezone.utc).isoformat(),
-            }
+                is_peer_reviewed=_is_peer_reviewed,
+                api_source="discovery_scan",
+                domain=extract_domain(source.raw.url or ""),
+                ingested_at=datetime.now(timezone.utc),
+            )
 
             # If related (0.85-0.95 similarity), mark duplicate_of
             if (
                 dedup_result.action == "store_as_related"
                 and dedup_result.duplicate_of_id
             ):
-                source_record["duplicate_of"] = dedup_result.duplicate_of_id
+                source_obj.duplicate_of = (
+                    uuid.UUID(dedup_result.duplicate_of_id)
+                    if isinstance(dedup_result.duplicate_of_id, str)
+                    else dedup_result.duplicate_of_id
+                )
 
             # Add domain_reputation_id if available (Task 2.7)
             if _domain_reputation_id:
-                source_record["domain_reputation_id"] = _domain_reputation_id
+                source_obj.domain_reputation_id = (
+                    uuid.UUID(_domain_reputation_id)
+                    if isinstance(_domain_reputation_id, str)
+                    else _domain_reputation_id
+                )
 
-            result = self.supabase.table("sources").insert(source_record).execute()
+            self.db.add(source_obj)
+            await self.db.flush()
+            await self.db.refresh(source_obj)
+            source_id = str(source_obj.id)
 
-            if result.data:
-                source_id = result.data[0]["id"]
+            # Compute and store source quality score (non-blocking)
+            try:
+                from app.source_quality import compute_and_store_quality_score
 
-                # Compute and store source quality score (non-blocking)
-                try:
-                    from app.source_quality import compute_and_store_quality_score
+                await compute_and_store_quality_score(
+                    self.db,
+                    source_id,
+                    analysis=(source.analysis if hasattr(source, "analysis") else None),
+                    triage=source.triage if hasattr(source, "triage") else None,
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to compute quality score for source {source_id}: {e}"
+                )
 
-                    compute_and_store_quality_score(
-                        self.supabase,
-                        source_id,
-                        analysis=(
-                            source.analysis if hasattr(source, "analysis") else None
-                        ),
-                        triage=source.triage if hasattr(source, "triage") else None,
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to compute quality score for source {source_id}: {e}"
-                    )
-
-                return source_id
+            return source_id
 
         except Exception as e:
             logger.error(f"Failed to store source: {e}")
@@ -3570,14 +3614,18 @@ class DiscoveryService:
             card_id: Card to approve
         """
         try:
-            self.supabase.table("cards").update(
-                {
-                    "status": "active",
-                    "review_status": "active",
-                    "auto_approved_at": datetime.now(timezone.utc).isoformat(),
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                }
-            ).eq("id", card_id).execute()
+            _cid = uuid.UUID(card_id) if isinstance(card_id, str) else card_id
+            await self.db.execute(
+                sa_update(Card)
+                .where(Card.id == _cid)
+                .values(
+                    status="active",
+                    review_status="active",
+                    auto_approved_at=datetime.now(timezone.utc),
+                    updated_at=datetime.now(timezone.utc),
+                )
+            )
+            await self.db.flush()
 
             await self._create_timeline_event(
                 card_id=card_id,
@@ -3600,36 +3648,45 @@ class DiscoveryService:
         try:
             from app.alignment_service import AlignmentService
 
+            _cid = uuid.UUID(card_id) if isinstance(card_id, str) else card_id
+
             # Fetch the card record
-            card_resp = (
-                self.supabase.table("cards")
-                .select("*")
-                .eq("id", card_id)
-                .limit(1)
-                .execute()
-            )
-            if not card_resp.data:
+            card_result_q = await self.db.execute(select(Card).where(Card.id == _cid))
+            card_obj = card_result_q.scalar_one_or_none()
+            if not card_obj:
                 return
-            card = card_resp.data[0]
+            # Convert to dict for alignment service compatibility
+            card = {c.key: getattr(card_obj, c.key) for c in Card.__table__.columns}
+            card["id"] = str(card_obj.id)
 
             # Fetch all active workstreams for this user
-            ws_resp = (
-                self.supabase.table("workstreams")
-                .select("*")
-                .eq("is_active", True)
-                .eq("user_id", self.triggered_by_user_id)
-                .execute()
+            _uid = (
+                uuid.UUID(self.triggered_by_user_id)
+                if self.triggered_by_user_id
+                and isinstance(self.triggered_by_user_id, str)
+                else self.triggered_by_user_id
             )
-            workstreams = ws_resp.data or []
-            if not workstreams:
+            ws_result = await self.db.execute(
+                select(Workstream).where(
+                    and_(Workstream.is_active == True, Workstream.user_id == _uid)
+                )
+            )
+            workstream_objs = ws_result.scalars().all()
+            if not workstream_objs:
                 return
 
             alignment_svc = AlignmentService()
             best_score = 0
             auto_added_count = 0
 
-            for ws in workstreams:
+            for ws_obj in workstream_objs:
                 try:
+                    # Convert to dict for alignment service compatibility
+                    ws = {
+                        c.key: getattr(ws_obj, c.key)
+                        for c in Workstream.__table__.columns
+                    }
+                    ws["id"] = str(ws_obj.id)
                     result = await alignment_svc.score_grant_against_program(card, ws)
                     if result.overall_score > best_score:
                         best_score = result.overall_score
@@ -3637,49 +3694,54 @@ class DiscoveryService:
                     # Auto-add to workstream pipeline if score >= 60
                     if result.overall_score >= 60:
                         # Check if already present
-                        existing = (
-                            self.supabase.table("workstream_cards")
-                            .select("id")
-                            .eq("workstream_id", ws["id"])
-                            .eq("card_id", card_id)
+                        existing_wc = await self.db.execute(
+                            select(WorkstreamCard.id)
+                            .where(
+                                and_(
+                                    WorkstreamCard.workstream_id == ws_obj.id,
+                                    WorkstreamCard.card_id == _cid,
+                                )
+                            )
                             .limit(1)
-                            .execute()
                         )
-                        if not existing.data:
-                            now = datetime.now(timezone.utc).isoformat()
-                            self.supabase.table("workstream_cards").insert(
-                                {
-                                    "workstream_id": ws["id"],
-                                    "card_id": card_id,
-                                    "added_by": self.triggered_by_user_id,
-                                    "added_at": now,
-                                    "status": "discovered",
-                                    "position": 0,
-                                    "added_from": "auto",
-                                    "updated_at": now,
-                                }
-                            ).execute()
+                        if not existing_wc.scalars().first():
+                            now = datetime.now(timezone.utc)
+                            wc_obj = WorkstreamCard(
+                                workstream_id=ws_obj.id,
+                                card_id=_cid,
+                                added_by=_uid,
+                                added_at=now,
+                                status="discovered",
+                                position=0,
+                                added_from="auto",
+                                updated_at=now,
+                            )
+                            self.db.add(wc_obj)
+                            await self.db.flush()
                             auto_added_count += 1
                             logger.info(
                                 "Alignment auto-add: card %s -> workstream %s "
                                 "(score=%d)",
                                 card_id,
-                                ws["id"],
+                                str(ws_obj.id),
                                 result.overall_score,
                             )
                 except Exception as ws_err:
                     logger.warning(
                         "Alignment scoring failed for card %s vs workstream %s: %s",
                         card_id,
-                        ws.get("id", "?"),
+                        str(ws_obj.id) if ws_obj else "?",
                         ws_err,
                     )
 
             # Store highest alignment score on the card
             if best_score > 0:
-                self.supabase.table("cards").update({"alignment_score": best_score}).eq(
-                    "id", card_id
-                ).execute()
+                await self.db.execute(
+                    sa_update(Card)
+                    .where(Card.id == _cid)
+                    .values(alignment_score=best_score)
+                )
+                await self.db.flush()
                 logger.info(
                     "Alignment score stored for card %s: %d (auto-added to %d workstreams)",
                     card_id,
@@ -3704,17 +3766,21 @@ class DiscoveryService:
     ) -> None:
         """Create a timeline event for a card."""
         try:
-            self.supabase.table("card_timeline").insert(
-                {
-                    "card_id": card_id,
-                    "event_type": event_type,
-                    "title": event_type.replace("_", " ").title(),
-                    "description": description,
-                    "triggered_by_source_id": source_id,
-                    "metadata": metadata or {},
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                }
-            ).execute()
+            tl_obj = CardTimeline(
+                card_id=uuid.UUID(card_id) if isinstance(card_id, str) else card_id,
+                event_type=event_type,
+                title=event_type.replace("_", " ").title(),
+                description=description,
+                triggered_by_source_id=(
+                    uuid.UUID(source_id)
+                    if source_id and isinstance(source_id, str)
+                    else source_id
+                ),
+                metadata_=metadata or {},
+                created_at=datetime.now(timezone.utc),
+            )
+            self.db.add(tl_obj)
+            await self.db.flush()
         except Exception as e:
             logger.warning(f"Failed to create timeline event: {e}")
 
@@ -3731,20 +3797,17 @@ class DiscoveryService:
             result: Discovery result
         """
         try:
+            _run_id = uuid.UUID(run_id) if isinstance(run_id, str) else run_id
+
             # Preserve any existing fields (e.g., initial config + live progress)
             # that may have been written into `summary_report` earlier in the run.
             existing_report: Dict[str, Any] = {}
             try:
-                existing = (
-                    self.supabase.table("discovery_runs")
-                    .select("summary_report")
-                    .eq("id", run_id)
-                    .single()
-                    .execute()
+                result_dr = await self.db.execute(
+                    select(DiscoveryRun).where(DiscoveryRun.id == _run_id)
                 )
-                raw_report = (
-                    existing.data.get("summary_report") if existing.data else None
-                )
+                dr_row = result_dr.scalar_one_or_none()
+                raw_report = dr_row.summary_report if dr_row else None
                 if isinstance(raw_report, dict):
                     existing_report = raw_report
             except Exception:
@@ -3765,34 +3828,35 @@ class DiscoveryService:
 
             updated_report = existing_report | final_report
 
-            self.supabase.table("discovery_runs").update(
-                {
-                    "status": result.status.value,
-                    "completed_at": (
-                        result.completed_at.isoformat() if result.completed_at else None
-                    ),
-                    "queries_generated": result.queries_generated,
-                    "sources_found": result.sources_discovered,
-                    "sources_relevant": result.sources_triaged,
-                    "cards_created": (
+            await self.db.execute(
+                sa_update(DiscoveryRun)
+                .where(DiscoveryRun.id == _run_id)
+                .values(
+                    status=result.status.value,
+                    completed_at=result.completed_at,
+                    queries_generated=result.queries_generated,
+                    sources_found=result.sources_discovered,
+                    sources_relevant=result.sources_triaged,
+                    cards_created=(
                         len(result.cards_created)
                         if isinstance(result.cards_created, list)
                         else result.cards_created
                     ),
-                    "cards_enriched": (
+                    cards_enriched=(
                         len(result.cards_enriched)
                         if isinstance(result.cards_enriched, list)
                         else result.cards_enriched
                     ),
-                    "cards_deduplicated": result.sources_duplicate,
-                    "estimated_cost": result.estimated_cost,
-                    "error_message": result.errors[0] if result.errors else None,
-                    "error_details": (
+                    cards_deduplicated=result.sources_duplicate,
+                    estimated_cost=result.estimated_cost,
+                    error_message=result.errors[0] if result.errors else None,
+                    error_details=(
                         {"errors": result.errors} if result.errors else None
                     ),
-                    "summary_report": updated_report,
-                }
-            ).eq("id", run_id).execute()
+                    summary_report=updated_report,
+                )
+            )
+            await self.db.flush()
         except Exception as e:
             logger.warning(f"Failed to update run record: {e}")
 
@@ -4014,20 +4078,20 @@ class DiscoveryService:
 
 
 async def run_weekly_discovery(
-    supabase: Client, openai_client: openai.OpenAI, pillars: Optional[List[str]] = None
+    db: AsyncSession, openai_client: openai.OpenAI, pillars: Optional[List[str]] = None
 ) -> DiscoveryResult:
     """
     Convenience function to run weekly discovery scan.
 
     Args:
-        supabase: Supabase client
+        db: SQLAlchemy async session
         openai_client: OpenAI client
         pillars: Optional list of pillar codes to filter
 
     Returns:
         DiscoveryResult
     """
-    service = DiscoveryService(supabase, openai_client)
+    service = DiscoveryService(db, openai_client)
     config = DiscoveryConfig(
         max_queries_per_run=100,
         max_sources_total=500,
@@ -4038,20 +4102,20 @@ async def run_weekly_discovery(
 
 
 async def run_pillar_discovery(
-    supabase: Client, openai_client: openai.OpenAI, pillar_code: str
+    db: AsyncSession, openai_client: openai.OpenAI, pillar_code: str
 ) -> DiscoveryResult:
     """
     Run discovery for a specific pillar.
 
     Args:
-        supabase: Supabase client
+        db: SQLAlchemy async session
         openai_client: OpenAI client
         pillar_code: Pillar code (e.g., 'CH', 'MC')
 
     Returns:
         DiscoveryResult
     """
-    service = DiscoveryService(supabase, openai_client)
+    service = DiscoveryService(db, openai_client)
     config = DiscoveryConfig(
         max_queries_per_run=25,
         max_sources_total=100,

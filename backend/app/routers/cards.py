@@ -1,22 +1,27 @@
-"""Cards router -- core CRUD, search, similar, blocked-topics, filter-preview."""
+"""Cards router -- core CRUD, search, similar, blocked-topics, filter-preview.
 
-import asyncio
+Migrated from Supabase PostgREST to SQLAlchemy 2.0 async.
+"""
+
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional
+from datetime import date, datetime, timezone
+from decimal import Decimal
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import select, func, and_, or_, text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import (
-    supabase,
-    get_current_user,
+    get_db,
+    get_current_user_hardcoded,
     _safe_error,
     azure_openai_embedding_client,
     get_embedding_deployment,
 )
-from app.models.core import Card, CardCreate, SimilarCard, BlockedTopic
+from app.models.core import Card as CardSchema, CardCreate, SimilarCard, BlockedTopic
 from app.models.search import (
     AdvancedSearchRequest,
     AdvancedSearchResponse,
@@ -30,6 +35,10 @@ from app.models.history import (
     CardComparisonResponse,
 )
 from app.models.workstream import FilterPreviewRequest, FilterPreviewResponse
+from app.models.db.card import Card
+from app.models.db.card_extras import CardScoreHistory, CardTimeline
+from app.models.db.discovery import DiscoveryBlock
+from app.helpers.db_utils import vector_search_cards
 from app.helpers.search_utils import (
     _apply_search_filters,
     _apply_score_filters,
@@ -41,12 +50,46 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["cards"])
 
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+_SKIP_COLUMNS = {"embedding", "search_vector"}
+
+
+def _card_to_dict(card: Card) -> dict[str, Any]:
+    """Convert a Card ORM instance to a JSON-safe dictionary.
+
+    Handles UUID -> str, datetime -> ISO string, and Decimal -> float
+    conversions so the result can be returned directly from a FastAPI
+    endpoint.
+    """
+    result: dict[str, Any] = {}
+    for col in Card.__table__.columns:
+        if col.name in _SKIP_COLUMNS:
+            continue
+        value = getattr(card, col.name, None)
+        if value is None:
+            result[col.name] = None
+        elif isinstance(value, uuid.UUID):
+            result[col.name] = str(value)
+        elif isinstance(value, datetime):
+            result[col.name] = value.isoformat()
+        elif isinstance(value, date):
+            result[col.name] = value.isoformat()
+        elif isinstance(value, Decimal):
+            result[col.name] = float(value)
+        else:
+            result[col.name] = value
+    return result
+
+
 # ============================================================================
 # Cards endpoints
 # ============================================================================
 
 
-@router.get("/cards", response_model=List[Card])
+@router.get("/cards", response_model=List[CardSchema])
 async def get_cards(
     limit: int = 20,
     offset: int = 0,
@@ -54,32 +97,40 @@ async def get_cards(
     stage_id: Optional[str] = None,
     horizon: Optional[str] = None,
     search: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
 ):
     """Get cards with filtering"""
-    query = supabase.table("cards").select("*").eq("status", "active")
+    try:
+        stmt = select(Card).where(Card.status == "active")
 
-    if pillar_id:
-        query = query.eq("pillar_id", pillar_id)
-    if stage_id:
-        query = query.eq("stage_id", stage_id)
-    if horizon:
-        query = query.eq("horizon", horizon)
+        if pillar_id:
+            stmt = stmt.where(Card.pillar_id == pillar_id)
+        if stage_id:
+            stmt = stmt.where(Card.stage_id == stage_id)
+        if horizon:
+            stmt = stmt.where(Card.horizon == horizon)
 
-    response = (
-        query.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
-    )
+        stmt = stmt.order_by(Card.created_at.desc()).offset(offset).limit(limit)
 
-    return [Card(**card) for card in response.data]
+        result = await db.execute(stmt)
+        cards = result.scalars().all()
+
+        return [CardSchema(**_card_to_dict(c)) for c in cards]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=_safe_error("get_cards", e)) from e
 
 
 # NOTE: This route MUST be before /cards/{card_id} to avoid route matching issues
 @router.get("/cards/pending-review")
 async def get_pending_review_cards(
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_hardcoded),
     limit: int = 200,
     offset: int = 0,
     pillar_id: Optional[str] = None,
     sort: Optional[str] = Query(None, regex="^(confidence|date)$"),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get cards pending review.
@@ -88,32 +139,43 @@ async def get_pending_review_cards(
     Default sort: newest first (discovered_at desc), with confidence as tiebreaker.
     Use sort=confidence for confidence-first ordering.
     """
-    # Backward-compatible: include draft cards even if `review_status` wasn't set correctly.
-    query = (
-        supabase.table("cards")
-        .select("*")
-        .neq("review_status", "rejected")
-        .or_("review_status.in.(discovered,pending_review),status.eq.draft")
-    )
-
-    if pillar_id:
-        query = query.eq("pillar_id", pillar_id)
-
-    if sort == "confidence":
-        query = query.order("ai_confidence", desc=True).order(
-            "discovered_at", desc=True
-        )
-    else:
-        # Default: newest first
-        query = query.order("discovered_at", desc=True).order(
-            "ai_confidence", desc=True
+    try:
+        # Backward-compatible: include draft cards even if `review_status` wasn't set correctly.
+        stmt = select(Card).where(
+            Card.review_status != "rejected",
+            or_(
+                Card.review_status.in_(["discovered", "pending_review"]),
+                Card.status == "draft",
+            ),
         )
 
-    response = (
-        query.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
-    )
+        if pillar_id:
+            stmt = stmt.where(Card.pillar_id == pillar_id)
 
-    return response.data
+        if sort == "confidence":
+            stmt = stmt.order_by(
+                Card.ai_confidence.desc().nulls_last(),
+                Card.discovered_at.desc().nulls_last(),
+            )
+        else:
+            # Default: newest first
+            stmt = stmt.order_by(
+                Card.discovered_at.desc().nulls_last(),
+                Card.ai_confidence.desc().nulls_last(),
+            )
+
+        stmt = stmt.order_by(Card.created_at.desc()).offset(offset).limit(limit)
+
+        result = await db.execute(stmt)
+        cards = result.scalars().all()
+
+        return [_card_to_dict(c) for c in cards]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=_safe_error("get_pending_review_cards", e)
+        ) from e
 
 
 # NOTE: This route MUST be before /cards/{card_id} to avoid route matching issues
@@ -122,7 +184,8 @@ async def compare_cards(
     card_ids: str,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Compare two cards side-by-side with their historical data.
@@ -153,62 +216,98 @@ async def compare_cards(
 
     card_id_1, card_id_2 = ids
 
-    # Helper function to fetch all data for a single card (synchronous)
-    def fetch_card_comparison_data(card_id: str) -> CardComparisonItem:
-        # Fetch card data
-        card_response = (
-            supabase.table("cards")
-            .select(
-                "id, name, slug, summary, pillar_id, goal_id, stage_id, horizon, "
-                "maturity_score, velocity_score, novelty_score, impact_score, "
-                "relevance_score, risk_score, opportunity_score, created_at, updated_at"
+    try:
+
+        async def fetch_card_comparison_data(card_id: str) -> CardComparisonItem:
+            # Fetch card data
+            card_result = await db.execute(select(Card).where(Card.id == card_id))
+            card_obj = card_result.scalar_one_or_none()
+
+            if not card_obj:
+                raise HTTPException(
+                    status_code=404, detail=f"Card not found: {card_id}"
+                )
+
+            card_dict = _card_to_dict(card_obj)
+            card_data = CardData(
+                id=card_dict["id"],
+                name=card_dict["name"],
+                slug=card_dict["slug"],
+                summary=card_dict.get("summary"),
+                pillar_id=card_dict.get("pillar_id"),
+                goal_id=card_dict.get("goal_id"),
+                stage_id=card_dict.get("stage_id"),
+                horizon=card_dict.get("horizon"),
+                maturity_score=card_dict.get("maturity_score"),
+                velocity_score=(
+                    int(card_dict["velocity_score"])
+                    if card_dict.get("velocity_score") is not None
+                    else None
+                ),
+                novelty_score=card_dict.get("novelty_score"),
+                impact_score=card_dict.get("impact_score"),
+                relevance_score=card_dict.get("relevance_score"),
+                risk_score=card_dict.get("risk_score"),
+                opportunity_score=card_dict.get("opportunity_score"),
+                created_at=card_dict.get("created_at"),
+                updated_at=card_dict.get("updated_at"),
             )
-            .eq("id", card_id)
-            .execute()
-        )
 
-        if not card_response.data:
-            raise HTTPException(status_code=404, detail=f"Card not found: {card_id}")
-
-        card_data = CardData(**card_response.data[0])
-
-        # Fetch score history
-        score_query = (
-            supabase.table("card_score_history").select("*").eq("card_id", card_id)
-        )
-        if start_date:
-            score_query = score_query.gte("recorded_at", start_date.isoformat())
-        if end_date:
-            score_query = score_query.lte("recorded_at", end_date.isoformat())
-        score_response = score_query.order("recorded_at", desc=True).execute()
-
-        score_history = (
-            [ScoreHistory(**record) for record in score_response.data]
-            if score_response.data
-            else []
-        )
-
-        # Fetch stage history from card_timeline
-        stage_response = (
-            supabase.table("card_timeline")
-            .select(
-                "id, card_id, created_at, old_stage_id, new_stage_id, old_horizon, new_horizon, trigger, reason"
+            # Fetch score history
+            score_stmt = select(CardScoreHistory).where(
+                CardScoreHistory.card_id == card_id
             )
-            .eq("card_id", card_id)
-            .eq("event_type", "stage_changed")
-            .order("created_at", desc=True)
-            .execute()
-        )
+            if start_date:
+                score_stmt = score_stmt.where(
+                    CardScoreHistory.recorded_at >= start_date
+                )
+            if end_date:
+                score_stmt = score_stmt.where(CardScoreHistory.recorded_at <= end_date)
+            score_stmt = score_stmt.order_by(CardScoreHistory.recorded_at.desc())
 
-        stage_history = []
-        if stage_response.data:
-            for record in stage_response.data:
+            score_result = await db.execute(score_stmt)
+            score_rows = score_result.scalars().all()
+
+            score_history = [
+                ScoreHistory(
+                    id=str(row.id),
+                    card_id=str(row.card_id),
+                    recorded_at=row.recorded_at,
+                    maturity_score=row.maturity_score,
+                    velocity_score=row.velocity_score,
+                    novelty_score=row.novelty_score,
+                    impact_score=row.impact_score,
+                    relevance_score=row.relevance_score,
+                    risk_score=row.risk_score,
+                    opportunity_score=row.opportunity_score,
+                )
+                for row in score_rows
+            ]
+
+            # Fetch stage history from card_timeline
+            # Note: old_stage_id, new_stage_id, old_horizon, new_horizon, trigger,
+            # reason are DB columns not on the ORM model, so use raw SQL.
+            stage_sql = text(
+                """
+                SELECT id, card_id, created_at, old_stage_id, new_stage_id,
+                       old_horizon, new_horizon, trigger, reason
+                FROM card_timeline
+                WHERE card_id = :card_id
+                  AND event_type = 'stage_changed'
+                ORDER BY created_at DESC
+                """
+            )
+            stage_result = await db.execute(stage_sql, {"card_id": card_id})
+            stage_rows = stage_result.mappings().all()
+
+            stage_history = []
+            for record in stage_rows:
                 if record.get("new_stage_id") is None:
                     continue
                 stage_history.append(
                     StageHistory(
-                        id=record["id"],
-                        card_id=record["card_id"],
+                        id=str(record["id"]),
+                        card_id=str(record["card_id"]),
                         changed_at=record["created_at"],
                         old_stage_id=record.get("old_stage_id"),
                         new_stage_id=record["new_stage_id"],
@@ -219,16 +318,16 @@ async def compare_cards(
                     )
                 )
 
-        return CardComparisonItem(
-            card=card_data, score_history=score_history, stage_history=stage_history
-        )
+            return CardComparisonItem(
+                card=card_data,
+                score_history=score_history,
+                stage_history=stage_history,
+            )
 
-    # Fetch data for both cards in parallel using asyncio.gather with to_thread
-    try:
-        card1_data, card2_data = await asyncio.gather(
-            asyncio.to_thread(fetch_card_comparison_data, card_id_1),
-            asyncio.to_thread(fetch_card_comparison_data, card_id_2),
-        )
+        # Fetch data for both cards sequentially (sharing the same session)
+        card1_data = await fetch_card_comparison_data(card_id_1)
+        card2_data = await fetch_card_comparison_data(card_id_2)
+
     except HTTPException:
         raise
     except Exception as e:
@@ -242,43 +341,81 @@ async def compare_cards(
     )
 
 
-@router.get("/cards/{card_id}", response_model=Card)
-async def get_card(card_id: uuid.UUID):
+@router.get("/cards/{card_id}", response_model=CardSchema)
+async def get_card(
+    card_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
     """Get specific card"""
-    response = supabase.table("cards").select("*").eq("id", str(card_id)).execute()
-    if response.data:
-        return Card(**response.data[0])
-    else:
-        raise HTTPException(status_code=404, detail="Card not found")
+    try:
+        result = await db.execute(select(Card).where(Card.id == card_id))
+        card = result.scalar_one_or_none()
+        if card:
+            return CardSchema(**_card_to_dict(card))
+        else:
+            raise HTTPException(status_code=404, detail="Card not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=_safe_error("get_card", e)) from e
 
 
-@router.post("/cards", response_model=Card)
+@router.post("/cards", response_model=CardSchema)
 async def create_card(
-    card_data: CardCreate, current_user: dict = Depends(get_current_user)
+    card_data: CardCreate,
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
 ):
     """Create new card"""
-    # Generate slug from name
-    slug = card_data.name.lower().replace(" ", "-").replace(":", "").replace("/", "-")
+    try:
+        # Generate slug from name
+        slug = (
+            card_data.name.lower().replace(" ", "-").replace(":", "").replace("/", "-")
+        )
 
-    card_dict = card_data.dict()
-    card_dict.update(
-        {
-            "slug": slug,
-            "created_by": current_user["id"],
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }
-    )
+        now = datetime.now(timezone.utc)
 
-    response = supabase.table("cards").insert(card_dict).execute()
-    if response.data:
-        return Card(**response.data[0])
-    else:
-        raise HTTPException(status_code=400, detail="Failed to create card")
+        card_dict = card_data.dict()
+        new_card = Card(
+            name=card_dict["name"],
+            slug=slug,
+            summary=card_dict.get("summary"),
+            description=card_dict.get("description"),
+            pillar_id=card_dict.get("pillar_id"),
+            goal_id=card_dict.get("goal_id"),
+            anchor_id=card_dict.get("anchor_id"),
+            stage_id=card_dict.get("stage_id"),
+            horizon=card_dict.get("horizon"),
+            grant_type=card_dict.get("grant_type"),
+            funding_amount_min=card_dict.get("funding_amount_min"),
+            funding_amount_max=card_dict.get("funding_amount_max"),
+            deadline=card_dict.get("deadline"),
+            grantor=card_dict.get("grantor"),
+            category_id=card_dict.get("category_id"),
+            source_url=card_dict.get("source_url"),
+            created_by=current_user["id"],
+            created_at=now,
+            updated_at=now,
+        )
+
+        db.add(new_card)
+        await db.flush()
+        await db.refresh(new_card)
+
+        return CardSchema(**_card_to_dict(new_card))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=400, detail=_safe_error("create_card", e)
+        ) from e
 
 
 @router.post("/cards/search")
-async def search_cards(request: AdvancedSearchRequest):
+async def search_cards(
+    request: AdvancedSearchRequest,
+    db: AsyncSession = Depends(get_db),
+):
     """
     Advanced search for intelligence cards with filtering and vector similarity.
 
@@ -290,7 +427,7 @@ async def search_cards(request: AdvancedSearchRequest):
     Returns cards sorted by relevance with search metadata.
     """
     try:
-        results = []
+        results: list[dict[str, Any]] = []
         search_type = (
             "vector" if request.use_vector_search and request.query else "text"
         )
@@ -298,45 +435,33 @@ async def search_cards(request: AdvancedSearchRequest):
         # Vector search path
         if request.use_vector_search and request.query:
             try:
-                # Get embedding for search query (uses embedding client with specific API version)
+                # Get embedding for search query
                 embedding_response = azure_openai_embedding_client.embeddings.create(
                     model=get_embedding_deployment(), input=request.query
                 )
                 query_embedding = embedding_response.data[0].embedding
 
-                # Vector similarity search returns id, name, summary,
-                # pillar_id, horizon, similarity.  We hydrate the matched
-                # IDs with only the columns needed for SearchResultItem.
-                search_response = supabase.rpc(
-                    "find_similar_cards",
-                    {
-                        "query_embedding": query_embedding,
-                        "match_threshold": 0.5,
-                        "match_count": request.limit
-                        + request.offset
-                        + 100,  # Get extra for filtering
-                    },
-                ).execute()
+                # Vector similarity search
+                matched = await vector_search_cards(
+                    db,
+                    query_embedding,
+                    match_threshold=0.5,
+                    match_count=request.limit + request.offset + 100,
+                )
 
-                if matched := search_response.data or []:
+                if matched:
                     similarity_map = {
                         item["id"]: item.get("similarity", 0.0) for item in matched
                     }
                     matched_ids = list(similarity_map.keys())
-                    _SEARCH_HYDRATE_COLS = (
-                        "id, name, slug, summary, description, pillar_id, goal_id, "
-                        "anchor_id, stage_id, horizon, novelty_score, maturity_score, "
-                        "impact_score, relevance_score, velocity_score, risk_score, "
-                        "opportunity_score, status, created_at, updated_at, "
-                        "signal_quality_score, top25_relevance, origin, is_exploratory"
+
+                    # Hydrate with full card data
+                    hydrate_result = await db.execute(
+                        select(Card).where(Card.id.in_(matched_ids))
                     )
-                    cards_response = (
-                        supabase.table("cards")
-                        .select(_SEARCH_HYDRATE_COLS)
-                        .in_("id", matched_ids)
-                        .execute()
-                    )
-                    results = cards_response.data or []
+                    hydrated_cards = hydrate_result.scalars().all()
+
+                    results = [_card_to_dict(c) for c in hydrated_cards]
                     for item in results:
                         item["search_relevance"] = similarity_map.get(item["id"], 0.0)
                     # Preserve similarity ordering
@@ -354,18 +479,22 @@ async def search_cards(request: AdvancedSearchRequest):
         # Text search path (or fallback)
         if search_type == "text" or (not request.use_vector_search and request.query):
             search_type = "text"
-            query_builder = supabase.table("cards").select("*")
+            stmt = select(Card)
 
             if request.query:
                 # Text search on name and summary
-                query_builder = query_builder.or_(
-                    f"name.ilike.%{request.query}%,summary.ilike.%{request.query}%"
+                pattern = f"%{request.query}%"
+                stmt = stmt.where(
+                    or_(
+                        Card.name.ilike(pattern),
+                        Card.summary.ilike(pattern),
+                    )
                 )
 
-            response = query_builder.limit(
-                request.limit + request.offset + 100
-            ).execute()
-            results = response.data or []
+            stmt = stmt.limit(request.limit + request.offset + 100)
+            text_result = await db.execute(stmt)
+            text_cards = text_result.scalars().all()
+            results = [_card_to_dict(c) for c in text_cards]
 
             # Add placeholder relevance for text search
             for item in results:
@@ -374,13 +503,10 @@ async def search_cards(request: AdvancedSearchRequest):
         # If no query provided, fetch all cards (for filter-only searches)
         if not request.query:
             search_type = "filter"
-            response = (
-                supabase.table("cards")
-                .select("*")
-                .limit(request.limit + request.offset + 100)
-                .execute()
-            )
-            results = response.data or []
+            stmt = select(Card).limit(request.limit + request.offset + 100)
+            filter_result = await db.execute(stmt)
+            filter_cards = filter_result.scalars().all()
+            results = [_card_to_dict(c) for c in filter_cards]
 
         # Apply filters
         if request.filters:
@@ -409,7 +535,11 @@ async def search_cards(request: AdvancedSearchRequest):
                 maturity_score=item.get("maturity_score"),
                 impact_score=item.get("impact_score"),
                 relevance_score=item.get("relevance_score"),
-                velocity_score=item.get("velocity_score"),
+                velocity_score=(
+                    int(item["velocity_score"])
+                    if item.get("velocity_score") is not None
+                    else None
+                ),
                 risk_score=item.get("risk_score"),
                 opportunity_score=item.get("opportunity_score"),
                 status=item.get("status"),
@@ -442,11 +572,15 @@ async def search_cards(request: AdvancedSearchRequest):
 
 
 @router.get("/cards/{card_id}/similar", response_model=List[SimilarCard])
-async def get_similar_cards(card_id: str, limit: int = 5):
+async def get_similar_cards(
+    card_id: str,
+    limit: int = 5,
+    db: AsyncSession = Depends(get_db),
+):
     """
     Get cards similar to the specified card.
 
-    Uses vector similarity search via the find_similar_cards RPC function
+    Uses vector similarity search via pgvector cosine distance
     to find semantically similar cards.
 
     Args:
@@ -456,33 +590,28 @@ async def get_similar_cards(card_id: str, limit: int = 5):
     Returns:
         List of similar cards with similarity scores
     """
-    # Get the source card's embedding
-    card_check = (
-        supabase.table("cards")
-        .select("id, name, embedding")
-        .eq("id", card_id)
-        .execute()
-    )
-    if not card_check.data:
-        raise HTTPException(status_code=404, detail="Card not found")
-
-    card = card_check.data[0]
-
-    if not card.get("embedding"):
-        # Fallback: return empty list if no embedding
-        logger.warning(f"Card {card_id} has no embedding for similarity search")
-        return []
-
     try:
-        # Use RPC function for vector similarity search
-        response = supabase.rpc(
-            "match_cards_by_embedding",
-            {
-                "query_embedding": card["embedding"],
-                "match_threshold": 0.7,
-                "match_count": limit + 1,  # +1 to exclude self
-            },
-        ).execute()
+        # Get the source card's embedding via raw SQL (embedding is NullType in ORM)
+        embed_sql = text("SELECT id, name, embedding FROM cards WHERE id = :card_id")
+        embed_result = await db.execute(embed_sql, {"card_id": card_id})
+        card_row = embed_result.mappings().first()
+
+        if not card_row:
+            raise HTTPException(status_code=404, detail="Card not found")
+
+        if not card_row["embedding"]:
+            # Fallback: return empty list if no embedding
+            logger.warning(f"Card {card_id} has no embedding for similarity search")
+            return []
+
+        # Use vector_search_cards helper (replaces match_cards_by_embedding RPC)
+        similar = await vector_search_cards(
+            db,
+            card_row["embedding"],
+            match_threshold=0.7,
+            match_count=limit + 1,  # +1 to exclude self
+            require_active=True,
+        )
 
         return [
             SimilarCard(
@@ -492,18 +621,23 @@ async def get_similar_cards(card_id: str, limit: int = 5):
                 similarity=c["similarity"],
                 pillar_id=c.get("pillar_id"),
             )
-            for c in response.data
+            for c in similar
             if c["id"] != card_id
         ][:limit]
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Similar cards search failed: {str(e)}")
-        # Fallback to simple text-based similarity
+        # Fallback to empty list
         return []
 
 
 @router.get("/discovery/blocked-topics", response_model=List[BlockedTopic])
 async def list_blocked_topics(
-    current_user: dict = Depends(get_current_user), limit: int = 50, offset: int = 0
+    current_user: dict = Depends(get_current_user_hardcoded),
+    limit: int = 50,
+    offset: int = 0,
+    db: AsyncSession = Depends(get_db),
 ):
     """
     List blocked discovery topics.
@@ -518,15 +652,33 @@ async def list_blocked_topics(
     Returns:
         List of blocked topic records
     """
-    response = (
-        supabase.table("discovery_blocks")
-        .select("*")
-        .order("created_at", desc=True)
-        .range(offset, offset + limit - 1)
-        .execute()
-    )
+    try:
+        stmt = (
+            select(DiscoveryBlock)
+            .order_by(DiscoveryBlock.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
 
-    return [BlockedTopic(**block) for block in response.data]
+        result = await db.execute(stmt)
+        blocks = result.scalars().all()
+
+        return [
+            BlockedTopic(
+                id=str(block.id),
+                topic_pattern=block.topic_name,
+                reason=block.reason or "",
+                blocked_by_count=block.blocked_by_count or 0,
+                created_at=block.created_at,
+            )
+            for block in blocks
+        ]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=_safe_error("list_blocked_topics", e)
+        ) from e
 
 
 # ============================================================================
@@ -536,7 +688,9 @@ async def list_blocked_topics(
 
 @router.post("/cards/filter-preview", response_model=FilterPreviewResponse)
 async def preview_filter_count(
-    filters: FilterPreviewRequest, current_user: dict = Depends(get_current_user)
+    filters: FilterPreviewRequest,
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Preview how many cards match the given filter criteria.
@@ -551,72 +705,72 @@ async def preview_filter_count(
     Returns:
         FilterPreviewResponse with estimated count and sample cards
     """
-    # Build base query for active cards
-    query = (
-        supabase.table("cards")
-        .select("id, name, pillar_id, horizon, stage_id")
-        .eq("status", "active")
-    )
+    try:
+        # Build base query for active cards
+        stmt = select(Card).where(Card.status == "active")
 
-    # Apply filters
-    if filters.pillar_ids:
-        query = query.in_("pillar_id", filters.pillar_ids)
+        # Apply filters
+        if filters.pillar_ids:
+            stmt = stmt.where(Card.pillar_id.in_(filters.pillar_ids))
 
-    if filters.goal_ids:
-        query = query.in_("goal_id", filters.goal_ids)
+        if filters.goal_ids:
+            stmt = stmt.where(Card.goal_id.in_(filters.goal_ids))
 
-    if filters.horizon and filters.horizon != "ALL":
-        query = query.eq("horizon", filters.horizon)
+        if filters.horizon and filters.horizon != "ALL":
+            stmt = stmt.where(Card.horizon == filters.horizon)
 
-    # Fetch cards (limit to reasonable amount for performance)
-    response = query.order("created_at", desc=True).limit(500).execute()
-    cards = response.data or []
+        # Fetch cards (limit to reasonable amount for performance)
+        stmt = stmt.order_by(Card.created_at.desc()).limit(500)
+        result = await db.execute(stmt)
+        cards_orm = result.scalars().all()
+        cards = [_card_to_dict(c) for c in cards_orm]
 
-    # Apply stage filtering client-side
-    if filters.stage_ids:
-        filtered_by_stage = []
-        for card in cards:
-            card_stage_id = card.get("stage_id") or ""
-            stage_num = (
-                card_stage_id.split("_")[0] if "_" in card_stage_id else card_stage_id
-            )
-            if stage_num in filters.stage_ids:
-                filtered_by_stage.append(card)
-        cards = filtered_by_stage
+        # Apply stage filtering client-side
+        if filters.stage_ids:
+            filtered_by_stage = []
+            for card in cards:
+                card_stage_id = card.get("stage_id") or ""
+                stage_num = (
+                    card_stage_id.split("_")[0]
+                    if "_" in card_stage_id
+                    else card_stage_id
+                )
+                if stage_num in filters.stage_ids:
+                    filtered_by_stage.append(card)
+            cards = filtered_by_stage
 
-    # Apply keyword filtering (need to fetch full text for this)
-    if filters.keywords and cards:
-        card_ids = [c["id"] for c in cards]
-        full_response = (
-            supabase.table("cards")
-            .select("id, name, summary, description, pillar_id, horizon, stage_id")
-            .in_("id", card_ids)
-            .execute()
+        # Apply keyword filtering
+        if filters.keywords and cards:
+            filtered_cards = []
+            for card in cards:
+                card_text = " ".join(
+                    [
+                        (card.get("name") or "").lower(),
+                        (card.get("summary") or "").lower(),
+                        (card.get("description") or "").lower(),
+                    ]
+                )
+                if any(keyword.lower() in card_text for keyword in filters.keywords):
+                    filtered_cards.append(card)
+            cards = filtered_cards
+
+        # Build response
+        sample_cards = [
+            {
+                "id": c["id"],
+                "name": c["name"],
+                "pillar_id": c.get("pillar_id"),
+                "horizon": c.get("horizon"),
+            }
+            for c in cards[:5]
+        ]
+
+        return FilterPreviewResponse(
+            estimated_count=len(cards), sample_cards=sample_cards
         )
-        full_cards = full_response.data or []
-
-        filtered_cards = []
-        for card in full_cards:
-            card_text = " ".join(
-                [
-                    (card.get("name") or "").lower(),
-                    (card.get("summary") or "").lower(),
-                    (card.get("description") or "").lower(),
-                ]
-            )
-            if any(keyword.lower() in card_text for keyword in filters.keywords):
-                filtered_cards.append(card)
-        cards = filtered_cards
-
-    # Build response
-    sample_cards = [
-        {
-            "id": c["id"],
-            "name": c["name"],
-            "pillar_id": c.get("pillar_id"),
-            "horizon": c.get("horizon"),
-        }
-        for c in cards[:5]
-    ]
-
-    return FilterPreviewResponse(estimated_count=len(cards), sample_cards=sample_cards)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=_safe_error("filter_preview", e)
+        ) from e

@@ -2,14 +2,18 @@
 
 import asyncio
 import logging
+import uuid
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from datetime import date as date_type
+from decimal import Decimal
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import and_, func, or_, select, literal_column
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.deps import supabase, get_current_user, _safe_error, openai_client
+from app.deps import get_db, get_current_user_hardcoded, _safe_error, openai_client
 from app.openai_provider import get_chat_mini_deployment
 from app.models.analytics import (
     VelocityDataPoint,
@@ -39,6 +43,19 @@ from app.models.processing_metrics import (
     ResearchTaskMetrics,
     ClassificationMetrics,
 )
+from app.models.db.card import Card
+from app.models.db.card_extras import CardFollow
+from app.models.db.source import Source
+from app.models.db.discovery import DiscoveryRun
+from app.models.db.research import ResearchTask
+from app.models.db.analytics import (
+    CachedInsight,
+    ClassificationValidation,
+    DomainReputation,
+)
+from app.models.db.workstream import Workstream, WorkstreamCard
+from app.models.db.search import SearchHistory
+from app.models.db.user import User
 from app.taxonomy import PILLAR_NAMES
 
 logger = logging.getLogger(__name__)
@@ -114,6 +131,25 @@ def _compute_card_data_hash(cards: list) -> str:
     return hashlib.sha256(data_str.encode()).hexdigest()
 
 
+def _row_to_dict(obj, skip_cols=None) -> dict:
+    """Convert an ORM row to a JSON-safe dict."""
+    skip = skip_cols or set()
+    result = {}
+    for col in obj.__table__.columns:
+        if col.name in skip:
+            continue
+        value = getattr(obj, col.name, None)
+        if isinstance(value, uuid.UUID):
+            result[col.name] = str(value)
+        elif isinstance(value, (datetime, date_type)):
+            result[col.name] = value.isoformat()
+        elif isinstance(value, Decimal):
+            result[col.name] = float(value)
+        else:
+            result[col.name] = value
+    return result
+
+
 # ============================================================================
 # Routes
 # ============================================================================
@@ -121,7 +157,9 @@ def _compute_card_data_hash(cards: list) -> str:
 
 @router.get("/metrics/processing", response_model=ProcessingMetrics)
 async def get_processing_metrics(
-    current_user: dict = Depends(get_current_user), days: int = 7
+    current_user: dict = Depends(get_current_user_hardcoded),
+    days: int = 7,
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get comprehensive processing metrics for monitoring dashboard.
@@ -142,42 +180,35 @@ async def get_processing_metrics(
     # Calculate time range
     period_end = datetime.now(timezone.utc)
     period_start = period_end - timedelta(days=days)
-    period_start_iso = period_start.isoformat()
 
     # -------------------------------------------------------------------------
     # Discovery Run Metrics
     # -------------------------------------------------------------------------
-    discovery_runs_response = (
-        supabase.table("discovery_runs")
-        .select(
-            "id, status, cards_created, cards_enriched, sources_found, sources_relevant, summary_report, started_at, completed_at"
+    try:
+        dr_result = await db.execute(
+            select(DiscoveryRun).where(DiscoveryRun.started_at >= period_start)
         )
-        .gte("started_at", period_start_iso)
-        .execute()
-    )
+        discovery_runs_list = list(dr_result.scalars().all())
+    except Exception as e:
+        logger.warning(f"Failed to fetch discovery runs: {e}")
+        discovery_runs_list = []
 
-    discovery_runs_data = discovery_runs_response.data or []
+    completed_runs = [r for r in discovery_runs_list if r.status == "completed"]
+    failed_runs = [r for r in discovery_runs_list if r.status == "failed"]
 
-    completed_runs = [r for r in discovery_runs_data if r.get("status") == "completed"]
-    failed_runs = [r for r in discovery_runs_data if r.get("status") == "failed"]
-
-    total_cards_created = sum(
-        r.get("cards_created", 0) or 0 for r in discovery_runs_data
-    )
-    total_cards_enriched = sum(
-        r.get("cards_enriched", 0) or 0 for r in discovery_runs_data
-    )
-    total_sources = sum(r.get("sources_found", 0) or 0 for r in discovery_runs_data)
+    total_cards_created = sum((r.cards_created or 0) for r in discovery_runs_list)
+    total_cards_enriched = sum((r.cards_enriched or 0) for r in discovery_runs_list)
+    total_sources = sum((r.sources_found or 0) for r in discovery_runs_list)
 
     avg_cards_per_run = (
         total_cards_created / len(completed_runs) if completed_runs else 0.0
     )
     avg_sources_per_run = (
-        total_sources / len(discovery_runs_data) if discovery_runs_data else 0.0
+        total_sources / len(discovery_runs_list) if discovery_runs_list else 0.0
     )
 
     discovery_metrics = DiscoveryRunMetrics(
-        total_runs=len(discovery_runs_data),
+        total_runs=len(discovery_runs_list),
         completed_runs=len(completed_runs),
         failed_runs=len(failed_runs),
         avg_cards_per_run=round(avg_cards_per_run, 2),
@@ -188,8 +219,8 @@ async def get_processing_metrics(
 
     # Extract source category metrics from discovery run summary_report
     sources_by_category: Dict[str, SourceCategoryMetrics] = {}
-    for run in discovery_runs_data:
-        report = run.get("summary_report") or {}
+    for run in discovery_runs_list:
+        report = run.summary_report or {}
         categories_data = report.get("sources_by_category", {})
         for category, count in categories_data.items():
             if category not in sources_by_category:
@@ -207,32 +238,28 @@ async def get_processing_metrics(
     # -------------------------------------------------------------------------
     # Research Task Metrics
     # -------------------------------------------------------------------------
-    research_tasks_response = (
-        supabase.table("research_tasks")
-        .select("id, status, started_at, completed_at")
-        .gte("created_at", period_start_iso)
-        .execute()
-    )
+    try:
+        rt_result = await db.execute(
+            select(ResearchTask).where(ResearchTask.created_at >= period_start)
+        )
+        research_tasks_list = list(rt_result.scalars().all())
+    except Exception as e:
+        logger.warning(f"Failed to fetch research tasks: {e}")
+        research_tasks_list = []
 
-    research_tasks_data = research_tasks_response.data or []
-
-    completed_tasks = [t for t in research_tasks_data if t.get("status") == "completed"]
-    failed_tasks = [t for t in research_tasks_data if t.get("status") == "failed"]
-    queued_tasks = [t for t in research_tasks_data if t.get("status") == "queued"]
-    processing_tasks = [
-        t for t in research_tasks_data if t.get("status") == "processing"
-    ]
+    completed_tasks = [t for t in research_tasks_list if t.status == "completed"]
+    failed_tasks = [t for t in research_tasks_list if t.status == "failed"]
+    queued_tasks = [t for t in research_tasks_list if t.status == "queued"]
+    processing_tasks = [t for t in research_tasks_list if t.status == "processing"]
 
     # Calculate average processing time for completed tasks
     processing_times = []
     for task in completed_tasks:
-        started = task.get("started_at")
-        completed = task.get("completed_at")
+        started = task.started_at
+        completed = task.completed_at
         if started and completed:
             try:
-                start_dt = datetime.fromisoformat(started.replace("Z", "+00:00"))
-                end_dt = datetime.fromisoformat(completed.replace("Z", "+00:00"))
-                processing_times.append((end_dt - start_dt).total_seconds())
+                processing_times.append((completed - started).total_seconds())
             except (ValueError, TypeError):
                 pass
 
@@ -241,7 +268,7 @@ async def get_processing_metrics(
     )
 
     research_metrics = ResearchTaskMetrics(
-        total_tasks=len(research_tasks_data),
+        total_tasks=len(research_tasks_list),
         completed_tasks=len(completed_tasks),
         failed_tasks=len(failed_tasks),
         queued_tasks=len(queued_tasks),
@@ -254,16 +281,19 @@ async def get_processing_metrics(
     # -------------------------------------------------------------------------
     # Classification Accuracy Metrics
     # -------------------------------------------------------------------------
-    validations_response = (
-        supabase.table("classification_validations")
-        .select("is_correct")
-        .not_.is_("is_correct", "null")
-        .execute()
-    )
+    try:
+        cv_result = await db.execute(
+            select(ClassificationValidation).where(
+                ClassificationValidation.is_correct.is_not(None)
+            )
+        )
+        validations_list = list(cv_result.scalars().all())
+    except Exception as e:
+        logger.warning(f"Failed to fetch classification validations: {e}")
+        validations_list = []
 
-    validations_data = validations_response.data or []
-    total_validations = len(validations_data)
-    correct_count = sum(bool(v.get("is_correct")) for v in validations_data)
+    total_validations = len(validations_list)
+    correct_count = sum(bool(v.is_correct) for v in validations_list)
     accuracy = (
         (correct_count / total_validations * 100) if total_validations > 0 else None
     )
@@ -279,34 +309,33 @@ async def get_processing_metrics(
     # -------------------------------------------------------------------------
     # Card Generation Summary
     # -------------------------------------------------------------------------
-    cards_response = (
-        supabase.table("cards")
-        .select(
-            "id, impact_score, velocity_score, novelty_score, risk_score", count="exact"
+    try:
+        cards_result = await db.execute(
+            select(Card).where(Card.created_at >= period_start)
         )
-        .gte("created_at", period_start_iso)
-        .execute()
-    )
+        cards_list = list(cards_result.scalars().all())
+    except Exception as e:
+        logger.warning(f"Failed to fetch cards: {e}")
+        cards_list = []
 
-    cards_data = cards_response.data or []
-    cards_generated = len(cards_data)
+    cards_generated = len(cards_list)
 
     # Count cards with all 4 scoring dimensions
     cards_with_all_scores = sum(
         bool(
-            c.get("impact_score") is not None
-            and c.get("velocity_score") is not None
-            and c.get("novelty_score") is not None
-            and c.get("risk_score") is not None
+            c.impact_score is not None
+            and c.velocity_score is not None
+            and c.novelty_score is not None
+            and c.risk_score is not None
         )
-        for c in cards_data
+        for c in cards_list
     )
 
     # -------------------------------------------------------------------------
     # Error Summary
     # -------------------------------------------------------------------------
     total_errors = len(failed_runs) + len(failed_tasks)
-    total_operations = len(discovery_runs_data) + len(research_tasks_data)
+    total_operations = len(discovery_runs_list) + len(research_tasks_list)
     error_rate = (
         (total_errors / total_operations * 100) if total_operations > 0 else None
     )
@@ -332,12 +361,13 @@ async def get_processing_metrics(
 
 @router.get("/analytics/pillar-coverage", response_model=PillarCoverageResponse)
 async def get_pillar_coverage(
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_hardcoded),
     start_date: Optional[str] = Query(
         None, description="Start date filter (ISO format)"
     ),
     end_date: Optional[str] = Query(None, description="End date filter (ISO format)"),
     stage_id: Optional[str] = Query(None, description="Filter by maturity stage"),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get activity distribution across strategic pillars.
@@ -355,24 +385,22 @@ async def get_pillar_coverage(
     """
     try:
         # Build query for active cards with velocity_score for avg calculation
-        query = (
-            supabase.table("cards")
-            .select("pillar_id, velocity_score")
-            .eq("status", "active")
+        stmt = select(Card.pillar_id, Card.velocity_score).where(
+            Card.status == "active"
         )
 
         # Apply date filters if provided
         if start_date:
-            query = query.gte("created_at", start_date)
+            stmt = stmt.where(Card.created_at >= start_date)
         if end_date:
-            query = query.lte("created_at", end_date)
+            stmt = stmt.where(Card.created_at <= end_date)
 
         # Apply stage filter if provided
         if stage_id:
-            query = query.eq("stage_id", stage_id)
+            stmt = stmt.where(Card.stage_id == stage_id)
 
-        response = query.execute()
-        cards_data = response.data or []
+        result = await db.execute(stmt)
+        cards_data = result.all()
 
         # Count cards per pillar and sum velocity scores
         pillar_counts: Dict[str, int] = {}
@@ -383,13 +411,13 @@ async def get_pillar_coverage(
 
         # Also count cards with null/unknown pillar
         unassigned_count = 0
-        for card in cards_data:
-            pillar_id = card.get("pillar_id")
+        for row in cards_data:
+            pillar_id = row[0]
+            velocity = row[1]
             if pillar_id and pillar_id in ANALYTICS_PILLAR_DEFINITIONS:
                 pillar_counts[pillar_id] += 1
-                velocity = card.get("velocity_score")
                 if velocity is not None:
-                    pillar_velocity_sums[pillar_id] += velocity
+                    pillar_velocity_sums[pillar_id] += float(velocity)
             else:
                 unassigned_count += 1
 
@@ -447,7 +475,8 @@ async def get_analytics_insights(
     force_refresh: bool = Query(
         False, description="Force regeneration, bypassing cache"
     ),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get AI-generated strategic insights for top emerging trends.
@@ -468,20 +497,17 @@ async def get_analytics_insights(
         # -------------------------------------------------------------------------
         # Step 1: Fetch top cards (needed for both cache check and generation)
         # -------------------------------------------------------------------------
-        query = (
-            supabase.table("cards")
-            .select(
-                "id, name, slug, summary, pillar_id, horizon, velocity_score, impact_score, relevance_score, novelty_score"
-            )
-            .eq("status", "active")
-        )
+        stmt = select(Card).where(Card.status == "active")
 
         if pillar_id:
-            query = query.eq("pillar_id", pillar_id)
+            stmt = stmt.where(Card.pillar_id == pillar_id)
 
-        response = query.order("velocity_score", desc=True).limit(limit * 2).execute()
+        stmt = stmt.order_by(Card.velocity_score.desc().nullslast()).limit(limit * 2)
 
-        if not response.data:
+        result = await db.execute(stmt)
+        card_rows = result.scalars().all()
+
+        if not card_rows:
             return InsightsResponse(
                 insights=[],
                 generated_at=datetime.now(timezone.utc),
@@ -489,15 +515,31 @@ async def get_analytics_insights(
                 period_analyzed="No active cards found",
             )
 
-        # Calculate combined scores and sort
+        # Convert to dict-like for scoring
         cards_with_scores = []
-        for card in response.data:
-            velocity = card.get("velocity_score") or 0
-            impact = card.get("impact_score") or 0
-            relevance = card.get("relevance_score") or 0
-            novelty = card.get("novelty_score") or 0
+        for card in card_rows:
+            velocity = (
+                float(card.velocity_score) if card.velocity_score is not None else 0
+            )
+            impact = card.impact_score or 0
+            relevance = card.relevance_score or 0
+            novelty = card.novelty_score or 0
             combined_score = (velocity + impact + relevance + novelty) / 4
-            cards_with_scores.append({**card, "combined_score": combined_score})
+            cards_with_scores.append(
+                {
+                    "id": str(card.id),
+                    "name": card.name,
+                    "slug": card.slug,
+                    "summary": card.summary,
+                    "pillar_id": card.pillar_id,
+                    "horizon": card.horizon,
+                    "velocity_score": velocity,
+                    "impact_score": impact,
+                    "relevance_score": relevance,
+                    "novelty_score": novelty,
+                    "combined_score": combined_score,
+                }
+            )
 
         cards_with_scores.sort(key=lambda x: x["combined_score"], reverse=True)
         top_cards = cards_with_scores[:limit]
@@ -516,42 +558,40 @@ async def get_analytics_insights(
         # -------------------------------------------------------------------------
         if not force_refresh:
             try:
-                cache_response = (
-                    supabase.table("cached_insights")
-                    .select("insights_json, generated_at, card_data_hash")
-                    .eq("pillar_filter", pillar_id)
-                    .eq("insight_limit", limit)
-                    .eq("cache_date", date_type.today().isoformat())
-                    .gt("expires_at", datetime.now(timezone.utc).isoformat())
+                cache_stmt = (
+                    select(CachedInsight)
+                    .where(
+                        CachedInsight.pillar_filter == pillar_id,
+                        CachedInsight.insight_limit == limit,
+                        CachedInsight.cache_date == date_type.today(),
+                        CachedInsight.expires_at > datetime.now(timezone.utc),
+                    )
                     .limit(1)
-                    .execute()
                 )
 
-                if cache_response.data:
-                    cached = cache_response.data[0]
-                    # Validate cache - check if underlying data changed
-                    if cached.get("card_data_hash") == current_hash:
-                        logger.info(
-                            f"Serving cached insights for pillar={pillar_id}, limit={limit}"
-                        )
-                        cached_json = cached["insights_json"]
+                cache_result = await db.execute(cache_stmt)
+                cached = cache_result.scalar_one_or_none()
 
-                        # Reconstruct response from cached JSON
-                        cached_insights = [
-                            InsightItem(**item)
-                            for item in cached_json.get("insights", [])
-                        ]
-                        return InsightsResponse(
-                            insights=cached_insights,
-                            generated_at=datetime.fromisoformat(
-                                cached["generated_at"].replace("Z", "+00:00")
-                            ),
-                            ai_available=cached_json.get("ai_available", True),
-                            period_analyzed=cached_json.get("period_analyzed"),
-                            fallback_message=cached_json.get("fallback_message"),
-                        )
-                    else:
-                        logger.info("Cache invalidated - card data changed")
+                if cached and cached.card_data_hash == current_hash:
+                    logger.info(
+                        f"Serving cached insights for pillar={pillar_id}, limit={limit}"
+                    )
+                    cached_json = cached.insights_json
+
+                    # Reconstruct response from cached JSON
+                    cached_insights = [
+                        InsightItem(**item) for item in cached_json.get("insights", [])
+                    ]
+                    generated_at = cached.generated_at
+                    return InsightsResponse(
+                        insights=cached_insights,
+                        generated_at=generated_at,
+                        ai_available=cached_json.get("ai_available", True),
+                        period_analyzed=cached_json.get("period_analyzed"),
+                        fallback_message=cached_json.get("fallback_message"),
+                    )
+                elif cached:
+                    logger.info("Cache invalidated - card data changed")
             except Exception as cache_err:
                 # Cache check failed - proceed to generate
                 logger.warning(f"Cache lookup failed: {cache_err}")
@@ -585,9 +625,9 @@ async def get_analytics_insights(
                 timeout=30,
             )
 
-            result = json.loads(ai_response.choices[0].message.content)
+            ai_result = json.loads(ai_response.choices[0].message.content)
 
-            for i, insight_data in enumerate(result.get("insights", [])):
+            for i, insight_data in enumerate(ai_result.get("insights", [])):
                 if i < len(top_cards):
                     card = top_cards[i]
                     insights.append(
@@ -645,24 +685,44 @@ async def get_analytics_insights(
                 "fallback_message": fallback_message,
             }
 
-            # Upsert cache entry
-            supabase.table("cached_insights").upsert(
-                {
-                    "pillar_filter": pillar_id,
-                    "insight_limit": limit,
-                    "cache_date": date_type.today().isoformat(),
-                    "insights_json": cache_json,
-                    "top_card_ids": top_card_ids,
-                    "card_data_hash": current_hash,
-                    "ai_model_used": (
+            # Check if cache entry exists for upsert
+            existing_cache_result = await db.execute(
+                select(CachedInsight).where(
+                    CachedInsight.pillar_filter == pillar_id,
+                    CachedInsight.insight_limit == limit,
+                    CachedInsight.cache_date == date_type.today(),
+                )
+            )
+            existing_cache = existing_cache_result.scalar_one_or_none()
+
+            if existing_cache:
+                existing_cache.insights_json = cache_json
+                existing_cache.top_card_ids = top_card_ids
+                existing_cache.card_data_hash = current_hash
+                existing_cache.ai_model_used = (
+                    get_chat_mini_deployment() if ai_available else None
+                )
+                existing_cache.generation_time_ms = generation_time_ms
+                existing_cache.generated_at = generated_at
+                existing_cache.expires_at = generated_at + timedelta(hours=24)
+            else:
+                new_cache = CachedInsight(
+                    pillar_filter=pillar_id,
+                    insight_limit=limit,
+                    cache_date=date_type.today(),
+                    insights_json=cache_json,
+                    top_card_ids=top_card_ids,
+                    card_data_hash=current_hash,
+                    ai_model_used=(
                         get_chat_mini_deployment() if ai_available else None
                     ),
-                    "generation_time_ms": generation_time_ms,
-                    "generated_at": generated_at.isoformat(),
-                    "expires_at": (generated_at + timedelta(hours=24)).isoformat(),
-                },
-                on_conflict="pillar_filter,insight_limit,cache_date",
-            ).execute()
+                    generation_time_ms=generation_time_ms,
+                    generated_at=generated_at,
+                    expires_at=generated_at + timedelta(hours=24),
+                )
+                db.add(new_cache)
+
+            await db.flush()
 
             logger.info(
                 f"Cached insights for pillar={pillar_id}, limit={limit}, took {generation_time_ms}ms"
@@ -691,7 +751,8 @@ async def get_trend_velocity(
     stage_id: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get trend velocity analytics over time.
@@ -732,11 +793,14 @@ async def get_trend_velocity(
             )
 
         # Build query for cards
-        query = (
-            supabase.table("cards")
-            .select("id, velocity_score, created_at, updated_at, pillar_id, stage_id")
-            .eq("status", "active")
-        )
+        stmt = select(
+            Card.id,
+            Card.velocity_score,
+            Card.created_at,
+            Card.updated_at,
+            Card.pillar_id,
+            Card.stage_id,
+        ).where(Card.status == "active")
 
         # Apply filters
         if pillar_id:
@@ -745,30 +809,33 @@ async def get_trend_velocity(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Invalid pillar_id. Must be one of: {', '.join(ANALYTICS_PILLAR_DEFINITIONS.keys())}",
                 )
-            query = query.eq("pillar_id", pillar_id)
+            stmt = stmt.where(Card.pillar_id == pillar_id)
 
         if stage_id:
-            query = query.eq("stage_id", stage_id)
+            stmt = stmt.where(Card.stage_id == stage_id)
 
         # Filter by date range on created_at
-        query = query.gte("created_at", f"{start_date}T00:00:00")
-        query = query.lte("created_at", f"{end_date}T23:59:59")
+        stmt = stmt.where(Card.created_at >= f"{start_date}T00:00:00")
+        stmt = stmt.where(Card.created_at <= f"{end_date}T23:59:59")
 
-        response = query.order("created_at", desc=False).execute()
+        stmt = stmt.order_by(Card.created_at.asc())
 
-        cards = response.data or []
+        result = await db.execute(stmt)
+        cards = result.all()
         total_cards = len(cards)
 
         # Aggregate velocity data by date
         daily_data = defaultdict(lambda: {"velocity_sum": 0, "count": 0, "scores": []})
 
-        for card in cards:
-            if created_at := card.get("created_at", ""):
-                date_str = created_at[:10]  # YYYY-MM-DD
-                velocity = card.get("velocity_score")
+        for row in cards:
+            created_at = row[2]  # Card.created_at
+            if created_at:
+                date_str = created_at.strftime("%Y-%m-%d")
+                velocity = row[1]  # Card.velocity_score
                 if velocity is not None:
-                    daily_data[date_str]["velocity_sum"] += velocity
-                    daily_data[date_str]["scores"].append(velocity)
+                    vel_float = float(velocity)
+                    daily_data[date_str]["velocity_sum"] += vel_float
+                    daily_data[date_str]["scores"].append(vel_float)
                 daily_data[date_str]["count"] += 1
 
         # Convert to VelocityDataPoint list
@@ -827,7 +894,10 @@ async def get_trend_velocity(
 
 
 @router.get("/analytics/system-stats", response_model=SystemWideStats)
-async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
+async def get_system_wide_stats(
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
+):
     """
     Get comprehensive system-wide analytics.
 
@@ -843,148 +913,48 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
         one_month_ago = now - timedelta(days=30)
 
         # -------------------------------------------------------------------------
-        # Batch 1: All independent count & distribution queries in parallel
-        # -------------------------------------------------------------------------
-
-        (
-            total_cards_resp,
-            active_cards_resp,
-            cards_week_resp,
-            cards_month_resp,
-            pillar_resp,
-            stage_resp,
-            horizon_resp,
-            recent_pillar_resp,
-            hot_cards_resp,
-            sources_resp,
-            discovery_resp,
-            search_resp,
-            ws_resp,
-            ws_cards_resp,
-            follows_resp,
-        ) = await asyncio.gather(
-            # Core card counts
-            asyncio.to_thread(
-                lambda: supabase.table("cards").select("id", count="exact").execute()
-            ),
-            asyncio.to_thread(
-                lambda: supabase.table("cards")
-                .select("id", count="exact")
-                .eq("status", "active")
-                .execute()
-            ),
-            asyncio.to_thread(
-                lambda: supabase.table("cards")
-                .select("id", count="exact")
-                .gte("created_at", one_week_ago.isoformat())
-                .execute()
-            ),
-            asyncio.to_thread(
-                lambda: supabase.table("cards")
-                .select("id", count="exact")
-                .gte("created_at", one_month_ago.isoformat())
-                .execute()
-            ),
-            # Distribution queries
-            asyncio.to_thread(
-                lambda: supabase.table("cards")
-                .select("pillar_id, velocity_score")
-                .eq("status", "active")
-                .execute()
-            ),
-            asyncio.to_thread(
-                lambda: supabase.table("cards")
-                .select("stage_id")
-                .eq("status", "active")
-                .execute()
-            ),
-            asyncio.to_thread(
-                lambda: supabase.table("cards")
-                .select("horizon")
-                .eq("status", "active")
-                .execute()
-            ),
-            # Trending pillars
-            asyncio.to_thread(
-                lambda: supabase.table("cards")
-                .select("pillar_id, velocity_score")
-                .gte("created_at", one_week_ago.isoformat())
-                .eq("status", "active")
-                .execute()
-            ),
-            # Hot topics
-            asyncio.to_thread(
-                lambda: supabase.table("cards")
-                .select("name, velocity_score")
-                .eq("status", "active")
-                .gte("velocity_score", 70)
-                .order("velocity_score", desc=True)
-                .limit(5)
-                .execute()
-            ),
-            # Sources (bounded)
-            asyncio.to_thread(
-                lambda: supabase.table("sources")
-                .select("id, source_type, created_at", count="exact")
-                .limit(10000)
-                .execute()
-            ),
-            # Discovery runs (bounded)
-            asyncio.to_thread(
-                lambda: supabase.table("discovery_runs")
-                .select("id, cards_created, started_at, status")
-                .limit(1000)
-                .execute()
-            ),
-            # Search history (bounded)
-            asyncio.to_thread(
-                lambda: supabase.table("search_history")
-                .select("id, executed_at", count="exact")
-                .limit(1000)
-                .execute()
-            ),
-            # Workstreams
-            asyncio.to_thread(
-                lambda: supabase.table("workstreams")
-                .select("id, updated_at", count="exact")
-                .execute()
-            ),
-            # Workstream cards
-            asyncio.to_thread(
-                lambda: supabase.table("workstream_cards").select("card_id").execute()
-            ),
-            # Follows
-            asyncio.to_thread(
-                lambda: supabase.table("card_follows")
-                .select("card_id, user_id")
-                .execute()
-            ),
-        )
-
-        # -------------------------------------------------------------------------
         # Core Card Stats
         # -------------------------------------------------------------------------
+        total_cards_result = await db.execute(select(func.count()).select_from(Card))
+        total_cards = total_cards_result.scalar() or 0
 
-        total_cards = total_cards_resp.count or 0
-        active_cards = active_cards_resp.count or 0
-        cards_this_week = cards_week_resp.count or 0
-        cards_this_month = cards_month_resp.count or 0
+        active_cards_result = await db.execute(
+            select(func.count()).select_from(Card).where(Card.status == "active")
+        )
+        active_cards = active_cards_result.scalar() or 0
+
+        cards_week_result = await db.execute(
+            select(func.count())
+            .select_from(Card)
+            .where(Card.created_at >= one_week_ago)
+        )
+        cards_this_week = cards_week_result.scalar() or 0
+
+        cards_month_result = await db.execute(
+            select(func.count())
+            .select_from(Card)
+            .where(Card.created_at >= one_month_ago)
+        )
+        cards_this_month = cards_month_result.scalar() or 0
 
         # -------------------------------------------------------------------------
-        # Cards by Pillar
+        # Cards by Pillar (active cards with velocity)
         # -------------------------------------------------------------------------
-
-        pillar_data = pillar_resp.data or []
+        pillar_result = await db.execute(
+            select(Card.pillar_id, Card.velocity_score).where(Card.status == "active")
+        )
+        pillar_data = pillar_result.all()
 
         pillar_counts = Counter()
-        pillar_velocity = {}
-        for card in pillar_data:
-            if p := card.get("pillar_id"):
+        pillar_velocity: dict = {}
+        for row in pillar_data:
+            p = row[0]
+            if p:
                 pillar_counts[p] += 1
                 if p not in pillar_velocity:
                     pillar_velocity[p] = []
-                if card.get("velocity_score"):
-                    pillar_velocity[p].append(card["velocity_score"])
+                if row[1] is not None:
+                    pillar_velocity[p].append(float(row[1]))
 
         cards_by_pillar = []
         for code, name in ANALYTICS_PILLAR_DEFINITIONS.items():
@@ -1008,12 +978,15 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
         # -------------------------------------------------------------------------
         # Cards by Stage
         # -------------------------------------------------------------------------
-
-        stage_data = stage_resp.data or []
+        stage_result = await db.execute(
+            select(Card.stage_id).where(Card.status == "active")
+        )
+        stage_data = stage_result.all()
 
         stage_counts = Counter()
-        for card in stage_data:
-            if s := card.get("stage_id"):
+        for row in stage_data:
+            s = row[0]
+            if s:
                 # Normalize stage_id - extract number from formats like "4_proof", "5_implementing"
                 stage_str = str(s)
                 stage_num = (
@@ -1024,12 +997,12 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
                 stage_counts[stage_num] += 1
 
         cards_by_stage = []
-        for stage_id, stage_name in STAGE_NAMES.items():
-            count = stage_counts.get(stage_id, 0)
+        for stage_id_key, stage_name in STAGE_NAMES.items():
+            count = stage_counts.get(stage_id_key, 0)
             pct = (count / active_cards * 100) if active_cards > 0 else 0
             cards_by_stage.append(
                 StageDistribution(
-                    stage_id=stage_id,
+                    stage_id=stage_id_key,
                     stage_name=stage_name,
                     count=count,
                     percentage=round(pct, 1),
@@ -1039,12 +1012,15 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
         # -------------------------------------------------------------------------
         # Cards by Horizon
         # -------------------------------------------------------------------------
-
-        horizon_data = horizon_resp.data or []
+        horizon_result = await db.execute(
+            select(Card.horizon).where(Card.status == "active")
+        )
+        horizon_data = horizon_result.all()
 
         horizon_counts = Counter()
-        for card in horizon_data:
-            if h := card.get("horizon"):
+        for row in horizon_data:
+            h = row[0]
+            if h:
                 horizon_counts[h] += 1
 
         cards_by_horizon = []
@@ -1060,18 +1036,23 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
         # -------------------------------------------------------------------------
         # Trending Pillars (based on recent card creation)
         # -------------------------------------------------------------------------
-
-        recent_pillar_data = recent_pillar_resp.data or []
+        recent_pillar_result = await db.execute(
+            select(Card.pillar_id, Card.velocity_score).where(
+                Card.created_at >= one_week_ago, Card.status == "active"
+            )
+        )
+        recent_pillar_data = recent_pillar_result.all()
 
         recent_pillar_counts = Counter()
-        recent_pillar_velocity = {}
-        for card in recent_pillar_data:
-            if p := card.get("pillar_id"):
+        recent_pillar_velocity: dict = {}
+        for row in recent_pillar_data:
+            p = row[0]
+            if p:
                 recent_pillar_counts[p] += 1
                 if p not in recent_pillar_velocity:
                     recent_pillar_velocity[p] = []
-                if card.get("velocity_score"):
-                    recent_pillar_velocity[p].append(card["velocity_score"])
+                if row[1] is not None:
+                    recent_pillar_velocity[p].append(float(row[1]))
 
         trending_pillars = []
         for code, count in recent_pillar_counts.most_common(6):
@@ -1098,43 +1079,49 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
             )
 
         # -------------------------------------------------------------------------
-        # Hot Topics (high velocity cards recently updated)
+        # Hot Topics (high velocity cards)
         # -------------------------------------------------------------------------
-
-        hot_cards_data = hot_cards_resp.data or []
+        hot_cards_result = await db.execute(
+            select(Card.name, Card.velocity_score)
+            .where(Card.status == "active", Card.velocity_score >= 70)
+            .order_by(Card.velocity_score.desc())
+            .limit(5)
+        )
+        hot_cards_data = hot_cards_result.all()
 
         hot_topics = [
             TrendingTopic(
-                name=card.get("name", "Unknown"),
+                name=row[0] or "Unknown",
                 count=1,
                 trend="up",
-                velocity_avg=card.get("velocity_score"),
+                velocity_avg=float(row[1]) if row[1] is not None else None,
             )
-            for card in hot_cards_data
+            for row in hot_cards_data
         ]
 
         # -------------------------------------------------------------------------
         # Source Statistics
         # -------------------------------------------------------------------------
-
         try:
-            total_sources = sources_resp.count or 0
-            sources_data = sources_resp.data or []
+            total_sources_result = await db.execute(
+                select(func.count()).select_from(Source)
+            )
+            total_sources = total_sources_result.scalar() or 0
+
+            sources_data_result = await db.execute(
+                select(Source.source_type, Source.created_at).limit(10000)
+            )
+            sources_data = sources_data_result.all()
 
             # Sources this week
             sources_week = sum(
-                bool(
-                    s.get("created_at")
-                    and datetime.fromisoformat(s["created_at"].replace("Z", "+00:00"))
-                    > one_week_ago
-                )
-                for s in sources_data
+                bool(row[1] and row[1] > one_week_ago) for row in sources_data
             )
 
             # Sources by type
             source_types = Counter()
-            for s in sources_data:
-                st = s.get("source_type") or "unknown"
+            for row in sources_data:
+                st = row[0] or "unknown"
                 source_types[st] += 1
 
             source_stats = SourceStats(
@@ -1149,40 +1136,36 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
         # -------------------------------------------------------------------------
         # Discovery Statistics
         # -------------------------------------------------------------------------
-
         try:
-            discovery_data = discovery_resp.data or []
+            discovery_data_result = await db.execute(select(DiscoveryRun).limit(1000))
+            discovery_data = list(discovery_data_result.scalars().all())
 
             total_runs = len(discovery_data)
-            completed_runs = [
-                r for r in discovery_data if r.get("status") == "completed"
-            ]
+            completed_runs_list = [r for r in discovery_data if r.status == "completed"]
             runs_week = sum(
-                bool(
-                    r.get("started_at")
-                    and datetime.fromisoformat(r["started_at"].replace("Z", "+00:00"))
-                    > one_week_ago
-                )
+                bool(r.started_at and r.started_at > one_week_ago)
                 for r in discovery_data
             )
 
-            total_discovered = sum(r.get("cards_created", 0) for r in completed_runs)
+            total_discovered = sum((r.cards_created or 0) for r in completed_runs_list)
             avg_per_run = (
-                total_discovered / len(completed_runs) if completed_runs else 0
+                total_discovered / len(completed_runs_list)
+                if completed_runs_list
+                else 0
             )
 
             try:
-                total_searches = search_resp.count or 0
-                search_data = search_resp.data or []
+                total_searches_result = await db.execute(
+                    select(func.count()).select_from(SearchHistory)
+                )
+                total_searches = total_searches_result.scalar() or 0
+
+                search_data_result = await db.execute(
+                    select(SearchHistory.executed_at).limit(1000)
+                )
+                search_data = search_data_result.all()
                 searches_week = sum(
-                    bool(
-                        s.get("executed_at")
-                        and datetime.fromisoformat(
-                            s["executed_at"].replace("Z", "+00:00")
-                        )
-                        > one_week_ago
-                    )
-                    for s in search_data
+                    bool(row[0] and row[0] > one_week_ago) for row in search_data
                 )
             except Exception:
                 total_searches = 0
@@ -1203,25 +1186,23 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
         # -------------------------------------------------------------------------
         # Workstream Engagement
         # -------------------------------------------------------------------------
-
         try:
-            total_workstreams = ws_resp.count or 0
-            ws_data = ws_resp.data or []
+            total_ws_result = await db.execute(
+                select(func.count()).select_from(Workstream)
+            )
+            total_workstreams = total_ws_result.scalar() or 0
+
+            ws_data_result = await db.execute(select(Workstream.updated_at))
+            ws_data = ws_data_result.all()
 
             # Active workstreams (updated in last 30 days)
             active_workstreams = sum(
-                bool(
-                    w.get("updated_at")
-                    and datetime.fromisoformat(w["updated_at"].replace("Z", "+00:00"))
-                    > one_month_ago
-                )
-                for w in ws_data
+                bool(row[0] and row[0] > one_month_ago) for row in ws_data
             )
 
-            ws_cards_data = ws_cards_resp.data or []
-            unique_cards_in_ws = len(
-                {c.get("card_id") for c in ws_cards_data if c.get("card_id")}
-            )
+            ws_cards_result = await db.execute(select(WorkstreamCard.card_id))
+            ws_cards_data = ws_cards_result.all()
+            unique_cards_in_ws = len({row[0] for row in ws_cards_data if row[0]})
 
             avg_cards_per_ws = (
                 len(ws_cards_data) / total_workstreams if total_workstreams > 0 else 0
@@ -1240,37 +1221,32 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
         # -------------------------------------------------------------------------
         # Follow Statistics
         # -------------------------------------------------------------------------
-
         try:
-            follows_data = follows_resp.data or []
+            follows_result = await db.execute(
+                select(CardFollow.card_id, CardFollow.user_id)
+            )
+            follows_data = follows_result.all()
 
             total_follows = len(follows_data)
-            unique_cards_followed = len(
-                {f.get("card_id") for f in follows_data if f.get("card_id")}
-            )
-            unique_users_following = len(
-                {f.get("user_id") for f in follows_data if f.get("user_id")}
-            )
+            unique_cards_followed = len({row[0] for row in follows_data if row[0]})
+            unique_users_following = len({row[1] for row in follows_data if row[1]})
 
             # Most followed cards
-            card_follow_counts = Counter(
-                f.get("card_id") for f in follows_data if f.get("card_id")
-            )
+            card_follow_counts = Counter(row[0] for row in follows_data if row[0])
             top_followed = card_follow_counts.most_common(5)
 
             # Get card names for top followed
             most_followed_cards = []
             if top_followed:
                 top_card_ids = [c[0] for c in top_followed]
-                cards_info = await asyncio.to_thread(
-                    lambda: supabase.table("cards")
-                    .select("id, name, slug")
-                    .in_("id", top_card_ids)
-                    .execute()
+                cards_info_result = await db.execute(
+                    select(Card.id, Card.name, Card.slug).where(
+                        Card.id.in_(top_card_ids)
+                    )
                 )
+                cards_info = cards_info_result.all()
                 cards_map = {
-                    c["id"]: {"name": c["name"], "slug": c.get("slug")}
-                    for c in (cards_info.data or [])
+                    row[0]: {"name": row[1], "slug": row[2]} for row in cards_info
                 }
 
                 for card_id, count in top_followed:
@@ -1279,7 +1255,11 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
                     )
                     most_followed_cards.append(
                         {
-                            "card_id": card_id,
+                            "card_id": (
+                                str(card_id)
+                                if isinstance(card_id, uuid.UUID)
+                                else card_id
+                            ),
                             "card_slug": card_info.get("slug"),
                             "card_name": card_info.get("name", "Unknown"),
                             "follower_count": count,
@@ -1326,7 +1306,10 @@ async def get_system_wide_stats(current_user: dict = Depends(get_current_user)):
 
 
 @router.get("/analytics/personal-stats", response_model=PersonalStats)
-async def get_personal_stats(current_user: dict = Depends(get_current_user)):
+async def get_personal_stats(
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
+):
     """
     Get personal analytics for the current user.
 
@@ -1342,97 +1325,48 @@ async def get_personal_stats(current_user: dict = Depends(get_current_user)):
         one_week_ago = now - timedelta(days=7)
 
         # -------------------------------------------------------------------------
-        # Batch 1: All independent queries in parallel
+        # User's Follows -- fetch follows and join card data
         # -------------------------------------------------------------------------
-
-        (
-            user_follows_resp,
-            all_follows_resp,
-            users_resp,
-            user_ws_resp,
-            all_ws_resp,
-            user_ws_cards_resp,
-        ) = await asyncio.gather(
-            # User's follows with card join
-            asyncio.to_thread(
-                lambda: supabase.table("card_follows")
-                .select(
-                    "card_id, priority, created_at, cards(id, name, slug, pillar_id, horizon, velocity_score)"
-                )
-                .eq("user_id", user_id)
-                .execute()
-            ),
-            # All follows (card_id, user_id, created_at) - single fetch for
-            # follower counts, engagement comparison, and recently popular
-            asyncio.to_thread(
-                lambda: supabase.table("card_follows")
-                .select("card_id, user_id, created_at")
-                .execute()
-            ),
-            # All users for engagement percentile
-            asyncio.to_thread(lambda: supabase.table("users").select("id").execute()),
-            # User's workstreams count
-            asyncio.to_thread(
-                lambda: supabase.table("workstreams")
-                .select("id", count="exact")
-                .eq("user_id", user_id)
-                .execute()
-            ),
-            # All workstreams per user
-            asyncio.to_thread(
-                lambda: supabase.table("workstreams").select("user_id").execute()
-            ),
-            # User workstream cards
-            asyncio.to_thread(
-                lambda: supabase.table("workstream_cards")
-                .select("card_id, workstreams!inner(user_id)")
-                .eq("workstreams.user_id", user_id)
-                .execute()
-            ),
+        user_follows_result = await db.execute(
+            select(CardFollow, Card)
+            .outerjoin(Card, CardFollow.card_id == Card.id)
+            .where(CardFollow.user_id == user_id)
         )
+        user_follows_rows = user_follows_result.all()
 
-        # -------------------------------------------------------------------------
-        # User's Follows
-        # -------------------------------------------------------------------------
-
-        user_follows_data = user_follows_resp.data or []
-        all_follows_data = all_follows_resp.data or []
-
-        # Build follower counts from the single all_follows query
-        card_follower_counts = Counter(
-            f.get("card_id") for f in all_follows_data if f.get("card_id")
+        # All follows (for community stats)
+        all_follows_result = await db.execute(
+            select(CardFollow.card_id, CardFollow.user_id, CardFollow.created_at)
         )
+        all_follows_data = all_follows_result.all()
+
+        # Build follower counts from the all_follows query
+        card_follower_counts = Counter(row[0] for row in all_follows_data if row[0])
 
         user_card_ids = set()
         following = []
-        for f in user_follows_data:
-            card = f.get("cards", {})
+        for follow, card in user_follows_rows:
             if not card:
                 continue
-            card_id = card.get("id") or f.get("card_id")
+            card_id = card.id
             user_card_ids.add(card_id)
 
-            followed_at = f.get("created_at")
-            if followed_at:
-                try:
-                    followed_at = datetime.fromisoformat(
-                        followed_at.replace("Z", "+00:00")
-                    )
-                except (ValueError, TypeError):
-                    followed_at = now
-            else:
-                followed_at = now
+            followed_at = follow.created_at or now
 
             following.append(
                 UserFollowItem(
-                    card_id=card_id,
-                    card_slug=card.get("slug"),
-                    card_name=card.get("name", "Unknown"),
-                    pillar_id=card.get("pillar_id"),
-                    horizon=card.get("horizon"),
-                    velocity_score=card.get("velocity_score"),
+                    card_id=str(card_id),
+                    card_slug=card.slug,
+                    card_name=card.name or "Unknown",
+                    pillar_id=card.pillar_id,
+                    horizon=card.horizon,
+                    velocity_score=(
+                        float(card.velocity_score)
+                        if card.velocity_score is not None
+                        else None
+                    ),
                     followed_at=followed_at,
-                    priority=f.get("priority", "medium"),
+                    priority=follow.priority or "medium",
                     follower_count=card_follower_counts.get(card_id, 1),
                 )
             )
@@ -1442,31 +1376,35 @@ async def get_personal_stats(current_user: dict = Depends(get_current_user)):
         # -------------------------------------------------------------------------
         # Engagement Comparison
         # -------------------------------------------------------------------------
-
-        all_users = users_resp.data or []
+        all_users_result = await db.execute(select(User.id))
+        all_users = all_users_result.all()
         total_users = len(all_users)
 
         # User follow counts per user
-        user_follow_counts = Counter(
-            f.get("user_id") for f in all_follows_data if f.get("user_id")
-        )
+        user_follow_counts = Counter(row[1] for row in all_follows_data if row[1])
         all_follow_counts = list(user_follow_counts.values()) or [0]
         avg_follows = (
             sum(all_follow_counts) / len(all_follow_counts) if all_follow_counts else 0
         )
 
-        user_workstream_count = user_ws_resp.count or 0
-
-        ws_per_user = Counter(
-            w.get("user_id") for w in (all_ws_resp.data or []) if w.get("user_id")
+        user_ws_result = await db.execute(
+            select(func.count())
+            .select_from(Workstream)
+            .where(Workstream.user_id == user_id)
         )
+        user_workstream_count = user_ws_result.scalar() or 0
+
+        all_ws_result = await db.execute(select(Workstream.user_id))
+        all_ws_data = all_ws_result.all()
+        ws_per_user = Counter(row[0] for row in all_ws_data if row[0])
         all_ws_counts = list(ws_per_user.values()) or [0]
         avg_workstreams = (
             sum(all_ws_counts) / len(all_ws_counts) if all_ws_counts else 0
         )
 
         # Calculate percentiles
-        user_follows_count = user_follow_counts.get(user_id, 0)
+        user_id_uuid = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
+        user_follows_count = user_follow_counts.get(user_id_uuid, 0)
         follows_below = sum(bool(c < user_follows_count) for c in all_follow_counts)
         user_percentile_follows = (
             (follows_below / len(all_follow_counts) * 100) if all_follow_counts else 0
@@ -1498,21 +1436,14 @@ async def get_personal_stats(current_user: dict = Depends(get_current_user)):
 
         # Community pillar distribution from all follows
         community_pillar_counts = Counter()
-        all_card_ids = list(
-            {f.get("card_id") for f in all_follows_data if f.get("card_id")}
-        )
+        all_card_ids = list({row[0] for row in all_follows_data if row[0]})
         if all_card_ids:
-            cards_pillar_resp = await asyncio.to_thread(
-                lambda: supabase.table("cards")
-                .select("id, pillar_id")
-                .in_("id", all_card_ids)
-                .execute()
+            cards_pillar_result = await db.execute(
+                select(Card.id, Card.pillar_id).where(Card.id.in_(all_card_ids))
             )
-            card_pillars = {
-                c["id"]: c.get("pillar_id") for c in (cards_pillar_resp.data or [])
-            }
-            for f in all_follows_data:
-                card_id = f.get("card_id")
+            card_pillars = {row[0]: row[1] for row in cards_pillar_result.all()}
+            for row in all_follows_data:
+                card_id = row[0]
                 if pillar := card_pillars.get(card_id):
                     community_pillar_counts[pillar] += 1
 
@@ -1556,26 +1487,28 @@ async def get_personal_stats(current_user: dict = Depends(get_current_user)):
 
         popular_not_followed = []
         if popular_card_ids:
-            popular_cards_resp = await asyncio.to_thread(
-                lambda: supabase.table("cards")
-                .select("id, name, slug, summary, pillar_id, horizon, velocity_score")
-                .in_("id", popular_card_ids)
-                .eq("status", "active")
-                .execute()
+            popular_cards_result = await db.execute(
+                select(Card).where(
+                    Card.id.in_(popular_card_ids), Card.status == "active"
+                )
             )
+            popular_cards = popular_cards_result.scalars().all()
 
-            for card in popular_cards_resp.data or []:
-                card_id = card.get("id")
+            for card in popular_cards:
                 popular_not_followed.append(
                     PopularCard(
-                        card_id=card_id,
-                        card_slug=card.get("slug"),
-                        card_name=card.get("name", "Unknown"),
-                        summary=card.get("summary", "")[:200],
-                        pillar_id=card.get("pillar_id"),
-                        horizon=card.get("horizon"),
-                        velocity_score=card.get("velocity_score"),
-                        follower_count=card_follower_counts.get(card_id, 0),
+                        card_id=str(card.id),
+                        card_slug=card.slug,
+                        card_name=card.name or "Unknown",
+                        summary=(card.summary or "")[:200],
+                        pillar_id=card.pillar_id,
+                        horizon=card.horizon,
+                        velocity_score=(
+                            float(card.velocity_score)
+                            if card.velocity_score is not None
+                            else None
+                        ),
+                        follower_count=card_follower_counts.get(card.id, 0),
                         is_followed_by_user=False,
                     )
                 )
@@ -1584,14 +1517,13 @@ async def get_personal_stats(current_user: dict = Depends(get_current_user)):
         # Recently Popular (new follows in last week)
         # -------------------------------------------------------------------------
 
-        # Reuse the all_follows_data already fetched (includes created_at)
         recent_card_counts = Counter()
-        for f in all_follows_data:
-            if created_at := f.get("created_at"):
+        for row in all_follows_data:
+            created_at = row[2]
+            if created_at:
                 try:
-                    dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-                    if dt > one_week_ago:
-                        recent_card_counts[f.get("card_id")] += 1
+                    if created_at > one_week_ago:
+                        recent_card_counts[row[0]] += 1
                 except (ValueError, TypeError):
                     pass
 
@@ -1603,26 +1535,28 @@ async def get_personal_stats(current_user: dict = Depends(get_current_user)):
 
         recently_popular = []
         if recently_popular_ids:
-            recent_cards_resp = await asyncio.to_thread(
-                lambda: supabase.table("cards")
-                .select("id, name, slug, summary, pillar_id, horizon, velocity_score")
-                .in_("id", recently_popular_ids)
-                .eq("status", "active")
-                .execute()
+            recent_cards_result = await db.execute(
+                select(Card).where(
+                    Card.id.in_(recently_popular_ids), Card.status == "active"
+                )
             )
+            recent_cards = recent_cards_result.scalars().all()
 
-            for card in recent_cards_resp.data or []:
-                card_id = card.get("id")
+            for card in recent_cards:
                 recently_popular.append(
                     PopularCard(
-                        card_id=card_id,
-                        card_slug=card.get("slug"),
-                        card_name=card.get("name", "Unknown"),
-                        summary=card.get("summary", "")[:200],
-                        pillar_id=card.get("pillar_id"),
-                        horizon=card.get("horizon"),
-                        velocity_score=card.get("velocity_score"),
-                        follower_count=recent_card_counts.get(card_id, 0),
+                        card_id=str(card.id),
+                        card_slug=card.slug,
+                        card_name=card.name or "Unknown",
+                        summary=(card.summary or "")[:200],
+                        pillar_id=card.pillar_id,
+                        horizon=card.horizon,
+                        velocity_score=(
+                            float(card.velocity_score)
+                            if card.velocity_score is not None
+                            else None
+                        ),
+                        follower_count=recent_card_counts.get(card.id, 0),
                         is_followed_by_user=False,
                     )
                 )
@@ -1631,13 +1565,13 @@ async def get_personal_stats(current_user: dict = Depends(get_current_user)):
         # User Workstream Stats
         # -------------------------------------------------------------------------
 
-        cards_in_workstreams = len(
-            {
-                c.get("card_id")
-                for c in (user_ws_cards_resp.data or [])
-                if c.get("card_id")
-            }
+        user_ws_cards_result = await db.execute(
+            select(WorkstreamCard.card_id)
+            .join(Workstream, WorkstreamCard.workstream_id == Workstream.id)
+            .where(Workstream.user_id == user_id)
         )
+        user_ws_cards_data = user_ws_cards_result.all()
+        cards_in_workstreams = len({row[0] for row in user_ws_cards_data if row[0]})
 
         # -------------------------------------------------------------------------
         # Build Response
@@ -1667,20 +1601,19 @@ async def get_personal_stats(current_user: dict = Depends(get_current_user)):
 async def get_top_domains(
     limit: int = 20,
     category: Optional[str] = None,
-    user=Depends(get_current_user),
+    user=Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
 ):
     """Top domains leaderboard by composite score."""
     try:
-        query = supabase.table("domain_reputation").select(
-            "id,domain_pattern,organization_name,category,curated_tier,"
-            "composite_score,user_quality_avg,user_rating_count,triage_pass_rate"
-        )
-        query = query.eq("is_active", True)
+        stmt = select(DomainReputation).where(DomainReputation.is_active == True)
         if category:
-            query = query.eq("category", category)
-        query = query.order("composite_score", desc=True).limit(limit)
-        result = query.execute()
-        return result.data
+            stmt = stmt.where(DomainReputation.category == category)
+        stmt = stmt.order_by(DomainReputation.composite_score.desc()).limit(limit)
+
+        result = await db.execute(stmt)
+        rows = result.scalars().all()
+        return [_row_to_dict(row, skip_cols={"notes"}) for row in rows]
     except Exception as e:
         logger.error(f"Failed to get top domains: {str(e)}")
         raise HTTPException(

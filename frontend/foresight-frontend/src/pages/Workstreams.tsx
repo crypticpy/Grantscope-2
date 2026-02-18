@@ -23,8 +23,8 @@ import {
   Radar,
   Loader2,
 } from "lucide-react";
-import { supabase } from "../App";
 import { useAuthContext } from "../hooks/useAuthContext";
+import { API_BASE_URL } from "../lib/config";
 import { WorkstreamForm, type Workstream } from "../components/WorkstreamForm";
 import { WorkstreamWizard } from "../components/workstream/WorkstreamWizard";
 import { PillarBadgeGroup } from "../components/PillarBadge";
@@ -744,13 +744,28 @@ const Workstreams: React.FC = () => {
 
   const loadWorkstreams = async () => {
     try {
-      const { data } = await supabase
-        .from("workstreams")
-        .select("*")
-        .eq("user_id", user?.id)
-        .order("created_at", { ascending: false });
+      const token = localStorage.getItem("gs2_token");
+      if (!token) {
+        setLoading(false);
+        return;
+      }
 
-      const list = data || [];
+      const response = await fetch(`${API_BASE_URL}/api/v1/me/workstreams`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const data: Workstream[] = await response.json();
+      // Sort by created_at descending (in case API doesn't guarantee order)
+      const list = data.sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+      );
       setWorkstreams(list);
       workstreamsRef.current = list;
 
@@ -807,13 +822,23 @@ const Workstreams: React.FC = () => {
 
     setIsDeleting(true);
     try {
-      const { error } = await supabase
-        .from("workstreams")
-        .delete()
-        .eq("id", deletingWorkstream.id)
-        .eq("user_id", user?.id);
+      const token = localStorage.getItem("gs2_token");
+      if (!token) throw new Error("Authentication required");
 
-      if (error) throw error;
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/me/workstreams/${deletingWorkstream.id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(errBody.detail || `Delete failed: ${response.status}`);
+      }
 
       setDeletingWorkstream(undefined);
       loadWorkstreams();

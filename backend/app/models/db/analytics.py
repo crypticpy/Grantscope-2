@@ -14,8 +14,10 @@ from typing import Optional
 
 from sqlalchemy import (
     Boolean,
+    Computed,
     Date,
     DateTime,
+    Float,
     Integer,
     Numeric,
     Text,
@@ -27,7 +29,12 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.db.base import Base
 
-__all__ = ["CachedInsight", "DomainReputation", "PatternInsight"]
+__all__ = [
+    "CachedInsight",
+    "ClassificationValidation",
+    "DomainReputation",
+    "PatternInsight",
+]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -183,4 +190,36 @@ class PatternInsight(Base):
     )
     expires_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# classification_validations
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class ClassificationValidation(Base):
+    """Human-verified classification validation for AI-predicted pillars."""
+
+    __tablename__ = "classification_validations"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    card_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    predicted_pillar: Mapped[str] = mapped_column(Text, nullable=False)
+    ground_truth_pillar: Mapped[str] = mapped_column(Text, nullable=False)
+    is_correct: Mapped[Optional[bool]] = mapped_column(
+        Boolean,
+        Computed("predicted_pillar = ground_truth_pillar", persisted=True),
+    )
+    reviewer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    confidence_at_prediction: Mapped[Optional[float]] = mapped_column(
+        Float, nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
     )

@@ -17,9 +17,16 @@ Scoring Components (weighted):
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Optional
 
-from supabase import Client
+from sqlalchemy import select, update as sa_update, func
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.db.card import Card
+from app.models.db.source import Source, DiscoveredSource
+from app.models.db.research import ResearchTask
+from app.models.db.card_extras import Entity, CardFollow
+from app.models.db.workstream import WorkstreamCard
 
 logger = logging.getLogger(__name__)
 
@@ -103,12 +110,12 @@ def _score_engagement(total_engagement: int) -> int:
         return 100
 
 
-def compute_signal_quality_score(supabase: Client, card_id: str) -> dict:
+async def compute_signal_quality_score(db: AsyncSession, card_id: str) -> dict:
     """
     Compute signal quality score and component breakdown for a card.
 
     Args:
-        supabase: Supabase client instance
+        db: AsyncSession instance
         card_id: UUID of the card to score
 
     Returns:
@@ -118,13 +125,10 @@ def compute_signal_quality_score(supabase: Client, card_id: str) -> dict:
 
     # 1. Source Count (15%) - from sources table
     try:
-        sources_result = (
-            supabase.table("sources")
-            .select("id", count="exact")
-            .eq("card_id", card_id)
-            .execute()
+        sources_result = await db.execute(
+            select(func.count(Source.id)).where(Source.card_id == card_id)
         )
-        source_count = sources_result.count or 0
+        source_count = sources_result.scalar() or 0
     except Exception as e:
         logger.warning(f"Failed to fetch source count for card {card_id}: {e}")
         source_count = 0
@@ -138,20 +142,17 @@ def compute_signal_quality_score(supabase: Client, card_id: str) -> dict:
 
     # 2. Source Diversity (10%) - from discovered_sources: distinct source_type + distinct domain
     try:
-        diversity_result = (
-            supabase.table("discovered_sources")
-            .select("source_type, domain")
-            .eq("resulting_card_id", card_id)
-            .execute()
+        diversity_result = await db.execute(
+            select(DiscoveredSource.source_type, DiscoveredSource.domain).where(
+                DiscoveredSource.resulting_card_id == card_id
+            )
         )
-        diversity_data = diversity_result.data or []
+        diversity_data = diversity_result.all()
 
         unique_types = len(
-            {row["source_type"] for row in diversity_data if row.get("source_type")}
+            {row.source_type for row in diversity_data if row.source_type}
         )
-        unique_domains = len(
-            {row["domain"] for row in diversity_data if row.get("domain")}
-        )
+        unique_domains = len({row.domain for row in diversity_data if row.domain})
     except Exception as e:
         logger.warning(f"Failed to fetch source diversity for card {card_id}: {e}")
         unique_types = 0
@@ -166,17 +167,15 @@ def compute_signal_quality_score(supabase: Client, card_id: str) -> dict:
 
     # 3. Avg Credibility (15%) - from discovered_sources.analysis_credibility (1.0-5.0)
     try:
-        credibility_result = (
-            supabase.table("discovered_sources")
-            .select("analysis_credibility")
-            .eq("resulting_card_id", card_id)
-            .not_.is_("analysis_credibility", "null")
-            .execute()
+        credibility_result = await db.execute(
+            select(DiscoveredSource.analysis_credibility).where(
+                DiscoveredSource.resulting_card_id == card_id,
+                DiscoveredSource.analysis_credibility.isnot(None),
+            )
         )
-        if credibility_data := credibility_result.data or []:
-            avg_credibility = sum(
-                row["analysis_credibility"] for row in credibility_data
-            ) / len(credibility_data)
+        credibility_data = credibility_result.scalars().all()
+        if credibility_data:
+            avg_credibility = sum(credibility_data) / len(credibility_data)
         else:
             avg_credibility = None
     except Exception as e:
@@ -192,17 +191,15 @@ def compute_signal_quality_score(supabase: Client, card_id: str) -> dict:
 
     # 4. Avg Triage Confidence (10%) - from discovered_sources.triage_confidence (0-1)
     try:
-        triage_result = (
-            supabase.table("discovered_sources")
-            .select("triage_confidence")
-            .eq("resulting_card_id", card_id)
-            .not_.is_("triage_confidence", "null")
-            .execute()
-        )
-        if triage_data := triage_result.data or []:
-            avg_triage = sum(row["triage_confidence"] for row in triage_data) / len(
-                triage_data
+        triage_result = await db.execute(
+            select(DiscoveredSource.triage_confidence).where(
+                DiscoveredSource.resulting_card_id == card_id,
+                DiscoveredSource.triage_confidence.isnot(None),
             )
+        )
+        triage_data = triage_result.scalars().all()
+        if triage_data:
+            avg_triage = sum(triage_data) / len(triage_data)
         else:
             avg_triage = None
     except Exception as e:
@@ -218,15 +215,14 @@ def compute_signal_quality_score(supabase: Client, card_id: str) -> dict:
 
     # 5. Deep Research (15%) - cards.deep_research_at IS NOT NULL
     try:
-        card_result = (
-            supabase.table("cards")
-            .select("deep_research_at, reviewed_at")
-            .eq("id", card_id)
-            .execute()
+        card_result = await db.execute(
+            select(Card.deep_research_at, Card.reviewed_at).where(Card.id == card_id)
         )
-        card_data = card_result.data[0] if card_result.data else {}
-        has_deep_research = card_data.get("deep_research_at") is not None
-        has_review = card_data.get("reviewed_at") is not None
+        card_data = card_result.one_or_none()
+        has_deep_research = (
+            card_data.deep_research_at is not None if card_data else False
+        )
+        has_review = card_data.reviewed_at is not None if card_data else False
     except Exception as e:
         logger.warning(f"Failed to fetch card data for card {card_id}: {e}")
         has_deep_research = False
@@ -241,14 +237,13 @@ def compute_signal_quality_score(supabase: Client, card_id: str) -> dict:
 
     # 6. Research Tasks (10%) - count completed research tasks for this card
     try:
-        research_result = (
-            supabase.table("research_tasks")
-            .select("id", count="exact")
-            .eq("card_id", card_id)
-            .eq("status", "completed")
-            .execute()
+        research_result = await db.execute(
+            select(func.count(ResearchTask.id)).where(
+                ResearchTask.card_id == card_id,
+                ResearchTask.status == "completed",
+            )
         )
-        research_task_count = research_result.count or 0
+        research_task_count = research_result.scalar() or 0
     except Exception as e:
         logger.warning(f"Failed to fetch research task count for card {card_id}: {e}")
         research_task_count = 0
@@ -262,13 +257,10 @@ def compute_signal_quality_score(supabase: Client, card_id: str) -> dict:
 
     # 7. Entity Count (5%) - from entities table
     try:
-        entity_result = (
-            supabase.table("entities")
-            .select("id", count="exact")
-            .eq("card_id", card_id)
-            .execute()
+        entity_result = await db.execute(
+            select(func.count(Entity.id)).where(Entity.card_id == card_id)
         )
-        entity_count = entity_result.count or 0
+        entity_count = entity_result.scalar() or 0
     except Exception as e:
         logger.warning(f"Failed to fetch entity count for card {card_id}: {e}")
         entity_count = 0
@@ -290,25 +282,21 @@ def compute_signal_quality_score(supabase: Client, card_id: str) -> dict:
 
     # 9. Engagement (10%) - card_follows COUNT + workstream_cards COUNT
     try:
-        follows_result = (
-            supabase.table("card_follows")
-            .select("id", count="exact")
-            .eq("card_id", card_id)
-            .execute()
+        follows_result = await db.execute(
+            select(func.count(CardFollow.id)).where(CardFollow.card_id == card_id)
         )
-        follows_count = follows_result.count or 0
+        follows_count = follows_result.scalar() or 0
     except Exception as e:
         logger.warning(f"Failed to fetch follows count for card {card_id}: {e}")
         follows_count = 0
 
     try:
-        workstream_result = (
-            supabase.table("workstream_cards")
-            .select("id", count="exact")
-            .eq("card_id", card_id)
-            .execute()
+        workstream_result = await db.execute(
+            select(func.count(WorkstreamCard.id)).where(
+                WorkstreamCard.card_id == card_id
+            )
         )
-        workstream_count = workstream_result.count or 0
+        workstream_count = workstream_result.scalar() or 0
     except Exception as e:
         logger.warning(
             f"Failed to fetch workstream membership count for card {card_id}: {e}"
@@ -345,26 +333,25 @@ def compute_signal_quality_score(supabase: Client, card_id: str) -> dict:
     }
 
 
-def update_signal_quality_score(supabase: Client, card_id: str) -> int:
+async def update_signal_quality_score(db: AsyncSession, card_id: str) -> int:
     """
     Compute and save the signal quality score for a card.
 
     Args:
-        supabase: Supabase client instance
+        db: AsyncSession instance
         card_id: UUID of the card to update
 
     Returns:
         The computed score (int 0-100)
     """
-    result = compute_signal_quality_score(supabase, card_id)
+    result = await compute_signal_quality_score(db, card_id)
     score = result["score"]
 
     try:
-        supabase.table("cards").update(
-            {
-                "signal_quality_score": score,
-            }
-        ).eq("id", card_id).execute()
+        await db.execute(
+            sa_update(Card).where(Card.id == card_id).values(signal_quality_score=score)
+        )
+        await db.flush()
         logger.info(f"Updated signal quality score for card {card_id}: {score}")
     except Exception as e:
         logger.error(f"Failed to save signal quality score for card {card_id}: {e}")
@@ -372,12 +359,12 @@ def update_signal_quality_score(supabase: Client, card_id: str) -> int:
     return score
 
 
-def recompute_all_quality_scores(supabase: Client) -> dict:
+async def recompute_all_quality_scores(db: AsyncSession) -> dict:
     """
     Recompute quality scores for all active cards.
 
     Args:
-        supabase: Supabase client instance
+        db: AsyncSession instance
 
     Returns:
         dict with "updated" (int) and "errors" (int) counts
@@ -387,22 +374,20 @@ def recompute_all_quality_scores(supabase: Client) -> dict:
 
     try:
         # Fetch all active card IDs
-        result = supabase.table("cards").select("id").eq("status", "active").execute()
-        cards = result.data or []
+        result = await db.execute(select(Card.id).where(Card.status == "active"))
+        cards = result.scalars().all()
     except Exception as e:
         logger.error(
             f"Failed to fetch active cards for quality score recomputation: {e}"
         )
         return {"updated": 0, "errors": 1}
 
-    for card in cards:
+    for card_id in cards:
         try:
-            update_signal_quality_score(supabase, card["id"])
+            await update_signal_quality_score(db, str(card_id))
             updated += 1
         except Exception as e:
-            logger.error(
-                f"Failed to recompute quality score for card {card['id']}: {e}"
-            )
+            logger.error(f"Failed to recompute quality score for card {card_id}: {e}")
             errors += 1
 
     logger.info(f"Recomputed quality scores: {updated} updated, {errors} errors")

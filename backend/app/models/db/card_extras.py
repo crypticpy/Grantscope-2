@@ -92,6 +92,14 @@ class CardTimeline(Base):
         UUID(as_uuid=True), nullable=True
     )
 
+    # Stage transition columns (1766436102_enhance_card_timeline)
+    old_stage_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    new_stage_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    old_horizon: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    new_horizon: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    trigger: Mapped[Optional[str]] = mapped_column("trigger", Text, nullable=True)
+    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     created_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=True
     )

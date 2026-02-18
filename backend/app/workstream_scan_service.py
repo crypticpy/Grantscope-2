@@ -21,7 +21,7 @@ Usage:
         pillar_ids=["HH"],
         horizon="H2"
     )
-    service = WorkstreamScanService(supabase_client, openai_client)
+    service = WorkstreamScanService(db, openai_client)
     result = await service.execute_scan(config)
 """
 
@@ -34,8 +34,16 @@ from typing import List, Optional, Dict, Any, Tuple
 from enum import Enum
 import uuid
 
-from supabase import Client
+from sqlalchemy import func, select, text
+from sqlalchemy import update as sa_update
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 import openai
+
+from app.helpers.db_utils import vector_search_cards
+from app.models.db.card import Card, CardEmbedding
+from app.models.db.source import Source
+from app.models.db.workstream import WorkstreamCard, WorkstreamScan
 
 from .ai_service import AIService, AnalysisResult, TriageResult
 from .research_service import RawSource, ProcessedSource
@@ -133,10 +141,10 @@ class WorkstreamScanService:
 
     def __init__(
         self,
-        supabase: Client,
+        db: AsyncSession,
         openai_client: openai.OpenAI,
     ):
-        self.supabase = supabase
+        self.db = db
         self.openai_client = openai_client
         self.ai_service = AIService(openai_client)
 
@@ -156,15 +164,13 @@ class WorkstreamScanService:
         """
         # FIX-H5: Rate limiting - max 10 scans per workstream per 24 hours
         try:
-            cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
-            recent_scans = (
-                self.supabase.table("workstream_scans")
-                .select("id")
-                .eq("workstream_id", config.workstream_id)
-                .gte("created_at", cutoff)
-                .execute()
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+            result = await self.db.execute(
+                select(WorkstreamScan.id)
+                .where(WorkstreamScan.workstream_id == config.workstream_id)
+                .where(WorkstreamScan.created_at >= cutoff)
             )
-            scan_count = len(recent_scans.data) if recent_scans.data else 0
+            scan_count = len(result.all())
             if scan_count >= 10:
                 logger.warning(
                     f"Rate limit exceeded for workstream {config.workstream_id}: "
@@ -183,7 +189,7 @@ class WorkstreamScanService:
             logger.warning(f"Rate limit check failed, proceeding with scan: {e}")
 
         start_time = datetime.now(timezone.utc)
-        result = ScanResult(
+        scan_result = ScanResult(
             scan_id=config.scan_id,
             workstream_id=config.workstream_id,
             status="running",
@@ -198,25 +204,25 @@ class WorkstreamScanService:
 
             # Step 1: Generate queries (AI-powered with static fallback)
             queries = await self._generate_queries_with_ai(config)
-            result.queries_executed = len(queries)
+            scan_result.queries_executed = len(queries)
             logger.info(f"Generated {len(queries)} queries for workstream scan")
 
             # Step 2: Fetch sources (Serper primary, RSS + academic supplementary)
             raw_sources, sources_by_category = await self._fetch_sources(
                 queries, config, workstream_id=config.workstream_id
             )
-            result.sources_fetched = len(raw_sources)
-            result.sources_by_category = sources_by_category
+            scan_result.sources_fetched = len(raw_sources)
+            scan_result.sources_by_category = sources_by_category
             logger.info(f"Fetched {len(raw_sources)} sources across categories")
 
             if not raw_sources:
-                result.status = "completed"
-                result.completed_at = datetime.now(timezone.utc)
-                result.execution_time_seconds = (
-                    result.completed_at - start_time
+                scan_result.status = "completed"
+                scan_result.completed_at = datetime.now(timezone.utc)
+                scan_result.execution_time_seconds = (
+                    scan_result.completed_at - start_time
                 ).total_seconds()
-                await self._finalize_scan(config.scan_id, result)
-                return result
+                await self._finalize_scan(config.scan_id, scan_result)
+                return scan_result
 
             logger.info(f"Enriching {len(raw_sources)} sources with full content...")
             raw_sources = await enrich_sources(raw_sources, max_concurrent=5)
@@ -224,9 +230,7 @@ class WorkstreamScanService:
             # Step 2c: Preload domain reputation cache (Task 2.7)
             try:
                 source_urls = [s.url for s in raw_sources if s.url]
-                domain_reputation_service.get_reputation_batch(
-                    self.supabase, source_urls
-                )
+                domain_reputation_service.get_reputation_batch(self.db, source_urls)
                 logger.info(
                     "Domain reputation cache preloaded for %d source URLs",
                     len(source_urls),
@@ -239,7 +243,7 @@ class WorkstreamScanService:
             # Step 3: Triage and analyze
             logger.info(f"Starting triage of {len(raw_sources)} raw sources...")
             processed_sources = await self._triage_and_analyze(raw_sources, config)
-            result.sources_triaged = len(processed_sources)
+            scan_result.sources_triaged = len(processed_sources)
             logger.info(
                 f"Triaged {len(processed_sources)} relevant sources (from {len(raw_sources)} raw)"
             )
@@ -254,13 +258,13 @@ class WorkstreamScanService:
                 logger.warning(
                     "No sources passed triage - completing scan with 0 cards"
                 )
-                result.status = "completed"
-                result.completed_at = datetime.now(timezone.utc)
-                result.execution_time_seconds = (
-                    result.completed_at - start_time
+                scan_result.status = "completed"
+                scan_result.completed_at = datetime.now(timezone.utc)
+                scan_result.execution_time_seconds = (
+                    scan_result.completed_at - start_time
                 ).total_seconds()
-                await self._finalize_scan(config.scan_id, result)
-                return result
+                await self._finalize_scan(config.scan_id, scan_result)
+                return scan_result
 
             # Step 4: Deduplicate
             logger.info(
@@ -269,7 +273,7 @@ class WorkstreamScanService:
             unique_sources, enrichment_candidates, duplicates = await self._deduplicate(
                 processed_sources, config
             )
-            result.duplicates_skipped = duplicates
+            scan_result.duplicates_skipped = duplicates
             logger.info(
                 f"Dedup complete: {len(unique_sources)} unique, "
                 f"{len(enrichment_candidates)} enrichments, {duplicates} duplicates"
@@ -279,8 +283,8 @@ class WorkstreamScanService:
             for source, card_id, similarity in enrichment_candidates:
                 try:
                     source_id = await self._store_source_to_card(source, card_id)
-                    if source_id and card_id not in result.cards_enriched:
-                        result.cards_enriched.append(card_id)
+                    if source_id and card_id not in scan_result.cards_enriched:
+                        scan_result.cards_enriched.append(card_id)
                         logger.info(f"Enriched card {card_id}")
                 except Exception as e:
                     logger.warning(f"Failed to enrich card {card_id}: {e}")
@@ -306,7 +310,7 @@ class WorkstreamScanService:
                     )
                     card_id = await self._create_card(source, config)
                     if card_id:
-                        result.cards_created.append(card_id)
+                        scan_result.cards_created.append(card_id)
                         cards_created_count += 1
                         logger.info(
                             f"Created card {card_id}: {source.analysis.suggested_card_name}"
@@ -317,7 +321,7 @@ class WorkstreamScanService:
                         )
                 except Exception as e:
                     logger.warning(f"Failed to create card: {e}", exc_info=True)
-                    result.errors.append(f"Card creation failed: {str(e)[:100]}")
+                    scan_result.errors.append(f"Card creation failed: {str(e)[:100]}")
 
             if sources_without_analysis > 0:
                 logger.warning(
@@ -326,33 +330,33 @@ class WorkstreamScanService:
 
             # Step 7: Auto-add to workstream inbox
             if config.auto_add_to_workstream:
-                all_card_ids = result.cards_created + result.cards_enriched
+                all_card_ids = scan_result.cards_created + scan_result.cards_enriched
                 for card_id in all_card_ids:
                     try:
                         added = await self._add_to_workstream(
                             config.workstream_id, card_id, config.user_id
                         )
                         if added:
-                            result.cards_added_to_workstream.append(card_id)
+                            scan_result.cards_added_to_workstream.append(card_id)
                     except Exception as e:
                         logger.warning(
                             f"Failed to add card {card_id} to workstream: {e}"
                         )
 
-            result.status = "completed"
+            scan_result.status = "completed"
 
         except Exception as e:
             logger.exception(f"Workstream scan failed: {e}")
-            result.status = "failed"
-            result.errors.append(str(e))
+            scan_result.status = "failed"
+            scan_result.errors.append(str(e))
 
-        result.completed_at = datetime.now(timezone.utc)
-        result.execution_time_seconds = (
-            result.completed_at - start_time
+        scan_result.completed_at = datetime.now(timezone.utc)
+        scan_result.execution_time_seconds = (
+            scan_result.completed_at - start_time
         ).total_seconds()
-        await self._finalize_scan(config.scan_id, result)
+        await self._finalize_scan(config.scan_id, scan_result)
 
-        return result
+        return scan_result
 
     async def _get_workstream_context(
         self, config: WorkstreamScanConfig
@@ -368,35 +372,31 @@ class WorkstreamScanService:
 
         try:
             # Get card names already in this workstream
-            ws_cards = (
-                self.supabase.table("workstream_cards")
-                .select("card_id")
-                .eq("workstream_id", config.workstream_id)
-                .execute()
-            )
-            if ws_cards.data:
-                card_ids = [r["card_id"] for r in ws_cards.data]
-                # Fetch names in batches (Supabase IN filter)
-                cards = (
-                    self.supabase.table("cards")
-                    .select("name")
-                    .in_("id", card_ids[:50])  # Cap to avoid huge queries
-                    .execute()
+            ws_result = await self.db.execute(
+                select(WorkstreamCard.card_id).where(
+                    WorkstreamCard.workstream_id == config.workstream_id
                 )
-                existing_names = [r["name"] for r in (cards.data or [])]
+            )
+            card_ids = [str(row.card_id) for row in ws_result.all()]
+
+            if card_ids:
+                # Fetch names in batches (cap to avoid huge queries)
+                cards_result = await self.db.execute(
+                    select(Card.name).where(Card.id.in_(card_ids[:50]))
+                )
+                existing_names = [row.name for row in cards_result.all()]
 
             # Get the last completed scan for this workstream
-            last_scan = (
-                self.supabase.table("workstream_scans")
-                .select("completed_at")
-                .eq("workstream_id", config.workstream_id)
-                .eq("status", "completed")
-                .order("completed_at", desc=True)
+            last_scan_result = await self.db.execute(
+                select(WorkstreamScan.completed_at)
+                .where(WorkstreamScan.workstream_id == config.workstream_id)
+                .where(WorkstreamScan.status == "completed")
+                .order_by(WorkstreamScan.completed_at.desc())
                 .limit(1)
-                .execute()
             )
-            if last_scan.data:
-                last_scan_date = last_scan.data[0].get("completed_at")
+            row = last_scan_result.first()
+            if row and row.completed_at:
+                last_scan_date = row.completed_at.isoformat()
 
         except Exception as e:
             logger.warning(f"Failed to fetch workstream context: {e}")
@@ -449,8 +449,8 @@ Grant opportunities already tracked (DO NOT search for these — find NEW, DIFFE
 
         # Determine scan mode: seed (no cards yet) vs follow-up (has cards)
         # Using card count rather than scan history handles edge cases:
-        # - Scan ran but found 0 cards → still seed mode (need broad search)
-        # - Cards manually added, no scan ever ran → follow-up mode (have context)
+        # - Scan ran but found 0 cards -> still seed mode (need broad search)
+        # - Cards manually added, no scan ever ran -> follow-up mode (have context)
         is_seed = len(existing_names) == 0
         scan_mode_hint = ""
         if is_seed:
@@ -654,47 +654,48 @@ Example: ["query 1", "query 2", ...]"""
             # Determine date filter based on workstream state:
             #
             # SEED scan (no cards yet):
-            #   No date filter — find everything available on this topic,
+            #   No date filter -- find everything available on this topic,
             #   including historical articles, landmark reports, foundational
             #   research. Some topics have years of relevant history.
             #
             # FOLLOW-UP scan (has cards, progressively narrow):
-            #   < 2 days since last scan  → past day   (qdr:d)
-            #   2-7 days since last scan  → past week  (qdr:w)
-            #   8-30 days since last scan → past month  (qdr:m)
-            #   31-365 days since last    → past year   (qdr:y)
-            #   > 1 year or no prior scan → past year   (qdr:y)
+            #   < 2 days since last scan  -> past day   (qdr:d)
+            #   2-7 days since last scan  -> past week  (qdr:w)
+            #   8-30 days since last scan -> past month  (qdr:m)
+            #   31-365 days since last    -> past year   (qdr:y)
+            #   > 1 year or no prior scan -> past year   (qdr:y)
             #
             date_filter: Optional[str] = None  # None = no date restriction
             has_cards = False
             try:
                 if workstream_id:
                     # Check if the workstream has any cards (determines seed vs follow-up)
-                    card_count = (
-                        self.supabase.table("workstream_cards")
-                        .select("id", count="exact")
-                        .eq("workstream_id", workstream_id)
-                        .execute()
+                    card_count_result = await self.db.execute(
+                        select(func.count(WorkstreamCard.id)).where(
+                            WorkstreamCard.workstream_id == workstream_id
+                        )
                     )
-                    has_cards = bool(card_count.count and card_count.count > 0)
+                    count_val = card_count_result.scalar() or 0
+                    has_cards = count_val > 0
 
                     if has_cards:
                         # Follow-up mode: narrow based on last successful scan
-                        last_scan = (
-                            self.supabase.table("workstream_scans")
-                            .select("completed_at")
-                            .eq("workstream_id", workstream_id)
-                            .eq("status", "completed")
-                            .order("completed_at", desc=True)
+                        last_scan_result = await self.db.execute(
+                            select(WorkstreamScan.completed_at)
+                            .where(WorkstreamScan.workstream_id == workstream_id)
+                            .where(WorkstreamScan.status == "completed")
+                            .order_by(WorkstreamScan.completed_at.desc())
                             .limit(1)
-                            .execute()
                         )
-                        if last_scan.data and last_scan.data[0].get("completed_at"):
-                            last_completed = last_scan.data[0]["completed_at"]
+                        last_scan_row = last_scan_result.first()
+                        if last_scan_row and last_scan_row.completed_at:
+                            last_completed = last_scan_row.completed_at
                             try:
-                                last_dt = datetime.fromisoformat(
-                                    last_completed.replace("Z", "+00:00")
-                                )
+                                last_dt = last_completed
+                                if last_dt.tzinfo is None:
+                                    from datetime import timezone as tz
+
+                                    last_dt = last_dt.replace(tzinfo=tz.utc)
                                 days_since = (
                                     datetime.now(last_dt.tzinfo) - last_dt
                                 ).days
@@ -711,13 +712,13 @@ Example: ["query 1", "query 2", ...]"""
                         else:
                             # Has cards but no completed scan (cards added manually)
                             date_filter = "qdr:m"
-                    # else: seed scan — date_filter stays None (no restriction)
+                    # else: seed scan -- date_filter stays None (no restriction)
 
             except Exception as e:
                 logger.warning(f"Date filter lookup failed, using no filter: {e}")
 
             filter_label = date_filter or "none (seed scan)"
-            logger.info(f"Smart date filter: has_cards={has_cards} → {filter_label}")
+            logger.info(f"Smart date filter: has_cards={has_cards} -> {filter_label}")
 
             try:
                 serper_results: List[SearchResult] = await serper_search_all(
@@ -973,7 +974,7 @@ Example: ["query 1", "query 2", ...]"""
                 # Domain reputation confidence adjustment (Task 2.7)
                 try:
                     reputation = domain_reputation_service.get_reputation(
-                        self.supabase, source.url or ""
+                        self.db, source.url or ""
                     )
                     adj = domain_reputation_service.get_confidence_adjustment(
                         reputation
@@ -1000,7 +1001,7 @@ Example: ["query 1", "query 2", ...]"""
 
                     if _domain := _urlparse(source.url or "").netloc:
                         domain_reputation_service.record_triage_result(
-                            self.supabase, _domain, passed=passed_triage
+                            self.db, _domain, passed=passed_triage
                         )
                 except Exception as e:
                     logger.debug(f"Domain triage recording failed (non-fatal): {e}")
@@ -1055,42 +1056,39 @@ Example: ["query 1", "query 2", ...]"""
 
         for source in sources:
             try:
-                # Check URL — only skip if this exact URL is already linked
+                # Check URL -- only skip if this exact URL is already linked
                 # to a card in THIS workstream (not globally across all cards).
-                url_check = (
-                    self.supabase.table("sources")
-                    .select("id, card_id")
-                    .eq("url", source.raw.url)
-                    .execute()
-                )
-
-                if url_check.data:
-                    # Check if any of these source cards are already in the workstream
-                    existing_card_ids = {r["card_id"] for r in url_check.data}
-                    ws_cards = (
-                        self.supabase.table("workstream_cards")
-                        .select("card_id")
-                        .eq("workstream_id", config.workstream_id)
-                        .in_("card_id", list(existing_card_ids))
-                        .execute()
+                url_result = await self.db.execute(
+                    select(Source.id, Source.card_id).where(
+                        Source.url == source.raw.url
                     )
-                    if ws_cards.data:
-                        duplicate_count += 1
-                        continue
+                )
+                url_rows = url_result.all()
+
+                if url_rows:
+                    # Check if any of these source cards are already in the workstream
+                    existing_card_ids = [str(r.card_id) for r in url_rows if r.card_id]
+                    if existing_card_ids:
+                        ws_result = await self.db.execute(
+                            select(WorkstreamCard.card_id)
+                            .where(WorkstreamCard.workstream_id == config.workstream_id)
+                            .where(WorkstreamCard.card_id.in_(existing_card_ids))
+                        )
+                        if ws_result.first():
+                            duplicate_count += 1
+                            continue
 
                 # Vector similarity check
                 if source.embedding:
-                    match_result = self.supabase.rpc(
-                        "find_similar_cards",
-                        {
-                            "query_embedding": source.embedding,
-                            "match_threshold": 0.75,
-                            "match_count": 3,
-                        },
-                    ).execute()
+                    matches = await vector_search_cards(
+                        self.db,
+                        source.embedding,
+                        match_threshold=0.75,
+                        match_count=3,
+                    )
 
-                    if match_result.data:
-                        top_match = match_result.data[0]
+                    if matches:
+                        top_match = matches[0]
                         similarity = top_match.get("similarity", 0)
 
                         if similarity >= config.similarity_threshold:
@@ -1122,8 +1120,10 @@ Example: ["query 1", "query 2", ...]"""
         slug = "-".join(slug.split())[:50]
 
         # Ensure unique slug
-        existing = self.supabase.table("cards").select("id").eq("slug", slug).execute()
-        if existing.data:
+        existing_result = await self.db.execute(
+            select(Card.id).where(Card.slug == slug)
+        )
+        if existing_result.first():
             slug = f"{slug}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
 
         # Map stage and goal
@@ -1131,75 +1131,95 @@ Example: ["query 1", "query 2", ...]"""
         goal_id = convert_goal_id(analysis.goals[0]) if analysis.goals else None
 
         try:
-            now = datetime.now(timezone.utc).isoformat()
+            now = datetime.now(timezone.utc)
 
-            result = (
-                self.supabase.table("cards")
-                .insert(
-                    {
-                        "name": analysis.suggested_card_name,
-                        "slug": slug,
-                        "summary": analysis.summary,
-                        "horizon": analysis.horizon,
-                        "stage_id": stage_id,
-                        "pillar_id": (
-                            convert_pillar_id(analysis.pillars[0])
-                            if analysis.pillars
-                            else None
-                        ),
-                        "goal_id": goal_id,
-                        "maturity_score": int(analysis.credibility * 20),
-                        "novelty_score": int(analysis.novelty * 20),
-                        "impact_score": int(analysis.impact * 20),
-                        "relevance_score": int(analysis.relevance * 20),
-                        "velocity_score": int(analysis.velocity * 10),
-                        "risk_score": int(analysis.risk * 10),
-                        "status": "active",  # Workstream scans create active cards
-                        "review_status": "pending_review",  # FIX-C2: Require human review
-                        "discovered_at": now,
-                        "discovery_metadata": {
-                            "source": "workstream_scan",
-                            "workstream_id": config.workstream_id,
-                            "scan_id": config.scan_id,
-                            "source_url": source.raw.url,
-                            "source_title": source.raw.title,
-                        },
-                        "created_by": config.user_id,
-                        "created_at": now,
-                        "updated_at": now,
-                    }
-                )
-                .execute()
+            card = Card(
+                name=analysis.suggested_card_name,
+                slug=slug,
+                summary=analysis.summary,
+                horizon=analysis.horizon,
+                stage_id=stage_id,
+                pillar_id=(
+                    convert_pillar_id(analysis.pillars[0]) if analysis.pillars else None
+                ),
+                goal_id=goal_id,
+                maturity_score=int(analysis.credibility * 20),
+                novelty_score=int(analysis.novelty * 20),
+                impact_score=int(analysis.impact * 20),
+                relevance_score=int(analysis.relevance * 20),
+                velocity_score=int(analysis.velocity * 10),
+                risk_score=int(analysis.risk * 10),
+                status="active",  # Workstream scans create active cards
+                review_status="pending_review",  # FIX-C2: Require human review
+                discovered_at=now,
+                discovery_metadata={
+                    "source": "workstream_scan",
+                    "workstream_id": config.workstream_id,
+                    "scan_id": config.scan_id,
+                    "source_url": source.raw.url,
+                    "source_title": source.raw.title,
+                },
+                created_by=config.user_id,
+                created_at=now,
+                updated_at=now,
             )
+            self.db.add(card)
+            await self.db.flush()
 
-            if result.data:
-                card_id = result.data[0]["id"]
+            card_id = str(card.id)
 
-                # Store embedding on both cards.embedding (for find_similar_cards RPC)
-                # and card_embeddings table (for consistency with other services)
-                if source.embedding:
-                    try:
-                        self.supabase.table("cards").update(
-                            {"embedding": source.embedding}
-                        ).eq("id", card_id).execute()
-                    except Exception as emb_err:
-                        logger.warning(f"Failed to store embedding on card: {emb_err}")
+            # Store embedding on both cards.embedding (for find_similar_cards RPC)
+            # and card_embeddings table (for consistency with other services)
+            if source.embedding:
+                try:
+                    embedding_str = (
+                        "[" + ",".join(str(v) for v in source.embedding) + "]"
+                    )
+                    await self.db.execute(
+                        text(
+                            "UPDATE cards SET embedding = :emb::vector WHERE id = :cid"
+                        ),
+                        {"emb": embedding_str, "cid": card_id},
+                    )
+                    await self.db.flush()
+                except Exception as emb_err:
+                    logger.warning(f"Failed to store embedding on card: {emb_err}")
 
-                    try:
-                        self.supabase.table("card_embeddings").upsert(
-                            {
-                                "card_id": card_id,
-                                "embedding": source.embedding,
-                                "created_at": now,
-                            }
-                        ).execute()
-                    except Exception as emb_err:
-                        logger.warning(f"Failed to store card_embedding: {emb_err}")
+                try:
+                    stmt = (
+                        pg_insert(CardEmbedding)
+                        .values(
+                            card_id=card_id,
+                            created_at=now,
+                        )
+                        .on_conflict_do_update(
+                            index_elements=["card_id"],
+                            set_={"updated_at": now},
+                        )
+                    )
+                    # Store embedding via raw SQL since CardEmbedding.embedding is NullType
+                    await self.db.execute(
+                        text(
+                            "INSERT INTO card_embeddings (card_id, embedding, created_at) "
+                            "VALUES (:card_id, :emb::vector, :created_at) "
+                            "ON CONFLICT (card_id) DO UPDATE SET "
+                            "embedding = :emb::vector, updated_at = :updated_at"
+                        ),
+                        {
+                            "card_id": card_id,
+                            "emb": embedding_str,
+                            "created_at": now,
+                            "updated_at": now,
+                        },
+                    )
+                    await self.db.flush()
+                except Exception as emb_err:
+                    logger.warning(f"Failed to store card_embedding: {emb_err}")
 
-                # Store source
-                await self._store_source_to_card(source, card_id)
+            # Store source
+            await self._store_source_to_card(source, card_id)
 
-                return card_id
+            return card_id
         except Exception as e:
             logger.error(f"Card creation failed: {e}")
             raise
@@ -1215,30 +1235,26 @@ Example: ["query 1", "query 2", ...]"""
             _domain_reputation_id = None
             try:
                 if _rep := domain_reputation_service.get_reputation(
-                    self.supabase, source.raw.url or ""
+                    self.db, source.raw.url or ""
                 ):
                     _domain_reputation_id = _rep.get("id")
             except Exception:
                 pass  # Non-fatal
 
-            source_record = {
-                "card_id": card_id,
-                "url": source.raw.url,
-                "title": (source.raw.title or "Untitled")[:500],
-                "publication": (
+            source_obj = Source(
+                card_id=card_id,
+                url=source.raw.url,
+                title=(source.raw.title or "Untitled")[:500],
+                publication=(
                     (source.raw.source_name or "")[:200]
                     if source.raw.source_name
                     else None
                 ),
-                "full_text": (
-                    source.raw.content[:10000] if source.raw.content else None
-                ),
-                "ai_summary": (source.analysis.summary if source.analysis else None),
-                "relevance_to_card": (
-                    source.triage.confidence if source.triage else 0.5
-                ),
+                full_text=(source.raw.content[:10000] if source.raw.content else None),
+                ai_summary=(source.analysis.summary if source.analysis else None),
+                relevance_to_card=(source.triage.confidence if source.triage else 0.5),
                 # Pre-print / peer-review status (Task 2.6)
-                "is_peer_reviewed": (
+                is_peer_reviewed=(
                     False
                     if getattr(source.raw, "is_preprint", False)
                     else (
@@ -1247,18 +1263,18 @@ Example: ["query 1", "query 2", ...]"""
                         else None
                     )
                 ),
-                "api_source": "workstream_scan",
-                "ingested_at": datetime.now(timezone.utc).isoformat(),
-            }
+                api_source="workstream_scan",
+                ingested_at=datetime.now(timezone.utc),
+            )
 
             # Add domain_reputation_id if available (Task 2.7)
             if _domain_reputation_id:
-                source_record["domain_reputation_id"] = _domain_reputation_id
+                source_obj.domain_reputation_id = _domain_reputation_id
 
-            result = self.supabase.table("sources").insert(source_record).execute()
+            self.db.add(source_obj)
+            await self.db.flush()
 
-            if result.data:
-                return result.data[0]["id"]
+            return str(source_obj.id)
         except Exception as e:
             logger.warning(f"Source storage failed: {e}")
 
@@ -1270,35 +1286,29 @@ Example: ["query 1", "query 2", ...]"""
         """Add card to workstream inbox if not already present."""
         try:
             # Check if already in workstream
-            existing = (
-                self.supabase.table("workstream_cards")
-                .select("id")
-                .eq("workstream_id", workstream_id)
-                .eq("card_id", card_id)
-                .execute()
+            existing_result = await self.db.execute(
+                select(WorkstreamCard.id)
+                .where(WorkstreamCard.workstream_id == workstream_id)
+                .where(WorkstreamCard.card_id == card_id)
             )
 
-            if existing.data:
+            if existing_result.first():
                 return False  # Already in workstream
 
             # Add to inbox
-            result = (
-                self.supabase.table("workstream_cards")
-                .insert(
-                    {
-                        "workstream_id": workstream_id,
-                        "card_id": card_id,
-                        "added_by": user_id,
-                        "status": "inbox",
-                        "position": 0,
-                        "added_from": "workstream_scan",
-                        "created_at": datetime.now(timezone.utc).isoformat(),
-                    }
-                )
-                .execute()
+            ws_card = WorkstreamCard(
+                workstream_id=workstream_id,
+                card_id=card_id,
+                added_by=user_id,
+                status="inbox",
+                position=0,
+                added_from="workstream_scan",
+                added_at=datetime.now(timezone.utc),
             )
+            self.db.add(ws_card)
+            await self.db.flush()
 
-            return bool(result.data)
+            return True
         except Exception as e:
             logger.warning(f"Add to workstream failed: {e}")
             return False
@@ -1312,28 +1322,31 @@ Example: ["query 1", "query 2", ...]"""
     ):
         """Update scan record status."""
         try:
-            update_data = {"status": status}
+            values: Dict[str, Any] = {"status": status}
             if started_at:
-                update_data["started_at"] = started_at.isoformat()
+                values["started_at"] = started_at
             if error_message:
-                update_data["error_message"] = error_message
+                values["error_message"] = error_message
 
-            self.supabase.table("workstream_scans").update(update_data).eq(
-                "id", scan_id
-            ).execute()
+            await self.db.execute(
+                sa_update(WorkstreamScan)
+                .where(WorkstreamScan.id == scan_id)
+                .values(**values)
+            )
+            await self.db.flush()
         except Exception as e:
             logger.warning(f"Failed to update scan status: {e}")
 
     async def _finalize_scan(self, scan_id: str, result: ScanResult):
         """Finalize scan record with results."""
         try:
-            self.supabase.table("workstream_scans").update(
-                {
-                    "status": result.status,
-                    "completed_at": (
-                        result.completed_at.isoformat() if result.completed_at else None
-                    ),
-                    "results": {
+            await self.db.execute(
+                sa_update(WorkstreamScan)
+                .where(WorkstreamScan.id == scan_id)
+                .values(
+                    status=result.status,
+                    completed_at=result.completed_at,
+                    results={
                         "queries_executed": result.queries_executed,
                         "sources_fetched": result.sources_fetched,
                         "sources_by_category": result.sources_by_category,
@@ -1347,8 +1360,9 @@ Example: ["query 1", "query 2", ...]"""
                         "execution_time_seconds": result.execution_time_seconds,
                         "errors": result.errors,
                     },
-                    "error_message": result.errors[0] if result.errors else None,
-                }
-            ).eq("id", scan_id).execute()
+                    error_message=result.errors[0] if result.errors else None,
+                )
+            )
+            await self.db.flush()
         except Exception as e:
             logger.warning(f"Failed to finalize scan: {e}")

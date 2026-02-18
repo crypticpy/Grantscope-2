@@ -2,13 +2,13 @@
  * GrantSearch — Step 1b of the Grant Application Wizard
  *
  * A simplified grant browser for users who don't have a specific grant in mind.
- * Queries the cards table directly via the Supabase client, filtering for
- * grant-type cards, and lets the user select one to proceed with.
+ * Queries cards via the backend API, filtering for grant-type cards,
+ * and lets the user select one to proceed with.
  */
 
 import React, { useState, useEffect, useCallback } from "react";
 import { Search, ArrowLeft, Clock, DollarSign } from "lucide-react";
-import { supabase } from "../../App";
+import { API_BASE_URL } from "../../lib/config";
 import { useDebounce } from "../../hooks/useDebounce";
 import { getDeadlineUrgency } from "../../data/taxonomy";
 import type { GrantContext } from "../../lib/wizard-api";
@@ -153,23 +153,26 @@ export const GrantSearch: React.FC<GrantSearchProps> = ({
   const fetchGrants = useCallback(async () => {
     setLoading(true);
     try {
-      let query = supabase
-        .from("cards")
-        .select(
-          "id, name, summary, grantor, deadline, funding_amount_min, funding_amount_max, grant_type, source_url, alignment_score",
-        )
-        .or("grant_type.not.is.null,grantor.not.is.null")
-        .order("deadline", { ascending: true, nullsFirst: false })
-        .limit(20);
+      const token = localStorage.getItem("gs2_token");
+      if (!token) {
+        setResults([]);
+        return;
+      }
+
+      const params = new URLSearchParams();
+      params.append("is_grant", "true");
+      params.append("limit", "20");
+      params.append("sort_by", "deadline");
+      params.append("sort_order", "asc");
 
       // Text search
       if (debouncedSearch.trim()) {
-        query = query.ilike("name", `%${debouncedSearch.trim()}%`);
+        params.append("search", debouncedSearch.trim());
       }
 
       // Grant type filter
       if (grantType !== "All") {
-        query = query.ilike("grant_type", `%${grantType}%`);
+        params.append("grant_type", grantType);
       }
 
       // Deadline filter
@@ -177,29 +180,32 @@ export const GrantSearch: React.FC<GrantSearchProps> = ({
         const days = parseInt(deadlineFilter, 10);
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() + days);
-        query = query
-          .gte("deadline", new Date().toISOString())
-          .lte("deadline", cutoff.toISOString());
+        params.append("deadline_after", new Date().toISOString());
+        params.append("deadline_before", cutoff.toISOString());
       }
 
       // Funding filter
       if (fundingFilter === "under50k") {
-        query = query.lte("funding_amount_max", 50000);
+        params.append("funding_max", "50000");
       } else if (fundingFilter === "50k-500k") {
-        query = query
-          .gte("funding_amount_min", 50000)
-          .lte("funding_amount_max", 500000);
+        params.append("funding_min", "50000");
+        params.append("funding_max", "500000");
       } else if (fundingFilter === "over500k") {
-        query = query.gte("funding_amount_min", 500000);
+        params.append("funding_min", "500000");
       }
 
-      const { data, error } = await query;
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/cards?${params.toString()}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
 
-      if (error) {
-        console.error("Grant search error:", error);
+      if (!response.ok) {
+        console.error("Grant search error:", response.status);
         setResults([]);
       } else {
-        setResults((data as GrantCard[]) || []);
+        const data = await response.json();
+        const cards = Array.isArray(data) ? data : data.cards || [];
+        setResults(cards as GrantCard[]);
       }
     } catch (err) {
       console.error("Grant search failed:", err);

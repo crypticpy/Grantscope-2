@@ -11,7 +11,6 @@
  */
 
 import { useState, useEffect, useCallback, KeyboardEvent } from "react";
-import { supabase } from "../App";
 import { useAuthContext } from "./useAuthContext";
 import { useWorkstreamPreview } from "./useWorkstreamPreview";
 import { useKeywordSuggestions } from "./useKeywordSuggestions";
@@ -329,14 +328,29 @@ export function useWorkstreamForm({
       };
 
       if (isEditMode && workstream) {
-        // EDIT mode: direct Supabase update (no special backend logic needed)
-        const { error } = await supabase
-          .from("workstreams")
-          .update(payload)
-          .eq("id", workstream.id)
-          .eq("user_id", user?.id);
+        // EDIT mode: use backend API
+        const token = localStorage.getItem("gs2_token");
+        if (!token) throw new Error("Authentication required");
 
-        if (error) throw error;
+        const editResponse = await fetch(
+          `${API_BASE_URL}/api/v1/me/workstreams/${workstream.id}`,
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(payload),
+          },
+        );
+
+        if (!editResponse.ok) {
+          const errBody = await editResponse.json().catch(() => ({}));
+          throw new Error(
+            errBody.detail || `Update failed: ${editResponse.status}`,
+          );
+        }
+
         onSuccess();
       } else {
         // CREATE mode: use backend API so auto-populate and auto-scan queueing runs

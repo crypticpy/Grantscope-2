@@ -1,14 +1,26 @@
 """RSS Feeds management router."""
 
 import logging
+import uuid
+from datetime import datetime, date
+from decimal import Decimal
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.deps import supabase, get_current_user, _safe_error, openai_client, limiter
+from app.deps import (
+    get_db,
+    get_current_user_hardcoded,
+    _safe_error,
+    openai_client,
+    limiter,
+)
 from app.rss_service import RSSService
 from app.ai_service import AIService
+from app.models.db.rss import RssFeed, RssFeedItem
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["feeds"])
@@ -108,10 +120,28 @@ class FeedCheckResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _get_rss_service() -> RSSService:
-    """Create an RSSService instance with the shared Supabase and AI clients."""
+def _row_to_dict(obj, skip_cols=None) -> dict:
+    skip = skip_cols or set()
+    result = {}
+    for col in obj.__table__.columns:
+        if col.name in skip:
+            continue
+        value = getattr(obj, col.name, None)
+        if isinstance(value, uuid.UUID):
+            result[col.name] = str(value)
+        elif isinstance(value, (datetime, date)):
+            result[col.name] = value.isoformat()
+        elif isinstance(value, Decimal):
+            result[col.name] = float(value)
+        else:
+            result[col.name] = value
+    return result
+
+
+def _get_rss_service(db: AsyncSession) -> RSSService:
+    """Create an RSSService instance with the database session and AI clients."""
     ai_service = AIService(openai_client)
-    return RSSService(supabase, ai_service)
+    return RSSService(db, ai_service)
 
 
 # ---------------------------------------------------------------------------
@@ -120,7 +150,10 @@ def _get_rss_service() -> RSSService:
 
 
 @router.get("/feeds", response_model=List[FeedStatsResponse])
-async def list_feeds(current_user: dict = Depends(get_current_user)):
+async def list_feeds(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
+):
     """
     List all RSS feeds with stats.
 
@@ -128,7 +161,7 @@ async def list_feeds(current_user: dict = Depends(get_current_user)):
     articles_found_total, articles_matched_total, and recent_items_7d.
     """
     try:
-        service = _get_rss_service()
+        service = _get_rss_service(db)
         feeds = await service.get_feed_stats()
         return [FeedStatsResponse(**f) for f in feeds]
     except Exception as e:
@@ -141,7 +174,8 @@ async def list_feeds(current_user: dict = Depends(get_current_user)):
 async def create_feed(
     request: Request,
     body: FeedCreate,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Add a new RSS feed subscription.
@@ -150,7 +184,7 @@ async def create_feed(
     Rate limited to 10 requests per minute.
     """
     try:
-        service = _get_rss_service()
+        service = _get_rss_service(db)
         feed = await service.add_feed(
             url=body.url,
             name=body.name,
@@ -167,7 +201,11 @@ async def create_feed(
 
 
 @router.get("/feeds/{feed_id}", response_model=dict)
-async def get_feed(feed_id: str, current_user: dict = Depends(get_current_user)):
+async def get_feed(
+    feed_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
+):
     """
     Get feed details with recent items.
 
@@ -175,25 +213,25 @@ async def get_feed(feed_id: str, current_user: dict = Depends(get_current_user))
     """
     try:
         # Fetch the feed record
-        feed_result = (
-            supabase.table("rss_feeds").select("*").eq("id", feed_id).single().execute()
-        )
-        if not feed_result.data:
+        feed_stmt = select(RssFeed).where(RssFeed.id == feed_id)
+        feed_result = await db.execute(feed_stmt)
+        feed_row = feed_result.scalar_one_or_none()
+        if not feed_row:
             raise HTTPException(status_code=404, detail="Feed not found")
 
         # Fetch recent items
-        items_result = (
-            supabase.table("rss_feed_items")
-            .select("*")
-            .eq("feed_id", feed_id)
-            .order("published_at", desc=True)
+        items_stmt = (
+            select(RssFeedItem)
+            .where(RssFeedItem.feed_id == feed_id)
+            .order_by(RssFeedItem.published_at.desc())
             .limit(50)
-            .execute()
         )
+        items_result = await db.execute(items_stmt)
+        item_rows = items_result.scalars().all()
 
         return {
-            "feed": feed_result.data,
-            "items": items_result.data or [],
+            "feed": _row_to_dict(feed_row),
+            "items": [_row_to_dict(item) for item in item_rows],
         }
     except HTTPException:
         raise
@@ -206,7 +244,8 @@ async def get_feed(feed_id: str, current_user: dict = Depends(get_current_user))
 async def update_feed(
     feed_id: str,
     body: FeedUpdate,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Update feed settings.
@@ -215,7 +254,7 @@ async def update_feed(
     check_interval_hours, and status.
     """
     try:
-        service = _get_rss_service()
+        service = _get_rss_service(db)
         update_kwargs = body.dict(exclude_none=True)
         if not update_kwargs:
             raise HTTPException(status_code=400, detail="No fields to update")
@@ -233,12 +272,16 @@ async def update_feed(
 
 
 @router.delete("/feeds/{feed_id}")
-async def delete_feed(feed_id: str, current_user: dict = Depends(get_current_user)):
+async def delete_feed(
+    feed_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
+):
     """
     Delete an RSS feed and its items.
     """
     try:
-        service = _get_rss_service()
+        service = _get_rss_service(db)
         deleted = await service.delete_feed(feed_id)
         if not deleted:
             raise HTTPException(
@@ -258,7 +301,8 @@ async def delete_feed(feed_id: str, current_user: dict = Depends(get_current_use
 @limiter.limit("2/minute")
 async def check_feeds(
     request: Request,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Trigger a manual feed check for all due feeds.
@@ -267,7 +311,7 @@ async def check_feeds(
     Checks all active feeds whose next_check_at has passed.
     """
     try:
-        service = _get_rss_service()
+        service = _get_rss_service(db)
         stats = await service.check_feeds()
         return FeedCheckResponse(**stats)
     except Exception as e:
@@ -280,7 +324,8 @@ async def check_feeds(
 @router.get("/feeds/{feed_id}/items", response_model=List[FeedItemResponse])
 async def list_feed_items(
     feed_id: str,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
     limit: int = 50,
     offset: int = 0,
     triage_result: Optional[str] = None,
@@ -292,24 +337,27 @@ async def list_feed_items(
     """
     try:
         # Verify feed exists
-        feed_check = (
-            supabase.table("rss_feeds").select("id").eq("id", feed_id).execute()
-        )
-        if not feed_check.data:
+        feed_stmt = select(RssFeed.id).where(RssFeed.id == feed_id)
+        feed_result = await db.execute(feed_stmt)
+        if not feed_result.scalar_one_or_none():
             raise HTTPException(status_code=404, detail="Feed not found")
 
-        query = supabase.table("rss_feed_items").select("*").eq("feed_id", feed_id)
+        # Build items query
+        items_stmt = select(RssFeedItem).where(RssFeedItem.feed_id == feed_id)
 
         if triage_result:
-            query = query.eq("triage_result", triage_result)
+            items_stmt = items_stmt.where(RssFeedItem.triage_result == triage_result)
 
-        result = (
-            query.order("published_at", desc=True)
-            .range(offset, offset + limit - 1)
-            .execute()
+        items_stmt = (
+            items_stmt.order_by(RssFeedItem.published_at.desc())
+            .offset(offset)
+            .limit(limit)
         )
 
-        return [FeedItemResponse(**item) for item in (result.data or [])]
+        items_result = await db.execute(items_stmt)
+        item_rows = items_result.scalars().all()
+
+        return [FeedItemResponse(**_row_to_dict(item)) for item in item_rows]
     except HTTPException:
         raise
     except Exception as e:

@@ -10,12 +10,19 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from sqlalchemy import select, update as sa_update
 
-from app.deps import supabase, openai_client
+from app.database import async_session_factory
+from app.deps import openai_client
 from app.helpers.workstream_utils import (
     _build_workstream_scan_config,
     _auto_queue_workstream_scan,
 )
+from app.models.db.card import Card
+from app.models.db.discovery import DiscoveryRun
+from app.models.db.research import ResearchTask
+from app.models.db.user import User
+from app.models.db.workstream import Workstream, WorkstreamScan
 
 logger = logging.getLogger(__name__)
 
@@ -39,70 +46,87 @@ async def run_scheduled_workstream_scans():
     This bypasses the per-user 2-scans-per-day rate limit since it's
     system-initiated.
     """
+    if async_session_factory is None:
+        logger.error("Database not configured — cannot run scheduled workstream scans")
+        return
+
     logger.info("Starting scheduled workstream auto-scan check...")
 
     try:
-        ws_response = (
-            supabase.table("workstreams")
-            .select(
-                "id, user_id, name, keywords, pillar_ids, goal_ids, stage_ids, horizon"
+        async with async_session_factory() as db:
+            ws_result = await db.execute(
+                select(Workstream).where(
+                    Workstream.auto_scan == True, Workstream.is_active == True
+                )  # noqa: E712
             )
-            .eq("auto_scan", True)
-            .eq("is_active", True)
-            .execute()
-        )
+            workstreams = ws_result.scalars().all()
 
-        workstreams = ws_response.data or []
-        if not workstreams:
-            logger.info("No active workstreams with auto_scan enabled")
-            return
+            if not workstreams:
+                logger.info("No active workstreams with auto_scan enabled")
+                return
 
-        logger.info(f"Found {len(workstreams)} workstreams with auto_scan enabled")
+            logger.info(f"Found {len(workstreams)} workstreams with auto_scan enabled")
 
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
-        scans_queued = 0
+            cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+            scans_queued = 0
 
-        for ws in workstreams:
-            try:
-                recent_scans = (
-                    supabase.table("workstream_scans")
-                    .select("id")
-                    .eq("workstream_id", ws["id"])
-                    .gte("created_at", cutoff)
-                    .neq("status", "failed")
-                    .limit(1)
-                    .execute()
-                )
+            for ws in workstreams:
+                try:
+                    recent_scan_result = await db.execute(
+                        select(WorkstreamScan.id)
+                        .where(
+                            WorkstreamScan.workstream_id == ws.id,
+                            WorkstreamScan.created_at >= cutoff,
+                            WorkstreamScan.status != "failed",
+                        )
+                        .limit(1)
+                    )
+                    recent_scan = recent_scan_result.scalar_one_or_none()
 
-                if recent_scans.data:
-                    logger.debug(
-                        f"Workstream '{ws['name']}' ({ws['id']}) scanned recently, skipping"
+                    if recent_scan:
+                        logger.debug(
+                            f"Workstream '{ws.name}' ({ws.id}) scanned recently, skipping"
+                        )
+                        continue
+
+                    ws_keywords = ws.keywords or []
+                    ws_pillar_ids = ws.pillar_ids or []
+                    if not ws_keywords and not ws_pillar_ids:
+                        logger.debug(
+                            f"Workstream '{ws.name}' ({ws.id}) has no keywords/pillars, skipping"
+                        )
+                        continue
+
+                    # Build config dict from ORM object attributes
+                    ws_dict = {
+                        "id": str(ws.id),
+                        "user_id": str(ws.user_id) if ws.user_id else None,
+                        "name": ws.name,
+                        "keywords": ws.keywords or [],
+                        "pillar_ids": ws.pillar_ids or [],
+                        "goal_ids": ws.goal_ids or [],
+                        "stage_ids": ws.stage_ids or [],
+                        "horizon": ws.horizon,
+                    }
+                    config = _build_workstream_scan_config(
+                        ws_dict, "auto_scan_scheduler"
+                    )
+                    if queued := await _auto_queue_workstream_scan(
+                        db, str(ws.id), str(ws.user_id), config
+                    ):
+                        scans_queued += 1
+                        logger.info(
+                            f"Queued auto-scan for workstream '{ws.name}' ({ws.id})"
+                        )
+
+                except Exception as e:
+                    logger.error(
+                        f"Failed to queue auto-scan for workstream '{ws.name}' "
+                        f"({ws.id}): {e}"
                     )
                     continue
 
-                ws_keywords = ws.get("keywords") or []
-                ws_pillar_ids = ws.get("pillar_ids") or []
-                if not ws_keywords and not ws_pillar_ids:
-                    logger.debug(
-                        f"Workstream '{ws['name']}' ({ws['id']}) has no keywords/pillars, skipping"
-                    )
-                    continue
-
-                config = _build_workstream_scan_config(ws, "auto_scan_scheduler")
-                if queued := _auto_queue_workstream_scan(
-                    supabase, ws["id"], ws["user_id"], config
-                ):
-                    scans_queued += 1
-                    logger.info(
-                        f"Queued auto-scan for workstream '{ws['name']}' ({ws['id']})"
-                    )
-
-            except Exception as e:
-                logger.error(
-                    f"Failed to queue auto-scan for workstream '{ws.get('name', 'unknown')}' "
-                    f"({ws.get('id', 'unknown')}): {e}"
-                )
-                continue
+            await db.commit()
 
         logger.info(
             f"Scheduled workstream auto-scan complete: {scans_queued} scans queued "
@@ -121,54 +145,59 @@ async def run_nightly_scan():
     """
     from app.research_service import ResearchService
 
+    if async_session_factory is None:
+        logger.error("Database not configured — cannot run nightly scan")
+        return
+
     logger.info("Starting nightly scan...")
 
     try:
-        cutoff = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
+        async with async_session_factory() as db:
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
 
-        cards_result = (
-            supabase.table("cards")
-            .select("id, name")
-            .eq("status", "active")
-            .lt("updated_at", cutoff)
-            .limit(20)
-            .execute()
-        )
+            cards_result = await db.execute(
+                select(Card)
+                .where(Card.status == "active", Card.updated_at < cutoff)
+                .limit(20)
+            )
+            cards = cards_result.scalars().all()
 
-        if not cards_result.data:
-            logger.info("Nightly scan: No cards need updating")
-            return
+            if not cards:
+                logger.info("Nightly scan: No cards need updating")
+                return
 
-        system_user = supabase.table("users").select("id").limit(1).execute()
-        user_id = system_user.data[0]["id"] if system_user.data else None
+            user_result = await db.execute(select(User.id).limit(1))
+            user_id_val = user_result.scalar_one_or_none()
 
-        if not user_id:
-            logger.warning("Nightly scan: No system user found, skipping")
-            return
+            if not user_id_val:
+                logger.warning("Nightly scan: No system user found, skipping")
+                return
 
-        service = ResearchService(supabase, openai_client)  # noqa: F841
-        tasks_queued = 0
+            user_id = str(user_id_val)
 
-        for card in cards_result.data:
-            try:
-                task_record = {
-                    "user_id": user_id,
-                    "card_id": card["id"],
-                    "task_type": "update",
-                    "status": "queued",
-                }
-                task_result = (
-                    supabase.table("research_tasks").insert(task_record).execute()
-                )
+            service = ResearchService(db, openai_client)  # noqa: F841
+            tasks_queued = 0
 
-                if task_result.data:
+            for card in cards:
+                try:
+                    task_obj = ResearchTask(
+                        user_id=user_id_val,
+                        card_id=card.id,
+                        task_type="update",
+                        status="queued",
+                    )
+                    db.add(task_obj)
+                    await db.flush()
+
                     tasks_queued += 1
-                    logger.info(f"Nightly scan: Queued update for '{card['name']}'")
+                    logger.info(f"Nightly scan: Queued update for '{card.name}'")
 
-            except Exception as e:
-                logger.error(
-                    f"Nightly scan: Failed to queue task for card {card['id']}: {e}"
-                )
+                except Exception as e:
+                    logger.error(
+                        f"Nightly scan: Failed to queue task for card {card.id}: {e}"
+                    )
+
+            await db.commit()
 
         logger.info(f"Nightly scan complete: {tasks_queued} tasks queued")
 
@@ -184,33 +213,41 @@ async def run_weekly_discovery():
     """
     from app.models.discovery_models import DiscoveryConfigRequest
 
+    if async_session_factory is None:
+        logger.error("Database not configured — cannot run weekly discovery")
+        return
+
     logger.info("Starting weekly discovery run...")
 
     try:
-        system_user = supabase.table("users").select("id").limit(1).execute()
-        user_id = system_user.data[0]["id"] if system_user.data else None
+        async with async_session_factory() as db:
+            user_result = await db.execute(select(User.id).limit(1))
+            user_id_val = user_result.scalar_one_or_none()
 
-        if not user_id:
-            logger.warning("Weekly discovery: No system user found, skipping")
-            return
+            if not user_id_val:
+                logger.warning("Weekly discovery: No system user found, skipping")
+                return
 
-        run_id = str(uuid.uuid4())
-        config = DiscoveryConfigRequest()
+            user_id = str(user_id_val)
 
-        run_record = {
-            "id": run_id,
-            "status": "running",
-            "triggered_by": "scheduled",
-            "triggered_by_user": user_id,
-            "cards_created": 0,
-            "cards_enriched": 0,
-            "cards_deduplicated": 0,
-            "sources_found": 0,
-            "started_at": datetime.now(timezone.utc).isoformat(),
-            "summary_report": {"stage": "queued", "config": config.dict()},
-        }
+            run_id = str(uuid.uuid4())
+            config = DiscoveryConfigRequest()
 
-        supabase.table("discovery_runs").insert(run_record).execute()
+            new_run = DiscoveryRun(
+                id=uuid.UUID(run_id),
+                status="running",
+                triggered_by="scheduled",
+                triggered_by_user=user_id_val,
+                cards_created=0,
+                cards_enriched=0,
+                cards_deduplicated=0,
+                sources_found=0,
+                started_at=datetime.now(timezone.utc),
+                summary_report={"stage": "queued", "config": config.dict()},
+            )
+            db.add(new_run)
+            await db.commit()
+
         logger.info(f"Weekly discovery run queued: {run_id}")
 
     except Exception as e:
@@ -225,9 +262,16 @@ async def run_nightly_reputation_aggregation():
     """
     from app import domain_reputation_service
 
+    if async_session_factory is None:
+        logger.error("Database not configured — cannot run reputation aggregation")
+        return
+
     logger.info("Starting nightly domain reputation aggregation...")
     try:
-        result = domain_reputation_service.recalculate_all(supabase)
+        async with async_session_factory() as db:
+            result = await domain_reputation_service.recalculate_all(db)
+            await db.commit()
+
         domains_updated = result.get("domains_updated", 0)
         if errors := result.get("errors", []):
             logger.warning(
@@ -251,9 +295,16 @@ async def run_nightly_sqi_recalculation():
     """
     from app import quality_service
 
+    if async_session_factory is None:
+        logger.error("Database not configured — cannot run SQI recalculation")
+        return
+
     logger.info("Starting nightly SQI recalculation...")
     try:
-        result = quality_service.recalculate_all_cards(supabase)
+        async with async_session_factory() as db:
+            result = await quality_service.recalculate_all_cards(db)
+            await db.commit()
+
         cards_succeeded = result.get("cards_succeeded", 0)
         cards_failed = result.get("cards_failed", 0)
         if errors := result.get("errors", []):
@@ -279,10 +330,17 @@ async def run_nightly_pattern_detection():
     """
     from app.pattern_detection_service import PatternDetectionService
 
+    if async_session_factory is None:
+        logger.error("Database not configured — cannot run pattern detection")
+        return
+
     logger.info("Starting nightly pattern detection...")
     try:
-        service = PatternDetectionService(supabase, openai_client)
-        result = await service.run_detection()
+        async with async_session_factory() as db:
+            service = PatternDetectionService(db, openai_client)
+            result = await service.run_detection()
+            await db.commit()
+
         logger.info(
             "Nightly pattern detection complete: %d insights stored (analyzed %d cards)",
             result.get("insights_stored", 0),
@@ -300,9 +358,16 @@ async def run_nightly_velocity_calculation():
     """
     from app.velocity_service import calculate_velocity_trends
 
+    if async_session_factory is None:
+        logger.error("Database not configured — cannot run velocity calculation")
+        return
+
     logger.info("Starting nightly velocity calculation...")
     try:
-        result = await calculate_velocity_trends(supabase)
+        async with async_session_factory() as db:
+            result = await calculate_velocity_trends(db)
+            await db.commit()
+
         logger.info(
             "Nightly velocity calculation complete: %d / %d cards updated",
             result.get("updated", 0),
@@ -321,10 +386,17 @@ async def run_digest_batch():
     """
     from app.digest_service import DigestService
 
+    if async_session_factory is None:
+        logger.error("Database not configured — cannot run digest batch")
+        return
+
     logger.info("Starting scheduled digest batch processing...")
     try:
-        digest_service = DigestService(supabase, openai_client)
-        stats = await digest_service.run_digest_batch()
+        async with async_session_factory() as db:
+            digest_service = DigestService(db, openai_client)
+            stats = await digest_service.run_digest_batch()
+            await db.commit()
+
         logger.info(f"Digest batch complete: {stats}")
     except Exception as e:
         logger.error(f"Digest batch processing failed: {e}")
@@ -338,41 +410,46 @@ async def scan_grants():
     config hints which source categories to prioritise via
     ``source_categories``.
     """
+    if async_session_factory is None:
+        logger.error("Database not configured — cannot run grant scan")
+        return
 
     logger.info("Starting scheduled grant scan...")
 
     try:
-        system_user = supabase.table("users").select("id").limit(1).execute()
-        user_id = system_user.data[0]["id"] if system_user.data else None
+        async with async_session_factory() as db:
+            user_result = await db.execute(select(User.id).limit(1))
+            user_id_val = user_result.scalar_one_or_none()
 
-        if not user_id:
-            logger.warning("Grant scan: No system user found, skipping")
-            return
+            if not user_id_val:
+                logger.warning("Grant scan: No system user found, skipping")
+                return
 
-        run_id = str(uuid.uuid4())
-        config_data = {
-            "source_categories": ["grants_gov", "sam_gov"],
-            "dry_run": False,
-        }
+            run_id = str(uuid.uuid4())
+            config_data = {
+                "source_categories": ["grants_gov", "sam_gov"],
+                "dry_run": False,
+            }
 
-        run_record = {
-            "id": run_id,
-            "status": "running",
-            "triggered_by": "scheduled",
-            "triggered_by_user": user_id,
-            "cards_created": 0,
-            "cards_enriched": 0,
-            "cards_deduplicated": 0,
-            "sources_found": 0,
-            "started_at": datetime.now(timezone.utc).isoformat(),
-            "summary_report": {
-                "stage": "queued",
-                "config": config_data,
-                "job": "scan_grants",
-            },
-        }
+            new_run = DiscoveryRun(
+                id=uuid.UUID(run_id),
+                status="running",
+                triggered_by="scheduled",
+                triggered_by_user=user_id_val,
+                cards_created=0,
+                cards_enriched=0,
+                cards_deduplicated=0,
+                sources_found=0,
+                started_at=datetime.now(timezone.utc),
+                summary_report={
+                    "stage": "queued",
+                    "config": config_data,
+                    "job": "scan_grants",
+                },
+            )
+            db.add(new_run)
+            await db.commit()
 
-        supabase.table("discovery_runs").insert(run_record).execute()
         logger.info(f"Grant scan discovery run queued: {run_id}")
 
     except Exception as e:

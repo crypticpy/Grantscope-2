@@ -1,17 +1,18 @@
-"""Workstream CRUD and feed router."""
+"""Workstream CRUD and feed router (SQLAlchemy 2.0 async)."""
 
 import logging
-from datetime import datetime, timezone
-from typing import List
+import uuid
+from datetime import datetime, date, timezone
+from decimal import Decimal
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-
-from app.deps import supabase, get_current_user, _safe_error, openai_client, limiter
-from app.helpers.workstream_utils import (
-    _filter_cards_for_workstream,
-    _build_workstream_scan_config,
-    _auto_queue_workstream_scan,
-)
+from app.deps import get_db, get_current_user_hardcoded, _safe_error
+from app.models.db.workstream import Workstream as WorkstreamORM
+from app.models.db.workstream import WorkstreamCard as WorkstreamCardORM
+from app.models.db.workstream import WorkstreamScan as WorkstreamScanORM
+from app.models.db.card import Card as CardORM
 from app.models.workstream import (
     Workstream,
     WorkstreamCreate,
@@ -19,8 +20,6 @@ from app.models.workstream import (
     WorkstreamCreateResponse,
     AutoPopulateResponse,
     WorkstreamCardWithDetails,
-    FilterPreviewRequest,
-    FilterPreviewResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -28,24 +27,157 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["workstreams & programs"])
 
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _row_to_dict(obj, skip_cols=None) -> dict:
+    """Convert a SQLAlchemy ORM instance to a plain dict, serialising
+    UUID / datetime / Decimal values so they are JSON-friendly and
+    compatible with the existing Pydantic response models.
+    """
+    skip = skip_cols or set()
+    result = {}
+    for col in obj.__table__.columns:
+        if col.name in skip:
+            continue
+        value = getattr(obj, col.name, None)
+        if isinstance(value, uuid.UUID):
+            result[col.name] = str(value)
+        elif isinstance(value, (datetime, date)):
+            result[col.name] = value.isoformat()
+        elif isinstance(value, Decimal):
+            result[col.name] = float(value)
+        else:
+            result[col.name] = value
+    return result
+
+
+def _filter_cards_dicts(workstream_dict: dict, cards: list[dict]) -> list[dict]:
+    """Apply pillar / goal / horizon / stage / keyword filters (in-memory).
+
+    Operates on plain dicts so it works identically to the old Supabase path
+    and to the shared helper in ``app.helpers.workstream_utils``.
+    """
+    filtered = cards
+
+    ws_pillar_ids = workstream_dict.get("pillar_ids") or []
+    if ws_pillar_ids:
+        filtered = [c for c in filtered if c.get("pillar_id") in ws_pillar_ids]
+
+    ws_goal_ids = workstream_dict.get("goal_ids") or []
+    if ws_goal_ids:
+        filtered = [c for c in filtered if c.get("goal_id") in ws_goal_ids]
+
+    ws_horizon = workstream_dict.get("horizon")
+    if ws_horizon and ws_horizon != "ALL":
+        filtered = [c for c in filtered if c.get("horizon") == ws_horizon]
+
+    ws_stage_ids = workstream_dict.get("stage_ids") or []
+    if ws_stage_ids:
+
+        def _stage_num(card_stage_id: str) -> str:
+            return (
+                card_stage_id.split("_", 1)[0]
+                if "_" in card_stage_id
+                else card_stage_id
+            )
+
+        filtered = [
+            c for c in filtered if _stage_num(c.get("stage_id") or "") in ws_stage_ids
+        ]
+
+    ws_keywords = [k.lower() for k in (workstream_dict.get("keywords") or [])]
+    if ws_keywords:
+
+        def _card_text(card: dict) -> str:
+            return " ".join(
+                [
+                    (card.get("name") or "").lower(),
+                    (card.get("summary") or "").lower(),
+                    (card.get("description") or "").lower(),
+                ]
+            )
+
+        filtered = [
+            c for c in filtered if any(kw in _card_text(c) for kw in ws_keywords)
+        ]
+
+    return filtered
+
+
+async def _auto_queue_workstream_scan_sa(
+    db: AsyncSession,
+    workstream_id: str,
+    user_id: str,
+    config: dict,
+) -> bool:
+    """Queue a workstream scan via SQLAlchemy (replaces supabase helper)."""
+    try:
+        scan = WorkstreamScanORM(
+            workstream_id=uuid.UUID(workstream_id),
+            user_id=uuid.UUID(user_id),
+            status="queued",
+            config=config,
+        )
+        db.add(scan)
+        await db.flush()
+        await db.refresh(scan)
+        logger.info(
+            "Auto-queued workstream scan %s for workstream %s " "(triggered_by: %s)",
+            scan.id,
+            workstream_id,
+            config.get("triggered_by", "unknown"),
+        )
+        return True
+    except Exception as e:
+        logger.error(
+            "Failed to auto-queue scan for workstream %s: %s", workstream_id, e
+        )
+        return False
+
+
+# ---------------------------------------------------------------------------
+# GET /me/workstreams
+# ---------------------------------------------------------------------------
+
+
 @router.get("/me/workstreams")
 @router.get("/me/programs")
-async def get_user_workstreams(current_user: dict = Depends(get_current_user)):
-    """Get user's workstreams"""
-    response = (
-        supabase.table("workstreams")
-        .select("*")
-        .eq("user_id", current_user["id"])
-        .order("created_at", desc=True)
-        .execute()
-    )
-    return [Workstream(**ws) for ws in response.data]
+async def get_user_workstreams(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
+):
+    """Get user's workstreams."""
+    try:
+        result = await db.execute(
+            select(WorkstreamORM)
+            .where(WorkstreamORM.user_id == uuid.UUID(current_user["id"]))
+            .order_by(WorkstreamORM.created_at.desc())
+        )
+        rows = result.scalars().all()
+    except Exception as e:
+        logger.error("Failed to list workstreams: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("listing workstreams", e),
+        ) from e
+
+    return [Workstream(**_row_to_dict(ws)) for ws in rows]
+
+
+# ---------------------------------------------------------------------------
+# POST /me/workstreams
+# ---------------------------------------------------------------------------
 
 
 @router.post("/me/workstreams", response_model=WorkstreamCreateResponse)
 @router.post("/me/programs", response_model=WorkstreamCreateResponse)
 async def create_workstream(
-    workstream_data: WorkstreamCreate, current_user: dict = Depends(get_current_user)
+    workstream_data: WorkstreamCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """Create new workstream with optional auto-populate and auto-scan queueing.
 
@@ -53,20 +185,45 @@ async def create_workstream(
     1. Auto-populates the workstream with matching existing cards
     2. If fewer than 3 cards matched AND auto_scan is enabled, queues a scan
     """
-    ws_dict = workstream_data.dict()
-    ws_dict.update(
-        {
-            "user_id": current_user["id"],
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }
+    now_ts = datetime.now(timezone.utc)
+
+    ws_obj = WorkstreamORM(
+        user_id=uuid.UUID(current_user["id"]),
+        name=workstream_data.name,
+        description=workstream_data.description,
+        pillar_ids=workstream_data.pillar_ids,
+        goal_ids=workstream_data.goal_ids,
+        stage_ids=workstream_data.stage_ids,
+        horizon=workstream_data.horizon,
+        keywords=workstream_data.keywords,
+        is_active=True,
+        auto_add=workstream_data.auto_add,
+        auto_scan=workstream_data.auto_scan,
+        program_type=workstream_data.program_type,
+        department_id=workstream_data.department_id,
+        budget=(
+            Decimal(str(workstream_data.budget))
+            if workstream_data.budget is not None
+            else None
+        ),
+        fiscal_year=workstream_data.fiscal_year,
+        category_ids=workstream_data.category_ids,
+        created_at=now_ts,
+        updated_at=now_ts,
     )
 
-    response = supabase.table("workstreams").insert(ws_dict).execute()
-    if not response.data:
-        raise HTTPException(status_code=400, detail="Failed to create workstream")
+    try:
+        db.add(ws_obj)
+        await db.flush()
+        await db.refresh(ws_obj)
+    except Exception as e:
+        logger.error("Failed to create workstream: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to create workstream",
+        ) from e
 
-    workstream = response.data[0]
+    workstream = _row_to_dict(ws_obj)
     workstream_id = workstream["id"]
     user_id = current_user["id"]
 
@@ -75,42 +232,48 @@ async def create_workstream(
     scan_queued = False
 
     try:
-        # Fetch candidate cards from DB (broad filter via SQL where possible)
-        query = supabase.table("cards").select("*").eq("status", "active")
-        cards_response = query.order("created_at", desc=True).limit(60).execute()
-        cards = cards_response.data or []
+        card_result = await db.execute(
+            select(CardORM)
+            .where(CardORM.status == "active")
+            .order_by(CardORM.created_at.desc())
+            .limit(60)
+        )
+        card_rows = card_result.scalars().all()
+        cards = [
+            _row_to_dict(c, skip_cols={"embedding", "search_vector"}) for c in card_rows
+        ]
 
-        # Apply workstream filters via shared helper
-        cards = _filter_cards_for_workstream(workstream, cards)
+        # Apply workstream filters
+        cards = _filter_cards_dicts(workstream, cards)
 
         if candidates := cards[:20]:
-            now = datetime.now(timezone.utc).isoformat()
-            new_records = [
-                {
-                    "workstream_id": workstream_id,
-                    "card_id": card["id"],
-                    "added_by": user_id,
-                    "added_at": now,
-                    "status": "inbox",
-                    "position": idx,
-                    "added_from": "auto",
-                    "updated_at": now,
-                }
-                for idx, card in enumerate(candidates)
-            ]
-            insert_result = (
-                supabase.table("workstream_cards").insert(new_records).execute()
-            )
-            auto_populated_count = len(insert_result.data) if insert_result.data else 0
+            for idx, card in enumerate(candidates):
+                wc = WorkstreamCardORM(
+                    workstream_id=uuid.UUID(workstream_id),
+                    card_id=uuid.UUID(card["id"]),
+                    added_by=uuid.UUID(user_id),
+                    added_at=now_ts,
+                    status="inbox",
+                    position=idx,
+                    added_from="auto",
+                    updated_at=now_ts,
+                )
+                db.add(wc)
+
+            await db.flush()
+            auto_populated_count = len(candidates)
 
         logger.info(
-            f"Post-creation auto-populate for workstream {workstream_id}: "
-            f"{auto_populated_count} cards added"
+            "Post-creation auto-populate for workstream %s: %d cards added",
+            workstream_id,
+            auto_populated_count,
         )
 
     except Exception as e:
         logger.error(
-            f"Post-creation auto-populate failed for workstream {workstream_id}: {e}"
+            "Post-creation auto-populate failed for workstream %s: %s",
+            workstream_id,
+            e,
         )
         # Non-fatal: workstream was created successfully, continue
 
@@ -121,13 +284,22 @@ async def create_workstream(
             ws_pillar_ids = workstream.get("pillar_ids") or []
 
             if ws_keywords or ws_pillar_ids:
-                scan_config = _build_workstream_scan_config(workstream, "post_creation")
-                scan_queued = _auto_queue_workstream_scan(
-                    supabase, workstream_id, user_id, scan_config
+                scan_config = {
+                    "workstream_id": workstream_id,
+                    "user_id": workstream.get("user_id"),
+                    "keywords": ws_keywords,
+                    "pillar_ids": ws_pillar_ids,
+                    "horizon": workstream.get("horizon") or "ALL",
+                    "triggered_by": "post_creation",
+                }
+                scan_queued = await _auto_queue_workstream_scan_sa(
+                    db, workstream_id, user_id, scan_config
                 )
     except Exception as e:
         logger.error(
-            f"Post-creation scan queue failed for workstream {workstream_id}: {e}"
+            "Post-creation scan queue failed for workstream %s: %s",
+            workstream_id,
+            e,
         )
 
     return WorkstreamCreateResponse(
@@ -143,8 +315,18 @@ async def create_workstream(
         auto_scan=workstream.get("auto_scan", False),
         auto_add=workstream.get("auto_add", False),
         auto_populated_count=auto_populated_count,
+        program_type=workstream.get("program_type"),
+        department_id=workstream.get("department_id"),
+        budget=workstream.get("budget"),
+        fiscal_year=workstream.get("fiscal_year"),
+        category_ids=workstream.get("category_ids") or [],
         scan_queued=scan_queued,
     )
+
+
+# ---------------------------------------------------------------------------
+# PATCH /me/workstreams/{workstream_id}
+# ---------------------------------------------------------------------------
 
 
 @router.patch("/me/workstreams/{workstream_id}", response_model=Workstream)
@@ -152,36 +334,32 @@ async def create_workstream(
 async def update_workstream(
     workstream_id: str,
     workstream_data: WorkstreamUpdate,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
-    """
-    Update an existing workstream.
+    """Update an existing workstream.
 
     - Verifies the workstream belongs to the current user
     - Accepts partial updates (any field can be updated)
     - Returns the updated workstream
-
-    Args:
-        workstream_id: UUID of the workstream to update
-        workstream_data: Partial update data
-        current_user: Authenticated user (injected)
-
-    Returns:
-        Updated Workstream object
-
-    Raises:
-        HTTPException 404: Workstream not found
-        HTTPException 403: Workstream belongs to another user
     """
-    # First check if workstream exists
-    ws_check = (
-        supabase.table("workstreams").select("*").eq("id", workstream_id).execute()
-    )
-    if not ws_check.data:
+    try:
+        result = await db.execute(
+            select(WorkstreamORM).where(WorkstreamORM.id == uuid.UUID(workstream_id))
+        )
+        ws_obj = result.scalar_one_or_none()
+    except Exception as e:
+        logger.error("Failed to fetch workstream %s: %s", workstream_id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("fetching workstream", e),
+        ) from e
+
+    if ws_obj is None:
         raise HTTPException(status_code=404, detail="Workstream not found")
 
     # Verify ownership
-    if ws_check.data[0]["user_id"] != current_user["id"]:
+    if str(ws_obj.user_id) != current_user["id"]:
         raise HTTPException(
             status_code=403, detail="Not authorized to update this workstream"
         )
@@ -191,75 +369,96 @@ async def update_workstream(
 
     if not update_dict:
         # No updates provided, return existing workstream
-        return Workstream(**ws_check.data[0])
+        return Workstream(**_row_to_dict(ws_obj))
 
-    # Add updated_at timestamp
-    update_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
+    # Apply updates
+    for field_name, value in update_dict.items():
+        if field_name == "budget" and value is not None:
+            setattr(ws_obj, field_name, Decimal(str(value)))
+        else:
+            setattr(ws_obj, field_name, value)
 
-    # Perform update
-    response = (
-        supabase.table("workstreams")
-        .update(update_dict)
-        .eq("id", workstream_id)
-        .execute()
-    )
-    if response.data:
-        return Workstream(**response.data[0])
-    else:
-        raise HTTPException(status_code=400, detail="Failed to update workstream")
+    ws_obj.updated_at = datetime.now(timezone.utc)
+
+    try:
+        await db.flush()
+        await db.refresh(ws_obj)
+    except Exception as e:
+        logger.error("Failed to update workstream %s: %s", workstream_id, e)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to update workstream",
+        ) from e
+
+    return Workstream(**_row_to_dict(ws_obj))
+
+
+# ---------------------------------------------------------------------------
+# DELETE /me/workstreams/{workstream_id}
+# ---------------------------------------------------------------------------
 
 
 @router.delete("/me/workstreams/{workstream_id}")
 @router.delete("/me/programs/{workstream_id}")
 async def delete_workstream(
-    workstream_id: str, current_user: dict = Depends(get_current_user)
+    workstream_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
-    """
-    Delete a workstream.
+    """Delete a workstream.
 
     - Verifies the workstream belongs to the current user
     - Permanently deletes the workstream
-
-    Args:
-        workstream_id: UUID of the workstream to delete
-        current_user: Authenticated user (injected)
-
-    Returns:
-        Success message
-
-    Raises:
-        HTTPException 404: Workstream not found
-        HTTPException 403: Workstream belongs to another user
     """
-    # First check if workstream exists
-    ws_check = (
-        supabase.table("workstreams").select("*").eq("id", workstream_id).execute()
-    )
-    if not ws_check.data:
+    try:
+        result = await db.execute(
+            select(WorkstreamORM).where(WorkstreamORM.id == uuid.UUID(workstream_id))
+        )
+        ws_obj = result.scalar_one_or_none()
+    except Exception as e:
+        logger.error("Failed to fetch workstream %s for deletion: %s", workstream_id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("fetching workstream", e),
+        ) from e
+
+    if ws_obj is None:
         raise HTTPException(status_code=404, detail="Workstream not found")
 
     # Verify ownership
-    if ws_check.data[0]["user_id"] != current_user["id"]:
+    if str(ws_obj.user_id) != current_user["id"]:
         raise HTTPException(
             status_code=403, detail="Not authorized to delete this workstream"
         )
 
-    # Perform delete
-    response = supabase.table("workstreams").delete().eq("id", workstream_id).execute()
+    try:
+        await db.delete(ws_obj)
+        await db.flush()
+    except Exception as e:
+        logger.error("Failed to delete workstream %s: %s", workstream_id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("deleting workstream", e),
+        ) from e
 
     return {"status": "deleted", "message": "Workstream successfully deleted"}
+
+
+# ---------------------------------------------------------------------------
+# GET /me/workstreams/{workstream_id}/feed
+# ---------------------------------------------------------------------------
 
 
 @router.get("/me/workstreams/{workstream_id}/feed")
 @router.get("/me/programs/{workstream_id}/feed")
 async def get_workstream_feed(
     workstream_id: str,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
     limit: int = 20,
     offset: int = 0,
 ):
-    """
-    Get cards for a workstream with filtering support.
+    """Get cards for a workstream with filtering support.
 
     Filters cards based on workstream configuration:
     - pillar_ids: Filter by pillar IDs
@@ -267,54 +466,61 @@ async def get_workstream_feed(
     - stage_ids: Filter by stage IDs
     - horizon: Filter by horizon (H1, H2, H3, ALL)
     - keywords: Search card name/summary/description for keywords
-
-    Args:
-        workstream_id: UUID of the workstream
-        current_user: Authenticated user (injected)
-        limit: Maximum number of cards to return (default: 20)
-        offset: Number of cards to skip for pagination (default: 0)
-
-    Returns:
-        List of Card objects matching workstream filters
-
-    Raises:
-        HTTPException 404: Workstream not found or not owned by user
     """
     # Verify workstream belongs to user
-    ws_response = (
-        supabase.table("workstreams")
-        .select("*")
-        .eq("id", workstream_id)
-        .eq("user_id", current_user["id"])
-        .execute()
-    )
-    if not ws_response.data:
+    try:
+        ws_result = await db.execute(
+            select(WorkstreamORM).where(
+                WorkstreamORM.id == uuid.UUID(workstream_id),
+                WorkstreamORM.user_id == uuid.UUID(current_user["id"]),
+            )
+        )
+        ws_obj = ws_result.scalar_one_or_none()
+    except Exception as e:
+        logger.error("Failed to fetch workstream %s: %s", workstream_id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("fetching workstream", e),
+        ) from e
+
+    if ws_obj is None:
         raise HTTPException(status_code=404, detail="Workstream not found")
 
-    workstream = ws_response.data[0]
+    workstream = _row_to_dict(ws_obj)
 
     # Build query based on workstream filters
-    query = supabase.table("cards").select("*").eq("status", "active")
+    stmt = select(CardORM).where(CardORM.status == "active")
 
     # Filter by pillar_ids
     if workstream.get("pillar_ids"):
-        query = query.in_("pillar_id", workstream["pillar_ids"])
+        stmt = stmt.where(CardORM.pillar_id.in_(workstream["pillar_ids"]))
 
     # Filter by goal_ids
     if workstream.get("goal_ids"):
-        query = query.in_("goal_id", workstream["goal_ids"])
+        stmt = stmt.where(CardORM.goal_id.in_(workstream["goal_ids"]))
 
     # Note: stage_ids filter applied in Python because card stage_id format
     # is "5_implementing" while workstream stores ["4", "5", "6"]
 
     # Filter by horizon (skip if ALL)
     if workstream.get("horizon") and workstream["horizon"] != "ALL":
-        query = query.eq("horizon", workstream["horizon"])
+        stmt = stmt.where(CardORM.horizon == workstream["horizon"])
 
-    response = (
-        query.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
-    )
-    cards = response.data or []
+    stmt = stmt.order_by(CardORM.created_at.desc()).offset(offset).limit(limit)
+
+    try:
+        card_result = await db.execute(stmt)
+        card_rows = card_result.scalars().all()
+    except Exception as e:
+        logger.error("Failed to fetch cards for workstream %s: %s", workstream_id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("fetching workstream cards", e),
+        ) from e
+
+    cards = [
+        _row_to_dict(c, skip_cols={"embedding", "search_vector"}) for c in card_rows
+    ]
 
     if stage_ids := workstream.get("stage_ids", []):
         filtered_by_stage = []
@@ -345,6 +551,11 @@ async def get_workstream_feed(
     return cards
 
 
+# ---------------------------------------------------------------------------
+# POST /me/workstreams/{workstream_id}/auto-populate
+# ---------------------------------------------------------------------------
+
+
 @router.post(
     "/me/workstreams/{workstream_id}/auto-populate",
     response_model=AutoPopulateResponse,
@@ -355,77 +566,87 @@ async def get_workstream_feed(
 )
 async def auto_populate_workstream(
     workstream_id: str,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
     limit: int = Query(default=20, ge=1, le=50, description="Maximum cards to add"),
 ):
-    """
-    Auto-populate workstream with matching cards.
+    """Auto-populate workstream with matching cards.
 
     Finds cards matching the workstream's filter criteria (pillars, goals, stages,
     horizon, keywords) that are not already in the workstream, and adds them
     to the 'inbox' column.
-
-    Args:
-        workstream_id: UUID of the workstream
-        current_user: Authenticated user (injected)
-        limit: Maximum number of cards to add (default: 20, max: 50)
-
-    Returns:
-        AutoPopulateResponse with count and details of added cards
-
-    Raises:
-        HTTPException 404: Workstream not found
-        HTTPException 403: Not authorized
     """
     # Verify workstream belongs to user
-    ws_response = (
-        supabase.table("workstreams")
-        .select("*")
-        .eq("id", workstream_id)
-        .eq("user_id", current_user["id"])
-        .execute()
-    )
-    if not ws_response.data:
+    try:
+        ws_result = await db.execute(
+            select(WorkstreamORM).where(
+                WorkstreamORM.id == uuid.UUID(workstream_id),
+                WorkstreamORM.user_id == uuid.UUID(current_user["id"]),
+            )
+        )
+        ws_obj = ws_result.scalar_one_or_none()
+    except Exception as e:
+        logger.error("Failed to fetch workstream %s: %s", workstream_id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("fetching workstream", e),
+        ) from e
+
+    if ws_obj is None:
         raise HTTPException(status_code=404, detail="Workstream not found")
 
-    workstream = ws_response.data[0]
+    workstream = _row_to_dict(ws_obj)
 
     # Get existing card IDs in workstream
-    existing_response = (
-        supabase.table("workstream_cards")
-        .select("card_id")
-        .eq("workstream_id", workstream_id)
-        .execute()
-    )
-    existing_card_ids = {item["card_id"] for item in existing_response.data or []}
+    try:
+        existing_result = await db.execute(
+            select(WorkstreamCardORM.card_id).where(
+                WorkstreamCardORM.workstream_id == uuid.UUID(workstream_id)
+            )
+        )
+        existing_card_ids = {str(row) for row in existing_result.scalars().all()}
+    except Exception as e:
+        logger.error("Failed to fetch existing workstream cards: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("fetching existing workstream cards", e),
+        ) from e
 
     # Build query based on workstream filters
-    query = supabase.table("cards").select("*").eq("status", "active")
+    stmt = select(CardORM).where(CardORM.status == "active")
 
     # Apply filters
     if workstream.get("pillar_ids"):
-        query = query.in_("pillar_id", workstream["pillar_ids"])
+        stmt = stmt.where(CardORM.pillar_id.in_(workstream["pillar_ids"]))
 
     if workstream.get("goal_ids"):
-        query = query.in_("goal_id", workstream["goal_ids"])
-
-    # Note: stage_ids filter is applied client-side because card stage_id format
-    # is "5_implementing" while workstream stores ["4", "5", "6"]
-    # We need to extract the number prefix for comparison
+        stmt = stmt.where(CardORM.goal_id.in_(workstream["goal_ids"]))
 
     if workstream.get("horizon") and workstream["horizon"] != "ALL":
-        query = query.eq("horizon", workstream["horizon"])
+        stmt = stmt.where(CardORM.horizon == workstream["horizon"])
 
     # Fetch more cards than limit to account for filtering
     fetch_limit = min(limit * 3, 100)
-    response = query.order("created_at", desc=True).limit(fetch_limit).execute()
-    cards = response.data or []
+    stmt = stmt.order_by(CardORM.created_at.desc()).limit(fetch_limit)
+
+    try:
+        card_result = await db.execute(stmt)
+        card_rows = card_result.scalars().all()
+    except Exception as e:
+        logger.error("Failed to fetch cards for auto-populate: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("fetching cards for auto-populate", e),
+        ) from e
+
+    cards = [
+        _row_to_dict(c, skip_cols={"embedding", "search_vector"}) for c in card_rows
+    ]
 
     if stage_ids := workstream.get("stage_ids", []):
         filtered_by_stage = []
         for card in cards:
             card_stage_id = card.get("stage_id") or ""
-            # Extract number prefix (e.g., "5" from "5_implementing")
             stage_num = (
                 card_stage_id.split("_")[0] if "_" in card_stage_id else card_stage_id
             )
@@ -454,68 +675,75 @@ async def auto_populate_workstream(
         return AutoPopulateResponse(added=0, cards=[])
 
     # Get current max position in inbox
-    position_response = (
-        supabase.table("workstream_cards")
-        .select("position")
-        .eq("workstream_id", workstream_id)
-        .eq("status", "inbox")
-        .order("position", desc=True)
-        .limit(1)
-        .execute()
-    )
-
-    start_position = 0
-    if position_response.data:
-        start_position = position_response.data[0]["position"] + 1
+    try:
+        position_result = await db.execute(
+            select(func.coalesce(func.max(WorkstreamCardORM.position), -1)).where(
+                WorkstreamCardORM.workstream_id == uuid.UUID(workstream_id),
+                WorkstreamCardORM.status == "inbox",
+            )
+        )
+        start_position = (position_result.scalar() or 0) + 1
+    except Exception:
+        start_position = 0
 
     # Add cards to workstream
-    now = datetime.now(timezone.utc).isoformat()
-    new_records = []
+    now_ts = datetime.now(timezone.utc)
+    new_wc_objs: list[WorkstreamCardORM] = []
     for idx, card in enumerate(candidates):
-        new_records.append(
-            {
-                "workstream_id": workstream_id,
-                "card_id": card["id"],
-                "added_by": current_user["id"],
-                "added_at": now,
-                "status": "inbox",
-                "position": start_position + idx,
-                "added_from": "auto",
-                "updated_at": now,
-            }
+        wc = WorkstreamCardORM(
+            workstream_id=uuid.UUID(workstream_id),
+            card_id=uuid.UUID(card["id"]),
+            added_by=uuid.UUID(current_user["id"]),
+            added_at=now_ts,
+            status="inbox",
+            position=start_position + idx,
+            added_from="auto",
+            updated_at=now_ts,
         )
+        db.add(wc)
+        new_wc_objs.append(wc)
 
-    # Insert all records
-    result = supabase.table("workstream_cards").insert(new_records).execute()
-
-    if not result.data:
+    try:
+        await db.flush()
+        for wc in new_wc_objs:
+            await db.refresh(wc)
+    except Exception as e:
+        logger.error("Failed to auto-populate workstream %s: %s", workstream_id, e)
         raise HTTPException(
-            status_code=500, detail="Failed to auto-populate workstream"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to auto-populate workstream",
+        ) from e
 
     card_map = {c["id"]: c for c in candidates}
     added_cards = [
         WorkstreamCardWithDetails(
-            id=item["id"],
-            workstream_id=item["workstream_id"],
-            card_id=item["card_id"],
-            added_by=item["added_by"],
-            added_at=item["added_at"],
-            status=item.get("status", "inbox"),
-            position=item.get("position", 0),
-            notes=item.get("notes"),
-            reminder_at=item.get("reminder_at"),
-            added_from=item.get("added_from", "auto"),
-            updated_at=item.get("updated_at"),
-            card=card_map.get(item["card_id"]),
+            id=str(wc.id),
+            workstream_id=str(wc.workstream_id),
+            card_id=str(wc.card_id),
+            added_by=str(wc.added_by),
+            added_at=wc.added_at,
+            status=wc.status or "inbox",
+            position=wc.position or 0,
+            notes=wc.notes,
+            reminder_at=wc.reminder_at,
+            added_from=wc.added_from or "auto",
+            updated_at=wc.updated_at,
+            card=card_map.get(str(wc.card_id)),
         )
-        for item in result.data
+        for wc in new_wc_objs
     ]
     logger.info(
-        f"Auto-populated workstream {workstream_id} with {len(added_cards)} cards"
+        "Auto-populated workstream %s with %d cards",
+        workstream_id,
+        len(added_cards),
     )
 
     return AutoPopulateResponse(added=len(added_cards), cards=added_cards)
+
+
+# ---------------------------------------------------------------------------
+# POST /me/workstreams/{workstream_id}/auto-scan
+# ---------------------------------------------------------------------------
 
 
 @router.post("/me/workstreams/{workstream_id}/auto-scan")
@@ -523,7 +751,8 @@ async def auto_populate_workstream(
 async def toggle_workstream_auto_scan(
     workstream_id: str,
     enable: bool = True,
-    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """Enable or disable automatic scanning for a workstream.
 
@@ -532,50 +761,41 @@ async def toggle_workstream_auto_scan(
     """
     try:
         # Verify workstream exists and belongs to user
-        ws_check = (
-            supabase.table("workstreams")
-            .select("id, user_id")
-            .eq("id", workstream_id)
-            .execute()
+        result = await db.execute(
+            select(WorkstreamORM).where(WorkstreamORM.id == uuid.UUID(workstream_id))
         )
-        if not ws_check.data:
+        ws_obj = result.scalar_one_or_none()
+
+        if ws_obj is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Workstream not found",
             )
-        if ws_check.data[0]["user_id"] != user["id"]:
+        if str(ws_obj.user_id) != current_user["id"]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not authorized to modify this workstream",
             )
 
         # Update auto_scan setting
-        result = (
-            supabase.table("workstreams")
-            .update(
-                {
-                    "auto_scan": enable,
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                }
-            )
-            .eq("id", workstream_id)
-            .execute()
-        )
-        if result.data:
-            return {
-                "workstream_id": workstream_id,
-                "auto_scan": enable,
-                "status": "enabled" if enable else "disabled",
-            }
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Failed to update auto_scan setting",
-        )
+        ws_obj.auto_scan = enable
+        ws_obj.updated_at = datetime.now(timezone.utc)
+
+        await db.flush()
+        await db.refresh(ws_obj)
+
+        return {
+            "workstream_id": workstream_id,
+            "auto_scan": enable,
+            "status": "enabled" if enable else "disabled",
+        }
     except HTTPException:
         raise
     except Exception as e:
         logger.error(
-            f"Failed to toggle auto_scan for workstream {workstream_id}: {str(e)}"
+            "Failed to toggle auto_scan for workstream %s: %s",
+            workstream_id,
+            str(e),
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

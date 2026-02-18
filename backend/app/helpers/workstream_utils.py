@@ -7,7 +7,9 @@ configurations, and auto-queuing workstream scans.
 import logging
 from typing import Any, Dict, List
 
-from supabase import Client
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.db.workstream import WorkstreamScan
 
 logger = logging.getLogger(__name__)
 
@@ -76,8 +78,8 @@ def _build_workstream_scan_config(ws: dict, triggered_by: str) -> dict:
     }
 
 
-def _auto_queue_workstream_scan(
-    supabase_client: Client,
+async def _auto_queue_workstream_scan(
+    db: AsyncSession,
     workstream_id: str,
     user_id: str,
     config: dict,
@@ -88,7 +90,7 @@ def _auto_queue_workstream_scan(
     system (post-creation or auto-scan scheduler), not by a manual user action.
 
     Args:
-        supabase_client: Supabase client instance
+        db: AsyncSession instance
         workstream_id: UUID of the workstream
         user_id: UUID of the workstream owner
         config: Scan configuration dict (keywords, pillar_ids, horizon, etc.)
@@ -97,21 +99,21 @@ def _auto_queue_workstream_scan(
         True if the scan was successfully queued, False otherwise
     """
     try:
-        scan_record = {
-            "workstream_id": workstream_id,
-            "user_id": user_id,
-            "status": "queued",
-            "config": config,
-        }
-        result = supabase_client.table("workstream_scans").insert(scan_record).execute()
-        if result.data:
-            scan_id = result.data[0]["id"]
-            logger.info(
-                f"Auto-queued workstream scan {scan_id} for workstream {workstream_id} "
-                f"(triggered_by: {config.get('triggered_by', 'unknown')})"
-            )
-            return True
-        return False
+        scan_obj = WorkstreamScan(
+            workstream_id=workstream_id,
+            user_id=user_id,
+            status="queued",
+            config=config,
+        )
+        db.add(scan_obj)
+        await db.flush()
+        await db.refresh(scan_obj)
+        scan_id = str(scan_obj.id)
+        logger.info(
+            f"Auto-queued workstream scan {scan_id} for workstream {workstream_id} "
+            f"(triggered_by: {config.get('triggered_by', 'unknown')})"
+        )
+        return True
     except Exception as e:
         logger.error(f"Failed to auto-queue scan for workstream {workstream_id}: {e}")
         return False

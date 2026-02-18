@@ -14,12 +14,11 @@ Key Features:
 Usage:
     from app.digest_service import DigestService
 
-    service = DigestService(supabase, openai_client)
+    service = DigestService(db, openai_client)
     digest = await service.generate_user_digest(user_id)
     await service.send_digest_email(to_email, digest["subject"], digest["html"])
 """
 
-import asyncio
 import json
 import logging
 import os
@@ -29,7 +28,15 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any, Dict, List, Optional
 
-from supabase import Client
+from sqlalchemy import select, update as sa_update, func
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.db.analytics import CachedInsight, PatternInsight
+from app.models.db.card import Card
+from app.models.db.card_extras import CardFollow, CardScoreHistory
+from app.models.db.notification import DigestLog, NotificationPreference
+from app.models.db.user import User
+from app.models.db.workstream import Workstream, WorkstreamCard, WorkstreamScan
 
 from app.openai_provider import get_chat_mini_deployment
 
@@ -104,15 +111,15 @@ class DigestService:
     - Sending via SMTP (stub for now)
     """
 
-    def __init__(self, supabase_client: Client, openai_client):
+    def __init__(self, db: AsyncSession, openai_client):
         """
         Initialize the DigestService.
 
         Args:
-            supabase_client: Supabase client for database operations
+            db: SQLAlchemy async session for database operations
             openai_client: OpenAI client for LLM-powered email generation
         """
-        self.supabase = supabase_client
+        self.db = db
         self.openai_client = openai_client
 
     # ========================================================================
@@ -207,13 +214,29 @@ class DigestService:
     async def _get_user_preferences(self, user_id: str) -> Optional[Dict[str, Any]]:
         """Get notification preferences for a user, or None if not configured."""
         try:
-            response = (
-                self.supabase.table("notification_preferences")
-                .select("*")
-                .eq("user_id", user_id)
-                .execute()
+            result = await self.db.execute(
+                select(NotificationPreference).where(
+                    NotificationPreference.user_id == user_id
+                )
             )
-            return response.data[0] if response.data else None
+            pref = result.scalar_one_or_none()
+            if pref is None:
+                return None
+            return {
+                "digest_frequency": pref.digest_frequency,
+                "digest_day": pref.digest_day,
+                "include_new_signals": pref.include_new_signals,
+                "include_velocity_changes": pref.include_velocity_changes,
+                "include_pattern_insights": pref.include_pattern_insights,
+                "include_workstream_updates": pref.include_workstream_updates,
+                "last_digest_sent_at": (
+                    pref.last_digest_sent_at.isoformat()
+                    if pref.last_digest_sent_at
+                    else None
+                ),
+                "notification_email": pref.notification_email,
+                "user_id": str(pref.user_id),
+            }
         except Exception as e:
             logger.error(f"Failed to get notification preferences for {user_id}: {e}")
             return None
@@ -229,64 +252,77 @@ class DigestService:
 
         try:
             # Get user's workstream IDs
-            ws_resp = (
-                self.supabase.table("workstreams")
-                .select("id, name")
-                .eq("user_id", user_id)
-                .execute()
+            ws_result = await self.db.execute(
+                select(Workstream.id, Workstream.name).where(
+                    Workstream.user_id == user_id
+                )
             )
-            workstreams = ws_resp.data or []
-            if ws_map := {ws["id"]: ws["name"] for ws in workstreams}:
+            workstreams = ws_result.all()
+            if ws_map := {str(ws.id): ws.name for ws in workstreams}:
                 # Get cards added to workstreams since last digest
-                wc_resp = (
-                    self.supabase.table("workstream_cards")
-                    .select(
-                        "card_id, workstream_id, created_at, "
-                        "cards!inner(name, summary, pillar, horizon, stage)"
+                ws_ids = [ws.id for ws in workstreams]
+                wc_result = await self.db.execute(
+                    select(
+                        WorkstreamCard.card_id,
+                        WorkstreamCard.workstream_id,
+                        WorkstreamCard.added_at,
+                        Card.name,
+                        Card.summary,
+                        Card.pillar_id,
+                        Card.horizon,
+                        Card.stage_id,
                     )
-                    .in_("workstream_id", list(ws_map.keys()))
-                    .gte("created_at", since.isoformat())
-                    .order("created_at", desc=True)
+                    .join(Card, Card.id == WorkstreamCard.card_id)
+                    .where(WorkstreamCard.workstream_id.in_(ws_ids))
+                    .where(WorkstreamCard.added_at >= since)
+                    .order_by(WorkstreamCard.added_at.desc())
                     .limit(MAX_NEW_SIGNALS)
-                    .execute()
                 )
 
-                for wc in wc_resp.data or []:
-                    card = wc.get("cards", {})
+                for wc in wc_result.all():
                     results.append(
                         {
-                            "name": card.get("name", "Unknown Signal"),
-                            "summary": card.get("summary", ""),
-                            "pillar": card.get("pillar", ""),
-                            "horizon": card.get("horizon", ""),
-                            "stage": card.get("stage", ""),
-                            "workstream": ws_map.get(wc["workstream_id"], ""),
-                            "added_at": wc.get("created_at", ""),
+                            "name": wc.name or "Unknown Signal",
+                            "summary": wc.summary or "",
+                            "pillar": wc.pillar_id or "",
+                            "horizon": wc.horizon or "",
+                            "stage": wc.stage_id or "",
+                            "workstream": ws_map.get(str(wc.workstream_id), ""),
+                            "added_at": wc.added_at.isoformat() if wc.added_at else "",
                         }
                     )
 
             # Also get newly followed cards
-            follows_resp = (
-                self.supabase.table("card_follows")
-                .select("card_id, created_at, cards!inner(name, summary, pillar)")
-                .eq("user_id", user_id)
-                .gte("created_at", since.isoformat())
-                .order("created_at", desc=True)
+            follows_result = await self.db.execute(
+                select(
+                    CardFollow.card_id,
+                    CardFollow.created_at,
+                    Card.name,
+                    Card.summary,
+                    Card.pillar_id,
+                )
+                .join(Card, Card.id == CardFollow.card_id)
+                .where(CardFollow.user_id == user_id)
+                .where(CardFollow.created_at >= since)
+                .order_by(CardFollow.created_at.desc())
                 .limit(MAX_NEW_SIGNALS)
-                .execute()
             )
 
-            for follow in follows_resp.data or []:
-                card = follow.get("cards", {})
+            for follow in follows_result.all():
+                card_name = follow.name or "Unknown Signal"
                 # Avoid duplicates with workstream cards
-                if all(r["name"] != card.get("name") for r in results):
+                if all(r["name"] != card_name for r in results):
                     results.append(
                         {
-                            "name": card.get("name", "Unknown Signal"),
-                            "summary": card.get("summary", ""),
-                            "pillar": card.get("pillar", ""),
+                            "name": card_name,
+                            "summary": follow.summary or "",
+                            "pillar": follow.pillar_id or "",
                             "source": "followed",
-                            "added_at": follow.get("created_at", ""),
+                            "added_at": (
+                                follow.created_at.isoformat()
+                                if follow.created_at
+                                else ""
+                            ),
                         }
                     )
 
@@ -316,62 +352,64 @@ class DigestService:
                 batch = card_ids[i : i + batch_size]
 
                 # Get score history entries for this period
-                history_resp = (
-                    self.supabase.table("card_score_history")
-                    .select(
-                        "card_id, velocity_score, impact_score, "
-                        "relevance_score, recorded_at"
+                history_result = await self.db.execute(
+                    select(
+                        CardScoreHistory.card_id,
+                        CardScoreHistory.velocity_score,
+                        CardScoreHistory.impact_score,
+                        CardScoreHistory.relevance_score,
+                        CardScoreHistory.recorded_at,
                     )
-                    .in_("card_id", batch)
-                    .gte("recorded_at", since.isoformat())
-                    .order("recorded_at", desc=False)
-                    .execute()
+                    .where(CardScoreHistory.card_id.in_(batch))
+                    .where(CardScoreHistory.recorded_at >= since)
+                    .order_by(CardScoreHistory.recorded_at.asc())
                 )
 
                 # Group by card_id
                 history_by_card: Dict[str, list] = {}
-                for entry in history_resp.data or []:
-                    cid = entry["card_id"]
+                for entry in history_result.all():
+                    cid = str(entry.card_id)
                     if cid not in history_by_card:
                         history_by_card[cid] = []
                     history_by_card[cid].append(entry)
 
                 # Get current card details
                 if history_by_card:
-                    cards_resp = (
-                        self.supabase.table("cards")
-                        .select(
-                            "id, name, velocity_score, impact_score, "
-                            "relevance_score, pillar"
-                        )
-                        .in_("id", list(history_by_card.keys()))
-                        .execute()
+                    cards_result = await self.db.execute(
+                        select(
+                            Card.id,
+                            Card.name,
+                            Card.velocity_score,
+                            Card.impact_score,
+                            Card.relevance_score,
+                            Card.pillar_id,
+                        ).where(Card.id.in_(list(history_by_card.keys())))
                     )
-                    card_details = {c["id"]: c for c in (cards_resp.data or [])}
+                    card_details = {str(c.id): c for c in cards_result.all()}
 
                     for cid, entries in history_by_card.items():
                         if len(entries) < 2:
                             continue
 
-                        card = card_details.get(cid, {})
+                        card = card_details.get(cid)
                         first = entries[0]
                         last = entries[-1]
 
                         # Calculate velocity change
-                        v_old = first.get("velocity_score") or 0
-                        v_new = last.get("velocity_score") or 0
-                        v_delta = v_new - v_old
+                        v_old = first.velocity_score or 0
+                        v_new = last.velocity_score or 0
+                        v_delta = float(v_new) - float(v_old)
 
                         if abs(v_delta) >= 5:  # Significant change threshold
                             direction = "accelerating" if v_delta > 0 else "declining"
                             results.append(
                                 {
-                                    "name": card.get("name", "Unknown"),
-                                    "pillar": card.get("pillar", ""),
+                                    "name": card.name if card else "Unknown",
+                                    "pillar": card.pillar_id if card else "",
                                     "direction": direction,
                                     "velocity_change": v_delta,
-                                    "velocity_current": v_new,
-                                    "velocity_previous": v_old,
+                                    "velocity_current": float(v_new),
+                                    "velocity_previous": float(v_old),
                                 }
                             )
 
@@ -393,24 +431,24 @@ class DigestService:
         try:
             # Try pattern_insights table first
             try:
-                pi_resp = (
-                    self.supabase.table("pattern_insights")
-                    .select("*")
-                    .gte("created_at", since.isoformat())
-                    .order("confidence_score", desc=True)
+                pi_result = await self.db.execute(
+                    select(PatternInsight)
+                    .where(PatternInsight.created_at >= since)
+                    .order_by(PatternInsight.confidence_score.desc())
                     .limit(MAX_PATTERN_INSIGHTS)
-                    .execute()
                 )
-                results.extend(
-                    {
-                        "title": pi.get("title", ""),
-                        "summary": pi.get("description", pi.get("summary", "")),
-                        "pattern_type": pi.get("pattern_type", ""),
-                        "affected_pillars": pi.get("affected_pillars", []),
-                        "confidence": pi.get("confidence_score", 0),
-                    }
-                    for pi in pi_resp.data or []
-                )
+                for pi in pi_result.scalars().all():
+                    results.append(
+                        {
+                            "title": pi.title or "",
+                            "summary": pi.description
+                            or (pi.summary if hasattr(pi, "summary") else "")
+                            or "",
+                            "pattern_type": pi.pattern_type or "",
+                            "affected_pillars": pi.affected_pillars or [],
+                            "confidence": pi.confidence_score or 0,
+                        }
+                    )
             except Exception:
                 # pattern_insights table may not exist yet
                 pass
@@ -418,16 +456,15 @@ class DigestService:
             # Fall back to cached_insights if no pattern insights found
             if not results:
                 try:
-                    ci_resp = (
-                        self.supabase.table("cached_insights")
-                        .select("insights_json, generated_at")
-                        .gte("generated_at", since.isoformat())
-                        .order("generated_at", desc=True)
+                    ci_result = await self.db.execute(
+                        select(CachedInsight.insights_json, CachedInsight.generated_at)
+                        .where(CachedInsight.generated_at >= since)
+                        .order_by(CachedInsight.generated_at.desc())
                         .limit(1)
-                        .execute()
                     )
-                    if ci_resp.data:
-                        insights_json = ci_resp.data[0].get("insights_json", {})
+                    row = ci_result.first()
+                    if row:
+                        insights_json = row.insights_json or {}
                         insights_list = (
                             insights_json
                             if isinstance(insights_json, list)
@@ -465,44 +502,39 @@ class DigestService:
 
         try:
             # Get user workstreams
-            ws_resp = (
-                self.supabase.table("workstreams")
-                .select("id, name, updated_at")
-                .eq("user_id", user_id)
-                .execute()
+            ws_result = await self.db.execute(
+                select(Workstream.id, Workstream.name, Workstream.updated_at).where(
+                    Workstream.user_id == user_id
+                )
             )
-            workstreams = ws_resp.data or []
+            workstreams = ws_result.all()
 
             for ws in workstreams:
                 ws_update: Dict[str, Any] = {
-                    "name": ws["name"],
-                    "workstream_id": ws["id"],
+                    "name": ws.name,
+                    "workstream_id": str(ws.id),
                 }
 
                 # Count new cards added since last digest
                 try:
-                    cards_resp = (
-                        self.supabase.table("workstream_cards")
-                        .select("id", count="exact")
-                        .eq("workstream_id", ws["id"])
-                        .gte("created_at", since.isoformat())
-                        .execute()
+                    cards_count_result = await self.db.execute(
+                        select(func.count(WorkstreamCard.id))
+                        .where(WorkstreamCard.workstream_id == ws.id)
+                        .where(WorkstreamCard.added_at >= since)
                     )
-                    ws_update["new_cards_count"] = cards_resp.count or 0
+                    ws_update["new_cards_count"] = cards_count_result.scalar() or 0
                 except Exception:
                     ws_update["new_cards_count"] = 0
 
                 # Check for completed scans
                 try:
-                    scans_resp = (
-                        self.supabase.table("workstream_scans")
-                        .select("id, status, completed_at")
-                        .eq("workstream_id", ws["id"])
-                        .eq("status", "completed")
-                        .gte("completed_at", since.isoformat())
-                        .execute()
+                    scans_result = await self.db.execute(
+                        select(func.count(WorkstreamScan.id))
+                        .where(WorkstreamScan.workstream_id == ws.id)
+                        .where(WorkstreamScan.status == "completed")
+                        .where(WorkstreamScan.completed_at >= since)
                     )
-                    ws_update["scans_completed"] = len(scans_resp.data or [])
+                    ws_update["scans_completed"] = scans_result.scalar() or 0
                 except Exception:
                     ws_update["scans_completed"] = 0
 
@@ -525,31 +557,25 @@ class DigestService:
 
         try:
             # Followed cards
-            follows_resp = (
-                self.supabase.table("card_follows")
-                .select("card_id")
-                .eq("user_id", user_id)
-                .execute()
+            follows_result = await self.db.execute(
+                select(CardFollow.card_id).where(CardFollow.user_id == user_id)
             )
-            for f in follows_resp.data or []:
-                card_ids.add(f["card_id"])
+            for f in follows_result.scalars().all():
+                card_ids.add(str(f))
 
             # Workstream cards
-            ws_resp = (
-                self.supabase.table("workstreams")
-                .select("id")
-                .eq("user_id", user_id)
-                .execute()
+            ws_result = await self.db.execute(
+                select(Workstream.id).where(Workstream.user_id == user_id)
             )
-            if ws_ids := [ws["id"] for ws in (ws_resp.data or [])]:
-                wc_resp = (
-                    self.supabase.table("workstream_cards")
-                    .select("card_id")
-                    .in_("workstream_id", ws_ids)
-                    .execute()
+            ws_ids = [ws_id for ws_id in ws_result.scalars().all()]
+            if ws_ids:
+                wc_result = await self.db.execute(
+                    select(WorkstreamCard.card_id).where(
+                        WorkstreamCard.workstream_id.in_(ws_ids)
+                    )
                 )
-                for wc in wc_resp.data or []:
-                    card_ids.add(wc["card_id"])
+                for wc in wc_result.scalars().all():
+                    card_ids.add(str(wc))
 
         except Exception as e:
             logger.error(f"Failed to get user card IDs for {user_id}: {e}")
@@ -813,30 +839,31 @@ class DigestService:
     ) -> None:
         """Store a record of the generated digest for audit and retry."""
         try:
-            self.supabase.table("digest_logs").insert(
-                {
-                    "user_id": user_id,
-                    "digest_type": summary_json.get("sections", {}).get(
-                        "frequency", "weekly"
-                    ),
-                    "subject": subject,
-                    "html_content": html_content,
-                    "summary_json": summary_json,
-                    "status": "generated",
-                }
-            ).execute()
+            log = DigestLog(
+                user_id=user_id,
+                digest_type=summary_json.get("sections", {}).get("frequency", "weekly"),
+                subject=subject,
+                html_content=html_content,
+                summary_json=summary_json,
+                status="generated",
+            )
+            self.db.add(log)
+            await self.db.flush()
         except Exception as e:
             logger.error(f"Failed to store digest log for {user_id}: {e}")
 
     async def _update_last_digest_sent(self, user_id: str) -> None:
         """Update the last_digest_sent_at timestamp for the user."""
         try:
-            self.supabase.table("notification_preferences").update(
-                {
-                    "last_digest_sent_at": datetime.now(timezone.utc).isoformat(),
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                }
-            ).eq("user_id", user_id).execute()
+            await self.db.execute(
+                sa_update(NotificationPreference)
+                .where(NotificationPreference.user_id == user_id)
+                .values(
+                    last_digest_sent_at=datetime.now(timezone.utc),
+                    updated_at=datetime.now(timezone.utc),
+                )
+            )
+            await self.db.flush()
         except Exception as e:
             logger.error(f"Failed to update last_digest_sent_at for {user_id}: {e}")
 
@@ -868,18 +895,28 @@ class DigestService:
 
         try:
             # Get all users with digest enabled
-            prefs_resp = (
-                self.supabase.table("notification_preferences")
-                .select("*")
-                .neq("digest_frequency", "none")
-                .execute()
+            prefs_result = await self.db.execute(
+                select(NotificationPreference).where(
+                    NotificationPreference.digest_frequency != "none"
+                )
             )
 
-            all_prefs = prefs_resp.data or []
+            all_prefs = prefs_result.scalars().all()
             logger.info(f"Found {len(all_prefs)} users with digests enabled")
 
-            for prefs in all_prefs:
-                user_id = prefs["user_id"]
+            for pref_obj in all_prefs:
+                user_id = str(pref_obj.user_id)
+                prefs = {
+                    "digest_frequency": pref_obj.digest_frequency,
+                    "digest_day": pref_obj.digest_day,
+                    "last_digest_sent_at": (
+                        pref_obj.last_digest_sent_at.isoformat()
+                        if pref_obj.last_digest_sent_at
+                        else None
+                    ),
+                    "notification_email": pref_obj.notification_email,
+                    "user_id": user_id,
+                }
                 stats["processed"] += 1
 
                 # Check if this user is due for a digest
@@ -911,16 +948,19 @@ class DigestService:
                         stats["sent"] += 1
                         # Update digest log status
                         try:
-                            self.supabase.table("digest_logs").update(
-                                {
-                                    "status": "sent",
-                                    "sent_at": now.isoformat(),
-                                }
-                            ).eq("user_id", user_id).eq("status", "generated").order(
-                                "created_at", desc=True
-                            ).limit(
-                                1
-                            ).execute()
+                            # Find the most recent generated log for this user
+                            log_result = await self.db.execute(
+                                select(DigestLog)
+                                .where(DigestLog.user_id == user_id)
+                                .where(DigestLog.status == "generated")
+                                .order_by(DigestLog.created_at.desc())
+                                .limit(1)
+                            )
+                            log = log_result.scalar_one_or_none()
+                            if log:
+                                log.status = "sent"
+                                log.sent_at = now
+                                await self.db.flush()
                         except Exception:
                             pass
                     else:
@@ -991,11 +1031,9 @@ class DigestService:
 
         # Fall back to auth email via users table
         try:
-            user_resp = (
-                self.supabase.table("users").select("email").eq("id", user_id).execute()
-            )
-            if user_resp.data:
-                return user_resp.data[0].get("email")
+            result = await self.db.execute(select(User.email).where(User.id == user_id))
+            email = result.scalar()
+            return email
         except Exception as e:
             logger.error(f"Failed to get user email for {user_id}: {e}")
 

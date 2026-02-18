@@ -10,7 +10,6 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { supabase } from "../App";
 import {
   Plus,
   Trash2,
@@ -25,6 +24,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { cn } from "../lib/utils";
+import { API_BASE_URL } from "../lib/config";
 import { ChatPanel } from "../components/Chat/ChatPanel";
 import {
   fetchConversations,
@@ -223,16 +223,28 @@ export default function AskGrantScope() {
     }
   }, []);
 
-  /** Load user workstreams from Supabase. */
+  /** Load user workstreams from the backend API. */
   const loadWorkstreams = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from("workstreams")
-        .select("id, name")
-        .order("name", { ascending: true });
+      const token = localStorage.getItem("gs2_token");
+      if (!token) return;
 
-      if (!error && data) {
-        setWorkstreams(data as Workstream[]);
+      const response = await fetch(`${API_BASE_URL}/api/v1/me/workstreams`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Extract id and name, sort by name
+        const wsList: Workstream[] = (data || [])
+          .map((ws: { id: string; name: string }) => ({
+            id: ws.id,
+            name: ws.name,
+          }))
+          .sort((a: Workstream, b: Workstream) => a.name.localeCompare(b.name));
+        setWorkstreams(wsList);
       }
     } catch {
       // Non-critical
@@ -394,7 +406,7 @@ export default function AskGrantScope() {
     ? activeConversationScopeId
     : selectedScope.scopeId;
 
-  // ChatPanel is always mounted so it can auto-restore from Supabase.
+  // ChatPanel is always mounted so it can auto-restore from the backend API.
   // Its built-in empty state (with suggestions) handles the no-conversation case.
 
   // Group conversations for sidebar

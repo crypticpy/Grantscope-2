@@ -13,7 +13,7 @@ Chart Generation:
 - All charts use matplotlib with 'Agg' backend (non-GUI)
 
 Usage:
-    export_service = ExportService(supabase_client)
+    export_service = ExportService(db)
     pdf_path = await export_service.generate_pdf(card_data)
     pptx_path = await export_service.generate_pptx(card_data)
     csv_content = await export_service.generate_csv(card_data)
@@ -62,7 +62,11 @@ from reportlab.platypus import (
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT, TA_JUSTIFY
 from reportlab.pdfgen import canvas
 
-from supabase import Client
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.db.card import Card
+from app.models.db.workstream import Workstream, WorkstreamCard
 
 from .models.export import (
     CardExportData,
@@ -1156,14 +1160,14 @@ class ExportService:
     Follows the service class pattern from research_service.py.
     """
 
-    def __init__(self, supabase: Client):
+    def __init__(self, db: AsyncSession):
         """
         Initialize the ExportService.
 
         Args:
-            supabase: Supabase client for database queries
+            db: AsyncSession instance for database queries
         """
-        self.supabase = supabase
+        self.db = db
         logger.info("ExportService initialized")
 
     # ========================================================================
@@ -2535,15 +2539,14 @@ class ExportService:
             CardExportData object or None if not found
         """
         try:
-            response = (
-                self.supabase.table("cards")
-                .select("*")
-                .eq("id", card_id)
-                .single()
-                .execute()
-            )
+            result = await self.db.execute(select(Card).where(Card.id == card_id))
+            card = result.scalar_one_or_none()
+            if not card:
+                return None
 
-            return CardExportData(**response.data) if response.data else None
+            # Convert ORM object to dict for CardExportData
+            card_dict = {c.key: getattr(card, c.key) for c in Card.__table__.columns}
+            return CardExportData(**card_dict)
         except Exception as e:
             logger.error(f"Error fetching card {card_id}: {e}")
             return None
@@ -2563,35 +2566,38 @@ class ExportService:
         """
         try:
             # Fetch workstream
-            ws_response = (
-                self.supabase.table("workstreams")
-                .select("*")
-                .eq("id", workstream_id)
-                .single()
-                .execute()
+            ws_result = await self.db.execute(
+                select(Workstream).where(Workstream.id == workstream_id)
             )
+            ws_obj = ws_result.scalar_one_or_none()
 
-            if not ws_response.data:
+            if not ws_obj:
                 return None, []
 
-            workstream = ws_response.data
+            # Convert ORM object to dict for downstream compatibility
+            workstream = {
+                c.key: getattr(ws_obj, c.key) for c in Workstream.__table__.columns
+            }
 
             # Fetch associated cards via workstream_cards junction table
-            cards_response = (
-                self.supabase.table("workstream_cards")
-                .select("card_id, cards(*)")
-                .eq("workstream_id", workstream_id)
+            wc_result = await self.db.execute(
+                select(WorkstreamCard.card_id)
+                .where(WorkstreamCard.workstream_id == workstream_id)
                 .limit(max_cards)
-                .execute()
             )
+            card_ids = [row[0] for row in wc_result.all()]
 
             cards = []
-            if cards_response.data:
-                cards.extend(
-                    CardExportData(**item["cards"])
-                    for item in cards_response.data
-                    if item.get("cards")
+            if card_ids:
+                cards_result = await self.db.execute(
+                    select(Card).where(Card.id.in_(card_ids))
                 )
+                for card_obj in cards_result.scalars().all():
+                    card_dict = {
+                        c.key: getattr(card_obj, c.key) for c in Card.__table__.columns
+                    }
+                    cards.append(CardExportData(**card_dict))
+
             return workstream, cards
 
         except Exception as e:

@@ -10,7 +10,12 @@ import logging
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from supabase import Client
+from sqlalchemy import select, and_, or_
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.db.card import Card
+from app.models.db.card_extras import CardRelationship
+from app.helpers.db_utils import vector_search_cards
 
 from .ai_service import AIService
 from .openai_provider import get_chat_mini_deployment
@@ -83,7 +88,7 @@ class ConnectionService:
     using embedding similarity and LLM-classified relationship types.
 
     Usage:
-        service = ConnectionService(supabase_client, ai_service)
+        service = ConnectionService(db, ai_service)
         new_count = await service.discover_connections(card_id)
     """
 
@@ -92,15 +97,15 @@ class ConnectionService:
     DEFAULT_MAX_CONNECTIONS = 10
     DEFAULT_BATCH_SIZE = 20
 
-    def __init__(self, supabase: Client, ai_service: AIService):
+    def __init__(self, db: AsyncSession, ai_service: AIService):
         """
         Initialize the connection service.
 
         Args:
-            supabase: Supabase client (sync) for database operations.
+            db: SQLAlchemy async database session.
             ai_service: AIService instance for LLM calls and embeddings.
         """
-        self.supabase = supabase
+        self.db = db
         self.ai_service = ai_service
 
     # ====================================================================
@@ -130,23 +135,21 @@ class ConnectionService:
         """
         # 1. Get the card's embedding
         try:
-            card_result = (
-                self.supabase.table("cards")
-                .select("id, name, summary, embedding")
-                .eq("id", card_id)
-                .single()
-                .execute()
+            result = await self.db.execute(
+                select(Card.id, Card.name, Card.summary, Card.embedding).where(
+                    Card.id == card_id
+                )
             )
+            card = result.one_or_none()
         except Exception as e:
             logger.error(f"Failed to fetch card {card_id}: {e}")
             return 0
 
-        if not card_result.data:
+        if not card:
             logger.warning(f"Card not found: {card_id}")
             return 0
 
-        card = card_result.data
-        embedding = card.get("embedding")
+        embedding = card.embedding
 
         if not embedding:
             logger.warning(
@@ -154,37 +157,27 @@ class ConnectionService:
             )
             return 0
 
-        # 2. Find similar cards via RPC (find_similar_cards has proper
-        #    search_path for pgvector and supports exclude_card_id)
+        # 2. Find similar cards via vector_search_cards helper
         try:
-            similar_result = self.supabase.rpc(
-                "find_similar_cards",
-                {
-                    "query_embedding": embedding,
-                    "exclude_card_id": card_id,
-                    "match_threshold": similarity_threshold,
-                    "match_count": max_connections + 5,
-                },
-            ).execute()
+            candidates = await vector_search_cards(
+                self.db,
+                query_embedding=embedding,
+                exclude_card_id=card_id,
+                match_threshold=similarity_threshold,
+                match_count=max_connections + 5,
+            )
         except Exception as e:
-            logger.error(f"find_similar_cards RPC failed for card {card_id}: {e}")
+            logger.error(f"vector_search_cards failed for card {card_id}: {e}")
             return 0
 
-        if not similar_result.data:
+        if not candidates:
             logger.debug(
                 f"No similar cards found for {card_id} above threshold {similarity_threshold}"
             )
             return 0
 
-        # find_similar_cards already excludes the source card via exclude_card_id
-        candidates = similar_result.data
-
-        if not candidates:
-            logger.debug(f"No candidate connections for card {card_id}")
-            return 0
-
         # 3. Check which relationships already exist
-        existing_pairs = self._get_existing_relationships(card_id)
+        existing_pairs = await self._get_existing_relationships(card_id)
 
         # 4. Classify and create new connections
         new_count = 0
@@ -201,8 +194,8 @@ class ConnectionService:
             # Classify the connection via LLM
             try:
                 classification = await self._classify_connection(
-                    card_a_name=card.get("name", ""),
-                    card_a_summary=card.get("summary", ""),
+                    card_a_name=card.name or "",
+                    card_a_summary=card.summary or "",
                     card_b_name=candidate.get("name", ""),
                     card_b_summary=candidate.get("summary", ""),
                 )
@@ -224,15 +217,15 @@ class ConnectionService:
 
             # Insert the relationship
             try:
-                self.supabase.table("card_relationships").insert(
-                    {
-                        "source_card_id": card_id,
-                        "target_card_id": target_id,
-                        "relationship_type": db_type,
-                        "strength": candidate.get("similarity", similarity_threshold),
-                        "created_at": datetime.now(timezone.utc).isoformat(),
-                    }
-                ).execute()
+                new_rel = CardRelationship(
+                    source_card_id=card_id,
+                    target_card_id=target_id,
+                    relationship_type=db_type,
+                    strength=candidate.get("similarity", similarity_threshold),
+                    created_at=datetime.now(timezone.utc),
+                )
+                self.db.add(new_rel)
+                await self.db.flush()
                 new_count += 1
                 logger.debug(
                     f"Created connection: {card_id} --[{db_type}]--> {target_id} "
@@ -293,25 +286,28 @@ class ConnectionService:
         # Simple approach: get cards with embeddings, ordered by updated_at,
         # and process those without recent relationships.
         try:
-            cards_result = (
-                self.supabase.table("cards")
-                .select("id, name")
-                .eq("status", "active")
-                .not_.is_("embedding", "null")
-                .order("updated_at", desc=True)
+            result = await self.db.execute(
+                select(Card.id, Card.name)
+                .where(
+                    and_(
+                        Card.status == "active",
+                        Card.embedding.isnot(None),
+                    )
+                )
+                .order_by(Card.updated_at.desc())
                 .limit(batch_size)
-                .execute()
             )
+            cards_data = result.all()
         except Exception as e:
             logger.error(f"Failed to fetch cards for connection refresh: {e}")
             return summary
 
-        if not cards_result.data:
+        if not cards_data:
             logger.info("No cards with embeddings found for connection refresh")
             return summary
 
-        for card in cards_result.data:
-            card_id = card["id"]
+        for card in cards_data:
+            card_id = str(card.id)
             try:
                 new_connections = await self.discover_connections(card_id)
                 summary["cards_processed"] += 1
@@ -385,7 +381,7 @@ class ConnectionService:
             logger.warning(f"Connection classification LLM call failed: {e}")
             raise
 
-    def _get_existing_relationships(self, card_id: str) -> set:
+    async def _get_existing_relationships(self, card_id: str) -> set:
         """
         Get the set of card IDs that already have a relationship with
         the given card (in either direction).
@@ -399,24 +395,22 @@ class ConnectionService:
         existing = set()
         try:
             # Relationships where this card is the source
-            outgoing = (
-                self.supabase.table("card_relationships")
-                .select("target_card_id")
-                .eq("source_card_id", card_id)
-                .execute()
+            outgoing_result = await self.db.execute(
+                select(CardRelationship.target_card_id).where(
+                    CardRelationship.source_card_id == card_id
+                )
             )
-            for row in outgoing.data or []:
-                existing.add(row["target_card_id"])
+            for row in outgoing_result.scalars().all():
+                existing.add(str(row))
 
             # Relationships where this card is the target
-            incoming = (
-                self.supabase.table("card_relationships")
-                .select("source_card_id")
-                .eq("target_card_id", card_id)
-                .execute()
+            incoming_result = await self.db.execute(
+                select(CardRelationship.source_card_id).where(
+                    CardRelationship.target_card_id == card_id
+                )
             )
-            for row in incoming.data or []:
-                existing.add(row["source_card_id"])
+            for row in incoming_result.scalars().all():
+                existing.add(str(row))
 
         except Exception as e:
             logger.warning(f"Failed to fetch existing relationships for {card_id}: {e}")

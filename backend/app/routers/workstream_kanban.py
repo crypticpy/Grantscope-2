@@ -1,13 +1,20 @@
-"""Workstream kanban card management router."""
+"""Workstream kanban card management router.
+
+Migrated from Supabase PostgREST to SQLAlchemy 2.0 async.
+"""
 
 import logging
-from datetime import datetime, timezone, timedelta
+import uuid
+from datetime import date, datetime, timezone, timedelta
+from decimal import Decimal
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
+from sqlalchemy import func, select, and_, or_
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.deps import supabase, get_current_user, _safe_error, openai_client, limiter
+from app.deps import get_db, get_current_user_hardcoded, _safe_error
 from app.models.workstream import (
     WorkstreamCardBase,
     WorkstreamCardWithDetails,
@@ -18,12 +25,85 @@ from app.models.workstream import (
     WorkstreamResearchStatus,
     WorkstreamResearchStatusResponse,
 )
-from app.models.research import ResearchTask
-from app.research_service import ResearchService
+from app.models.research import ResearchTask as ResearchTaskSchema
+from app.models.db.workstream import Workstream, WorkstreamCard
+from app.models.db.card import Card
+from app.models.db.research import ResearchTask
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["workstream-kanban"])
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _row_to_dict(obj, skip_cols=None) -> dict:
+    """Convert an ORM model instance to a plain dict, serialising
+    UUID / datetime / Decimal values so they are JSON-friendly."""
+    skip = skip_cols or set()
+    result = {}
+    for col in obj.__table__.columns:
+        if col.name in skip:
+            continue
+        value = getattr(obj, col.name, None)
+        if isinstance(value, uuid.UUID):
+            result[col.name] = str(value)
+        elif isinstance(value, (datetime, date)):
+            result[col.name] = value.isoformat()
+        elif isinstance(value, Decimal):
+            result[col.name] = float(value)
+        else:
+            result[col.name] = value
+    return result
+
+
+def _wsc_to_response(
+    wsc: WorkstreamCard, card_dict: Optional[dict] = None
+) -> WorkstreamCardWithDetails:
+    """Build a WorkstreamCardWithDetails from a WorkstreamCard ORM row."""
+    return WorkstreamCardWithDetails(
+        id=str(wsc.id),
+        workstream_id=str(wsc.workstream_id) if wsc.workstream_id else "",
+        card_id=str(wsc.card_id) if wsc.card_id else "",
+        added_by=str(wsc.added_by) if wsc.added_by else "",
+        added_at=wsc.added_at,
+        status=wsc.status or "inbox",
+        position=wsc.position or 0,
+        notes=wsc.notes,
+        reminder_at=wsc.reminder_at,
+        added_from=wsc.added_from or "manual",
+        updated_at=wsc.updated_at,
+        card=card_dict,
+    )
+
+
+async def _verify_workstream_ownership(
+    db: AsyncSession, workstream_id: str, user_id: str, action: str = "access"
+) -> Workstream:
+    """Verify the workstream exists and belongs to the current user.
+
+    Returns the Workstream ORM object on success.
+    Raises HTTPException 404/403 on failure.
+    """
+    result = await db.execute(
+        select(Workstream).where(Workstream.id == uuid.UUID(workstream_id))
+    )
+    ws = result.scalar_one_or_none()
+    if ws is None:
+        raise HTTPException(status_code=404, detail="Workstream not found")
+    if str(ws.user_id) != user_id:
+        raise HTTPException(
+            status_code=403, detail=f"Not authorized to {action} this workstream"
+        )
+    return ws
+
+
+# ============================================================================
+# GET  /me/workstreams/{workstream_id}/cards  (Kanban view)
+# ============================================================================
 
 
 @router.get(
@@ -35,7 +115,9 @@ router = APIRouter(prefix="/api/v1", tags=["workstream-kanban"])
     response_model=WorkstreamCardsGroupedResponse,
 )
 async def get_workstream_cards(
-    workstream_id: str, current_user: dict = Depends(get_current_user)
+    workstream_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Get all cards in a workstream grouped by status (Kanban view).
@@ -67,55 +149,47 @@ async def get_workstream_cards(
     Raises:
         HTTPException 404: Workstream not found or not owned by user
     """
-    # Verify workstream belongs to user
-    ws_response = (
-        supabase.table("workstreams")
-        .select("id, user_id")
-        .eq("id", workstream_id)
-        .execute()
-    )
-    if not ws_response.data:
-        raise HTTPException(status_code=404, detail="Workstream not found")
+    try:
+        await _verify_workstream_ownership(db, workstream_id, current_user["id"])
 
-    if ws_response.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(
-            status_code=403, detail="Not authorized to access this workstream"
+        # Fetch all workstream_cards + joined card details, ordered by position
+        ws_uuid = uuid.UUID(workstream_id)
+        result = await db.execute(
+            select(WorkstreamCard, Card)
+            .outerjoin(Card, WorkstreamCard.card_id == Card.id)
+            .where(WorkstreamCard.workstream_id == ws_uuid)
+            .order_by(WorkstreamCard.position)
         )
+        rows = result.all()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_error("fetching workstream cards", e),
+        ) from e
 
-    # Fetch all cards with joined card details, ordered by position
-    cards_response = (
-        supabase.table("workstream_cards")
-        .select("*, cards(*)")
-        .eq("workstream_id", workstream_id)
-        .order("position")
-        .execute()
-    )
+    # Group cards by status -- dynamically built from the full status set
+    grouped: Dict[str, list] = {status: [] for status in VALID_WORKSTREAM_CARD_STATUSES}
 
-    # Group cards by status — dynamically built from the full status set
-    grouped = {status: [] for status in VALID_WORKSTREAM_CARD_STATUSES}
-
-    for item in cards_response.data or []:
-        card_status = item.get("status", "inbox")
+    for wsc, card_obj in rows:
+        card_status = wsc.status or "inbox"
         if card_status not in grouped:
             card_status = "inbox"
 
-        card_with_details = WorkstreamCardWithDetails(
-            id=item["id"],
-            workstream_id=item["workstream_id"],
-            card_id=item["card_id"],
-            added_by=item["added_by"],
-            added_at=item["added_at"],
-            status=item.get("status", "inbox"),
-            position=item.get("position", 0),
-            notes=item.get("notes"),
-            reminder_at=item.get("reminder_at"),
-            added_from=item.get("added_from", "manual"),
-            updated_at=item.get("updated_at"),
-            card=item.get("cards"),
+        card_dict = (
+            _row_to_dict(card_obj, skip_cols={"embedding", "search_vector"})
+            if card_obj
+            else None
         )
-        grouped[card_status].append(card_with_details)
+        grouped[card_status].append(_wsc_to_response(wsc, card_dict))
 
     return WorkstreamCardsGroupedResponse(**grouped)
+
+
+# ============================================================================
+# POST /me/workstreams/{workstream_id}/cards  (add card)
+# ============================================================================
 
 
 @router.post(
@@ -129,7 +203,8 @@ async def get_workstream_cards(
 async def add_card_to_workstream(
     workstream_id: str,
     card_data: WorkstreamCardCreate,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Add a card to a workstream.
@@ -150,90 +225,75 @@ async def add_card_to_workstream(
         HTTPException 403: Not authorized
         HTTPException 409: Card already in workstream
     """
-    # Verify workstream belongs to user
-    ws_response = (
-        supabase.table("workstreams")
-        .select("id, user_id")
-        .eq("id", workstream_id)
-        .execute()
-    )
-    if not ws_response.data:
-        raise HTTPException(status_code=404, detail="Workstream not found")
-
-    if ws_response.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(
-            status_code=403, detail="Not authorized to add cards to this workstream"
+    try:
+        await _verify_workstream_ownership(
+            db, workstream_id, current_user["id"], action="add cards to"
         )
 
-    # Verify card exists
-    card_response = (
-        supabase.table("cards").select("*").eq("id", card_data.card_id).execute()
-    )
-    if not card_response.data:
-        raise HTTPException(status_code=404, detail="Card not found")
+        ws_uuid = uuid.UUID(workstream_id)
+        card_uuid = uuid.UUID(card_data.card_id)
 
-    # Check if card is already in workstream
-    existing = (
-        supabase.table("workstream_cards")
-        .select("id")
-        .eq("workstream_id", workstream_id)
-        .eq("card_id", card_data.card_id)
-        .execute()
-    )
-    if existing.data:
-        raise HTTPException(
-            status_code=409, detail="Card is already in this workstream"
+        # Verify card exists
+        card_result = await db.execute(select(Card).where(Card.id == card_uuid))
+        card_obj = card_result.scalar_one_or_none()
+        if card_obj is None:
+            raise HTTPException(status_code=404, detail="Card not found")
+
+        # Check if card is already in workstream
+        existing_result = await db.execute(
+            select(WorkstreamCard.id).where(
+                WorkstreamCard.workstream_id == ws_uuid,
+                WorkstreamCard.card_id == card_uuid,
+            )
         )
+        if existing_result.scalar_one_or_none() is not None:
+            raise HTTPException(
+                status_code=409, detail="Card is already in this workstream"
+            )
 
-    # Get max position for the target status column
-    status = card_data.status or "inbox"
-    position_response = (
-        supabase.table("workstream_cards")
-        .select("position")
-        .eq("workstream_id", workstream_id)
-        .eq("status", status)
-        .order("position", desc=True)
-        .limit(1)
-        .execute()
-    )
+        # Get max position for the target status column
+        status = card_data.status or "inbox"
+        pos_result = await db.execute(
+            select(func.coalesce(func.max(WorkstreamCard.position), -1)).where(
+                WorkstreamCard.workstream_id == ws_uuid,
+                WorkstreamCard.status == status,
+            )
+        )
+        next_position = (pos_result.scalar() or -1) + 1
 
-    next_position = 0
-    if position_response.data:
-        next_position = position_response.data[0]["position"] + 1
+        # Create workstream card record
+        now = datetime.now(timezone.utc)
+        new_wsc = WorkstreamCard(
+            workstream_id=ws_uuid,
+            card_id=card_uuid,
+            added_by=uuid.UUID(current_user["id"]),
+            added_at=now,
+            status=status,
+            position=next_position,
+            notes=card_data.notes,
+            added_from="manual",
+            updated_at=now,
+        )
+        db.add(new_wsc)
+        await db.commit()
+        await db.refresh(new_wsc)
 
-    # Create workstream card record
-    now = datetime.now(timezone.utc).isoformat()
-    new_card = {
-        "workstream_id": workstream_id,
-        "card_id": card_data.card_id,
-        "added_by": current_user["id"],
-        "added_at": now,
-        "status": status,
-        "position": next_position,
-        "notes": card_data.notes,
-        "added_from": "manual",
-        "updated_at": now,
-    }
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_error("adding card to workstream", e),
+        ) from e
 
-    result = supabase.table("workstream_cards").insert(new_card).execute()
-    if not result.data:
-        raise HTTPException(status_code=500, detail="Failed to add card to workstream")
+    card_dict = _row_to_dict(card_obj, skip_cols={"embedding", "search_vector"})
+    return _wsc_to_response(new_wsc, card_dict)
 
-    inserted = result.data[0]
-    return WorkstreamCardWithDetails(
-        id=inserted["id"],
-        workstream_id=inserted["workstream_id"],
-        card_id=inserted["card_id"],
-        added_by=inserted["added_by"],
-        added_at=inserted["added_at"],
-        status=inserted.get("status", "inbox"),
-        position=inserted.get("position", 0),
-        notes=inserted.get("notes"),
-        reminder_at=inserted.get("reminder_at"),
-        added_from=inserted.get("added_from", "manual"),
-        updated_at=inserted.get("updated_at"),
-        card=card_response.data[0],
-    )
+
+# ============================================================================
+# PATCH /me/workstreams/{workstream_id}/cards/{card_id}  (update card)
+# ============================================================================
 
 
 @router.patch(
@@ -248,7 +308,8 @@ async def update_workstream_card(
     workstream_id: str,
     card_id: str,
     update_data: WorkstreamCardUpdate,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Update a workstream card's status, position, notes, or reminder.
@@ -269,122 +330,97 @@ async def update_workstream_card(
         HTTPException 404: Workstream or card not found
         HTTPException 403: Not authorized
     """
-    # Verify workstream belongs to user
-    ws_response = (
-        supabase.table("workstreams")
-        .select("id, user_id")
-        .eq("id", workstream_id)
-        .execute()
-    )
-    if not ws_response.data:
-        raise HTTPException(status_code=404, detail="Workstream not found")
-
-    if ws_response.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(
-            status_code=403, detail="Not authorized to update cards in this workstream"
+    try:
+        await _verify_workstream_ownership(
+            db, workstream_id, current_user["id"], action="update cards in"
         )
 
-    # Fetch the workstream card by its junction table ID (card_id param is actually workstream_card.id)
-    # The frontend passes the workstream_card junction table ID, not the underlying card UUID
-    wsc_response = (
-        supabase.table("workstream_cards")
-        .select("*, cards(*)")
-        .eq("workstream_id", workstream_id)
-        .eq("id", card_id)
-        .execute()
-    )
+        ws_uuid = uuid.UUID(workstream_id)
+        wsc_uuid = uuid.UUID(card_id)
 
-    if not wsc_response.data:
-        raise HTTPException(status_code=404, detail="Card not found in this workstream")
-
-    existing = wsc_response.data[0]
-    workstream_card_id = existing["id"]
-
-    # Build update dict
-    update_dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
-
-    if update_data.status is not None:
-        # If status changed, recalculate position
-        if update_data.status != existing.get("status"):
-            # Get max position in new column
-            position_response = (
-                supabase.table("workstream_cards")
-                .select("position")
-                .eq("workstream_id", workstream_id)
-                .eq("status", update_data.status)
-                .order("position", desc=True)
-                .limit(1)
-                .execute()
+        # Fetch the workstream card by its junction table ID
+        # (card_id param is actually workstream_card.id)
+        result = await db.execute(
+            select(WorkstreamCard, Card)
+            .outerjoin(Card, WorkstreamCard.card_id == Card.id)
+            .where(
+                WorkstreamCard.workstream_id == ws_uuid,
+                WorkstreamCard.id == wsc_uuid,
+            )
+        )
+        row = result.one_or_none()
+        if row is None:
+            raise HTTPException(
+                status_code=404, detail="Card not found in this workstream"
             )
 
-            next_position = 0
-            if position_response.data:
-                next_position = position_response.data[0]["position"] + 1
+        wsc, card_obj = row
 
-            update_dict["status"] = update_data.status
-            update_dict["position"] = (
-                update_data.position
-                if update_data.position is not None
-                else next_position
-            )
-        else:
-            update_dict["status"] = update_data.status
-            if update_data.position is not None:
-                update_dict["position"] = update_data.position
-    elif update_data.position is not None:
-        update_dict["position"] = update_data.position
+        # Apply updates
+        wsc.updated_at = datetime.now(timezone.utc)
 
-    if update_data.notes is not None:
-        update_dict["notes"] = update_data.notes
+        if update_data.status is not None:
+            if update_data.status != wsc.status:
+                # Status changed -- recalculate position in new column
+                pos_result = await db.execute(
+                    select(func.coalesce(func.max(WorkstreamCard.position), -1)).where(
+                        WorkstreamCard.workstream_id == ws_uuid,
+                        WorkstreamCard.status == update_data.status,
+                    )
+                )
+                next_position = (pos_result.scalar() or -1) + 1
 
-    if update_data.reminder_at is not None:
-        update_dict["reminder_at"] = update_data.reminder_at
+                wsc.status = update_data.status
+                wsc.position = (
+                    update_data.position
+                    if update_data.position is not None
+                    else next_position
+                )
+            else:
+                wsc.status = update_data.status
+                if update_data.position is not None:
+                    wsc.position = update_data.position
+        elif update_data.position is not None:
+            wsc.position = update_data.position
 
-    # Perform update
-    result = (
-        supabase.table("workstream_cards")
-        .update(update_dict)
-        .eq("id", workstream_card_id)
-        .execute()
+        if update_data.notes is not None:
+            wsc.notes = update_data.notes
+
+        if update_data.reminder_at is not None:
+            wsc.reminder_at = update_data.reminder_at
+
+        await db.commit()
+        await db.refresh(wsc)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_error("updating workstream card", e),
+        ) from e
+
+    card_dict = (
+        _row_to_dict(card_obj, skip_cols={"embedding", "search_vector"})
+        if card_obj
+        else None
     )
+    return _wsc_to_response(wsc, card_dict)
 
-    if not result.data:
-        raise HTTPException(status_code=500, detail="Failed to update workstream card")
 
-    updated = result.data[0]
-
-    # Re-fetch with card details for response
-    final_response = (
-        supabase.table("workstream_cards")
-        .select("*, cards(*)")
-        .eq("id", workstream_card_id)
-        .execute()
-    )
-
-    if not final_response.data:
-        raise HTTPException(status_code=500, detail="Failed to retrieve updated card")
-
-    item = final_response.data[0]
-    return WorkstreamCardWithDetails(
-        id=item["id"],
-        workstream_id=item["workstream_id"],
-        card_id=item["card_id"],
-        added_by=item["added_by"],
-        added_at=item["added_at"],
-        status=item.get("status", "inbox"),
-        position=item.get("position", 0),
-        notes=item.get("notes"),
-        reminder_at=item.get("reminder_at"),
-        added_from=item.get("added_from", "manual"),
-        updated_at=item.get("updated_at"),
-        card=item.get("cards"),
-    )
+# ============================================================================
+# DELETE /me/workstreams/{workstream_id}/cards/{card_id}  (remove card)
+# ============================================================================
 
 
 @router.delete("/me/workstreams/{workstream_id}/cards/{card_id}")
 @router.delete("/me/programs/{workstream_id}/cards/{card_id}")
 async def remove_card_from_workstream(
-    workstream_id: str, card_id: str, current_user: dict = Depends(get_current_user)
+    workstream_id: str,
+    card_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Remove a card from a workstream.
@@ -403,52 +439,60 @@ async def remove_card_from_workstream(
         HTTPException 404: Workstream or card not found
         HTTPException 403: Not authorized
     """
-    # Verify workstream belongs to user
-    ws_response = (
-        supabase.table("workstreams")
-        .select("id, user_id")
-        .eq("id", workstream_id)
-        .execute()
-    )
-    if not ws_response.data:
-        raise HTTPException(status_code=404, detail="Workstream not found")
-
-    if ws_response.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(
-            status_code=403,
-            detail="Not authorized to remove cards from this workstream",
+    try:
+        await _verify_workstream_ownership(
+            db, workstream_id, current_user["id"], action="remove cards from"
         )
 
-    # Check card exists in workstream (card_id param is actually workstream_card.id - the junction table ID)
-    existing = (
-        supabase.table("workstream_cards")
-        .select("id")
-        .eq("workstream_id", workstream_id)
-        .eq("id", card_id)
-        .execute()
-    )
+        ws_uuid = uuid.UUID(workstream_id)
+        wsc_uuid = uuid.UUID(card_id)
 
-    if not existing.data:
-        raise HTTPException(status_code=404, detail="Card not found in this workstream")
+        # Check card exists in workstream (card_id param is workstream_card.id)
+        result = await db.execute(
+            select(WorkstreamCard).where(
+                WorkstreamCard.workstream_id == ws_uuid,
+                WorkstreamCard.id == wsc_uuid,
+            )
+        )
+        wsc = result.scalar_one_or_none()
+        if wsc is None:
+            raise HTTPException(
+                status_code=404, detail="Card not found in this workstream"
+            )
 
-    # Delete the association
-    supabase.table("workstream_cards").delete().eq("workstream_id", workstream_id).eq(
-        "id", card_id
-    ).execute()
+        await db.delete(wsc)
+        await db.commit()
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_error("removing card from workstream", e),
+        ) from e
 
     return {"status": "removed", "message": "Card removed from workstream"}
 
 
+# ============================================================================
+# POST /me/workstreams/{workstream_id}/cards/{card_id}/deep-dive
+# ============================================================================
+
+
 @router.post(
     "/me/workstreams/{workstream_id}/cards/{card_id}/deep-dive",
-    response_model=ResearchTask,
+    response_model=ResearchTaskSchema,
 )
 @router.post(
     "/me/programs/{workstream_id}/cards/{card_id}/deep-dive",
-    response_model=ResearchTask,
+    response_model=ResearchTaskSchema,
 )
 async def trigger_card_deep_dive(
-    workstream_id: str, card_id: str, current_user: dict = Depends(get_current_user)
+    workstream_id: str,
+    card_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Trigger deep research for a card in the workstream.
@@ -471,72 +515,98 @@ async def trigger_card_deep_dive(
         HTTPException 403: Not authorized
         HTTPException 429: Daily rate limit exceeded
     """
-    # Verify workstream belongs to user
-    ws_response = (
-        supabase.table("workstreams")
-        .select("id, user_id")
-        .eq("id", workstream_id)
-        .execute()
-    )
-    if not ws_response.data:
-        raise HTTPException(status_code=404, detail="Workstream not found")
+    try:
+        await _verify_workstream_ownership(db, workstream_id, current_user["id"])
 
-    if ws_response.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(
-            status_code=403, detail="Not authorized to access this workstream"
+        ws_uuid = uuid.UUID(workstream_id)
+        wsc_uuid = uuid.UUID(card_id)
+
+        # Verify card exists in workstream (card_id param is workstream_card.id)
+        result = await db.execute(
+            select(WorkstreamCard.id, WorkstreamCard.card_id).where(
+                WorkstreamCard.workstream_id == ws_uuid,
+                WorkstreamCard.id == wsc_uuid,
+            )
         )
+        wsc_row = result.one_or_none()
+        if wsc_row is None:
+            raise HTTPException(
+                status_code=404, detail="Card not found in this workstream"
+            )
 
-    # Verify card exists in workstream (card_id param is actually workstream_card.id - the junction table ID)
-    wsc_response = (
-        supabase.table("workstream_cards")
-        .select("id, card_id")
-        .eq("workstream_id", workstream_id)
-        .eq("id", card_id)
-        .execute()
-    )
+        actual_card_id = wsc_row.card_id
 
-    if not wsc_response.data:
-        raise HTTPException(status_code=404, detail="Card not found in this workstream")
-
-    # Get the actual underlying card UUID for research
-    actual_card_id = wsc_response.data[0]["card_id"]
-
-    # Check rate limit for deep research
-    service = ResearchService(supabase, openai_client)
-    if not await service.check_rate_limit(actual_card_id):
-        raise HTTPException(
-            status_code=429, detail="Daily deep research limit reached (2 per card)"
+        # Check rate limit for deep research (inline -- replaces ResearchService.check_rate_limit)
+        card_result = await db.execute(
+            select(
+                Card.deep_research_count_today,
+                Card.deep_research_reset_date,
+            ).where(Card.id == actual_card_id)
         )
+        card_row = card_result.one_or_none()
+        if card_row is not None:
+            today = date.today()
+            count_today = card_row.deep_research_count_today or 0
+            reset_date = card_row.deep_research_reset_date
 
-    # Create research task using the actual underlying card UUID
-    task_record = {
-        "user_id": current_user["id"],
-        "card_id": actual_card_id,
-        "task_type": "deep_research",
-        "status": "queued",
-    }
+            if reset_date != today:
+                # Reset counter for new day
+                card_update_result = await db.execute(
+                    select(Card).where(Card.id == actual_card_id)
+                )
+                card_obj = card_update_result.scalar_one()
+                card_obj.deep_research_count_today = 0
+                card_obj.deep_research_reset_date = today
+                await db.flush()
+                # Allowed -- counter was reset
+            elif count_today >= 2:
+                raise HTTPException(
+                    status_code=429,
+                    detail="Daily deep research limit reached (2 per card)",
+                )
 
-    task_result = supabase.table("research_tasks").insert(task_record).execute()
+        # Create research task
+        new_task = ResearchTask(
+            user_id=uuid.UUID(current_user["id"]),
+            card_id=actual_card_id,
+            task_type="deep_research",
+            status="queued",
+        )
+        db.add(new_task)
+        await db.commit()
+        await db.refresh(new_task)
 
-    if not task_result.data:
-        raise HTTPException(status_code=500, detail="Failed to create research task")
-
-    task = task_result.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_error("creating deep research task", e),
+        ) from e
 
     # Task execution is handled by the background worker (see `app.worker`).
-    return ResearchTask(**task)
+    return ResearchTaskSchema(**_row_to_dict(new_task))
+
+
+# ============================================================================
+# POST /me/workstreams/{workstream_id}/cards/{card_id}/quick-update
+# ============================================================================
 
 
 @router.post(
     "/me/workstreams/{workstream_id}/cards/{card_id}/quick-update",
-    response_model=ResearchTask,
+    response_model=ResearchTaskSchema,
 )
 @router.post(
     "/me/programs/{workstream_id}/cards/{card_id}/quick-update",
-    response_model=ResearchTask,
+    response_model=ResearchTaskSchema,
 )
 async def trigger_card_quick_update(
-    workstream_id: str, card_id: str, current_user: dict = Depends(get_current_user)
+    workstream_id: str,
+    card_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Trigger a quick 5-source update for a card in the workstream.
@@ -557,66 +627,69 @@ async def trigger_card_quick_update(
         HTTPException 404: Workstream or card not found
         HTTPException 403: Not authorized
     """
-    # Verify workstream belongs to user
-    ws_response = (
-        supabase.table("workstreams")
-        .select("id, user_id")
-        .eq("id", workstream_id)
-        .execute()
-    )
-    if not ws_response.data:
-        raise HTTPException(status_code=404, detail="Workstream not found")
+    try:
+        await _verify_workstream_ownership(db, workstream_id, current_user["id"])
 
-    if ws_response.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(
-            status_code=403, detail="Not authorized to access this workstream"
+        ws_uuid = uuid.UUID(workstream_id)
+        wsc_uuid = uuid.UUID(card_id)
+
+        # Verify card exists in workstream (card_id param is workstream_card.id)
+        result = await db.execute(
+            select(WorkstreamCard.id, WorkstreamCard.card_id).where(
+                WorkstreamCard.workstream_id == ws_uuid,
+                WorkstreamCard.id == wsc_uuid,
+            )
         )
+        wsc_row = result.one_or_none()
+        if wsc_row is None:
+            raise HTTPException(
+                status_code=404, detail="Card not found in this workstream"
+            )
 
-    # Verify card exists in workstream (card_id param is actually workstream_card.id - the junction table ID)
-    wsc_response = (
-        supabase.table("workstream_cards")
-        .select("id, card_id")
-        .eq("workstream_id", workstream_id)
-        .eq("id", card_id)
-        .execute()
-    )
+        actual_card_id = wsc_row.card_id
 
-    if not wsc_response.data:
-        raise HTTPException(status_code=404, detail="Card not found in this workstream")
+        # Create research task (quick_update signals the worker for lighter update)
+        new_task = ResearchTask(
+            user_id=uuid.UUID(current_user["id"]),
+            card_id=actual_card_id,
+            task_type="quick_update",
+            status="queued",
+        )
+        db.add(new_task)
+        await db.commit()
+        await db.refresh(new_task)
 
-    # Get the actual underlying card UUID for research
-    actual_card_id = wsc_response.data[0]["card_id"]
-
-    # Create research task using the actual underlying card UUID
-    # task_type='quick_update' signals the worker to do a lighter 5-source update
-    task_record = {
-        "user_id": current_user["id"],
-        "card_id": actual_card_id,
-        "task_type": "quick_update",
-        "status": "queued",
-    }
-
-    task_result = supabase.table("research_tasks").insert(task_record).execute()
-
-    if not task_result.data:
-        raise HTTPException(status_code=500, detail="Failed to create research task")
-
-    task = task_result.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_error("creating quick update task", e),
+        ) from e
 
     # Task execution is handled by the background worker (see `app.worker`).
-    return ResearchTask(**task)
+    return ResearchTaskSchema(**_row_to_dict(new_task))
+
+
+# ============================================================================
+# POST /me/workstreams/{workstream_id}/cards/{card_id}/check-updates
+# ============================================================================
 
 
 @router.post(
     "/me/workstreams/{workstream_id}/cards/{card_id}/check-updates",
-    response_model=ResearchTask,
+    response_model=ResearchTaskSchema,
 )
 @router.post(
     "/me/programs/{workstream_id}/cards/{card_id}/check-updates",
-    response_model=ResearchTask,
+    response_model=ResearchTaskSchema,
 )
 async def trigger_card_check_updates(
-    workstream_id: str, card_id: str, current_user: dict = Depends(get_current_user)
+    workstream_id: str,
+    card_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Check for updates on a watched card.
@@ -637,7 +710,12 @@ async def trigger_card_check_updates(
         HTTPException 403: Not authorized
     """
     # Delegate to the quick-update implementation
-    return await trigger_card_quick_update(workstream_id, card_id, current_user)
+    return await trigger_card_quick_update(workstream_id, card_id, db, current_user)
+
+
+# ============================================================================
+# GET  /me/workstreams/{workstream_id}/research-status
+# ============================================================================
 
 
 @router.get(
@@ -649,7 +727,9 @@ async def trigger_card_check_updates(
     response_model=WorkstreamResearchStatusResponse,
 )
 async def get_workstream_research_status(
-    workstream_id: str, current_user: dict = Depends(get_current_user)
+    workstream_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Get active research tasks for cards in a workstream.
@@ -668,84 +748,84 @@ async def get_workstream_research_status(
         HTTPException 404: Workstream not found
         HTTPException 403: Not authorized
     """
-    # Verify workstream belongs to user
-    ws_response = (
-        supabase.table("workstreams")
-        .select("id, user_id")
-        .eq("id", workstream_id)
-        .execute()
-    )
-    if not ws_response.data:
-        raise HTTPException(status_code=404, detail="Workstream not found")
-
-    if ws_response.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(
-            status_code=403, detail="Not authorized to access this workstream"
-        )
-
-    # Get all card_ids in this workstream
-    wsc_response = (
-        supabase.table("workstream_cards")
-        .select("card_id")
-        .eq("workstream_id", workstream_id)
-        .execute()
-    )
-
-    if not wsc_response.data:
-        return WorkstreamResearchStatusResponse(tasks=[])
-
-    card_ids = [item["card_id"] for item in wsc_response.data if item.get("card_id")]
-
-    # If no valid card_ids, return empty response
-    if not card_ids:
-        return WorkstreamResearchStatusResponse(tasks=[])
-
-    # Get research tasks for these cards that are:
-    # - Currently active (queued or processing)
-    # - Recently completed/failed (within last hour for feedback)
     try:
-        one_hour_ago = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+        await _verify_workstream_ownership(db, workstream_id, current_user["id"])
 
-        # Query active tasks
-        active_tasks = (
-            supabase.table("research_tasks")
-            .select("id, card_id, task_type, status, started_at, completed_at")
-            .in_("card_id", card_ids)
-            .in_("status", ["queued", "processing"])
-            .execute()
-        )
+        ws_uuid = uuid.UUID(workstream_id)
 
-        # Query recently completed tasks
-        recent_tasks = (
-            supabase.table("research_tasks")
-            .select("id, card_id, task_type, status, started_at, completed_at")
-            .in_("card_id", card_ids)
-            .in_("status", ["completed", "failed"])
-            .gte("completed_at", one_hour_ago)
-            .execute()
+        # Get all card_ids in this workstream
+        wsc_result = await db.execute(
+            select(WorkstreamCard.card_id).where(
+                WorkstreamCard.workstream_id == ws_uuid
+            )
         )
+        card_ids = [row[0] for row in wsc_result.all() if row[0] is not None]
+
+        if not card_ids:
+            return WorkstreamResearchStatusResponse(tasks=[])
+
+        one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+
+        # Query active tasks (queued/processing) and recently completed/failed
+        tasks_result = await db.execute(
+            select(
+                ResearchTask.id,
+                ResearchTask.card_id,
+                ResearchTask.task_type,
+                ResearchTask.status,
+                ResearchTask.started_at,
+                ResearchTask.completed_at,
+            ).where(
+                ResearchTask.card_id.in_(card_ids),
+                or_(
+                    ResearchTask.status.in_(["queued", "processing"]),
+                    and_(
+                        ResearchTask.status.in_(["completed", "failed"]),
+                        ResearchTask.completed_at >= one_hour_ago,
+                    ),
+                ),
+            )
+        )
+        all_tasks = tasks_result.all()
+
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.warning(f"Error querying research tasks: {e}")
+        logger.warning("Error querying research tasks: %s", e)
         return WorkstreamResearchStatusResponse(tasks=[])
-
-    # Combine and format results
-    all_tasks = (active_tasks.data or []) + (recent_tasks.data or [])
 
     # Deduplicate by card_id, keeping the most recent task per card
     task_by_card: Dict[str, dict] = {}
-    for task in all_tasks:
-        card_id = task["card_id"]
-        if card_id not in task_by_card:
-            task_by_card[card_id] = task
+    for row in all_tasks:
+        t = {
+            "id": str(row.id),
+            "card_id": str(row.card_id),
+            "task_type": row.task_type,
+            "status": row.status,
+            "started_at": row.started_at,
+            "completed_at": row.completed_at,
+        }
+        cid = t["card_id"]
+        if cid not in task_by_card:
+            task_by_card[cid] = t
         else:
-            # Keep the more recent task (prefer active over completed)
-            existing = task_by_card[card_id]
-            if task["status"] in ["queued", "processing"]:
-                task_by_card[card_id] = task
+            existing = task_by_card[cid]
+            if t["status"] in ["queued", "processing"]:
+                task_by_card[cid] = t
             elif existing["status"] not in ["queued", "processing"]:
-                # Both are completed/failed - keep most recent by completed_at
-                if task.get("completed_at", "") > existing.get("completed_at", ""):
-                    task_by_card[card_id] = task
+                # Both are completed/failed -- keep most recent by completed_at
+                t_completed = t.get("completed_at") or datetime.min.replace(
+                    tzinfo=timezone.utc
+                )
+                e_completed = existing.get("completed_at") or datetime.min.replace(
+                    tzinfo=timezone.utc
+                )
+                if isinstance(t_completed, str):
+                    t_completed = datetime.fromisoformat(t_completed)
+                if isinstance(e_completed, str):
+                    e_completed = datetime.fromisoformat(e_completed)
+                if t_completed > e_completed:
+                    task_by_card[cid] = t
 
     result_tasks = [
         WorkstreamResearchStatus(

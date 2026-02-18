@@ -34,7 +34,7 @@ Usage:
         recalculate_all, record_triage_result,
     )
 
-    reputation = get_reputation(supabase_client, "https://gartner.com/article")
+    reputation = await get_reputation(db, "https://gartner.com/article")
     authority = get_authority_score(reputation)
     adjustment = get_confidence_adjustment(reputation)
 """
@@ -43,7 +43,11 @@ import logging
 from typing import Optional
 from urllib.parse import urlparse
 
-from supabase import Client
+from sqlalchemy import select, update as sa_update, and_
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.db.analytics import DomainReputation
+from app.models.db.source import DiscoveredSource, Source, SourceRating
 
 logger = logging.getLogger(__name__)
 
@@ -214,6 +218,29 @@ def _compute_composite_score(
     return tier_component + user_component + pipeline_component + texas_relevance_bonus
 
 
+def _dr_to_dict(dr: DomainReputation) -> dict:
+    """Convert a DomainReputation ORM object to a dict."""
+    return {
+        "id": str(dr.id) if dr.id else None,
+        "domain_pattern": dr.domain_pattern,
+        "organization_name": dr.organization_name,
+        "category": dr.category,
+        "curated_tier": dr.curated_tier,
+        "user_quality_avg": float(dr.user_quality_avg) if dr.user_quality_avg else 0,
+        "user_relevance_avg": (
+            float(dr.user_relevance_avg) if dr.user_relevance_avg else 0
+        ),
+        "user_rating_count": dr.user_rating_count or 0,
+        "triage_pass_rate": float(dr.triage_pass_rate) if dr.triage_pass_rate else 0,
+        "triage_total_count": dr.triage_total_count or 0,
+        "triage_pass_count": dr.triage_pass_count or 0,
+        "composite_score": float(dr.composite_score) if dr.composite_score else 0,
+        "texas_relevance_bonus": dr.texas_relevance_bonus or 0,
+        "is_active": dr.is_active,
+        "notes": dr.notes,
+    }
+
+
 # ============================================================================
 # In-Memory Cache for Batch Processing
 # ============================================================================
@@ -283,7 +310,7 @@ _batch_cache = _ReputationCache()
 # ============================================================================
 
 
-def get_reputation(supabase_client: Client, url: str) -> Optional[dict]:
+async def get_reputation(db: AsyncSession, url: str) -> Optional[dict]:
     """
     Look up domain reputation for a given URL.
 
@@ -298,7 +325,7 @@ def get_reputation(supabase_client: Client, url: str) -> Optional[dict]:
     The first match found wins.  Inactive rows (is_active=False) are excluded.
 
     Args:
-        supabase_client: Authenticated Supabase client instance.
+        db: SQLAlchemy async database session.
         url: Full URL of the source to look up.
 
     Returns:
@@ -329,14 +356,15 @@ def get_reputation(supabase_client: Client, url: str) -> Optional[dict]:
 
     # Query all candidates in one round-trip, then pick the highest-priority match
     try:
-        response = (
-            supabase_client.table("domain_reputation")
-            .select("*")
-            .in_("domain_pattern", candidates)
-            .eq("is_active", True)
-            .execute()
+        result = await db.execute(
+            select(DomainReputation).where(
+                and_(
+                    DomainReputation.domain_pattern.in_(candidates),
+                    DomainReputation.is_active == True,  # noqa: E712
+                )
+            )
         )
-        rows = response.data or []
+        rows = result.scalars().all()
     except Exception as e:
         logger.error("Error querying domain_reputation for %s: %s", domain, e)
         return None
@@ -346,14 +374,16 @@ def get_reputation(supabase_client: Client, url: str) -> Optional[dict]:
         return None
 
     # Index rows by pattern for O(1) priority lookup
-    rows_by_pattern: dict[str, dict] = {row["domain_pattern"]: row for row in rows}
+    rows_by_pattern: dict[str, dict] = {
+        row.domain_pattern: _dr_to_dict(row) for row in rows
+    }
 
     # Return the first match in priority order
     for candidate in candidates:
         if candidate in rows_by_pattern:
-            result = rows_by_pattern[candidate]
-            _batch_cache.set_domain(domain, result)
-            return result
+            result_dict = rows_by_pattern[candidate]
+            _batch_cache.set_domain(domain, result_dict)
+            return result_dict
 
     # Should not reach here if the query returned rows for our candidates,
     # but be defensive.
@@ -361,7 +391,7 @@ def get_reputation(supabase_client: Client, url: str) -> Optional[dict]:
     return None
 
 
-def get_reputation_batch(supabase_client: Client, urls: list[str]) -> dict[str, dict]:
+async def get_reputation_batch(db: AsyncSession, urls: list[str]) -> dict[str, dict]:
     """
     Look up domain reputations for a batch of URLs with caching.
 
@@ -374,7 +404,7 @@ def get_reputation_batch(supabase_client: Client, urls: list[str]) -> dict[str, 
     ``clear_batch_cache()`` between discovery runs to avoid stale data.
 
     Args:
-        supabase_client: Authenticated Supabase client instance.
+        db: SQLAlchemy async database session.
         urls: List of full source URLs.
 
     Returns:
@@ -384,16 +414,16 @@ def get_reputation_batch(supabase_client: Client, urls: list[str]) -> dict[str, 
     # Bulk-load all reputations into cache if not yet loaded
     if _batch_cache.get_all_reputations() is None:
         try:
-            response = (
-                supabase_client.table("domain_reputation")
-                .select("*")
-                .eq("is_active", True)
-                .execute()
+            result = await db.execute(
+                select(DomainReputation).where(
+                    DomainReputation.is_active == True
+                )  # noqa: E712
             )
-            all_rows = response.data or []
-            _batch_cache.set_all_reputations(all_rows)
+            all_rows = result.scalars().all()
+            all_dicts = [_dr_to_dict(row) for row in all_rows]
+            _batch_cache.set_all_reputations(all_dicts)
             logger.info(
-                "Loaded %d domain reputation rows into batch cache", len(all_rows)
+                "Loaded %d domain reputation rows into batch cache", len(all_dicts)
             )
         except Exception as e:
             logger.error("Failed to bulk-load domain reputations: %s", e)
@@ -534,7 +564,7 @@ def get_confidence_adjustment(reputation: Optional[dict]) -> float:
     )
 
 
-def recalculate_all(supabase_client: Client) -> dict:
+async def recalculate_all(db: AsyncSession) -> dict:
     """
     Recalculate composite scores for all active domain_reputation rows.
 
@@ -549,8 +579,7 @@ def recalculate_all(supabase_client: Client) -> dict:
     Intended to be run as a nightly background job by the worker.
 
     Args:
-        supabase_client: Supabase client with service_role credentials
-                         (required for write access).
+        db: SQLAlchemy async database session.
 
     Returns:
         Summary dict with keys:
@@ -558,19 +587,18 @@ def recalculate_all(supabase_client: Client) -> dict:
             - "domains_skipped": int, rows that had no changes
             - "errors": list[str], any errors encountered
     """
-    summary = {"domains_updated": 0, "domains_skipped": 0, "errors": []}
+    summary: dict = {"domains_updated": 0, "domains_skipped": 0, "errors": []}
 
     # ----------------------------------------------------------------
     # Step 1: Fetch all active domain_reputation rows
     # ----------------------------------------------------------------
     try:
-        rep_response = (
-            supabase_client.table("domain_reputation")
-            .select("*")
-            .eq("is_active", True)
-            .execute()
+        rep_result = await db.execute(
+            select(DomainReputation).where(
+                DomainReputation.is_active == True
+            )  # noqa: E712
         )
-        reputation_rows = rep_response.data or []
+        reputation_rows = rep_result.scalars().all()
     except Exception as e:
         msg = f"Failed to fetch domain_reputation rows: {e}"
         logger.error(msg)
@@ -591,34 +619,30 @@ def recalculate_all(supabase_client: Client) -> dict:
     user_agg_by_domain: dict[str, dict] = {}
     try:
         # Fetch all source_ratings joined with source URL
-        ratings_response = (
-            supabase_client.table("source_ratings")
-            .select("quality_rating, relevance_rating, source_id, sources!inner(url)")
-            .execute()
+        ratings_result = await db.execute(
+            select(
+                SourceRating.quality_rating,
+                SourceRating.relevance_rating,
+                SourceRating.source_id,
+                Source.url,
+            ).join(Source, SourceRating.source_id == Source.id)
         )
-        ratings_rows = ratings_response.data or []
+        ratings_rows = ratings_result.all()
 
         # Group by domain
-        domain_ratings: dict[str, list[dict]] = {}
+        domain_ratings: dict[str, list] = {}
         for row in ratings_rows:
-            source_url = ""
-            # The join returns sources as a nested dict or list
-            sources_data = row.get("sources")
-            if isinstance(sources_data, dict):
-                source_url = sources_data.get("url", "")
-            elif isinstance(sources_data, list) and sources_data:
-                source_url = sources_data[0].get("url", "")
-
+            source_url = row.url or ""
             if domain := _extract_domain(source_url):
                 domain_ratings.setdefault(domain, []).append(row)
 
         # Compute averages per domain
         for domain, ratings in domain_ratings.items():
-            quality_sum = sum(r["quality_rating"] for r in ratings)
+            quality_sum = sum(r.quality_rating for r in ratings)
             quality_avg = quality_sum / len(ratings)
 
             relevance_sum = sum(
-                RELEVANCE_ENCODING.get(r["relevance_rating"], 2) for r in ratings
+                RELEVANCE_ENCODING.get(r.relevance_rating, 2) for r in ratings
             )
             relevance_avg = relevance_sum / len(ratings)
 
@@ -649,24 +673,23 @@ def recalculate_all(supabase_client: Client) -> dict:
     triage_agg_by_domain: dict[str, dict] = {}
     try:
         # Fetch triage results -- only rows that have been triaged
-        triage_response = (
-            supabase_client.table("discovered_sources")
-            .select("domain, triage_is_relevant")
-            .not_.is_("triage_is_relevant", "null")
-            .execute()
+        triage_result = await db.execute(
+            select(DiscoveredSource.domain, DiscoveredSource.triage_is_relevant).where(
+                DiscoveredSource.triage_is_relevant.isnot(None)
+            )
         )
-        triage_rows = triage_response.data or []
+        triage_rows = triage_result.all()
 
         # Group by domain
         domain_triage: dict[str, dict[str, int]] = {}
         for row in triage_rows:
-            domain = (row.get("domain") or "").lower().strip()
+            domain = (row.domain or "").lower().strip()
             if not domain:
                 continue
             if domain not in domain_triage:
                 domain_triage[domain] = {"total": 0, "passed": 0}
             domain_triage[domain]["total"] += 1
-            if row.get("triage_is_relevant"):
+            if row.triage_is_relevant:
                 domain_triage[domain]["passed"] += 1
 
         for domain, counts in domain_triage.items():
@@ -692,8 +715,8 @@ def recalculate_all(supabase_client: Client) -> dict:
     # Step 4: Recompute composite_score for each domain_reputation row
     # ----------------------------------------------------------------
     for rep_row in reputation_rows:
-        domain_pattern = rep_row["domain_pattern"]
-        rep_id = rep_row["id"]
+        domain_pattern = rep_row.domain_pattern
+        rep_id = rep_row.id
 
         # Look up the pattern in user and triage aggregations.
         # For wildcard patterns (e.g., "*.gov"), we need the exact pattern
@@ -706,27 +729,27 @@ def recalculate_all(supabase_client: Client) -> dict:
         # Build updated values, falling back to current DB values
         # if no new aggregation data is available
         new_user_quality_avg = user_data.get(
-            "user_quality_avg", float(rep_row.get("user_quality_avg", 0))
+            "user_quality_avg", float(rep_row.user_quality_avg or 0)
         )
         new_user_relevance_avg = user_data.get(
-            "user_relevance_avg", float(rep_row.get("user_relevance_avg", 0))
+            "user_relevance_avg", float(rep_row.user_relevance_avg or 0)
         )
         new_user_rating_count = user_data.get(
-            "user_rating_count", rep_row.get("user_rating_count", 0)
+            "user_rating_count", rep_row.user_rating_count or 0
         )
 
         new_triage_pass_rate = triage_data.get(
-            "triage_pass_rate", float(rep_row.get("triage_pass_rate", 0))
+            "triage_pass_rate", float(rep_row.triage_pass_rate or 0)
         )
         new_triage_total_count = triage_data.get(
-            "triage_total_count", rep_row.get("triage_total_count", 0)
+            "triage_total_count", rep_row.triage_total_count or 0
         )
         new_triage_pass_count = triage_data.get(
-            "triage_pass_count", rep_row.get("triage_pass_count", 0)
+            "triage_pass_count", rep_row.triage_pass_count or 0
         )
 
-        texas_bonus = rep_row.get("texas_relevance_bonus", 0) or 0
-        curated_tier = rep_row.get("curated_tier")
+        texas_bonus = rep_row.texas_relevance_bonus or 0
+        curated_tier = rep_row.curated_tier
 
         new_composite = _compute_composite_score(
             curated_tier=curated_tier,
@@ -747,9 +770,12 @@ def recalculate_all(supabase_client: Client) -> dict:
         }
 
         try:
-            supabase_client.table("domain_reputation").update(update_data).eq(
-                "id", rep_id
-            ).execute()
+            await db.execute(
+                sa_update(DomainReputation)
+                .where(DomainReputation.id == rep_id)
+                .values(**update_data)
+            )
+            await db.flush()
             summary["domains_updated"] += 1
         except Exception as e:
             msg = f"Failed to update domain_reputation id={rep_id} ({domain_pattern}): {e}"
@@ -769,7 +795,7 @@ def recalculate_all(supabase_client: Client) -> dict:
     return summary
 
 
-def record_triage_result(supabase_client: Client, domain: str, passed: bool) -> None:
+async def record_triage_result(db: AsyncSession, domain: str, passed: bool) -> None:
     """
     Record a single triage outcome for a domain.
 
@@ -782,7 +808,7 @@ def record_triage_result(supabase_client: Client, domain: str, passed: bool) -> 
     function silently returns (the domain is untiered/unknown).
 
     Args:
-        supabase_client: Supabase client with service_role credentials.
+        db: SQLAlchemy async database session.
         domain: Bare domain string (e.g., "gartner.com").
         passed: True if the source from this domain passed triage.
     """
@@ -802,14 +828,15 @@ def record_triage_result(supabase_client: Client, domain: str, passed: bool) -> 
         candidates.append(tld_wc)
 
     try:
-        response = (
-            supabase_client.table("domain_reputation")
-            .select("*")
-            .in_("domain_pattern", candidates)
-            .eq("is_active", True)
-            .execute()
+        result = await db.execute(
+            select(DomainReputation).where(
+                and_(
+                    DomainReputation.domain_pattern.in_(candidates),
+                    DomainReputation.is_active == True,  # noqa: E712
+                )
+            )
         )
-        rows = response.data or []
+        rows = result.scalars().all()
     except Exception as e:
         logger.error("Error looking up domain for triage recording (%s): %s", domain, e)
         return
@@ -819,7 +846,7 @@ def record_triage_result(supabase_client: Client, domain: str, passed: bool) -> 
         return
 
     # Pick the highest-priority match
-    rows_by_pattern = {row["domain_pattern"]: row for row in rows}
+    rows_by_pattern = {row.domain_pattern: row for row in rows}
     matched_row = next(
         (
             rows_by_pattern[candidate]
@@ -832,14 +859,14 @@ def record_triage_result(supabase_client: Client, domain: str, passed: bool) -> 
         return
 
     # Increment counters
-    new_total = (matched_row.get("triage_total_count", 0) or 0) + 1
-    new_passed = (matched_row.get("triage_pass_count", 0) or 0) + (1 if passed else 0)
+    new_total = (matched_row.triage_total_count or 0) + 1
+    new_passed = (matched_row.triage_pass_count or 0) + (1 if passed else 0)
     new_pass_rate = round(new_passed / new_total, 4) if new_total > 0 else 0.0
 
     # Recompute composite score with updated pipeline stats
-    curated_tier = matched_row.get("curated_tier")
-    user_quality_avg = float(matched_row.get("user_quality_avg", 0))
-    texas_bonus = matched_row.get("texas_relevance_bonus", 0) or 0
+    curated_tier = matched_row.curated_tier
+    user_quality_avg = float(matched_row.user_quality_avg or 0)
+    texas_bonus = matched_row.texas_relevance_bonus or 0
 
     new_composite = _compute_composite_score(
         curated_tier=curated_tier,
@@ -856,9 +883,12 @@ def record_triage_result(supabase_client: Client, domain: str, passed: bool) -> 
     }
 
     try:
-        supabase_client.table("domain_reputation").update(update_data).eq(
-            "id", matched_row["id"]
-        ).execute()
+        await db.execute(
+            sa_update(DomainReputation)
+            .where(DomainReputation.id == matched_row.id)
+            .values(**update_data)
+        )
+        await db.flush()
         logger.debug(
             "Recorded triage result for %s (passed=%s): new rate=%.4f, composite=%.2f",
             domain,

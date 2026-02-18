@@ -27,7 +27,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { useAuthContext } from "../hooks/useAuthContext";
-import { supabase } from "../App";
+import { API_BASE_URL } from "../lib/config";
 import { PillarBadge } from "./PillarBadge";
 import { HorizonBadge } from "./HorizonBadge";
 import { StageBadge } from "./StageBadge";
@@ -274,13 +274,23 @@ export function PersonalizedQueue({
   const loadFollowedCards = useCallback(async () => {
     if (!user?.id) return;
     try {
-      const { data } = await supabase
-        .from("card_follows")
-        .select("card_id")
-        .eq("user_id", user.id);
-
-      if (data) {
-        setFollowedCardIds(new Set(data.map((f) => f.card_id)));
+      const token = localStorage.getItem("gs2_token");
+      if (!token) return;
+      const response = await fetch(`${API_BASE_URL}/api/v1/me/following`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (Array.isArray(data)) {
+          setFollowedCardIds(
+            new Set(
+              data.map(
+                (f: { card_id?: string; id?: string }) =>
+                  f.card_id || f.id || "",
+              ),
+            ),
+          );
+        }
       }
     } catch (_err) {
       // Silent fail for followed cards - non-critical
@@ -394,17 +404,17 @@ export function PersonalizedQueue({
     });
 
     try {
+      const token = localStorage.getItem("gs2_token");
+      if (!token) throw new Error("No token");
       if (isFollowing) {
-        await supabase
-          .from("card_follows")
-          .delete()
-          .eq("user_id", user.id)
-          .eq("card_id", cardId);
+        await fetch(`${API_BASE_URL}/api/v1/cards/${cardId}/follow`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
       } else {
-        await supabase.from("card_follows").insert({
-          user_id: user.id,
-          card_id: cardId,
-          priority: "medium",
+        await fetch(`${API_BASE_URL}/api/v1/cards/${cardId}/follow`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
         });
       }
     } catch (_err) {

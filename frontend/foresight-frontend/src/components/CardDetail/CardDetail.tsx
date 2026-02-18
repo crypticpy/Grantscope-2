@@ -35,7 +35,6 @@ import {
   FolderOpen,
   MessageSquare,
 } from "lucide-react";
-import { supabase } from "../../App";
 import { useAuthContext } from "../../hooks/useAuthContext";
 import { cn } from "../../lib/utils";
 
@@ -167,59 +166,67 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = "" }) => {
     return token ?? undefined;
   }, []);
 
-  // Load card detail from database
+  // Load card detail from backend API
   const loadCardDetail = useCallback(async () => {
     if (!slug) return;
     try {
-      let query = supabase.from("cards").select("*").eq("slug", slug);
+      const token = await getAuthToken();
+      if (!token) return;
 
-      // Default: only show active cards. Review mode: allow pending/draft cards.
+      // Fetch card by slug
+      const params = new URLSearchParams({ slug });
       if (!isReviewMode) {
-        query = query.eq("status", "active");
+        params.append("status", "active");
       }
-
-      const { data: cardData } = await query.single();
+      const cardResponse = await fetch(
+        `${API_BASE_URL}/api/v1/cards?${params.toString()}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      if (!cardResponse.ok)
+        throw new Error(`API error: ${cardResponse.status}`);
+      const cardsData = await cardResponse.json();
+      const cardData = Array.isArray(cardsData) ? cardsData[0] : cardsData;
 
       if (cardData) {
         setCard(cardData);
 
-        // Load related data in parallel
+        // Load related data in parallel via API
         const [sourcesRes, timelineRes, notesRes, researchRes] =
           await Promise.all([
-            supabase
-              .from("sources")
-              .select("*")
-              .eq("card_id", cardData.id)
-              .order("relevance_score", { ascending: false }),
-            supabase
-              .from("card_timeline")
-              .select("*")
-              .eq("card_id", cardData.id)
-              .order("created_at", { ascending: false }),
-            supabase
-              .from("card_notes")
-              .select("*")
-              .eq("card_id", cardData.id)
-              .or(`user_id.eq.${user?.id},is_private.eq.false`)
-              .order("created_at", { ascending: false }),
-            supabase
-              .from("research_tasks")
-              .select("*")
-              .eq("card_id", cardData.id)
-              .eq("status", "completed")
-              .order("completed_at", { ascending: false })
-              .limit(10),
+            fetch(`${API_BASE_URL}/api/v1/cards/${cardData.id}/sources`, {
+              headers: { Authorization: `Bearer ${token}` },
+            }).then((r) => (r.ok ? r.json() : [])),
+            fetch(`${API_BASE_URL}/api/v1/cards/${cardData.id}/timeline`, {
+              headers: { Authorization: `Bearer ${token}` },
+            }).then((r) => (r.ok ? r.json() : [])),
+            fetch(`${API_BASE_URL}/api/v1/cards/${cardData.id}/notes`, {
+              headers: { Authorization: `Bearer ${token}` },
+            }).then((r) => (r.ok ? r.json() : [])),
+            fetch(
+              `${API_BASE_URL}/api/v1/research?card_id=${cardData.id}&status=completed&limit=10`,
+              {
+                headers: { Authorization: `Bearer ${token}` },
+              },
+            ).then((r) => (r.ok ? r.json() : [])),
           ]);
 
-        setSources(sourcesRes.data || []);
-        setTimeline(timelineRes.data || []);
-        setNotes(notesRes.data || []);
-        setResearchHistory(researchRes.data || []);
+        setSources(
+          Array.isArray(sourcesRes) ? sourcesRes : sourcesRes.sources || [],
+        );
+        setTimeline(
+          Array.isArray(timelineRes) ? timelineRes : timelineRes.timeline || [],
+        );
+        setNotes(Array.isArray(notesRes) ? notesRes : notesRes.notes || []);
+        setResearchHistory(
+          Array.isArray(researchRes) ? researchRes : researchRes.tasks || [],
+        );
       }
     } finally {
       setLoading(false);
     }
-  }, [slug, user?.id, isReviewMode]);
+  }, [slug, user?.id, isReviewMode, getAuthToken]);
 
   // Load score/stage history and related cards
   const loadScoreHistory = useCallback(async () => {
@@ -298,62 +305,77 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = "" }) => {
   const checkIfFollowing = useCallback(async () => {
     if (!user || !card?.id) return;
     try {
-      const { data } = await supabase
-        .from("card_follows")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("card_id", card.id)
-        .maybeSingle();
-      setIsFollowing(!!data);
+      const token = await getAuthToken();
+      if (!token) return;
+      const response = await fetch(`${API_BASE_URL}/api/v1/me/following`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const followedCards = await response.json();
+        const ids = Array.isArray(followedCards)
+          ? followedCards.map(
+              (c: { card_id?: string; id?: string }) => c.card_id || c.id,
+            )
+          : [];
+        setIsFollowing(ids.includes(card.id));
+      } else {
+        setIsFollowing(false);
+      }
     } catch {
       setIsFollowing(false);
     }
-  }, [user, card?.id]);
+  }, [user, card?.id, getAuthToken]);
 
   // Toggle follow status
   const toggleFollow = useCallback(async () => {
     if (!user || !card) return;
     try {
+      const token = await getAuthToken();
+      if (!token) return;
       if (isFollowing) {
-        await supabase
-          .from("card_follows")
-          .delete()
-          .eq("user_id", user.id)
-          .eq("card_id", card.id);
+        await fetch(`${API_BASE_URL}/api/v1/cards/${card.id}/follow`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
         setIsFollowing(false);
       } else {
-        await supabase
-          .from("card_follows")
-          .insert({ user_id: user.id, card_id: card.id, priority: "medium" });
+        await fetch(`${API_BASE_URL}/api/v1/cards/${card.id}/follow`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        });
         setIsFollowing(true);
       }
     } catch (error) {
       console.error("Error toggling follow:", error);
     }
-  }, [user, card, isFollowing]);
+  }, [user, card, isFollowing, getAuthToken]);
 
   // Add note
   const addNote = useCallback(async () => {
     if (!user || !card || !newNote.trim()) return;
     try {
-      const { data } = await supabase
-        .from("card_notes")
-        .insert({
-          user_id: user.id,
-          card_id: card.id,
-          content: newNote,
-          is_private: false,
-        })
-        .select()
-        .single();
-      if (data) {
+      const token = await getAuthToken();
+      if (!token) return;
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/cards/${card.id}/notes`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ content: newNote, is_private: false }),
+        },
+      );
+      if (response.ok) {
+        const data = await response.json();
         setNotes([data, ...notes]);
         setNewNote("");
       }
     } catch (error) {
       console.error("Error adding note:", error);
     }
-  }, [user, card, newNote, notes]);
+  }, [user, card, newNote, notes, getAuthToken]);
 
   // Poll for research task status
   const pollTaskStatus = useCallback(

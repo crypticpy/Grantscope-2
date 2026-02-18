@@ -2,7 +2,7 @@
 
 Provides AI-powered grant extraction, plan synthesis, and card creation
 to support the wizard workflow. Uses Azure OpenAI (gpt-4.1) for structured
-data extraction and the Supabase client for persistence.
+data extraction and SQLAlchemy async ORM for persistence.
 """
 
 from __future__ import annotations
@@ -13,10 +13,12 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.crawler import crawl_url
-from app.deps import supabase
 from app.openai_provider import azure_openai_async_client, get_chat_deployment
 from app.models.wizard import GrantContext, PlanData
+from app.models.db.card import Card
 
 logger = logging.getLogger(__name__)
 
@@ -298,8 +300,9 @@ class WizardService:
 
     # -- Card creation ------------------------------------------------------
 
-    def create_card_from_grant(
+    async def create_card_from_grant(
         self,
+        db: AsyncSession,
         grant_context: GrantContext,
         user_id: str,
         source_url: Optional[str] = None,
@@ -307,6 +310,7 @@ class WizardService:
         """Create a card in the cards table from extracted grant data.
 
         Args:
+            db: AsyncSession instance.
             grant_context: Parsed grant context from AI extraction.
             user_id: UUID of the user creating the card.
             source_url: Optional source URL for the grant.
@@ -317,7 +321,7 @@ class WizardService:
         Raises:
             Exception: If the database insert fails.
         """
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(timezone.utc)
 
         # Generate a unique slug from the grant name
         card_name = grant_context.grant_name or "Untitled Grant Opportunity"
@@ -341,8 +345,6 @@ class WizardService:
             "grant_type": grant_context.grant_type,
             "cfda_number": grant_context.cfda_number,
             "match_requirement": grant_context.match_requirement,
-            "evaluation_criteria": grant_context.evaluation_criteria,
-            "contact_info": grant_context.contact_info,
             "created_by": user_id,
             "status": "active",
             "created_at": now,
@@ -358,11 +360,13 @@ class WizardService:
             user_id,
         )
 
-        result = supabase.table("cards").insert(card_data).execute()
+        # Only set attributes that exist on the Card model
+        card_kwargs = {k: v for k, v in card_data.items() if hasattr(Card, k)}
+        card_obj = Card(**card_kwargs)
+        db.add(card_obj)
+        await db.flush()
+        await db.refresh(card_obj)
 
-        if not result.data:
-            raise RuntimeError("Failed to insert card into database")
-
-        card_id = result.data[0]["id"]
+        card_id = str(card_obj.id)
         logger.info("Created card %s from grant context", card_id)
         return card_id

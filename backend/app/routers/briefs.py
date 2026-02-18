@@ -1,13 +1,17 @@
 """Executive briefs router."""
 
 import logging
-from datetime import datetime
+import uuid
+from datetime import datetime, date
+from decimal import Decimal
 from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.deps import supabase, get_current_user, _safe_error, openai_client
+from app.deps import get_db, get_current_user_hardcoded, _safe_error, openai_client
 from app.brief_service import ExecutiveBriefService
 from app.export_service import ExportService
 from app.models.brief import (
@@ -23,9 +27,72 @@ from app.models.briefs_extra import (
     BulkBriefStatusResponse,
 )
 from app.models.export import ExportFormat, EXPORT_CONTENT_TYPES, get_export_filename
+from app.models.db.brief import ExecutiveBrief
+from app.models.db.workstream import Workstream, WorkstreamCard
+from app.models.db.card import Card
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["briefs"])
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _row_to_dict(obj, skip_cols=None) -> dict:
+    skip = skip_cols or set()
+    result = {}
+    for col in obj.__table__.columns:
+        if col.name in skip:
+            continue
+        value = getattr(obj, col.name, None)
+        if isinstance(value, uuid.UUID):
+            result[col.name] = str(value)
+        elif isinstance(value, (datetime, date)):
+            result[col.name] = value.isoformat()
+        elif isinstance(value, Decimal):
+            result[col.name] = float(value)
+        else:
+            result[col.name] = value
+    return result
+
+
+async def _verify_workstream_ownership(
+    db: AsyncSession, workstream_id: str, user_id: str
+) -> Workstream:
+    """Verify the workstream exists and belongs to the user. Returns the row."""
+    stmt = select(Workstream).where(Workstream.id == workstream_id)
+    result = await db.execute(stmt)
+    ws = result.scalar_one_or_none()
+    if not ws:
+        raise HTTPException(status_code=404, detail="Workstream not found")
+    if str(ws.user_id) != user_id:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to access this workstream"
+        )
+    return ws
+
+
+async def _get_workstream_card(
+    db: AsyncSession, workstream_id: str, card_id: str
+) -> WorkstreamCard:
+    """Get a workstream_card record. Raises 404 if not found."""
+    stmt = (
+        select(WorkstreamCard)
+        .where(WorkstreamCard.workstream_id == workstream_id)
+        .where(WorkstreamCard.card_id == card_id)
+    )
+    result = await db.execute(stmt)
+    wsc = result.scalar_one_or_none()
+    if not wsc:
+        raise HTTPException(status_code=404, detail="Card not found in this workstream")
+    return wsc
+
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
 
 
 @router.post(
@@ -33,7 +100,10 @@ router = APIRouter(prefix="/api/v1", tags=["briefs"])
     response_model=BriefGenerateResponse,
 )
 async def generate_executive_brief(
-    workstream_id: str, card_id: str, current_user: dict = Depends(get_current_user)
+    workstream_id: str,
+    card_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Generate a new version of an executive brief for a card in a workstream.
@@ -54,37 +124,11 @@ async def generate_executive_brief(
         HTTPException 404: Workstream or card not found
         HTTPException 403: Not authorized to access workstream
     """
-    # Verify workstream belongs to user
-    ws_response = (
-        supabase.table("workstreams")
-        .select("id, user_id")
-        .eq("id", workstream_id)
-        .execute()
-    )
-    if not ws_response.data:
-        raise HTTPException(status_code=404, detail="Workstream not found")
+    await _verify_workstream_ownership(db, workstream_id, current_user["id"])
+    wsc = await _get_workstream_card(db, workstream_id, card_id)
+    workstream_card_id = str(wsc.id)
 
-    if ws_response.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(
-            status_code=403, detail="Not authorized to access this workstream"
-        )
-
-    # Verify card exists in workstream and get the workstream_cards record
-    wsc_response = (
-        supabase.table("workstream_cards")
-        .select("id, card_id")
-        .eq("workstream_id", workstream_id)
-        .eq("card_id", card_id)
-        .execute()
-    )
-
-    if not wsc_response.data:
-        raise HTTPException(status_code=404, detail="Card not found in this workstream")
-
-    workstream_card_id = wsc_response.data[0]["id"]
-
-    # Create brief service
-    brief_service = ExecutiveBriefService(supabase, openai_client)
+    brief_service = ExecutiveBriefService(db, openai_client)
 
     try:
         # Check if there's a brief currently generating
@@ -153,7 +197,8 @@ async def get_executive_brief(
     workstream_id: str,
     card_id: str,
     version: Optional[int] = None,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Get an executive brief for a card in a workstream.
@@ -174,37 +219,12 @@ async def get_executive_brief(
         HTTPException 404: Workstream, card, or brief not found
         HTTPException 403: Not authorized to access workstream
     """
-    # Verify workstream belongs to user
-    ws_response = (
-        supabase.table("workstreams")
-        .select("id, user_id")
-        .eq("id", workstream_id)
-        .execute()
-    )
-    if not ws_response.data:
-        raise HTTPException(status_code=404, detail="Workstream not found")
-
-    if ws_response.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(
-            status_code=403, detail="Not authorized to access this workstream"
-        )
-
-    # Verify card exists in workstream and get the workstream_cards record
-    wsc_response = (
-        supabase.table("workstream_cards")
-        .select("id")
-        .eq("workstream_id", workstream_id)
-        .eq("card_id", card_id)
-        .execute()
-    )
-
-    if not wsc_response.data:
-        raise HTTPException(status_code=404, detail="Card not found in this workstream")
-
-    workstream_card_id = wsc_response.data[0]["id"]
+    await _verify_workstream_ownership(db, workstream_id, current_user["id"])
+    wsc = await _get_workstream_card(db, workstream_id, card_id)
+    workstream_card_id = str(wsc.id)
 
     # Fetch the brief (latest or specific version)
-    brief_service = ExecutiveBriefService(supabase, openai_client)
+    brief_service = ExecutiveBriefService(db, openai_client)
     brief = await brief_service.get_brief_by_workstream_card(
         workstream_card_id, version=version
     )
@@ -224,7 +244,10 @@ async def get_executive_brief(
     response_model=BriefVersionsResponse,
 )
 async def get_brief_versions(
-    workstream_id: str, card_id: str, current_user: dict = Depends(get_current_user)
+    workstream_id: str,
+    card_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Get all versions of executive briefs for a card in a workstream.
@@ -243,37 +266,12 @@ async def get_brief_versions(
         HTTPException 404: Workstream or card not found
         HTTPException 403: Not authorized to access workstream
     """
-    # Verify workstream belongs to user
-    ws_response = (
-        supabase.table("workstreams")
-        .select("id, user_id")
-        .eq("id", workstream_id)
-        .execute()
-    )
-    if not ws_response.data:
-        raise HTTPException(status_code=404, detail="Workstream not found")
-
-    if ws_response.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(
-            status_code=403, detail="Not authorized to access this workstream"
-        )
-
-    # Verify card exists in workstream and get the workstream_cards record
-    wsc_response = (
-        supabase.table("workstream_cards")
-        .select("id")
-        .eq("workstream_id", workstream_id)
-        .eq("card_id", card_id)
-        .execute()
-    )
-
-    if not wsc_response.data:
-        raise HTTPException(status_code=404, detail="Card not found in this workstream")
-
-    workstream_card_id = wsc_response.data[0]["id"]
+    await _verify_workstream_ownership(db, workstream_id, current_user["id"])
+    wsc = await _get_workstream_card(db, workstream_id, card_id)
+    workstream_card_id = str(wsc.id)
 
     # Fetch all versions
-    brief_service = ExecutiveBriefService(supabase, openai_client)
+    brief_service = ExecutiveBriefService(db, openai_client)
     versions = await brief_service.get_brief_versions(workstream_card_id)
 
     # Convert to response model
@@ -304,7 +302,10 @@ async def get_brief_versions(
     response_model=BriefStatusResponse,
 )
 async def get_brief_status(
-    workstream_id: str, card_id: str, current_user: dict = Depends(get_current_user)
+    workstream_id: str,
+    card_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Get the status of brief generation for a card.
@@ -324,37 +325,12 @@ async def get_brief_status(
         HTTPException 404: Workstream, card, or brief not found
         HTTPException 403: Not authorized to access workstream
     """
-    # Verify workstream belongs to user
-    ws_response = (
-        supabase.table("workstreams")
-        .select("id, user_id")
-        .eq("id", workstream_id)
-        .execute()
-    )
-    if not ws_response.data:
-        raise HTTPException(status_code=404, detail="Workstream not found")
-
-    if ws_response.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(
-            status_code=403, detail="Not authorized to access this workstream"
-        )
-
-    # Verify card exists in workstream and get the workstream_cards record
-    wsc_response = (
-        supabase.table("workstream_cards")
-        .select("id")
-        .eq("workstream_id", workstream_id)
-        .eq("card_id", card_id)
-        .execute()
-    )
-
-    if not wsc_response.data:
-        raise HTTPException(status_code=404, detail="Card not found in this workstream")
-
-    workstream_card_id = wsc_response.data[0]["id"]
+    await _verify_workstream_ownership(db, workstream_id, current_user["id"])
+    wsc = await _get_workstream_card(db, workstream_id, card_id)
+    workstream_card_id = str(wsc.id)
 
     # Fetch the most recent brief
-    brief_service = ExecutiveBriefService(supabase, openai_client)
+    brief_service = ExecutiveBriefService(db, openai_client)
     brief = await brief_service.get_brief_by_workstream_card(workstream_card_id)
 
     if not brief:
@@ -384,7 +360,8 @@ async def export_brief(
     card_id: str,
     format: str,
     version: Optional[int] = None,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Export an executive brief in the specified format.
@@ -415,37 +392,12 @@ async def export_brief(
             detail=f"Invalid export format: {format}. Supported formats: pdf, pptx",
         )
 
-    # Verify workstream belongs to user
-    ws_response = (
-        supabase.table("workstreams")
-        .select("id, user_id")
-        .eq("id", workstream_id)
-        .execute()
-    )
-    if not ws_response.data:
-        raise HTTPException(status_code=404, detail="Workstream not found")
-
-    if ws_response.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(
-            status_code=403, detail="Not authorized to access this workstream"
-        )
-
-    # Verify card exists in workstream and get the workstream_cards record
-    wsc_response = (
-        supabase.table("workstream_cards")
-        .select("id")
-        .eq("workstream_id", workstream_id)
-        .eq("card_id", card_id)
-        .execute()
-    )
-
-    if not wsc_response.data:
-        raise HTTPException(status_code=404, detail="Card not found in this workstream")
-
-    workstream_card_id = wsc_response.data[0]["id"]
+    await _verify_workstream_ownership(db, workstream_id, current_user["id"])
+    wsc = await _get_workstream_card(db, workstream_id, card_id)
+    workstream_card_id = str(wsc.id)
 
     # Fetch the brief
-    brief_service = ExecutiveBriefService(supabase, openai_client)
+    brief_service = ExecutiveBriefService(db, openai_client)
     brief = await brief_service.get_brief_by_workstream_card(
         workstream_card_id, version=version
     )
@@ -460,34 +412,30 @@ async def export_brief(
         )
 
     # Fetch card info for the export (including classification)
-    card_response = (
-        supabase.table("cards")
-        .select("name, pillar_id, horizon, stage_id")
-        .eq("id", card_id)
-        .single()
-        .execute()
-    )
+    try:
+        card_stmt = select(Card).where(Card.id == card_id)
+        card_result = await db.execute(card_stmt)
+        card_row = card_result.scalar_one_or_none()
+    except Exception:
+        card_row = None
 
     card_name = "Unknown Card"
     classification = {}
-    if card_response.data:
-        card_name = card_response.data.get("name", "Unknown Card")
-        # Build classification info for professional PDF
+    if card_row:
+        card_name = card_row.name or "Unknown Card"
         classification = {
-            "pillar": card_response.data.get("pillar_id"),
-            "horizon": card_response.data.get("horizon"),
-            "stage": card_response.data.get("stage_id"),
+            "pillar": card_row.pillar_id,
+            "horizon": card_row.horizon,
+            "stage": card_row.stage_id,
         }
 
     # Generate export using ExportService
-    export_service = ExportService(supabase)
+    export_service = ExportService(db)
 
     try:
         # Parse generated_at if present
         generated_at = None
         if brief.get("generated_at"):
-            from datetime import datetime
-
             if isinstance(brief["generated_at"], str):
                 generated_at = datetime.fromisoformat(
                     brief["generated_at"].replace("Z", "+00:00")
@@ -549,7 +497,9 @@ async def export_brief(
 
 @router.get("/me/workstreams/{workstream_id}/bulk-brief-status")
 async def get_bulk_brief_status(
-    workstream_id: str, current_user: dict = Depends(get_current_user)
+    workstream_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ) -> BulkBriefStatusResponse:
     """
     Get brief status for all cards in the Brief column.
@@ -564,49 +514,39 @@ async def get_bulk_brief_status(
     Returns:
         BulkBriefStatusResponse with summary counts and per-card status
     """
-    # Verify workstream belongs to user
-    ws_response = (
-        supabase.table("workstreams")
-        .select("id, user_id, name")
-        .eq("id", workstream_id)
-        .execute()
-    )
-    if not ws_response.data:
-        raise HTTPException(status_code=404, detail="Workstream not found")
-    if ws_response.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    ws = await _verify_workstream_ownership(db, workstream_id, current_user["id"])
 
-    # Get all cards in brief column
-    wsc_response = (
-        supabase.table("workstream_cards")
-        .select("id, card_id, status, position, cards(id, name, pillar_id, horizon)")
-        .eq("workstream_id", workstream_id)
-        .eq("status", "brief")
-        .order("position")
-        .execute()
+    # Get all workstream_cards in brief column, joined with cards
+    wsc_stmt = (
+        select(WorkstreamCard, Card)
+        .join(Card, WorkstreamCard.card_id == Card.id)
+        .where(WorkstreamCard.workstream_id == workstream_id)
+        .where(WorkstreamCard.status == "brief")
+        .order_by(WorkstreamCard.position)
     )
+    wsc_result = await db.execute(wsc_stmt)
+    wsc_rows = wsc_result.all()
 
     card_statuses = []
     cards_with_briefs = 0
     cards_ready = 0
 
-    for wsc in wsc_response.data or []:
-        card = wsc.get("cards", {})
-        card_id = wsc.get("card_id")
-        position = wsc.get("position", 0)
+    for wsc_row, card_row in wsc_rows:
+        card_id = str(wsc_row.card_id)
+        position = wsc_row.position or 0
 
         # Check for completed brief
-        brief_response = (
-            supabase.table("executive_briefs")
-            .select("id, status")
-            .eq("workstream_card_id", wsc["id"])
-            .eq("status", "completed")
+        brief_stmt = (
+            select(ExecutiveBrief)
+            .where(ExecutiveBrief.workstream_card_id == wsc_row.id)
+            .where(ExecutiveBrief.status == "completed")
             .limit(1)
-            .execute()
         )
+        brief_result = await db.execute(brief_stmt)
+        brief_row = brief_result.scalar_one_or_none()
 
-        has_brief = len(brief_response.data or []) > 0
-        brief_status = brief_response.data[0]["status"] if has_brief else None
+        has_brief = brief_row is not None
+        brief_status = brief_row.status if has_brief else None
 
         if has_brief:
             cards_with_briefs += 1
@@ -616,7 +556,7 @@ async def get_bulk_brief_status(
         card_statuses.append(
             BulkBriefCardStatus(
                 card_id=card_id,
-                card_name=card.get("name", "Unknown"),
+                card_name=card_row.name if card_row else "Unknown",
                 has_brief=has_brief,
                 brief_status=brief_status,
                 position=position,
@@ -635,7 +575,8 @@ async def get_bulk_brief_status(
 async def bulk_brief_export(
     workstream_id: str,
     request: BulkExportRequest,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Export multiple briefs as a single portfolio presentation.
@@ -683,66 +624,50 @@ async def bulk_brief_export(
             detail="Maximum 15 cards per portfolio. Archive some cards or create separate workstreams.",
         )
 
-    # Verify workstream belongs to user
-    ws_response = (
-        supabase.table("workstreams")
-        .select("id, user_id, name")
-        .eq("id", workstream_id)
-        .execute()
-    )
-    if not ws_response.data:
-        raise HTTPException(status_code=404, detail="Workstream not found")
-    if ws_response.data[0]["user_id"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    workstream_name = ws_response.data[0].get("name", "Strategic Portfolio")
+    ws = await _verify_workstream_ownership(db, workstream_id, current_user["id"])
+    workstream_name = ws.name or "Strategic Portfolio"
 
     # Fetch briefs in the specified order
-    brief_service = ExecutiveBriefService(supabase, openai_client)
+    brief_service = ExecutiveBriefService(db, openai_client)
     portfolio_briefs = []
     skipped_cards = []
 
-    for card_id in request.card_order:
+    for cid in request.card_order:
         # Get workstream_card record
-        wsc_response = (
-            supabase.table("workstream_cards")
-            .select("id")
-            .eq("workstream_id", workstream_id)
-            .eq("card_id", card_id)
-            .execute()
+        wsc_stmt = (
+            select(WorkstreamCard)
+            .where(WorkstreamCard.workstream_id == workstream_id)
+            .where(WorkstreamCard.card_id == cid)
         )
+        wsc_result = await db.execute(wsc_stmt)
+        wsc_row = wsc_result.scalar_one_or_none()
 
-        if not wsc_response.data:
-            skipped_cards.append(card_id)
+        if not wsc_row:
+            skipped_cards.append(cid)
             continue
 
-        workstream_card_id = wsc_response.data[0]["id"]
+        workstream_card_id = str(wsc_row.id)
 
         # Get latest completed brief
         brief = await brief_service.get_latest_completed_brief(workstream_card_id)
         if not brief:
-            skipped_cards.append(card_id)
+            skipped_cards.append(cid)
             continue
 
-        # Get card data
-        card_response = (
-            supabase.table("cards")
-            .select(
-                "id, name, pillar_id, horizon, stage_id, impact_score, relevance_score, velocity_score"
-            )
-            .eq("id", card_id)
-            .execute()
-        )
+        # Get card data via SQLAlchemy
+        card_stmt = select(Card).where(Card.id == cid)
+        card_result = await db.execute(card_stmt)
+        card_row = card_result.scalar_one_or_none()
 
-        if not card_response.data:
-            skipped_cards.append(card_id)
+        if not card_row:
+            skipped_cards.append(cid)
             continue
 
-        card_data = card_response.data[0]
+        card_data = _row_to_dict(card_row)
 
         portfolio_briefs.append(
             PortfolioBrief(
-                card_id=card_id,
+                card_id=cid,
                 card_name=card_data.get("name", "Unknown"),
                 pillar_id=card_data.get("pillar_id", ""),
                 horizon=card_data.get("horizon", ""),
@@ -862,7 +787,7 @@ async def bulk_brief_export(
 
             # Fallback to local PPTX generation
             logger.info("Generating portfolio locally...")
-            export_service = ExportService(supabase)
+            export_service = ExportService(db)
             file_path = await export_service.generate_portfolio_pptx_local(
                 workstream_name=workstream_name,
                 briefs=portfolio_briefs,
@@ -882,7 +807,7 @@ async def bulk_brief_export(
 
         else:
             # PDF generation - expanded detail format
-            export_service = ExportService(supabase)
+            export_service = ExportService(db)
             file_path = await export_service.generate_portfolio_pdf(
                 workstream_name=workstream_name,
                 briefs=portfolio_briefs,

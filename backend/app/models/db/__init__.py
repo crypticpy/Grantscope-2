@@ -23,7 +23,7 @@ from app.models.db.reference import (  # noqa: F401
 
 # Core domain models
 from app.models.db.user import User  # noqa: F401
-from app.models.db.card import Card  # noqa: F401
+from app.models.db.card import Card, CardEmbedding  # noqa: F401
 from app.models.db.source import (  # noqa: F401
     DiscoveredSource,
     Source,
@@ -68,9 +68,11 @@ from app.models.db.brief import ExecutiveBrief  # noqa: F401
 from app.models.db.research import ResearchTask  # noqa: F401
 from app.models.db.analytics import (  # noqa: F401
     CachedInsight,
+    ClassificationValidation,
     DomainReputation,
     PatternInsight,
 )
+from app.models.db.search import SavedSearch, SearchHistory  # noqa: F401
 from app.models.db.notification import (  # noqa: F401
     DigestLog,
     NotificationPreference,
@@ -151,4 +153,9 @@ __all__ = [
     "ApplicationComment",
     "ApplicationMilestone",
     "ApplicationStatusHistory",
+    # Migration additions
+    "CardEmbedding",
+    "ClassificationValidation",
+    "SavedSearch",
+    "SearchHistory",
 ]

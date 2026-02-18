@@ -28,9 +28,16 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
+from sqlalchemy import select, update as sa_update
 
 from app.brief_service import ExecutiveBriefService
-from app.deps import openai_client, supabase
+from app.database import async_session_factory
+from app.deps import openai_client
+from app.models.db.brief import ExecutiveBrief
+from app.models.db.discovery import DiscoveryRun, DiscoverySchedule
+from app.models.db.research import ResearchTask
+from app.models.db.user import User
+from app.models.db.workstream import WorkstreamScan
 from app.models.discovery_models import DiscoveryConfigRequest
 from app.models.research import ResearchTaskCreate
 from app.routers.discovery import execute_discovery_run_background
@@ -156,190 +163,218 @@ class GrantScopeWorker:
         logger.info("Worker stopping", extra={"worker_id": self.worker_id})
 
     async def _process_one_research_task(self) -> bool:
-        tasks = (
-            supabase.table("research_tasks")
-            .select("id,user_id,card_id,workstream_id,task_type")
-            .eq("status", "queued")
-            .order("created_at", desc=False)
-            .limit(1)
-            .execute()
-            .data
-            or []
-        )
-        if not tasks:
+        if async_session_factory is None:
+            logger.error("Database not configured — cannot process research tasks")
             return False
 
-        task = tasks[0]
-        task_id = task["id"]
+        async with async_session_factory() as db:
+            result = await db.execute(
+                select(ResearchTask)
+                .where(ResearchTask.status == "queued")
+                .order_by(ResearchTask.created_at.asc())
+                .limit(1)
+            )
+            task = result.scalar_one_or_none()
+            if not task:
+                return False
 
-        now = datetime.now(timezone.utc).isoformat()
-        claimed = (
-            supabase.table("research_tasks")
-            .update(
-                {
-                    "status": "processing",
-                    "started_at": now,
-                    "result_summary": {
+            task_id = str(task.id)
+
+            now = datetime.now(timezone.utc)
+            now_iso = now.isoformat()
+            claim_result = await db.execute(
+                sa_update(ResearchTask)
+                .where(ResearchTask.id == task.id, ResearchTask.status == "queued")
+                .values(
+                    status="processing",
+                    started_at=now,
+                    result_summary={
                         "stage": "claimed:research",
-                        "heartbeat_at": now,
+                        "heartbeat_at": now_iso,
                         "worker_id": self.worker_id,
                     },
-                }
+                )
+                .returning(ResearchTask.id)
             )
-            .eq("id", task_id)
-            .eq("status", "queued")
-            .execute()
-            .data
-        )
-        if not claimed:
-            return False
+            claimed = claim_result.scalar_one_or_none()
+            await db.commit()
 
-        task_data = ResearchTaskCreate(
-            card_id=task.get("card_id"),
-            workstream_id=task.get("workstream_id"),
-            task_type=task.get("task_type"),
-        )
+            if not claimed:
+                return False
 
-        logger.info(
-            "Processing research task",
-            extra={
-                "worker_id": self.worker_id,
-                "task_id": task_id,
-                "task_type": task.get("task_type"),
-                "card_id": task.get("card_id"),
-                "workstream_id": task.get("workstream_id"),
-            },
-        )
+            task_data = ResearchTaskCreate(
+                card_id=str(task.card_id) if task.card_id else None,
+                workstream_id=str(task.workstream_id) if task.workstream_id else None,
+                task_type=task.task_type,
+            )
 
-        await execute_research_task_background(task_id, task_data, task["user_id"])
+            logger.info(
+                "Processing research task",
+                extra={
+                    "worker_id": self.worker_id,
+                    "task_id": task_id,
+                    "task_type": task.task_type,
+                    "card_id": str(task.card_id) if task.card_id else None,
+                    "workstream_id": (
+                        str(task.workstream_id) if task.workstream_id else None
+                    ),
+                },
+            )
+
+        await execute_research_task_background(task_id, task_data, str(task.user_id))
         return True
 
     async def _process_one_brief(self) -> bool:
-        briefs = (
-            supabase.table("executive_briefs")
-            .select("id,workstream_card_id,card_id,sources_since_previous,status")
-            .eq("status", "pending")
-            .order("created_at", desc=False)
-            .limit(1)
-            .execute()
-            .data
-            or []
-        )
-        if not briefs:
+        if async_session_factory is None:
+            logger.error("Database not configured — cannot process briefs")
             return False
 
-        brief = briefs[0]
-        brief_id = brief["id"]
-
-        claimed = (
-            supabase.table("executive_briefs")
-            .update({"status": "generating"})
-            .eq("id", brief_id)
-            .eq("status", "pending")
-            .execute()
-            .data
-        )
-        if not claimed:
-            return False
-
-        since_timestamp: Optional[str] = None
-        sources_since_previous = brief.get("sources_since_previous") or {}
-        if isinstance(sources_since_previous, dict):
-            since_timestamp = sources_since_previous.get(
-                "since_date"
-            ) or sources_since_previous.get("since_timestamp")
-
-        logger.info(
-            "Processing executive brief",
-            extra={
-                "worker_id": self.worker_id,
-                "brief_id": brief_id,
-                "workstream_card_id": brief.get("workstream_card_id"),
-                "card_id": brief.get("card_id"),
-            },
-        )
-
-        service = ExecutiveBriefService(supabase, openai_client)
-        try:
-            await asyncio.wait_for(
-                service.generate_executive_brief(
-                    brief_id=brief_id,
-                    workstream_card_id=brief["workstream_card_id"],
-                    card_id=brief["card_id"],
-                    since_timestamp=since_timestamp,
-                ),
-                timeout=self.brief_timeout_seconds,
+        async with async_session_factory() as db:
+            result = await db.execute(
+                select(ExecutiveBrief)
+                .where(ExecutiveBrief.status == "pending")
+                .order_by(ExecutiveBrief.created_at.asc())
+                .limit(1)
             )
-        except asyncio.TimeoutError:
-            await service.update_brief_status(
-                brief_id,
-                "failed",
-                error_message=f"Brief generation timed out after {self.brief_timeout_seconds} seconds",
+            brief = result.scalar_one_or_none()
+            if not brief:
+                return False
+
+            brief_id = str(brief.id)
+
+            claim_result = await db.execute(
+                sa_update(ExecutiveBrief)
+                .where(
+                    ExecutiveBrief.id == brief.id, ExecutiveBrief.status == "pending"
+                )
+                .values(status="generating")
+                .returning(ExecutiveBrief.id)
             )
-        except BaseException as e:
-            # Includes CancelledError which is not an Exception.
-            await service.update_brief_status(brief_id, "failed", error_message=str(e))
-            raise
+            claimed = claim_result.scalar_one_or_none()
+            await db.commit()
+
+            if not claimed:
+                return False
+
+            since_timestamp: Optional[str] = None
+            sources_since_previous = brief.sources_since_previous or {}
+            if isinstance(sources_since_previous, dict):
+                since_timestamp = sources_since_previous.get(
+                    "since_date"
+                ) or sources_since_previous.get("since_timestamp")
+
+            workstream_card_id = str(brief.workstream_card_id)
+            card_id = str(brief.card_id)
+
+            logger.info(
+                "Processing executive brief",
+                extra={
+                    "worker_id": self.worker_id,
+                    "brief_id": brief_id,
+                    "workstream_card_id": workstream_card_id,
+                    "card_id": card_id,
+                },
+            )
+
+        # Create a new session for the service to use during generation
+        async with async_session_factory() as db:
+            service = ExecutiveBriefService(db, openai_client)
+            try:
+                await asyncio.wait_for(
+                    service.generate_executive_brief(
+                        brief_id=brief_id,
+                        workstream_card_id=workstream_card_id,
+                        card_id=card_id,
+                        since_timestamp=since_timestamp,
+                    ),
+                    timeout=self.brief_timeout_seconds,
+                )
+                await db.commit()
+            except asyncio.TimeoutError:
+                await service.update_brief_status(
+                    brief_id,
+                    "failed",
+                    error_message=f"Brief generation timed out after {self.brief_timeout_seconds} seconds",
+                )
+                await db.commit()
+            except BaseException as e:
+                # Includes CancelledError which is not an Exception.
+                await service.update_brief_status(
+                    brief_id, "failed", error_message=str(e)
+                )
+                await db.commit()
+                raise
         return True
 
     async def _process_one_discovery_run(self) -> bool:
-        runs = (
-            supabase.table("discovery_runs")
-            .select("id,triggered_by_user,summary_report,status")
-            .eq("status", "running")
-            .contains("summary_report", {"stage": "queued"})
-            .order("started_at", desc=False)
-            .limit(1)
-            .execute()
-            .data
-            or []
-        )
-        if not runs:
+        if async_session_factory is None:
+            logger.error("Database not configured — cannot process discovery runs")
             return False
 
-        run = runs[0]
-        run_id = run["id"]
-        triggered_by_user = run.get("triggered_by_user")
-
-        summary_report: Dict[str, Any] = run.get("summary_report") or {}
-        if not isinstance(summary_report, dict):
-            summary_report = {}
-
-        summary_report["stage"] = "running"
-        summary_report["worker_id"] = self.worker_id
-        summary_report["heartbeat_at"] = datetime.now(timezone.utc).isoformat()
-
-        claimed = (
-            supabase.table("discovery_runs")
-            .update({"summary_report": summary_report})
-            .eq("id", run_id)
-            .eq("status", "running")
-            .contains("summary_report", {"stage": "queued"})
-            .execute()
-            .data
-        )
-        if not claimed:
-            return False
-
-        config_data = (
-            summary_report.get("config") if isinstance(summary_report, dict) else None
-        )
-        if not isinstance(config_data, dict):
-            config_data = {}
-
-        config = DiscoveryConfigRequest(**config_data)
-
-        if not triggered_by_user:
-            # Defensive fallback: pick any system user.
-            system_user = (
-                supabase.table("users").select("id").limit(1).execute().data or []
+        async with async_session_factory() as db:
+            result = await db.execute(
+                select(DiscoveryRun)
+                .where(
+                    DiscoveryRun.status == "running",
+                    DiscoveryRun.summary_report["stage"].astext == "queued",
+                )
+                .order_by(DiscoveryRun.started_at.asc())
+                .limit(1)
             )
-            triggered_by_user = system_user[0]["id"] if system_user else None
+            run = result.scalar_one_or_none()
+            if not run:
+                return False
 
-        if not triggered_by_user:
-            raise RuntimeError(
-                "Discovery run has no triggered_by_user and no users exist to run as."
+            run_id = str(run.id)
+            triggered_by_user = (
+                str(run.triggered_by_user) if run.triggered_by_user else None
             )
+
+            summary_report: Dict[str, Any] = run.summary_report or {}
+            if not isinstance(summary_report, dict):
+                summary_report = {}
+
+            summary_report["stage"] = "running"
+            summary_report["worker_id"] = self.worker_id
+            summary_report["heartbeat_at"] = datetime.now(timezone.utc).isoformat()
+
+            # Claim the run with optimistic lock
+            claim_result = await db.execute(
+                sa_update(DiscoveryRun)
+                .where(
+                    DiscoveryRun.id == run.id,
+                    DiscoveryRun.status == "running",
+                    DiscoveryRun.summary_report["stage"].astext == "queued",
+                )
+                .values(summary_report=summary_report)
+                .returning(DiscoveryRun.id)
+            )
+            claimed = claim_result.scalar_one_or_none()
+            await db.commit()
+
+            if not claimed:
+                return False
+
+            config_data = (
+                summary_report.get("config")
+                if isinstance(summary_report, dict)
+                else None
+            )
+            if not isinstance(config_data, dict):
+                config_data = {}
+
+            config = DiscoveryConfigRequest(**config_data)
+
+            if not triggered_by_user:
+                # Defensive fallback: pick any system user.
+                user_result = await db.execute(select(User.id).limit(1))
+                system_user = user_result.scalar_one_or_none()
+                triggered_by_user = str(system_user) if system_user else None
+
+            if not triggered_by_user:
+                raise RuntimeError(
+                    "Discovery run has no triggered_by_user and no users exist to run as."
+                )
 
         # Detect grant-oriented discovery runs
         source_categories = config_data.get("source_categories") or []
@@ -369,71 +404,81 @@ class GrantScopeWorker:
                 timeout=self.discovery_timeout_seconds,
             )
         except asyncio.TimeoutError:
-            summary_report["stage"] = "failed"
-            summary_report["timed_out"] = True
-            summary_report["timed_out_at"] = datetime.now(timezone.utc).isoformat()
-            supabase.table("discovery_runs").update(
-                {
-                    "status": "failed",
-                    "completed_at": datetime.now(timezone.utc).isoformat(),
-                    "error_message": f"Discovery run timed out after {self.discovery_timeout_seconds} seconds",
-                    "summary_report": summary_report,
-                }
-            ).eq("id", run_id).execute()
+            async with async_session_factory() as db:
+                summary_report["stage"] = "failed"
+                summary_report["timed_out"] = True
+                summary_report["timed_out_at"] = datetime.now(timezone.utc).isoformat()
+                await db.execute(
+                    sa_update(DiscoveryRun)
+                    .where(DiscoveryRun.id == uuid.UUID(run_id))
+                    .values(
+                        status="failed",
+                        completed_at=datetime.now(timezone.utc),
+                        error_message=f"Discovery run timed out after {self.discovery_timeout_seconds} seconds",
+                        summary_report=summary_report,
+                    )
+                )
+                await db.commit()
         except BaseException as e:
-            summary_report["stage"] = "failed"
-            summary_report["failed_at"] = datetime.now(timezone.utc).isoformat()
-            supabase.table("discovery_runs").update(
-                {
-                    "status": "failed",
-                    "completed_at": datetime.now(timezone.utc).isoformat(),
-                    "error_message": str(e),
-                    "summary_report": summary_report,
-                }
-            ).eq("id", run_id).execute()
+            async with async_session_factory() as db:
+                summary_report["stage"] = "failed"
+                summary_report["failed_at"] = datetime.now(timezone.utc).isoformat()
+                await db.execute(
+                    sa_update(DiscoveryRun)
+                    .where(DiscoveryRun.id == uuid.UUID(run_id))
+                    .values(
+                        status="failed",
+                        completed_at=datetime.now(timezone.utc),
+                        error_message=str(e),
+                        summary_report=summary_report,
+                    )
+                )
+                await db.commit()
             raise
         return True
 
     async def _process_one_workstream_scan(self) -> bool:
         """Process one queued workstream scan job."""
+        if async_session_factory is None:
+            logger.error("Database not configured — cannot process workstream scans")
+            return False
+
         try:
-            result = (
-                supabase.table("workstream_scans")
-                .select("id,workstream_id,user_id,config,status")
-                .eq("status", "queued")
-                .order("created_at", desc=False)
-                .limit(1)
-                .execute()
-            )
-            scans = result.data or []
-            if scans:
-                logger.info(
-                    f"Found {len(scans)} queued workstream scan(s): {[s['id'] for s in scans]}"
+            async with async_session_factory() as db:
+                result = await db.execute(
+                    select(WorkstreamScan)
+                    .where(WorkstreamScan.status == "queued")
+                    .order_by(WorkstreamScan.created_at.asc())
+                    .limit(1)
                 )
+                scan = result.scalar_one_or_none()
+                if scan:
+                    logger.info(f"Found queued workstream scan: {scan.id}")
         except Exception as e:
             logger.error(f"Error querying workstream_scans: {e}")
             return False
 
-        if not scans:
+        if not scan:
             return False
 
-        scan = scans[0]
-        scan_id = scan["id"]
+        scan_id = str(scan.id)
 
         # Claim the scan by setting status to running
-        now = datetime.now(timezone.utc).isoformat()
-        claimed = (
-            supabase.table("workstream_scans")
-            .update({"status": "running", "started_at": now})
-            .eq("id", scan_id)
-            .eq("status", "queued")
-            .execute()
-            .data
-        )
+        async with async_session_factory() as db:
+            now = datetime.now(timezone.utc)
+            claim_result = await db.execute(
+                sa_update(WorkstreamScan)
+                .where(WorkstreamScan.id == scan.id, WorkstreamScan.status == "queued")
+                .values(status="running", started_at=now)
+                .returning(WorkstreamScan.id)
+            )
+            claimed = claim_result.scalar_one_or_none()
+            await db.commit()
+
         if not claimed:
             return False
 
-        config = scan.get("config") or {}
+        config = scan.config or {}
         # Parse config if it's a JSON string (Supabase behavior)
         if isinstance(config, str):
             import json
@@ -448,8 +493,8 @@ class GrantScopeWorker:
             extra={
                 "worker_id": self.worker_id,
                 "scan_id": scan_id,
-                "workstream_id": scan.get("workstream_id"),
-                "user_id": scan.get("user_id"),
+                "workstream_id": str(scan.workstream_id),
+                "user_id": str(scan.user_id),
             },
         )
 
@@ -459,21 +504,29 @@ class GrantScopeWorker:
                 timeout=self.workstream_scan_timeout_seconds,
             )
         except asyncio.TimeoutError:
-            supabase.table("workstream_scans").update(
-                {
-                    "status": "failed",
-                    "completed_at": datetime.now(timezone.utc).isoformat(),
-                    "error_message": f"Workstream scan timed out after {self.workstream_scan_timeout_seconds} seconds",
-                }
-            ).eq("id", scan_id).execute()
+            async with async_session_factory() as db:
+                await db.execute(
+                    sa_update(WorkstreamScan)
+                    .where(WorkstreamScan.id == uuid.UUID(scan_id))
+                    .values(
+                        status="failed",
+                        completed_at=datetime.now(timezone.utc),
+                        error_message=f"Workstream scan timed out after {self.workstream_scan_timeout_seconds} seconds",
+                    )
+                )
+                await db.commit()
         except BaseException as e:
-            supabase.table("workstream_scans").update(
-                {
-                    "status": "failed",
-                    "completed_at": datetime.now(timezone.utc).isoformat(),
-                    "error_message": str(e),
-                }
-            ).eq("id", scan_id).execute()
+            async with async_session_factory() as db:
+                await db.execute(
+                    sa_update(WorkstreamScan)
+                    .where(WorkstreamScan.id == uuid.UUID(scan_id))
+                    .values(
+                        status="failed",
+                        completed_at=datetime.now(timezone.utc),
+                        error_message=str(e),
+                    )
+                )
+                await db.commit()
             raise
         return True
 
@@ -487,6 +540,10 @@ class GrantScopeWorker:
         Returns:
             True if any feeds were checked or items processed.
         """
+        if async_session_factory is None:
+            logger.error("Database not configured — cannot check RSS feeds")
+            return False
+
         now = datetime.now(timezone.utc)
 
         # Skip if we checked recently
@@ -502,33 +559,37 @@ class GrantScopeWorker:
             from app.ai_service import AIService
 
             ai_service = AIService(openai_client)
-            rss_service = RSSService(supabase, ai_service)
 
-            # Step 1: Poll feeds that are due
-            check_stats = await rss_service.check_feeds()
-            logger.info(
-                "RSS feed check complete",
-                extra={
-                    "worker_id": self.worker_id,
-                    "feeds_checked": check_stats.get("feeds_checked", 0),
-                    "items_found": check_stats.get("items_found", 0),
-                    "items_new": check_stats.get("items_new", 0),
-                    "errors": check_stats.get("errors", 0),
-                },
-            )
+            async with async_session_factory() as db:
+                rss_service = RSSService(db, ai_service)
 
-            # Step 2: Process (triage + match) any new items
-            process_stats = await rss_service.process_new_items()
-            logger.info(
-                "RSS item processing complete",
-                extra={
-                    "worker_id": self.worker_id,
-                    "items_processed": process_stats.get("items_processed", 0),
-                    "items_matched": process_stats.get("items_matched", 0),
-                    "items_pending": process_stats.get("items_pending", 0),
-                    "items_irrelevant": process_stats.get("items_irrelevant", 0),
-                },
-            )
+                # Step 1: Poll feeds that are due
+                check_stats = await rss_service.check_feeds()
+                logger.info(
+                    "RSS feed check complete",
+                    extra={
+                        "worker_id": self.worker_id,
+                        "feeds_checked": check_stats.get("feeds_checked", 0),
+                        "items_found": check_stats.get("items_found", 0),
+                        "items_new": check_stats.get("items_new", 0),
+                        "errors": check_stats.get("errors", 0),
+                    },
+                )
+
+                # Step 2: Process (triage + match) any new items
+                process_stats = await rss_service.process_new_items()
+                logger.info(
+                    "RSS item processing complete",
+                    extra={
+                        "worker_id": self.worker_id,
+                        "items_processed": process_stats.get("items_processed", 0),
+                        "items_matched": process_stats.get("items_matched", 0),
+                        "items_pending": process_stats.get("items_pending", 0),
+                        "items_irrelevant": process_stats.get("items_irrelevant", 0),
+                    },
+                )
+
+                await db.commit()
 
             did_work = (
                 check_stats.get("feeds_checked", 0) > 0
@@ -554,50 +615,60 @@ class GrantScopeWorker:
 
         Returns ``True`` if a scheduled discovery was triggered.
         """
+        if async_session_factory is None:
+            logger.error("Database not configured — cannot run scheduled discovery")
+            return False
+
         try:
             now = datetime.now(timezone.utc)
             now_iso = now.isoformat()
 
-            # Check for any due schedules
-            schedules = (
-                supabase.table("discovery_schedule")
-                .select("*")
-                .eq("enabled", True)
-                .lte("next_run_at", now_iso)
-                .order("next_run_at", desc=False)
-                .limit(1)
-                .execute()
-                .data
-                or []
-            )
-
-            if not schedules:
-                return False
-
-            schedule = schedules[0]
-            schedule_id = schedule["id"]
-            interval_hours = schedule.get("interval_hours") or 24
-            pillars = schedule.get("pillars_to_scan") or sorted(VALID_PILLAR_CODES)
-            max_queries = schedule.get("max_search_queries_per_run") or 20
-            process_rss = schedule.get("process_rss_first", True)
-
-            # Claim the schedule by advancing next_run_at (optimistic lock)
-            next_run = now + timedelta(hours=interval_hours)
-            claimed = (
-                supabase.table("discovery_schedule")
-                .update(
-                    {
-                        "last_run_at": now_iso,
-                        "next_run_at": next_run.isoformat(),
-                        "last_run_status": "running",
-                        "updated_at": now_iso,
-                    }
+            async with async_session_factory() as db:
+                # Check for any due schedules
+                result = await db.execute(
+                    select(DiscoverySchedule)
+                    .where(
+                        DiscoverySchedule.enabled == True,  # noqa: E712
+                        DiscoverySchedule.next_run_at <= now,
+                    )
+                    .order_by(DiscoverySchedule.next_run_at.asc())
+                    .limit(1)
                 )
-                .eq("id", schedule_id)
-                .lte("next_run_at", now_iso)
-                .execute()
-                .data
-            )
+                schedule = result.scalar_one_or_none()
+
+                if not schedule:
+                    return False
+
+                schedule_id = str(schedule.id)
+                interval_hours = schedule.interval_hours or 24
+                pillars = schedule.pillars_to_scan or sorted(VALID_PILLAR_CODES)
+                max_queries = schedule.max_search_queries_per_run or 20
+                process_rss = (
+                    schedule.process_rss_first
+                    if schedule.process_rss_first is not None
+                    else True
+                )
+                schedule_name = schedule.name
+
+                # Claim the schedule by advancing next_run_at (optimistic lock)
+                next_run = now + timedelta(hours=interval_hours)
+                claim_result = await db.execute(
+                    sa_update(DiscoverySchedule)
+                    .where(
+                        DiscoverySchedule.id == schedule.id,
+                        DiscoverySchedule.next_run_at <= now,
+                    )
+                    .values(
+                        last_run_at=now,
+                        next_run_at=next_run,
+                        last_run_status="running",
+                        updated_at=now,
+                    )
+                    .returning(DiscoverySchedule.id)
+                )
+                claimed = claim_result.scalar_one_or_none()
+                await db.commit()
+
             if not claimed:
                 return False
 
@@ -606,7 +677,7 @@ class GrantScopeWorker:
                 extra={
                     "worker_id": self.worker_id,
                     "schedule_id": schedule_id,
-                    "schedule_name": schedule.get("name"),
+                    "schedule_name": schedule_name,
                     "pillars": pillars,
                     "max_queries": max_queries,
                     "interval_hours": interval_hours,
@@ -628,10 +699,13 @@ class GrantScopeWorker:
                     from app.ai_service import AIService
 
                     ai_service = AIService(openai_client)
-                    rss_service = RSSService(supabase, ai_service)
 
-                    check_stats = await rss_service.check_feeds()
-                    process_stats = await rss_service.process_new_items()
+                    async with async_session_factory() as db:
+                        rss_service = RSSService(db, ai_service)
+
+                        check_stats = await rss_service.check_feeds()
+                        process_stats = await rss_service.process_new_items()
+                        await db.commit()
 
                     summary["rss_stats"] = {
                         "feeds_checked": check_stats.get("feeds_checked", 0),
@@ -652,10 +726,10 @@ class GrantScopeWorker:
                     summary["errors"].append(f"RSS processing failed: {rss_err}")
 
             # Step 2: Get a system user for the discovery run
-            system_user = (
-                supabase.table("users").select("id").limit(1).execute().data or []
-            )
-            user_id = system_user[0]["id"] if system_user else None
+            async with async_session_factory() as db:
+                user_result = await db.execute(select(User.id).limit(1))
+                system_user_id = user_result.scalar_one_or_none()
+                user_id = str(system_user_id) if system_user_id else None
 
             if not user_id:
                 logger.warning(
@@ -674,24 +748,27 @@ class GrantScopeWorker:
                         "dry_run": False,
                     }
 
-                    run_record = {
-                        "id": run_id,
-                        "status": "running",
-                        "triggered_by": "scheduled",
-                        "triggered_by_user": user_id,
-                        "cards_created": 0,
-                        "cards_enriched": 0,
-                        "cards_deduplicated": 0,
-                        "sources_found": 0,
-                        "started_at": now_iso,
-                        "summary_report": {
+                    new_run = DiscoveryRun(
+                        id=uuid.UUID(run_id),
+                        status="running",
+                        triggered_by="scheduled",
+                        triggered_by_user=uuid.UUID(user_id),
+                        cards_created=0,
+                        cards_enriched=0,
+                        cards_deduplicated=0,
+                        sources_found=0,
+                        started_at=now,
+                        summary_report={
                             "stage": "queued",
                             "config": config_data,
                             "scheduled_by": schedule_id,
                         },
-                    }
+                    )
 
-                    supabase.table("discovery_runs").insert(run_record).execute()
+                    async with async_session_factory() as db:
+                        db.add(new_run)
+                        await db.commit()
+
                     summary["discovery_run_ids"].append(run_id)
 
                     logger.info(
@@ -720,13 +797,17 @@ class GrantScopeWorker:
             summary["completed_at"] = datetime.now(timezone.utc).isoformat()
             summary["status"] = final_status
 
-            supabase.table("discovery_schedule").update(
-                {
-                    "last_run_status": final_status,
-                    "last_run_summary": summary,
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                }
-            ).eq("id", schedule_id).execute()
+            async with async_session_factory() as db:
+                await db.execute(
+                    sa_update(DiscoverySchedule)
+                    .where(DiscoverySchedule.id == uuid.UUID(schedule_id))
+                    .values(
+                        last_run_status=final_status,
+                        last_run_summary=summary,
+                        updated_at=datetime.now(timezone.utc),
+                    )
+                )
+                await db.commit()
 
             logger.info(
                 "Scheduled discovery complete",

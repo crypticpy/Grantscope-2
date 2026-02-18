@@ -27,7 +27,16 @@ from datetime import datetime
 from typing import Optional, Dict, Any, List
 from functools import wraps
 from dataclasses import dataclass
-from supabase import Client
+
+from sqlalchemy import select, update as sa_update, func
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.db.brief import ExecutiveBrief
+from app.models.db.card import Card
+from app.models.db.card_extras import CardRelationship
+from app.models.db.source import DiscoveredSource
+from app.models.db.workstream import WorkstreamCard, Workstream
+
 import openai
 
 # Azure OpenAI deployment names
@@ -420,15 +429,15 @@ class ExecutiveBriefService:
     metadata tracking for monitoring and cost analysis.
     """
 
-    def __init__(self, supabase: Client, openai_client: openai.AsyncOpenAI):
+    def __init__(self, db: AsyncSession, openai_client: openai.AsyncOpenAI):
         """
         Initialize the ExecutiveBriefService.
 
         Args:
-            supabase: Supabase client for database operations
+            db: AsyncSession for database operations
             openai_client: AsyncOpenAI client for AI generation
         """
-        self.supabase = supabase
+        self.db = db
         self.openai_client = openai_client
 
     # ========================================================================
@@ -458,40 +467,45 @@ class ExecutiveBriefService:
             Created brief record with version number
         """
         # Get the next version number
-        version_result = (
-            self.supabase.table("executive_briefs")
-            .select("version")
-            .eq("workstream_card_id", workstream_card_id)
-            .order("version", desc=True)
+        version_result = await self.db.execute(
+            select(ExecutiveBrief.version)
+            .where(ExecutiveBrief.workstream_card_id == workstream_card_id)
+            .order_by(ExecutiveBrief.version.desc())
             .limit(1)
-            .execute()
         )
+        latest_version = version_result.scalar_one_or_none()
 
         next_version = 1
-        if version_result.data:
-            next_version = version_result.data[0]["version"] + 1
+        if latest_version is not None:
+            next_version = latest_version + 1
 
         now = datetime.utcnow().isoformat()
-        brief_record = {
-            "workstream_card_id": workstream_card_id,
-            "card_id": card_id,
-            "created_by": user_id,
-            "status": "pending",
-            "version": next_version,
-            "sources_since_previous": sources_since_previous,
-            "created_at": now,
-            "updated_at": now,
-        }
-
-        result = self.supabase.table("executive_briefs").insert(brief_record).execute()
-
-        if not result.data:
-            raise Exception("Failed to create brief record")
+        brief = ExecutiveBrief(
+            workstream_card_id=workstream_card_id,
+            card_id=card_id,
+            created_by=user_id,
+            status="pending",
+            version=next_version,
+            sources_since_previous=sources_since_previous,
+        )
+        self.db.add(brief)
+        await self.db.flush()
+        await self.db.refresh(brief)
 
         logger.info(
             f"Created brief record version {next_version} for workstream_card {workstream_card_id}"
         )
-        return result.data[0]
+        return {
+            "id": str(brief.id),
+            "workstream_card_id": str(brief.workstream_card_id),
+            "card_id": str(brief.card_id),
+            "created_by": str(brief.created_by),
+            "status": brief.status,
+            "version": brief.version,
+            "sources_since_previous": brief.sources_since_previous,
+            "created_at": brief.created_at.isoformat() if brief.created_at else now,
+            "updated_at": brief.updated_at.isoformat() if brief.updated_at else now,
+        }
 
     async def get_brief(self, brief_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -503,14 +517,13 @@ class ExecutiveBriefService:
         Returns:
             Brief record or None
         """
-        result = (
-            self.supabase.table("executive_briefs")
-            .select("*")
-            .eq("id", brief_id)
-            .execute()
+        result = await self.db.execute(
+            select(ExecutiveBrief).where(ExecutiveBrief.id == brief_id)
         )
-
-        return result.data[0] if result.data else None
+        brief = result.scalar_one_or_none()
+        if not brief:
+            return None
+        return self._brief_to_dict(brief)
 
     async def get_brief_by_workstream_card(
         self, workstream_card_id: str, version: Optional[int] = None
@@ -527,20 +540,21 @@ class ExecutiveBriefService:
         Returns:
             Brief record or None
         """
-        query = (
-            self.supabase.table("executive_briefs")
-            .select("*")
-            .eq("workstream_card_id", workstream_card_id)
+        query = select(ExecutiveBrief).where(
+            ExecutiveBrief.workstream_card_id == workstream_card_id
         )
 
         if version is not None:
-            query = query.eq("version", version)
+            query = query.where(ExecutiveBrief.version == version)
         else:
             # Get the latest version (highest version number)
-            query = query.order("version", desc=True).limit(1)
+            query = query.order_by(ExecutiveBrief.version.desc()).limit(1)
 
-        result = query.execute()
-        return result.data[0] if result.data else None
+        result = await self.db.execute(query)
+        brief = result.scalar_one_or_none()
+        if not brief:
+            return None
+        return self._brief_to_dict(brief)
 
     async def get_brief_versions(self, workstream_card_id: str) -> List[Dict[str, Any]]:
         """
@@ -554,18 +568,37 @@ class ExecutiveBriefService:
         Returns:
             List of brief records (without full content for efficiency)
         """
-        result = (
-            self.supabase.table("executive_briefs")
-            .select(
-                "id, version, status, summary, sources_since_previous, "
-                "generated_at, created_at, model_used"
+        result = await self.db.execute(
+            select(
+                ExecutiveBrief.id,
+                ExecutiveBrief.version,
+                ExecutiveBrief.status,
+                ExecutiveBrief.summary,
+                ExecutiveBrief.sources_since_previous,
+                ExecutiveBrief.generated_at,
+                ExecutiveBrief.created_at,
+                ExecutiveBrief.model_used,
             )
-            .eq("workstream_card_id", workstream_card_id)
-            .order("version", desc=True)
-            .execute()
+            .where(ExecutiveBrief.workstream_card_id == workstream_card_id)
+            .order_by(ExecutiveBrief.version.desc())
         )
 
-        return result.data or []
+        rows = result.all()
+        return [
+            {
+                "id": str(row.id),
+                "version": row.version,
+                "status": row.status,
+                "summary": row.summary,
+                "sources_since_previous": row.sources_since_previous,
+                "generated_at": (
+                    row.generated_at.isoformat() if row.generated_at else None
+                ),
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "model_used": row.model_used,
+            }
+            for row in rows
+        ]
 
     async def get_latest_completed_brief(
         self, workstream_card_id: str
@@ -581,17 +614,26 @@ class ExecutiveBriefService:
         Returns:
             Latest completed brief or None
         """
-        result = (
-            self.supabase.table("executive_briefs")
-            .select("id, version, generated_at")
-            .eq("workstream_card_id", workstream_card_id)
-            .eq("status", "completed")
-            .order("version", desc=True)
+        result = await self.db.execute(
+            select(
+                ExecutiveBrief.id, ExecutiveBrief.version, ExecutiveBrief.generated_at
+            )
+            .where(
+                ExecutiveBrief.workstream_card_id == workstream_card_id,
+                ExecutiveBrief.status == "completed",
+            )
+            .order_by(ExecutiveBrief.version.desc())
             .limit(1)
-            .execute()
         )
 
-        return result.data[0] if result.data else None
+        row = result.one_or_none()
+        if not row:
+            return None
+        return {
+            "id": str(row.id),
+            "version": row.version,
+            "generated_at": row.generated_at.isoformat() if row.generated_at else None,
+        }
 
     async def get_brief_status(self, brief_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -603,14 +645,28 @@ class ExecutiveBriefService:
         Returns:
             Status data or None
         """
-        result = (
-            self.supabase.table("executive_briefs")
-            .select("id, status, version, summary, error_message, generated_at")
-            .eq("id", brief_id)
-            .execute()
+        result = await self.db.execute(
+            select(
+                ExecutiveBrief.id,
+                ExecutiveBrief.status,
+                ExecutiveBrief.version,
+                ExecutiveBrief.summary,
+                ExecutiveBrief.error_message,
+                ExecutiveBrief.generated_at,
+            ).where(ExecutiveBrief.id == brief_id)
         )
 
-        return result.data[0] if result.data else None
+        row = result.one_or_none()
+        if not row:
+            return None
+        return {
+            "id": str(row.id),
+            "status": row.status,
+            "version": row.version,
+            "summary": row.summary,
+            "error_message": row.error_message,
+            "generated_at": row.generated_at.isoformat() if row.generated_at else None,
+        }
 
     async def update_brief_status(
         self, brief_id: str, status: str, error_message: Optional[str] = None, **kwargs
@@ -631,9 +687,12 @@ class ExecutiveBriefService:
 
         update_data |= kwargs
 
-        self.supabase.table("executive_briefs").update(update_data).eq(
-            "id", brief_id
-        ).execute()
+        await self.db.execute(
+            sa_update(ExecutiveBrief)
+            .where(ExecutiveBrief.id == brief_id)
+            .values(**update_data)
+        )
+        await self.db.flush()
 
     # ========================================================================
     # Context Gathering
@@ -649,12 +708,13 @@ class ExecutiveBriefService:
         Returns:
             Card data with all relevant fields
         """
-        result = self.supabase.table("cards").select("*").eq("id", card_id).execute()
+        result = await self.db.execute(select(Card).where(Card.id == card_id))
+        card = result.scalar_one_or_none()
 
-        if not result.data:
+        if not card:
             raise ValueError(f"Card not found: {card_id}")
 
-        return result.data[0]
+        return self._card_to_dict(card)
 
     async def _gather_workstream_context(
         self, workstream_card_id: str
@@ -668,28 +728,29 @@ class ExecutiveBriefService:
         Returns:
             Dict with workstream info and user notes
         """
-        # Get workstream_card with workstream details
-        wsc_result = (
-            self.supabase.table("workstream_cards")
-            .select("*, workstreams(id, name, description)")
-            .eq("id", workstream_card_id)
-            .execute()
+        # Get workstream_card
+        wsc_result = await self.db.execute(
+            select(WorkstreamCard).where(WorkstreamCard.id == workstream_card_id)
         )
+        wsc = wsc_result.scalar_one_or_none()
 
-        if not wsc_result.data:
+        if not wsc:
             return {
                 "workstream_name": "Unknown Workstream",
                 "workstream_description": "",
                 "user_notes": "",
             }
 
-        wsc = wsc_result.data[0]
-        workstream = wsc.get("workstreams", {}) or {}
+        # Get the workstream
+        ws_result = await self.db.execute(
+            select(Workstream).where(Workstream.id == wsc.workstream_id)
+        )
+        workstream = ws_result.scalar_one_or_none()
 
         return {
-            "workstream_name": workstream.get("name", "Unknown Workstream"),
-            "workstream_description": workstream.get("description", ""),
-            "user_notes": wsc.get("notes", "") or "",
+            "workstream_name": workstream.name if workstream else "Unknown Workstream",
+            "workstream_description": workstream.description if workstream else "",
+            "user_notes": wsc.notes or "",
         }
 
     async def _gather_related_cards(self, card_id: str, limit: int = 5) -> str:
@@ -704,41 +765,46 @@ class ExecutiveBriefService:
             Formatted string with related opportunities summary
         """
         # Try to find related cards through card_relationships table
-        result = (
-            self.supabase.table("card_relationships")
-            .select("target_card_id, relationship_type, strength")
-            .eq("source_card_id", card_id)
-            .order("strength", desc=True)
+        result = await self.db.execute(
+            select(
+                CardRelationship.target_card_id,
+                CardRelationship.relationship_type,
+                CardRelationship.strength,
+            )
+            .where(CardRelationship.source_card_id == card_id)
+            .order_by(CardRelationship.strength.desc())
             .limit(limit)
-            .execute()
         )
+        relationships = result.all()
 
-        if not result.data:
+        if not relationships:
             return "No related opportunities identified."
 
         # Fetch details for related cards
-        related_ids = [r["target_card_id"] for r in result.data]
-        cards_result = (
-            self.supabase.table("cards")
-            .select("id, name, summary, pillar_id, horizon")
-            .in_("id", related_ids)
-            .execute()
+        related_ids = [r.target_card_id for r in relationships]
+        cards_result = await self.db.execute(
+            select(
+                Card.id, Card.name, Card.summary, Card.pillar_id, Card.horizon
+            ).where(Card.id.in_(related_ids))
         )
+        related_cards = cards_result.all()
 
-        if not cards_result.data:
+        if not related_cards:
             return "No related opportunities identified."
 
         # Build summary
         lines = []
-        card_map = {c["id"]: c for c in cards_result.data}
-        for rel in result.data:
-            if card := card_map.get(rel["target_card_id"]):
-                summary_text = card.get("summary", "No summary")
+        card_map = {str(c.id): c for c in related_cards}
+        for rel in relationships:
+            card = card_map.get(str(rel.target_card_id))
+            if card:
+                summary_text = card.summary or "No summary"
                 if summary_text and len(summary_text) > 150:
                     summary_text = f"{summary_text[:147]}..."
+                strength_val = float(rel.strength) if rel.strength else 0
                 lines.append(
-                    f"- **{card['name']}** ({rel['relationship_type']}, "
-                    f"strength: {rel.get('strength', 0):.0%}): {summary_text}"
+                    f"- **{card.name}** ({rel.relationship_type}, "
+                    f"strength: {strength_val:.0%}): {summary_text}"
                 )
 
         return "\n".join(lines) if lines else "No related opportunities identified."
@@ -757,34 +823,38 @@ class ExecutiveBriefService:
         Returns:
             Tuple of (formatted string with source excerpts, count of sources)
         """
-        query = (
-            self.supabase.table("discovered_sources")
-            .select(
-                "title, url, domain, analysis_summary, analysis_key_excerpts, created_at"
-            )
-            .eq("resulting_card_id", card_id)
-        )
+        query = select(
+            DiscoveredSource.title,
+            DiscoveredSource.url,
+            DiscoveredSource.domain,
+            DiscoveredSource.analysis_summary,
+            DiscoveredSource.analysis_key_excerpts,
+            DiscoveredSource.created_at,
+        ).where(DiscoveredSource.resulting_card_id == card_id)
 
         if since_timestamp:
-            query = query.gt("created_at", since_timestamp)
+            query = query.where(DiscoveredSource.created_at > since_timestamp)
 
-        result = query.order("created_at", desc=True).limit(limit).execute()
+        query = query.order_by(DiscoveredSource.created_at.desc()).limit(limit)
 
-        if not result.data:
+        result = await self.db.execute(query)
+        rows = result.all()
+
+        if not rows:
             if since_timestamp:
                 return "No new source materials since last summary.", 0
             return "No source materials available.", 0
 
         lines = []
-        for src in result.data:
-            title = src.get("title", "Untitled")
+        for src in rows:
+            title = src.title or "Untitled"
             if len(title) > 80:
                 title = f"{title[:77]}..."
-            source = src.get("domain", "Unknown")
-            summary = src.get("analysis_summary", "")
+            source = src.domain or "Unknown"
+            summary = src.analysis_summary or ""
             if summary and len(summary) > 200:
                 summary = f"{summary[:197]}..."
-            url = src.get("url", "")
+            url = src.url or ""
 
             line = f"- **{title}** ({source})"
             if summary:
@@ -794,7 +864,7 @@ class ExecutiveBriefService:
             lines.append(line)
 
         return "\n".join(lines) if lines else "No source materials available.", len(
-            result.data
+            rows
         )
 
     async def count_new_sources(self, card_id: str, since_timestamp: str) -> int:
@@ -808,15 +878,14 @@ class ExecutiveBriefService:
         Returns:
             Count of new sources
         """
-        result = (
-            self.supabase.table("discovered_sources")
-            .select("id", count="exact")
-            .eq("resulting_card_id", card_id)
-            .gt("created_at", since_timestamp)
-            .execute()
+        result = await self.db.execute(
+            select(func.count(DiscoveredSource.id)).where(
+                DiscoveredSource.resulting_card_id == card_id,
+                DiscoveredSource.created_at > since_timestamp,
+            )
         )
 
-        return result.count or 0
+        return result.scalar() or 0
 
     # ========================================================================
     # Grant Opportunity Summary Generation
@@ -1175,3 +1244,54 @@ Respond with ONLY the JSON object, no markdown formatting or explanation."""
             completion_tokens=response.usage.completion_tokens if response.usage else 0,
             model_used=model_deployment,
         )
+
+    # ========================================================================
+    # Private helpers
+    # ========================================================================
+
+    @staticmethod
+    def _brief_to_dict(brief: ExecutiveBrief) -> Dict[str, Any]:
+        """Convert an ExecutiveBrief ORM object to a dict."""
+        return {
+            "id": str(brief.id),
+            "workstream_card_id": str(brief.workstream_card_id),
+            "card_id": str(brief.card_id),
+            "created_by": str(brief.created_by),
+            "status": brief.status,
+            "content": brief.content,
+            "content_markdown": brief.content_markdown,
+            "summary": brief.summary,
+            "generated_at": (
+                brief.generated_at.isoformat() if brief.generated_at else None
+            ),
+            "generation_time_ms": brief.generation_time_ms,
+            "model_used": brief.model_used,
+            "prompt_tokens": brief.prompt_tokens,
+            "completion_tokens": brief.completion_tokens,
+            "error_message": brief.error_message,
+            "version": brief.version,
+            "sources_since_previous": brief.sources_since_previous,
+            "created_at": brief.created_at.isoformat() if brief.created_at else None,
+            "updated_at": brief.updated_at.isoformat() if brief.updated_at else None,
+        }
+
+    @staticmethod
+    def _card_to_dict(card: Card) -> Dict[str, Any]:
+        """Convert a Card ORM object to a dict for prompt generation."""
+        return {
+            "id": str(card.id),
+            "name": card.name,
+            "slug": card.slug,
+            "summary": card.summary,
+            "description": card.description,
+            "pillar_id": card.pillar_id,
+            "horizon": card.horizon,
+            "stage_id": card.stage_id,
+            "novelty_score": card.novelty_score,
+            "impact_score": card.impact_score,
+            "relevance_score": card.relevance_score,
+            "risk_score": card.risk_score,
+            "velocity_score": card.velocity_score,
+            "opportunity_score": card.opportunity_score,
+            "status": card.status,
+        }

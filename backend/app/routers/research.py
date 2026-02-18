@@ -1,19 +1,58 @@
-"""Research tasks router."""
+"""Research tasks router -- SQLAlchemy 2.0 async."""
 
 import asyncio
 import logging
 import os
-from datetime import datetime, timezone
+import uuid
+from datetime import datetime, date, timezone
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import select, update, desc
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.deps import supabase, get_current_user, _safe_error, openai_client, limiter
-from app.models.research import ResearchTaskCreate, ResearchTask, VALID_TASK_TYPES
+from app.deps import (
+    get_db,
+    get_current_user_hardcoded,
+    _safe_error,
+    openai_client,
+    limiter,
+)
+from app.models.research import (
+    ResearchTaskCreate,
+    ResearchTask as ResearchTaskSchema,
+    VALID_TASK_TYPES,
+)
+from app.models.db.research import ResearchTask
 from app.research_service import ResearchService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["research"])
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _row_to_dict(obj, skip_cols=None) -> dict:
+    """Convert an ORM model instance to a plain dict, serialising special types."""
+    skip = skip_cols or set()
+    result = {}
+    for col in obj.__table__.columns:
+        if col.name in skip:
+            continue
+        value = getattr(obj, col.name, None)
+        if isinstance(value, uuid.UUID):
+            result[col.name] = str(value)
+        elif isinstance(value, (datetime, date)):
+            result[col.name] = value.isoformat()
+        elif isinstance(value, Decimal):
+            result[col.name] = float(value)
+        else:
+            result[col.name] = value
+    return result
 
 
 # ============================================================================
@@ -36,7 +75,11 @@ async def execute_research_task_background(
     4. Matching: Vector similarity to existing cards
     5. Storage: Persist with entities for graph building
     """
-    service = ResearchService(supabase, openai_client)
+    from app.database import async_session_factory
+
+    if async_session_factory is None:
+        logger.error("No database session factory – cannot run research task")
+        return
 
     try:
 
@@ -62,17 +105,28 @@ async def execute_research_task_background(
             return defaults.get(task_type, 45 * 60)
 
         # Update status to processing
-        now = datetime.now(timezone.utc).isoformat()
-        supabase.table("research_tasks").update(
-            {
-                "status": "processing",
-                "started_at": now,
-                "result_summary": {
-                    "stage": f"running:{task_data.task_type}",
-                    "heartbeat_at": now,
-                },
-            }
-        ).eq("id", task_id).execute()
+        now = datetime.now(timezone.utc)
+        task_uuid = uuid.UUID(task_id)
+
+        async with async_session_factory() as db:
+            try:
+                stmt = (
+                    update(ResearchTask)
+                    .where(ResearchTask.id == task_uuid)
+                    .values(
+                        status="processing",
+                        started_at=now,
+                        result_summary={
+                            "stage": f"running:{task_data.task_type}",
+                            "heartbeat_at": now.isoformat(),
+                        },
+                    )
+                )
+                await db.execute(stmt)
+                await db.commit()
+            except Exception:
+                await db.rollback()
+                raise
 
         timeout_seconds = _get_timeout_seconds(task_data.task_type)
 
@@ -82,42 +136,51 @@ async def execute_research_task_background(
             while True:
                 await asyncio.sleep(60)
                 try:
-                    supabase.table("research_tasks").update(
-                        {
-                            "result_summary": {
-                                "stage": f"running:{task_data.task_type}",
-                                "heartbeat_at": datetime.now(timezone.utc).isoformat(),
-                            }
-                        }
-                    ).eq("id", task_id).execute()
+                    async with async_session_factory() as hb_db:
+                        hb_stmt = (
+                            update(ResearchTask)
+                            .where(ResearchTask.id == task_uuid)
+                            .values(
+                                result_summary={
+                                    "stage": f"running:{task_data.task_type}",
+                                    "heartbeat_at": datetime.now(
+                                        timezone.utc
+                                    ).isoformat(),
+                                }
+                            )
+                        )
+                        await hb_db.execute(hb_stmt)
+                        await hb_db.commit()
                 except Exception:
                     pass
 
         heartbeat_task = asyncio.create_task(_heartbeat())
 
-        try:
-            # Execute based on task type
-            if task_data.task_type == "update":
-                result = await asyncio.wait_for(
-                    service.execute_update(task_data.card_id, task_id),
-                    timeout=timeout_seconds,
-                )
-            elif task_data.task_type == "deep_research":
-                result = await asyncio.wait_for(
-                    service.execute_deep_research(task_data.card_id, task_id),
-                    timeout=timeout_seconds,
-                )
-            elif task_data.task_type == "workstream_analysis":
-                result = await asyncio.wait_for(
-                    service.execute_workstream_analysis(
-                        task_data.workstream_id, task_id, user_id
-                    ),
-                    timeout=timeout_seconds,
-                )
-            else:
-                raise ValueError(f"Unknown task type: {task_data.task_type}")
-        finally:
-            heartbeat_task.cancel()
+        async with async_session_factory() as svc_db:
+            service = ResearchService(svc_db, openai_client)
+            try:
+                # Execute based on task type
+                if task_data.task_type == "update":
+                    result = await asyncio.wait_for(
+                        service.execute_update(task_data.card_id, task_id),
+                        timeout=timeout_seconds,
+                    )
+                elif task_data.task_type == "deep_research":
+                    result = await asyncio.wait_for(
+                        service.execute_deep_research(task_data.card_id, task_id),
+                        timeout=timeout_seconds,
+                    )
+                elif task_data.task_type == "workstream_analysis":
+                    result = await asyncio.wait_for(
+                        service.execute_workstream_analysis(
+                            task_data.workstream_id, task_id, user_id
+                        ),
+                        timeout=timeout_seconds,
+                    )
+                else:
+                    raise ValueError(f"Unknown task type: {task_data.task_type}")
+            finally:
+                heartbeat_task.cancel()
 
         # Convert ResearchResult dataclass to dict for storage
         result_summary = {
@@ -132,20 +195,31 @@ async def execute_research_task_background(
         }
 
         # Update as completed
-        supabase.table("research_tasks").update(
-            {
-                "status": "completed",
-                "completed_at": datetime.now(timezone.utc).isoformat(),
-                "result_summary": result_summary,
-            }
-        ).eq("id", task_id).execute()
+        async with async_session_factory() as db:
+            try:
+                stmt = (
+                    update(ResearchTask)
+                    .where(ResearchTask.id == task_uuid)
+                    .values(
+                        status="completed",
+                        completed_at=datetime.now(timezone.utc),
+                        result_summary=result_summary,
+                    )
+                )
+                await db.execute(stmt)
+                await db.commit()
+            except Exception:
+                await db.rollback()
+                raise
 
         # Update signal quality score after research completion
         if task_data.card_id:
             try:
                 from app.signal_quality import update_signal_quality_score
 
-                update_signal_quality_score(supabase, task_data.card_id)
+                async with async_session_factory() as sq_db:
+                    await update_signal_quality_score(sq_db, task_data.card_id)
+                    await sq_db.commit()
             except Exception as e:
                 logger.warning(
                     f"Failed to update signal quality score for {task_data.card_id}: {e}"
@@ -153,23 +227,39 @@ async def execute_research_task_background(
 
     except asyncio.TimeoutError:
         # Update as failed (timeout)
-        supabase.table("research_tasks").update(
-            {
-                "status": "failed",
-                "completed_at": datetime.now(timezone.utc).isoformat(),
-                "error_message": f"Research task timed out while {task_data.task_type} was running",
-            }
-        ).eq("id", task_id).execute()
+        try:
+            async with async_session_factory() as db:
+                stmt = (
+                    update(ResearchTask)
+                    .where(ResearchTask.id == task_uuid)
+                    .values(
+                        status="failed",
+                        completed_at=datetime.now(timezone.utc),
+                        error_message=f"Research task timed out while {task_data.task_type} was running",
+                    )
+                )
+                await db.execute(stmt)
+                await db.commit()
+        except Exception as update_err:
+            logger.error(f"Failed to mark research task as timed out: {update_err}")
 
     except Exception as e:
         # Update as failed
-        supabase.table("research_tasks").update(
-            {
-                "status": "failed",
-                "completed_at": datetime.now(timezone.utc).isoformat(),
-                "error_message": str(e),
-            }
-        ).eq("id", task_id).execute()
+        try:
+            async with async_session_factory() as db:
+                stmt = (
+                    update(ResearchTask)
+                    .where(ResearchTask.id == task_uuid)
+                    .values(
+                        status="failed",
+                        completed_at=datetime.now(timezone.utc),
+                        error_message=str(e),
+                    )
+                )
+                await db.execute(stmt)
+                await db.commit()
+        except Exception as update_err:
+            logger.error(f"Failed to mark research task as failed: {update_err}")
 
 
 # ============================================================================
@@ -177,12 +267,13 @@ async def execute_research_task_background(
 # ============================================================================
 
 
-@router.post("/research", response_model=ResearchTask)
+@router.post("/research", response_model=ResearchTaskSchema)
 @limiter.limit("5/minute")
 async def create_research_task(
     request: Request,
     task_data: ResearchTaskCreate,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Create and execute a research task.
@@ -208,41 +299,50 @@ async def create_research_task(
 
     # Check rate limit for deep research
     if task_data.task_type == "deep_research" and task_data.card_id:
-        service = ResearchService(supabase, openai_client)
+        service = ResearchService(db, openai_client)
         if not await service.check_rate_limit(task_data.card_id):
             raise HTTPException(
                 status_code=429, detail="Daily deep research limit reached (2 per card)"
             )
 
-    # Create task record
-    task_record = {
-        "user_id": current_user["id"],
-        "task_type": task_data.task_type,
-        "status": "queued",
-    }
+    try:
+        # Create task record
+        task = ResearchTask(
+            user_id=uuid.UUID(current_user["id"]),
+            task_type=task_data.task_type,
+            status="queued",
+        )
 
-    if task_data.card_id:
-        task_record["card_id"] = task_data.card_id
-    if task_data.workstream_id:
-        task_record["workstream_id"] = task_data.workstream_id
+        if task_data.card_id:
+            task.card_id = uuid.UUID(task_data.card_id)
+        if task_data.workstream_id:
+            task.workstream_id = uuid.UUID(task_data.workstream_id)
 
-    task_result = supabase.table("research_tasks").insert(task_record).execute()
+        db.add(task)
+        await db.flush()
+        await db.refresh(task)
 
-    if not task_result.data:
-        raise HTTPException(status_code=500, detail="Failed to create research task")
+        task_dict = _row_to_dict(task)
 
-    task = task_result.data[0]
-    task_id = task["id"]
+        # Execute research in background (non-blocking)
+        # Task execution is handled by the background worker (see `app.worker`).
 
-    # Execute research in background (non-blocking)
-    # Task execution is handled by the background worker (see `app.worker`).
+        return ResearchTaskSchema(**task_dict)
 
-    return ResearchTask(**task)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create research task: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=_safe_error("create research task", e)
+        ) from e
 
 
-@router.get("/research/{task_id}", response_model=ResearchTask)
+@router.get("/research/{task_id}", response_model=ResearchTaskSchema)
 async def get_research_task(
-    task_id: str, current_user: dict = Depends(get_current_user)
+    task_id: str,
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get research task status.
@@ -250,19 +350,25 @@ async def get_research_task(
     Use this endpoint to poll for task completion after creating a research task.
     Status values: queued, processing, completed, failed
     """
-    result = (
-        supabase.table("research_tasks")
-        .select("*")
-        .eq("id", task_id)
-        .eq("user_id", current_user["id"])
-        .single()
-        .execute()
-    )
+    try:
+        task_uuid = uuid.UUID(task_id)
+        user_uuid = uuid.UUID(current_user["id"])
+        stmt = (
+            select(ResearchTask)
+            .where(ResearchTask.id == task_uuid)
+            .where(ResearchTask.user_id == user_uuid)
+        )
+        result = await db.execute(stmt)
+        row = result.scalar_one_or_none()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=_safe_error("get research task", e)
+        ) from e
 
-    if not result.data:
+    if not row:
         raise HTTPException(status_code=404, detail="Research task not found")
 
-    task = result.data
+    task = _row_to_dict(row)
 
     def _parse_dt(value: Any) -> Optional[datetime]:
         if value is None:
@@ -358,9 +464,12 @@ async def get_research_task(
         }
 
         try:
-            supabase.table("research_tasks").update(updates).eq("id", task_id).eq(
-                "user_id", current_user["id"]
-            ).execute()
+            # Update via the ORM object we already loaded (within the same session)
+            row.status = "failed"
+            row.completed_at = datetime.now(timezone.utc)
+            row.error_message = error_message
+            row.result_summary = new_summary
+            # Note: the session will commit via the get_db dependency
             task_row.update(updates)
         except Exception:
             # If we can't update, return original task row.
@@ -370,25 +479,33 @@ async def get_research_task(
 
     task = _maybe_fail_stale_task(task)
 
-    return ResearchTask(**task)
+    return ResearchTaskSchema(**task)
 
 
-@router.get("/me/research-tasks", response_model=List[ResearchTask])
+@router.get("/me/research-tasks", response_model=List[ResearchTaskSchema])
 async def list_research_tasks(
-    current_user: dict = Depends(get_current_user), limit: int = 10
+    current_user: dict = Depends(get_current_user_hardcoded),
+    limit: int = 10,
+    db: AsyncSession = Depends(get_db),
 ):
     """
     List user's recent research tasks.
 
     Returns the most recent tasks, ordered by creation date descending.
     """
-    result = (
-        supabase.table("research_tasks")
-        .select("*")
-        .eq("user_id", current_user["id"])
-        .order("created_at", desc=True)
-        .limit(limit)
-        .execute()
-    )
+    try:
+        user_uuid = uuid.UUID(current_user["id"])
+        stmt = (
+            select(ResearchTask)
+            .where(ResearchTask.user_id == user_uuid)
+            .order_by(desc(ResearchTask.created_at))
+            .limit(limit)
+        )
+        result = await db.execute(stmt)
+        rows = result.scalars().all()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=_safe_error("list research tasks", e)
+        ) from e
 
-    return [ResearchTask(**t) for t in result.data]
+    return [ResearchTaskSchema(**_row_to_dict(t)) for t in rows]

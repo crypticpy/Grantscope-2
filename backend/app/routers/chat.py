@@ -1,17 +1,26 @@
-"""Chat (Ask GrantScope) router."""
+"""Chat (Ask GrantScope) router -- SQLAlchemy 2.0 async."""
 
 import json
 import logging
 import os
+import uuid
+from datetime import datetime, date
+from decimal import Decimal
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse, FileResponse
+from sqlalchemy import func, select, delete
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.background import BackgroundTask
 
-from app.deps import supabase, get_current_user, _safe_error
+from app.deps import get_db, get_current_user_hardcoded, _safe_error
 from app.models.chat import ChatRequest, ConversationUpdateRequest
+from app.models.db.chat import ChatConversation, ChatMessage, ChatPinnedMessage
+from app.models.db.card import Card
+from app.models.db.card_extras import CardFollow
+from app.models.db.workstream import Workstream
 from app.export_service import ExportService
 from app.chat_service import (
     chat as chat_service_chat,
@@ -23,9 +32,39 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["chat"])
 
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _row_to_dict(obj, skip_cols=None) -> dict:
+    """Convert an ORM row to a plain dict, serialising UUID/datetime/Decimal."""
+    skip = skip_cols or set()
+    result = {}
+    for col in obj.__table__.columns:
+        if col.name in skip:
+            continue
+        value = getattr(obj, col.name, None)
+        if isinstance(value, uuid.UUID):
+            result[col.name] = str(value)
+        elif isinstance(value, (datetime, date)):
+            result[col.name] = value.isoformat()
+        elif isinstance(value, Decimal):
+            result[col.name] = float(value)
+        else:
+            result[col.name] = value
+    return result
+
+
+# ---------------------------------------------------------------------------
+# GET /chat/stats
+# ---------------------------------------------------------------------------
+
+
 @router.get("/chat/stats")
 async def chat_stats(
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Get lightweight stats for the chat empty state.
@@ -35,72 +74,69 @@ async def chat_stats(
     try:
         facts = []
 
-        # Count followed signals
+        # Count followed signals (card_follows, NOT user_follows)
         try:
-            follows = (
-                supabase.table("user_follows")
-                .select("id", count="exact")
-                .eq("user_id", user_id)
-                .execute()
+            result = await db.execute(
+                select(func.count(CardFollow.id)).where(CardFollow.user_id == user_id)
             )
-            if follows.count and follows.count > 0:
+            follow_count = result.scalar() or 0
+            if follow_count > 0:
                 facts.append(
-                    f"You're tracking {follows.count} signal{'s' if follows.count != 1 else ''}"
+                    f"You're tracking {follow_count} signal{'s' if follow_count != 1 else ''}"
                 )
         except Exception:
             pass
 
         # Count workstreams
         try:
-            ws = (
-                supabase.table("workstreams")
-                .select("id", count="exact")
-                .eq("created_by", user_id)
-                .execute()
+            result = await db.execute(
+                select(func.count(Workstream.id)).where(Workstream.user_id == user_id)
             )
-            if ws.count and ws.count > 0:
+            ws_count = result.scalar() or 0
+            if ws_count > 0:
                 facts.append(
-                    f"You have {ws.count} active workstream{'s' if ws.count != 1 else ''}"
+                    f"You have {ws_count} active workstream{'s' if ws_count != 1 else ''}"
                 )
         except Exception:
             pass
 
         # Count total cards
         try:
-            cards = supabase.table("cards").select("id", count="exact").execute()
-            if cards.count and cards.count > 0:
+            result = await db.execute(select(func.count(Card.id)))
+            card_count = result.scalar() or 0
+            if card_count > 0:
                 facts.append(
-                    f"GrantScope is monitoring {cards.count} signals across all pillars"
+                    f"GrantScope is monitoring {card_count} signals across all pillars"
                 )
         except Exception:
             pass
 
         # Count conversations
         try:
-            convs = (
-                supabase.table("chat_conversations")
-                .select("id", count="exact")
-                .eq("user_id", user_id)
-                .execute()
+            result = await db.execute(
+                select(func.count(ChatConversation.id)).where(
+                    ChatConversation.user_id == user_id
+                )
             )
-            if convs.count and convs.count > 0:
+            conv_count = result.scalar() or 0
+            if conv_count > 0:
                 facts.append(
-                    f"You've had {convs.count} conversation{'s' if convs.count != 1 else ''} with GrantScope"
+                    f"You've had {conv_count} conversation{'s' if conv_count != 1 else ''} with GrantScope"
                 )
         except Exception:
             pass
 
         # Count pinned messages
         try:
-            pins = (
-                supabase.table("chat_pinned_messages")
-                .select("id", count="exact")
-                .eq("user_id", user_id)
-                .execute()
+            result = await db.execute(
+                select(func.count(ChatPinnedMessage.id)).where(
+                    ChatPinnedMessage.user_id == user_id
+                )
             )
-            if pins.count and pins.count > 0:
+            pin_count = result.scalar() or 0
+            if pin_count > 0:
                 facts.append(
-                    f"You've saved {pins.count} insight{'s' if pins.count != 1 else ''}"
+                    f"You've saved {pin_count} insight{'s' if pin_count != 1 else ''}"
                 )
         except Exception:
             pass
@@ -111,10 +147,16 @@ async def chat_stats(
         return {"facts": []}
 
 
+# ---------------------------------------------------------------------------
+# POST /chat
+# ---------------------------------------------------------------------------
+
+
 @router.post("/chat")
 async def chat_endpoint(
     request: ChatRequest,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Main chat endpoint for Ask GrantScope NLQ feature.
@@ -156,12 +198,12 @@ async def chat_endpoint(
 
     async def event_generator():
         async for event in chat_service_chat(
-            scope=request.scope,
-            scope_id=request.scope_id,
-            message=request.message,
-            conversation_id=request.conversation_id,
-            user_id=user_id,
-            supabase_client=supabase,
+            request.scope,
+            request.scope_id,
+            request.message,
+            request.conversation_id,
+            user_id,
+            db,
             mentions=mention_dicts,
         ):
             yield event
@@ -177,13 +219,19 @@ async def chat_endpoint(
     )
 
 
+# ---------------------------------------------------------------------------
+# GET /chat/conversations
+# ---------------------------------------------------------------------------
+
+
 @router.get("/chat/conversations")
 async def list_chat_conversations(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     scope: Optional[str] = Query(None, description="Filter by scope"),
     scope_id: Optional[str] = Query(None, description="Filter by scope entity ID"),
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     List the current user's chat conversations.
@@ -193,21 +241,40 @@ async def list_chat_conversations(
     """
     user_id = current_user["id"]
     try:
-        query = (
-            supabase.table("chat_conversations")
-            .select("id, scope, scope_id, title, created_at, updated_at")
-            .eq("user_id", user_id)
-        )
+        stmt = select(
+            ChatConversation.id,
+            ChatConversation.scope,
+            ChatConversation.scope_id,
+            ChatConversation.title,
+            ChatConversation.created_at,
+            ChatConversation.updated_at,
+        ).where(ChatConversation.user_id == user_id)
 
         if scope:
-            query = query.eq("scope", scope)
+            stmt = stmt.where(ChatConversation.scope == scope)
         if scope_id:
-            query = query.eq("scope_id", scope_id)
+            stmt = stmt.where(ChatConversation.scope_id == scope_id)
 
-        query = query.order("updated_at", desc=True).range(offset, offset + limit - 1)
+        stmt = (
+            stmt.order_by(ChatConversation.updated_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
 
-        result = query.execute()
-        return result.data or []
+        result = await db.execute(stmt)
+        rows = result.all()
+
+        return [
+            {
+                "id": str(r.id),
+                "scope": r.scope,
+                "scope_id": str(r.scope_id) if r.scope_id else None,
+                "title": r.title,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+            }
+            for r in rows
+        ]
     except Exception as e:
         logger.error(f"Failed to list conversations for user {user_id}: {e}")
         raise HTTPException(
@@ -216,61 +283,95 @@ async def list_chat_conversations(
         ) from e
 
 
+# ---------------------------------------------------------------------------
+# GET /chat/conversations/search
+# ---------------------------------------------------------------------------
+
+
 @router.get("/chat/conversations/search")
 async def search_chat_conversations(
     q: str = Query(..., min_length=1, max_length=200, description="Search term"),
     limit: int = Query(20, ge=1, le=50),
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Search conversations by title and message content.
-    Uses Postgres full-text search across conversation titles and message content.
+    Uses ILIKE search across conversation titles and message content.
     """
     user_id = current_user["id"]
     try:
+        search_term = f"%{q}%"
+
         # Search conversation titles
-        title_result = (
-            supabase.table("chat_conversations")
-            .select("id, scope, scope_id, title, created_at, updated_at")
-            .eq("user_id", user_id)
-            .ilike("title", f"%{q}%")
-            .order("updated_at", desc=True)
+        title_stmt = (
+            select(
+                ChatConversation.id,
+                ChatConversation.scope,
+                ChatConversation.scope_id,
+                ChatConversation.title,
+                ChatConversation.created_at,
+                ChatConversation.updated_at,
+            )
+            .where(
+                ChatConversation.user_id == user_id,
+                ChatConversation.title.ilike(search_term),
+            )
+            .order_by(ChatConversation.updated_at.desc())
             .limit(limit)
-            .execute()
         )
+        title_result = await db.execute(title_stmt)
+        title_rows = title_result.all()
 
         # Search message content
-        msg_result = (
-            supabase.table("chat_messages")
-            .select("conversation_id, content")
-            .ilike("content", f"%{q}%")
+        msg_stmt = (
+            select(ChatMessage.conversation_id)
+            .where(ChatMessage.content.ilike(search_term))
+            .distinct()
             .limit(50)
-            .execute()
         )
-
-        # Get unique conversation IDs from message matches
-        msg_conv_ids = list(set(m["conversation_id"] for m in (msg_result.data or [])))
+        msg_result = await db.execute(msg_stmt)
+        msg_conv_ids = [r.conversation_id for r in msg_result.all()]
 
         # Fetch those conversations (with ownership check)
         msg_conversations = []
         if msg_conv_ids:
-            conv_result = (
-                supabase.table("chat_conversations")
-                .select("id, scope, scope_id, title, created_at, updated_at")
-                .eq("user_id", user_id)
-                .in_("id", msg_conv_ids)
-                .order("updated_at", desc=True)
-                .execute()
+            conv_stmt = (
+                select(
+                    ChatConversation.id,
+                    ChatConversation.scope,
+                    ChatConversation.scope_id,
+                    ChatConversation.title,
+                    ChatConversation.created_at,
+                    ChatConversation.updated_at,
+                )
+                .where(
+                    ChatConversation.user_id == user_id,
+                    ChatConversation.id.in_(msg_conv_ids),
+                )
+                .order_by(ChatConversation.updated_at.desc())
             )
-            msg_conversations = conv_result.data or []
+            conv_result = await db.execute(conv_stmt)
+            msg_conversations = conv_result.all()
 
         # Merge and deduplicate results, title matches first
-        seen = set()
-        results = []
-        for conv in (title_result.data or []) + msg_conversations:
-            if conv["id"] not in seen:
-                seen.add(conv["id"])
-                results.append(conv)
+        def _row_to_conv(r):
+            return {
+                "id": str(r.id),
+                "scope": r.scope,
+                "scope_id": str(r.scope_id) if r.scope_id else None,
+                "title": r.title,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+            }
+
+        seen: set = set()
+        results: list = []
+        for r in list(title_rows) + list(msg_conversations):
+            rid = str(r.id)
+            if rid not in seen:
+                seen.add(rid)
+                results.append(_row_to_conv(r))
                 if len(results) >= limit:
                     break
 
@@ -283,10 +384,16 @@ async def search_chat_conversations(
         ) from e
 
 
+# ---------------------------------------------------------------------------
+# GET /chat/conversations/{conversation_id}
+# ---------------------------------------------------------------------------
+
+
 @router.get("/chat/conversations/{conversation_id}")
 async def get_chat_conversation(
     conversation_id: str,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Get a specific conversation with all its messages.
@@ -296,32 +403,49 @@ async def get_chat_conversation(
     user_id = current_user["id"]
     try:
         # Fetch conversation and verify ownership
-        conv_result = (
-            supabase.table("chat_conversations")
-            .select("*")
-            .eq("id", conversation_id)
-            .eq("user_id", user_id)
-            .execute()
+        conv_result = await db.execute(
+            select(ChatConversation).where(
+                ChatConversation.id == conversation_id,
+                ChatConversation.user_id == user_id,
+            )
         )
+        conv = conv_result.scalars().first()
 
-        if not conv_result.data:
+        if not conv:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Conversation not found",
             )
 
-        conversation = conv_result.data[0]
+        conversation = _row_to_dict(conv)
 
         # Fetch messages
-        msg_result = (
-            supabase.table("chat_messages")
-            .select("id, role, content, citations, tokens_used, model, created_at")
-            .eq("conversation_id", conversation_id)
-            .order("created_at")
-            .execute()
+        msg_result = await db.execute(
+            select(
+                ChatMessage.id,
+                ChatMessage.role,
+                ChatMessage.content,
+                ChatMessage.citations,
+                ChatMessage.tokens_used,
+                ChatMessage.model,
+                ChatMessage.created_at,
+            )
+            .where(ChatMessage.conversation_id == conversation_id)
+            .order_by(ChatMessage.created_at)
         )
+        messages = [
+            {
+                "id": str(r.id),
+                "role": r.role,
+                "content": r.content,
+                "citations": r.citations,
+                "tokens_used": r.tokens_used,
+                "model": r.model,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in msg_result.all()
+        ]
 
-        messages = msg_result.data or []
         return {"conversation": conversation, "messages": messages}
     except HTTPException:
         raise
@@ -335,11 +459,17 @@ async def get_chat_conversation(
         ) from e
 
 
+# ---------------------------------------------------------------------------
+# PATCH /chat/conversations/{conversation_id}
+# ---------------------------------------------------------------------------
+
+
 @router.patch("/chat/conversations/{conversation_id}")
 async def update_chat_conversation(
     conversation_id: str,
     body: ConversationUpdateRequest,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Update a conversation's title.
@@ -349,44 +479,36 @@ async def update_chat_conversation(
     user_id = current_user["id"]
     try:
         # Fetch conversation to verify it exists
-        conv_result = (
-            supabase.table("chat_conversations")
-            .select("id, user_id")
-            .eq("id", conversation_id)
-            .execute()
+        conv_result = await db.execute(
+            select(ChatConversation).where(
+                ChatConversation.id == conversation_id,
+            )
         )
+        conv = conv_result.scalars().first()
 
-        if not conv_result.data:
+        if not conv:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Conversation not found",
             )
 
         # Verify ownership
-        if conv_result.data[0]["user_id"] != user_id:
+        if str(conv.user_id) != str(user_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not authorized to update this conversation",
             )
 
         # Update the title
-        update_result = (
-            supabase.table("chat_conversations")
-            .update({"title": body.title})
-            .eq("id", conversation_id)
-            .execute()
-        )
+        conv.title = body.title
+        await db.commit()
+        await db.refresh(conv)
 
-        if not update_result.data:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to update conversation",
-            )
-
-        return update_result.data[0]
+        return _row_to_dict(conv)
     except HTTPException:
         raise
     except Exception as e:
+        await db.rollback()
         logger.error(
             f"Failed to update conversation {conversation_id} for user {user_id}: {e}"
         )
@@ -396,10 +518,16 @@ async def update_chat_conversation(
         ) from e
 
 
+# ---------------------------------------------------------------------------
+# DELETE /chat/conversations/{conversation_id}
+# ---------------------------------------------------------------------------
+
+
 @router.delete("/chat/conversations/{conversation_id}")
 async def delete_chat_conversation(
     conversation_id: str,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Delete a conversation and all its messages.
@@ -409,29 +537,33 @@ async def delete_chat_conversation(
     user_id = current_user["id"]
     try:
         # Verify ownership first
-        conv_result = (
-            supabase.table("chat_conversations")
-            .select("id")
-            .eq("id", conversation_id)
-            .eq("user_id", user_id)
-            .execute()
+        conv_result = await db.execute(
+            select(ChatConversation.id).where(
+                ChatConversation.id == conversation_id,
+                ChatConversation.user_id == user_id,
+            )
         )
+        conv = conv_result.first()
 
-        if not conv_result.data:
+        if not conv:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Conversation not found",
             )
 
         # Delete conversation (messages cascade-deleted via FK)
-        supabase.table("chat_conversations").delete().eq(
-            "id", conversation_id
-        ).execute()
+        await db.execute(
+            delete(ChatConversation).where(
+                ChatConversation.id == conversation_id,
+            )
+        )
+        await db.commit()
 
         return {"status": "deleted", "conversation_id": conversation_id}
     except HTTPException:
         raise
     except Exception as e:
+        await db.rollback()
         logger.error(
             f"Failed to delete conversation {conversation_id} for user {user_id}: {e}"
         )
@@ -441,13 +573,19 @@ async def delete_chat_conversation(
         ) from e
 
 
+# ---------------------------------------------------------------------------
+# GET /chat/suggestions
+# ---------------------------------------------------------------------------
+
+
 @router.get("/chat/suggestions")
 async def chat_suggestions(
     scope: str = Query(
         ..., description="Chat scope: signal, workstream, global, or wizard"
     ),
     scope_id: Optional[str] = Query(None, description="ID of the scoped entity"),
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Get AI-generated suggested questions for a given scope.
@@ -465,9 +603,9 @@ async def chat_suggestions(
 
     try:
         return await chat_generate_suggestions(
-            scope=scope,
-            scope_id=scope_id,
-            supabase_client=supabase,
+            scope,
+            scope_id,
+            db,
             user_id=user_id,
         )
     except Exception as e:
@@ -476,6 +614,11 @@ async def chat_suggestions(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("generating suggestions", e),
         ) from e
+
+
+# ---------------------------------------------------------------------------
+# GET /chat/suggestions/smart
+# ---------------------------------------------------------------------------
 
 
 @router.get("/chat/suggestions/smart")
@@ -487,7 +630,8 @@ async def smart_chat_suggestions(
     conversation_id: Optional[str] = Query(
         None, description="Conversation ID for context-aware suggestions"
     ),
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Get AI-generated smart follow-up suggestions with categories.
@@ -513,33 +657,35 @@ async def smart_chat_suggestions(
         if conversation_id:
             try:
                 # Verify conversation ownership
-                conv_result = (
-                    supabase.table("chat_conversations")
-                    .select("id, scope, scope_id, title")
-                    .eq("id", conversation_id)
-                    .eq("user_id", user_id)
-                    .execute()
-                )
-                if conv_result.data:
-                    # Fetch last 3 messages from the conversation
-                    msg_result = (
-                        supabase.table("chat_messages")
-                        .select("role, content")
-                        .eq("conversation_id", conversation_id)
-                        .order("created_at", desc=True)
-                        .limit(3)
-                        .execute()
+                conv_result = await db.execute(
+                    select(
+                        ChatConversation.id,
+                        ChatConversation.scope,
+                        ChatConversation.scope_id,
+                        ChatConversation.title,
+                    ).where(
+                        ChatConversation.id == conversation_id,
+                        ChatConversation.user_id == user_id,
                     )
-                    if msg_result.data:
+                )
+                conv = conv_result.first()
+                if conv:
+                    # Fetch last 3 messages from the conversation
+                    msg_result = await db.execute(
+                        select(ChatMessage.role, ChatMessage.content)
+                        .where(ChatMessage.conversation_id == conversation_id)
+                        .order_by(ChatMessage.created_at.desc())
+                        .limit(3)
+                    )
+                    msg_rows = msg_result.all()
+                    if msg_rows:
                         # Build a brief summary of recent exchange
-                        recent_msgs = list(reversed(msg_result.data))
+                        recent_msgs = list(reversed(msg_rows))
                         parts = []
                         for msg in recent_msgs:
-                            role_label = (
-                                "User" if msg["role"] == "user" else "Assistant"
-                            )
+                            role_label = "User" if msg.role == "user" else "Assistant"
                             # Truncate long messages
-                            content = (msg.get("content") or "")[:300]
+                            content = (msg.content or "")[:300]
                             parts.append(f"{role_label}: {content}")
                         conversation_summary = "\n".join(parts)
             except Exception as e:
@@ -551,25 +697,21 @@ async def smart_chat_suggestions(
         scope_context = ""
         try:
             if scope == "signal" and scope_id:
-                card_result = (
-                    supabase.table("cards")
-                    .select("name, summary")
-                    .eq("id", scope_id)
-                    .execute()
+                card_result = await db.execute(
+                    select(Card.name, Card.summary).where(Card.id == scope_id)
                 )
-                if card_result.data:
-                    card = card_result.data[0]
-                    scope_context = f"Signal: \"{card.get('name', 'Unknown')}\". Summary: {(card.get('summary') or '')[:200]}"
+                card = card_result.first()
+                if card:
+                    scope_context = f"Signal: \"{card.name or 'Unknown'}\". Summary: {(card.summary or '')[:200]}"
             elif scope == "workstream" and scope_id:
-                ws_result = (
-                    supabase.table("workstreams")
-                    .select("name, description")
-                    .eq("id", scope_id)
-                    .execute()
+                ws_result = await db.execute(
+                    select(Workstream.name, Workstream.description).where(
+                        Workstream.id == scope_id
+                    )
                 )
-                if ws_result.data:
-                    ws = ws_result.data[0]
-                    scope_context = f"Workstream: \"{ws.get('name', 'Unknown')}\". Description: {(ws.get('description') or '')[:200]}"
+                ws = ws_result.first()
+                if ws:
+                    scope_context = f"Workstream: \"{ws.name or 'Unknown'}\". Description: {(ws.description or '')[:200]}"
             else:
                 scope_context = "Global strategic intelligence for the City of Austin."
         except Exception as e:
@@ -754,7 +896,8 @@ Example:
 async def search_mentions(
     q: str = Query(..., min_length=1, max_length=200, description="Search term"),
     limit: int = Query(8, ge=1, le=20, description="Max results"),
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Search signals (cards) and workstreams for @mention autocomplete.
@@ -768,21 +911,19 @@ async def search_mentions(
 
         # Search cards (signals) by name
         try:
-            cards_result = (
-                supabase.table("cards")
-                .select("id, name, slug")
-                .ilike("name", search_term)
-                .order("name")
+            cards_result = await db.execute(
+                select(Card.id, Card.name, Card.slug)
+                .where(Card.name.ilike(search_term))
+                .order_by(Card.name)
                 .limit(limit)
-                .execute()
             )
-            for card in cards_result.data or []:
+            for card in cards_result.all():
                 results.append(
                     {
-                        "id": card["id"],
+                        "id": str(card.id),
                         "type": "signal",
-                        "title": card["name"],
-                        "slug": card.get("slug"),
+                        "title": card.name,
+                        "slug": card.slug,
                     }
                 )
         except Exception as exc:
@@ -792,20 +933,18 @@ async def search_mentions(
         remaining = limit - len(results)
         if remaining > 0:
             try:
-                ws_result = (
-                    supabase.table("workstreams")
-                    .select("id, name")
-                    .ilike("name", search_term)
-                    .order("name")
+                ws_result = await db.execute(
+                    select(Workstream.id, Workstream.name)
+                    .where(Workstream.name.ilike(search_term))
+                    .order_by(Workstream.name)
                     .limit(remaining)
-                    .execute()
                 )
-                for ws in ws_result.data or []:
+                for ws in ws_result.all():
                     results.append(
                         {
-                            "id": ws["id"],
+                            "id": str(ws.id),
                             "type": "workstream",
-                            "title": ws["name"],
+                            "title": ws.name,
                         }
                     )
             except Exception as exc:
@@ -829,56 +968,73 @@ async def search_mentions(
 async def pin_chat_message(
     message_id: str,
     body: dict = None,  # optional { "note": "..." }
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """Pin a chat message for quick reference."""
     user_id = current_user["id"]
     try:
         # Verify the message exists and belongs to user's conversation
-        msg_result = (
-            supabase.table("chat_messages")
-            .select("id, conversation_id")
-            .eq("id", message_id)
-            .execute()
+        msg_result = await db.execute(
+            select(ChatMessage.id, ChatMessage.conversation_id).where(
+                ChatMessage.id == message_id
+            )
         )
-        if not msg_result.data:
+        msg = msg_result.first()
+        if not msg:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Message not found",
             )
 
-        conversation_id = msg_result.data[0]["conversation_id"]
+        conversation_id = str(msg.conversation_id)
 
         # Verify user owns the conversation
-        conv_result = (
-            supabase.table("chat_conversations")
-            .select("id")
-            .eq("id", conversation_id)
-            .eq("user_id", user_id)
-            .execute()
+        conv_result = await db.execute(
+            select(ChatConversation.id).where(
+                ChatConversation.id == conversation_id,
+                ChatConversation.user_id == user_id,
+            )
         )
-        if not conv_result.data:
+        if not conv_result.first():
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not authorized",
             )
 
-        # Create pin (upsert so re-pinning just updates the note)
-        pin_data = {
-            "user_id": user_id,
-            "message_id": message_id,
-            "conversation_id": conversation_id,
-            "note": (body or {}).get("note"),
-        }
-        result = (
-            supabase.table("chat_pinned_messages")
-            .upsert(pin_data, on_conflict="user_id,message_id")
-            .execute()
+        # Check if pin already exists (upsert behaviour)
+        existing_result = await db.execute(
+            select(ChatPinnedMessage).where(
+                ChatPinnedMessage.user_id == user_id,
+                ChatPinnedMessage.message_id == message_id,
+            )
         )
-        return result.data[0] if result.data else pin_data
+        existing_pin = existing_result.scalars().first()
+
+        note = (body or {}).get("note")
+
+        if existing_pin:
+            # Update the note on existing pin
+            existing_pin.note = note
+            await db.commit()
+            await db.refresh(existing_pin)
+            return _row_to_dict(existing_pin)
+        else:
+            # Create new pin
+            new_pin = ChatPinnedMessage(
+                user_id=user_id,
+                message_id=message_id,
+                conversation_id=conversation_id,
+                note=note,
+            )
+            db.add(new_pin)
+            await db.commit()
+            await db.refresh(new_pin)
+            return _row_to_dict(new_pin)
     except HTTPException:
         raise
     except Exception as e:
+        await db.rollback()
         logger.error(f"Failed to pin message {message_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -889,16 +1045,22 @@ async def pin_chat_message(
 @router.delete("/chat/messages/{message_id}/pin")
 async def unpin_chat_message(
     message_id: str,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """Unpin a chat message."""
     user_id = current_user["id"]
     try:
-        supabase.table("chat_pinned_messages").delete().eq("user_id", user_id).eq(
-            "message_id", message_id
-        ).execute()
+        await db.execute(
+            delete(ChatPinnedMessage).where(
+                ChatPinnedMessage.user_id == user_id,
+                ChatPinnedMessage.message_id == message_id,
+            )
+        )
+        await db.commit()
         return {"status": "unpinned", "message_id": message_id}
     except Exception as e:
+        await db.rollback()
         logger.error(f"Failed to unpin message {message_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -910,23 +1072,73 @@ async def unpin_chat_message(
 async def list_pinned_messages(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """List user's pinned messages with conversation context."""
     user_id = current_user["id"]
     try:
-        result = (
-            supabase.table("chat_pinned_messages")
-            .select(
-                "*, chat_messages(id, content, role, citations, created_at), "
-                "chat_conversations(id, title, scope)"
-            )
-            .eq("user_id", user_id)
-            .order("created_at", desc=True)
-            .range(offset, offset + limit - 1)
-            .execute()
+        # Fetch pinned messages with joined message and conversation data
+        stmt = (
+            select(ChatPinnedMessage)
+            .where(ChatPinnedMessage.user_id == user_id)
+            .order_by(ChatPinnedMessage.created_at.desc())
+            .offset(offset)
+            .limit(limit)
         )
-        return result.data or []
+        result = await db.execute(stmt)
+        pins = list(result.scalars().all())
+
+        # Build enriched response by joining with messages and conversations
+        enriched = []
+        for pin in pins:
+            pin_dict = _row_to_dict(pin)
+
+            # Fetch the associated message
+            msg_result = await db.execute(
+                select(
+                    ChatMessage.id,
+                    ChatMessage.content,
+                    ChatMessage.role,
+                    ChatMessage.citations,
+                    ChatMessage.created_at,
+                ).where(ChatMessage.id == pin.message_id)
+            )
+            msg = msg_result.first()
+            if msg:
+                pin_dict["chat_messages"] = {
+                    "id": str(msg.id),
+                    "content": msg.content,
+                    "role": msg.role,
+                    "citations": msg.citations,
+                    "created_at": (
+                        msg.created_at.isoformat() if msg.created_at else None
+                    ),
+                }
+            else:
+                pin_dict["chat_messages"] = None
+
+            # Fetch the associated conversation
+            conv_result = await db.execute(
+                select(
+                    ChatConversation.id,
+                    ChatConversation.title,
+                    ChatConversation.scope,
+                ).where(ChatConversation.id == pin.conversation_id)
+            )
+            conv = conv_result.first()
+            if conv:
+                pin_dict["chat_conversations"] = {
+                    "id": str(conv.id),
+                    "title": conv.title,
+                    "scope": conv.scope,
+                }
+            else:
+                pin_dict["chat_conversations"] = None
+
+            enriched.append(pin_dict)
+
+        return enriched
     except Exception as e:
         logger.error(f"Failed to list pins for user {user_id}: {e}")
         raise HTTPException(
@@ -952,7 +1164,8 @@ def _cleanup_temp_file(path: str):
 @router.get("/chat/messages/{message_id}/export/pdf")
 async def export_chat_message_pdf(
     message_id: str,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Export a chat assistant message as a professional PDF document.
@@ -967,84 +1180,99 @@ async def export_chat_message_pdf(
 
     try:
         # 1. Fetch the target message
-        msg_result = (
-            supabase.table("chat_messages")
-            .select("id, conversation_id, role, content, citations, model, created_at")
-            .eq("id", message_id)
-            .execute()
+        msg_result = await db.execute(
+            select(
+                ChatMessage.id,
+                ChatMessage.conversation_id,
+                ChatMessage.role,
+                ChatMessage.content,
+                ChatMessage.citations,
+                ChatMessage.model,
+                ChatMessage.created_at,
+            ).where(ChatMessage.id == message_id)
         )
-        if not msg_result.data:
+        message = msg_result.first()
+        if not message:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Message not found",
             )
 
-        message = msg_result.data[0]
-        conversation_id = message["conversation_id"]
+        conversation_id = str(message.conversation_id)
+        message_created_at = (
+            message.created_at.isoformat() if message.created_at else None
+        )
 
         # 2. Verify conversation ownership
-        conv_result = (
-            supabase.table("chat_conversations")
-            .select("id, title, scope, scope_id, user_id")
-            .eq("id", conversation_id)
-            .eq("user_id", user_id)
-            .execute()
+        conv_result = await db.execute(
+            select(
+                ChatConversation.id,
+                ChatConversation.title,
+                ChatConversation.scope,
+                ChatConversation.scope_id,
+                ChatConversation.user_id,
+            ).where(
+                ChatConversation.id == conversation_id,
+                ChatConversation.user_id == user_id,
+            )
         )
-        if not conv_result.data:
+        conversation = conv_result.first()
+        if not conversation:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not authorized to export this message",
             )
 
-        conversation = conv_result.data[0]
-
         # 3. Fetch the preceding user message (the question)
         question_text = ""
         try:
-            prev_msgs = (
-                supabase.table("chat_messages")
-                .select("role, content, created_at")
-                .eq("conversation_id", conversation_id)
-                .eq("role", "user")
-                .lt("created_at", message["created_at"])
-                .order("created_at", desc=True)
-                .limit(1)
-                .execute()
-            )
-            if prev_msgs.data:
-                question_text = prev_msgs.data[0].get("content", "")
+            if message_created_at:
+                prev_msgs = await db.execute(
+                    select(
+                        ChatMessage.role, ChatMessage.content, ChatMessage.created_at
+                    )
+                    .where(
+                        ChatMessage.conversation_id == conversation_id,
+                        ChatMessage.role == "user",
+                        ChatMessage.created_at < message.created_at,
+                    )
+                    .order_by(ChatMessage.created_at.desc())
+                    .limit(1)
+                )
+                prev = prev_msgs.first()
+                if prev:
+                    question_text = prev.content or ""
         except Exception as exc:
             logger.warning(f"Could not fetch preceding question for export: {exc}")
 
         # 4. Resolve scope context name
-        scope = conversation.get("scope")
-        scope_id = conversation.get("scope_id")
+        scope_val = conversation.scope
+        scope_id_val = str(conversation.scope_id) if conversation.scope_id else None
         scope_context = None
 
-        if scope == "signal" and scope_id:
+        if scope_val == "signal" and scope_id_val:
             try:
-                card_res = (
-                    supabase.table("cards").select("name").eq("id", scope_id).execute()
+                card_res = await db.execute(
+                    select(Card.name).where(Card.id == scope_id_val)
                 )
-                if card_res.data:
-                    scope_context = card_res.data[0].get("name")
+                card_row = card_res.first()
+                if card_row:
+                    scope_context = card_row.name
             except Exception:
                 pass
-        elif scope == "workstream" and scope_id:
+        elif scope_val == "workstream" and scope_id_val:
             try:
-                ws_res = (
-                    supabase.table("workstreams")
-                    .select("name")
-                    .eq("id", scope_id)
-                    .execute()
+                ws_res = await db.execute(
+                    select(Workstream.name).where(Workstream.id == scope_id_val)
                 )
-                if ws_res.data:
-                    scope_context = ws_res.data[0].get("name")
+                ws_row = ws_res.first()
+                if ws_row:
+                    scope_context = ws_row.name
             except Exception:
                 pass
 
         # 5. Parse citations
-        citations = message.get("citations") or []
+        citations = message.citations or []
         if isinstance(citations, str):
             try:
                 citations = json.loads(citations)
@@ -1055,19 +1283,19 @@ async def export_chat_message_pdf(
         metadata: Dict[str, Any] = {}
         if citations:
             metadata["source_count"] = len(citations)
-        if message.get("model"):
-            metadata["model"] = message["model"]
+        if message.model:
+            metadata["model"] = message.model
 
         # 7. Generate the PDF
-        title = conversation.get("title") or "GrantScope2 Intelligence Response"
-        export_service = ExportService(supabase)
+        title = conversation.title or "GrantScope2 Intelligence Response"
+        export_service = ExportService(db)
         pdf_path = await export_service.generate_chat_response_pdf(
             title=title,
             question=question_text,
-            response_content=message.get("content", ""),
+            response_content=message.content or "",
             citations=citations if citations else None,
             metadata=metadata if metadata else None,
-            scope=scope,
+            scope=scope_val,
             scope_context=scope_context,
         )
 

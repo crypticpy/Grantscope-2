@@ -64,7 +64,7 @@ type TopDomainsResponse = DomainEntry[];
 /**
  * Fetch the top domains ranked by composite score.
  *
- * @param token - Bearer auth token from Supabase session
+ * @param token - Bearer auth token (gs2_token)
  * @param limit - Maximum number of domains to return (default 20)
  * @returns The top domains response with ranked domain entries
  * @throws {Error} If the request fails or returns a non-OK status

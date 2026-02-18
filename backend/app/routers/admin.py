@@ -2,12 +2,22 @@
 
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
+import uuid as _uuid
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.deps import supabase, get_current_user, _safe_error, limiter
+from app.deps import (
+    get_db,
+    get_current_user,
+    get_current_user_hardcoded,
+    _safe_error,
+    limiter,
+)
 from app.models.source_rating import (
     SourceRatingCreate,
     SourceRatingResponse,
@@ -17,10 +27,38 @@ from app.models.domain_reputation import (
     DomainReputationCreate,
     DomainReputationUpdate,
 )
+from app.models.db.reference import Pillar, Goal, Anchor, Stage
+from app.models.db.card import Card
+from app.models.db.research import ResearchTask
+from app.models.db.source import SourceRating, SignalSource
+from app.models.db.analytics import DomainReputation
 from app import quality_service, domain_reputation_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["admin"])
+
+
+# ---------------------------------------------------------------------------
+# Helper: ORM row -> dict (safe JSON-serialisable conversion)
+# ---------------------------------------------------------------------------
+
+
+def _row_to_dict(obj, skip_cols=None) -> dict:
+    skip = skip_cols or set()
+    result = {}
+    for col in obj.__table__.columns:
+        if col.name in skip:
+            continue
+        value = getattr(obj, col.name, None)
+        if isinstance(value, _uuid.UUID):
+            result[col.name] = str(value)
+        elif isinstance(value, (datetime, date)):
+            result[col.name] = value.isoformat()
+        elif isinstance(value, Decimal):
+            result[col.name] = float(value)
+        else:
+            result[col.name] = value
+    return result
 
 
 # ============================================================================
@@ -29,21 +67,28 @@ router = APIRouter(prefix="/api/v1", tags=["admin"])
 
 
 @router.get("/taxonomy")
-async def get_taxonomy():
+async def get_taxonomy(db: AsyncSession = Depends(get_db)):
     """Get all taxonomy data"""
-    pillars = supabase.table("pillars").select("*").order("name").execute()
-    goals = (
-        supabase.table("goals").select("*").order("pillar_id", "sort_order").execute()
-    )
-    anchors = supabase.table("anchors").select("*").order("name").execute()
-    stages = supabase.table("stages").select("*").order("sort_order").execute()
+    try:
+        pillars_q = await db.execute(select(Pillar).order_by(Pillar.name))
+        goals_q = await db.execute(
+            select(Goal).order_by(Goal.pillar_id, Goal.sort_order)
+        )
+        anchors_q = await db.execute(select(Anchor).order_by(Anchor.name))
+        stages_q = await db.execute(select(Stage).order_by(Stage.sort_order))
 
-    return {
-        "pillars": pillars.data,
-        "goals": goals.data,
-        "anchors": anchors.data,
-        "stages": stages.data,
-    }
+        return {
+            "pillars": [_row_to_dict(p) for p in pillars_q.scalars().all()],
+            "goals": [_row_to_dict(g) for g in goals_q.scalars().all()],
+            "anchors": [_row_to_dict(a) for a in anchors_q.scalars().all()],
+            "stages": [_row_to_dict(s) for s in stages_q.scalars().all()],
+        }
+    except Exception as e:
+        logger.error(f"Failed to fetch taxonomy: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("taxonomy retrieval", e),
+        ) from e
 
 
 # ============================================================================
@@ -54,7 +99,9 @@ async def get_taxonomy():
 @router.post("/admin/scan")
 @limiter.limit("3/minute")
 async def trigger_manual_scan(
-    request: Request, current_user: dict = Depends(get_current_user)
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Manually trigger content scan for all active cards.
@@ -66,18 +113,17 @@ async def trigger_manual_scan(
     """
     try:
         # Get cards that need updates (not updated in last 24 hours)
-        cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
 
-        cards_result = (
-            supabase.table("cards")
-            .select("id, name")
-            .eq("status", "active")
-            .lt("updated_at", cutoff)
+        cards_result = await db.execute(
+            select(Card.id, Card.name)
+            .where(Card.status == "active")
+            .where(Card.updated_at < cutoff)
             .limit(10)
-            .execute()
         )
+        cards = cards_result.all()
 
-        if not cards_result.data:
+        if not cards:
             return {
                 "status": "skipped",
                 "message": "No cards need updating",
@@ -86,17 +132,19 @@ async def trigger_manual_scan(
 
         # Queue update tasks for each card
         tasks_created = 0
-        for card in cards_result.data:
-            task_record = {
-                "user_id": current_user["id"],
-                "card_id": card["id"],
-                "task_type": "update",
-                "status": "queued",
-            }
-            result = supabase.table("research_tasks").insert(task_record).execute()
-            if result.data:
-                tasks_created += 1
-                logger.info(f"Queued update task for card: {card['name']}")
+        for card in cards:
+            task = ResearchTask(
+                user_id=_uuid.UUID(current_user["id"]),
+                card_id=card.id,
+                task_type="update",
+                status="queued",
+            )
+            db.add(task)
+            tasks_created += 1
+            logger.info(f"Queued update task for card: {card.name}")
+
+        # Flush so the inserts are visible; commit happens on session close
+        await db.flush()
 
         return {
             "status": "scan_triggered",
@@ -121,41 +169,55 @@ async def trigger_manual_scan(
 async def rate_source(
     source_id: str,
     rating: SourceRatingCreate,
+    db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ):
     """Create or update user's rating for a source. Upserts on (source_id, user_id)."""
     try:
-        data = {
-            "source_id": source_id,
-            "user_id": user["id"],
-            "quality_rating": rating.quality_rating,
-            "relevance_rating": rating.relevance_rating.value,
-            "comment": rating.comment,
-        }
-        result = (
-            supabase.table("source_ratings")
-            .upsert(data, on_conflict="source_id,user_id")
-            .execute()
+        src_uuid = _uuid.UUID(source_id)
+        usr_uuid = _uuid.UUID(user["id"])
+
+        # Check for existing rating
+        existing_result = await db.execute(
+            select(SourceRating)
+            .where(SourceRating.source_id == src_uuid)
+            .where(SourceRating.user_id == usr_uuid)
         )
-        if not result.data:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to save rating",
+        existing = existing_result.scalar_one_or_none()
+
+        if existing:
+            existing.quality_rating = rating.quality_rating
+            existing.relevance_rating = rating.relevance_rating.value
+            existing.comment = rating.comment
+            existing.updated_at = datetime.now(timezone.utc)
+            await db.flush()
+            saved = existing
+        else:
+            new_rating = SourceRating(
+                source_id=src_uuid,
+                user_id=usr_uuid,
+                quality_rating=rating.quality_rating,
+                relevance_rating=rating.relevance_rating.value,
+                comment=rating.comment,
             )
+            db.add(new_rating)
+            await db.flush()
+            await db.refresh(new_rating)
+            saved = new_rating
+
+        result_dict = _row_to_dict(saved)
 
         # Trigger SQI recalculation for parent card(s) of this source.
         # Fire-and-forget: rating is saved even if recalculation fails.
         try:
-            card_links = (
-                supabase.table("card_sources")
-                .select("card_id")
-                .eq("source_id", source_id)
-                .execute()
+            links_result = await db.execute(
+                select(SignalSource.card_id).where(SignalSource.source_id == src_uuid)
             )
-            for link in card_links.data or []:
-                if card_id := link.get("card_id"):
+            for row in links_result.all():
+                card_id = row.card_id
+                if card_id:
                     try:
-                        quality_service.calculate_sqi(supabase, card_id)
+                        await quality_service.calculate_sqi(db, str(card_id))
                     except Exception as sqi_err:
                         logger.warning(
                             f"SQI recalc failed for card {card_id} after rating: {sqi_err}"
@@ -165,7 +227,7 @@ async def rate_source(
                 f"Failed to look up parent cards for source {source_id}: {lookup_err}"
             )
 
-        return result.data[0]
+        return result_dict
     except HTTPException:
         raise
     except Exception as e:
@@ -177,18 +239,21 @@ async def rate_source(
 
 
 @router.get("/sources/{source_id}/ratings", response_model=SourceRatingAggregate)
-async def get_source_ratings(source_id: str, user=Depends(get_current_user)):
+async def get_source_ratings(
+    source_id: str,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
     """Get aggregated ratings for a source plus current user's rating."""
     try:
-        all_ratings = (
-            supabase.table("source_ratings")
-            .select("*")
-            .eq("source_id", source_id)
-            .execute()
-        )
+        src_uuid = _uuid.UUID(source_id)
 
-        ratings = all_ratings.data or []
-        if not ratings:
+        result = await db.execute(
+            select(SourceRating).where(SourceRating.source_id == src_uuid)
+        )
+        all_ratings = result.scalars().all()
+
+        if not all_ratings:
             return SourceRatingAggregate(
                 source_id=source_id,
                 avg_quality=0,
@@ -201,20 +266,24 @@ async def get_source_ratings(source_id: str, user=Depends(get_current_user)):
                 },
             )
 
-        avg_quality = sum(r["quality_rating"] for r in ratings) / len(ratings)
+        ratings_dicts = [_row_to_dict(r) for r in all_ratings]
+
+        avg_quality = sum(r["quality_rating"] for r in ratings_dicts) / len(
+            ratings_dicts
+        )
         relevance_dist = {"high": 0, "medium": 0, "low": 0, "not_relevant": 0}
-        for r in ratings:
+        for r in ratings_dicts:
             if r["relevance_rating"] in relevance_dist:
                 relevance_dist[r["relevance_rating"]] += 1
 
         current_user_rating = next(
-            (r for r in ratings if r["user_id"] == user["id"]), None
+            (r for r in ratings_dicts if r["user_id"] == user["id"]), None
         )
 
         return SourceRatingAggregate(
             source_id=source_id,
             avg_quality=round(avg_quality, 2),
-            total_ratings=len(ratings),
+            total_ratings=len(ratings_dicts),
             relevance_distribution=relevance_dist,
             current_user_rating=current_user_rating,
         )
@@ -227,12 +296,22 @@ async def get_source_ratings(source_id: str, user=Depends(get_current_user)):
 
 
 @router.delete("/sources/{source_id}/rate")
-async def delete_source_rating(source_id: str, user=Depends(get_current_user)):
+async def delete_source_rating(
+    source_id: str,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
     """Remove user's rating for a source."""
     try:
-        supabase.table("source_ratings").delete().eq("source_id", source_id).eq(
-            "user_id", user["id"]
-        ).execute()
+        src_uuid = _uuid.UUID(source_id)
+        usr_uuid = _uuid.UUID(user["id"])
+
+        await db.execute(
+            delete(SourceRating)
+            .where(SourceRating.source_id == src_uuid)
+            .where(SourceRating.user_id == usr_uuid)
+        )
+        await db.flush()
         return {"status": "deleted"}
     except Exception as e:
         logger.error(f"Failed to delete source rating for {source_id}: {str(e)}")
@@ -248,12 +327,16 @@ async def delete_source_rating(source_id: str, user=Depends(get_current_user)):
 
 
 @router.get("/cards/{card_id}/quality")
-async def get_card_quality(card_id: str, user=Depends(get_current_user)):
+async def get_card_quality(
+    card_id: str,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
     """Get full SQI breakdown for a card."""
     try:
-        breakdown = quality_service.get_breakdown(
-            supabase, card_id
-        ) or quality_service.calculate_sqi(supabase, card_id)
+        breakdown = await quality_service.get_breakdown(
+            db, card_id
+        ) or await quality_service.calculate_sqi(db, card_id)
         return breakdown
     except Exception as e:
         logger.error(f"Failed to get quality for card {card_id}: {str(e)}")
@@ -266,11 +349,14 @@ async def get_card_quality(card_id: str, user=Depends(get_current_user)):
 @router.post("/cards/{card_id}/quality/recalculate")
 @limiter.limit("20/minute")
 async def recalculate_card_quality(
-    request: Request, card_id: str, user=Depends(get_current_user)
+    request: Request,
+    card_id: str,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
 ):
     """Force SQI recalculation for a card."""
     try:
-        return quality_service.calculate_sqi(supabase, card_id)
+        return await quality_service.calculate_sqi(db, card_id)
     except Exception as e:
         logger.error(f"Failed to recalculate quality for card {card_id}: {str(e)}")
         raise HTTPException(
@@ -280,10 +366,13 @@ async def recalculate_card_quality(
 
 
 @router.post("/admin/quality/recalculate-all")
-async def recalculate_all_quality(user=Depends(get_current_user)):
+async def recalculate_all_quality(
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
     """Batch recalculate SQI for all cards. Admin only."""
     try:
-        return quality_service.recalculate_all_cards(supabase)
+        return await quality_service.recalculate_all_cards(db)
     except Exception as e:
         logger.error(f"Failed to batch recalculate quality: {str(e)}")
         raise HTTPException(
@@ -293,20 +382,42 @@ async def recalculate_all_quality(user=Depends(get_current_user)):
 
 
 @router.get("/cards/{card_id}/quality-score")
-async def get_signal_quality_score(card_id: str):
+async def get_signal_quality_score(
+    card_id: str,
+    db: AsyncSession = Depends(get_db),
+):
     """Get computed signal quality score for a card."""
-    from app.signal_quality import compute_signal_quality_score
+    try:
+        from app.signal_quality import compute_signal_quality_score
 
-    return compute_signal_quality_score(supabase, card_id)
+        return await compute_signal_quality_score(db, card_id)
+    except Exception as e:
+        logger.error(f"Failed to get signal quality score for card {card_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("signal quality score retrieval", e),
+        ) from e
 
 
 @router.post("/cards/{card_id}/quality-score/refresh")
-async def refresh_signal_quality_score(card_id: str):
+async def refresh_signal_quality_score(
+    card_id: str,
+    db: AsyncSession = Depends(get_db),
+):
     """Recompute and store the signal quality score."""
-    from app.signal_quality import update_signal_quality_score
+    try:
+        from app.signal_quality import update_signal_quality_score
 
-    score = update_signal_quality_score(supabase, card_id)
-    return {"card_id": card_id, "signal_quality_score": score}
+        score = await update_signal_quality_score(db, card_id)
+        return {"card_id": card_id, "signal_quality_score": score}
+    except Exception as e:
+        logger.error(
+            f"Failed to refresh signal quality score for card {card_id}: {str(e)}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("signal quality score refresh", e),
+        ) from e
 
 
 # ============================================================================
@@ -320,21 +431,36 @@ async def list_domain_reputations(
     page_size: int = 50,
     tier: Optional[int] = None,
     category: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ):
     """List all domains with reputation data, paginated and filterable."""
     try:
-        query = supabase.table("domain_reputation").select("*", count="exact")
+        # Build base query
+        query = select(DomainReputation)
+        count_query = select(func.count()).select_from(DomainReputation)
+
         if tier:
-            query = query.eq("curated_tier", tier)
+            query = query.where(DomainReputation.curated_tier == tier)
+            count_query = count_query.where(DomainReputation.curated_tier == tier)
         if category:
-            query = query.eq("category", category)
-        query = query.order("composite_score", desc=True)
-        query = query.range((page - 1) * page_size, page * page_size - 1)
-        result = query.execute()
+            query = query.where(DomainReputation.category == category)
+            count_query = count_query.where(DomainReputation.category == category)
+
+        query = query.order_by(DomainReputation.composite_score.desc())
+        offset = (page - 1) * page_size
+        query = query.offset(offset).limit(page_size)
+
+        # Execute both queries
+        total_result = await db.execute(count_query)
+        total = total_result.scalar() or 0
+
+        items_result = await db.execute(query)
+        items = [_row_to_dict(r) for r in items_result.scalars().all()]
+
         return {
-            "items": result.data,
-            "total": result.count,
+            "items": items,
+            "total": total,
             "page": page,
             "page_size": page_size,
         }
@@ -347,17 +473,26 @@ async def list_domain_reputations(
 
 
 @router.get("/domain-reputation/{domain_id}")
-async def get_domain_reputation(domain_id: str, user=Depends(get_current_user)):
+async def get_domain_reputation(
+    domain_id: str,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
     """Get single domain reputation detail."""
     try:
-        result = (
-            supabase.table("domain_reputation")
-            .select("*")
-            .eq("id", domain_id)
-            .single()
-            .execute()
+        dom_uuid = _uuid.UUID(domain_id)
+        result = await db.execute(
+            select(DomainReputation).where(DomainReputation.id == dom_uuid)
         )
-        return result.data
+        domain = result.scalar_one_or_none()
+        if not domain:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Domain reputation not found",
+            )
+        return _row_to_dict(domain)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get domain reputation {domain_id}: {str(e)}")
         raise HTTPException(
@@ -368,7 +503,9 @@ async def get_domain_reputation(domain_id: str, user=Depends(get_current_user)):
 
 @router.post("/admin/domain-reputation")
 async def create_domain_reputation(
-    body: DomainReputationCreate, user=Depends(get_current_user)
+    body: DomainReputationCreate,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
 ):
     """Add a new domain to the reputation system. Admin only."""
     try:
@@ -376,16 +513,22 @@ async def create_domain_reputation(
         # Calculate initial composite score based on tier
         tier_scores = {1: 85, 2: 60, 3: 35}
         tier_score = tier_scores.get(data.get("curated_tier"), 20)
-        data["composite_score"] = tier_score * 0.50 + data.get(
-            "texas_relevance_bonus", 0
+        composite = tier_score * 0.50 + data.get("texas_relevance_bonus", 0)
+
+        domain_rep = DomainReputation(
+            domain_pattern=data["domain_pattern"],
+            organization_name=data["organization_name"],
+            category=data["category"],
+            curated_tier=data.get("curated_tier"),
+            texas_relevance_bonus=data.get("texas_relevance_bonus", 0),
+            notes=data.get("notes"),
+            composite_score=composite,
         )
-        result = supabase.table("domain_reputation").insert(data).execute()
-        if not result.data:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to create domain reputation",
-            )
-        return result.data[0]
+        db.add(domain_rep)
+        await db.flush()
+        await db.refresh(domain_rep)
+
+        return _row_to_dict(domain_rep)
     except HTTPException:
         raise
     except Exception as e:
@@ -400,6 +543,7 @@ async def create_domain_reputation(
 async def update_domain_reputation(
     domain_id: str,
     body: DomainReputationUpdate,
+    db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ):
     """Update a domain's tier, category, or other fields. Admin only."""
@@ -410,18 +554,25 @@ async def update_domain_reputation(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No fields provided for update",
             )
-        result = (
-            supabase.table("domain_reputation")
-            .update(data)
-            .eq("id", domain_id)
-            .execute()
+
+        dom_uuid = _uuid.UUID(domain_id)
+        result = await db.execute(
+            select(DomainReputation).where(DomainReputation.id == dom_uuid)
         )
-        if not result.data:
+        domain_rep = result.scalar_one_or_none()
+        if not domain_rep:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Domain reputation not found",
             )
-        return result.data[0]
+
+        for key, value in data.items():
+            setattr(domain_rep, key, value)
+
+        await db.flush()
+        await db.refresh(domain_rep)
+
+        return _row_to_dict(domain_rep)
     except HTTPException:
         raise
     except Exception as e:
@@ -433,10 +584,18 @@ async def update_domain_reputation(
 
 
 @router.delete("/admin/domain-reputation/{domain_id}")
-async def delete_domain_reputation(domain_id: str, user=Depends(get_current_user)):
+async def delete_domain_reputation(
+    domain_id: str,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
     """Remove a domain from the reputation system. Admin only."""
     try:
-        supabase.table("domain_reputation").delete().eq("id", domain_id).execute()
+        dom_uuid = _uuid.UUID(domain_id)
+        await db.execute(
+            delete(DomainReputation).where(DomainReputation.id == dom_uuid)
+        )
+        await db.flush()
         return {"status": "deleted"}
     except Exception as e:
         logger.error(f"Failed to delete domain reputation {domain_id}: {str(e)}")
@@ -447,10 +606,13 @@ async def delete_domain_reputation(domain_id: str, user=Depends(get_current_user
 
 
 @router.post("/admin/domain-reputation/recalculate")
-async def recalculate_domain_reputations(user=Depends(get_current_user)):
+async def recalculate_domain_reputations(
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
     """Recalculate all composite scores from user ratings + pipeline stats."""
     try:
-        return domain_reputation_service.recalculate_all(supabase)
+        return await domain_reputation_service.recalculate_all(db)
     except Exception as e:
         logger.error(f"Failed to recalculate domain reputations: {str(e)}")
         raise HTTPException(
@@ -469,6 +631,7 @@ async def recalculate_domain_reputations(user=Depends(get_current_user)):
 
 @router.post("/admin/velocity/calculate")
 async def trigger_velocity_calculation(
+    db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     """Trigger velocity trend calculation for all active cards. Runs in background."""
@@ -484,7 +647,7 @@ async def trigger_velocity_calculation(
 
     async def _run_velocity():
         try:
-            result = await calculate_velocity_trends(supabase)
+            result = await calculate_velocity_trends(db)
             logger.info("On-demand velocity calculation completed: %s", result)
         except Exception as exc:
             logger.exception("On-demand velocity calculation failed: %s", exc)

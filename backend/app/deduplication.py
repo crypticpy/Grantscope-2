@@ -17,7 +17,7 @@ Usage
     from app.deduplication import check_duplicate, DedupResult
 
     result = await check_duplicate(
-        supabase=supabase,
+        db=db,
         card_id=card_id,
         content=source_content,
         url=source_url,
@@ -33,7 +33,7 @@ Usage
 Dependencies
 ------------
 - ``sources`` table with ``embedding VECTOR(1536)`` and ``duplicate_of UUID`` columns.
-- ``match_sources_by_embedding`` Postgres function (migration 20260213_dedup_similarity_function).
+- ``app.helpers.db_utils.vector_search_sources`` for embedding similarity search.
 - ``ai_service.AIService.generate_embedding`` for on-the-fly embedding generation.
 """
 
@@ -41,7 +41,11 @@ import logging
 from dataclasses import dataclass
 from typing import List, Optional
 
-from supabase import Client
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.db.source import Source
+from app.helpers.db_utils import vector_search_sources
 
 logger = logging.getLogger(__name__)
 
@@ -86,12 +90,12 @@ def _no_match_result() -> DedupResult:
 # Public API
 # ---------------------------------------------------------------------------
 async def check_duplicate(
-    supabase: Client,
+    db: AsyncSession,
     card_id: str,
     content: str,
     url: str,
     embedding: Optional[List[float]] = None,
-    ai_service=None,  # Optional[AIService] — typed loosely to avoid circular import
+    ai_service=None,  # Optional[AIService] -- typed loosely to avoid circular import
 ) -> DedupResult:
     """
     Check whether a source is a duplicate of an existing source on the same card.
@@ -103,12 +107,12 @@ async def check_duplicate(
 
     2. **Embedding dedup** (semantic): Compare the source embedding against
        existing source embeddings on the same card via the
-       ``match_sources_by_embedding`` RPC function.
+       ``vector_search_sources`` utility function.
 
     Parameters
     ----------
-    supabase : Client
-        Authenticated Supabase client.
+    db : AsyncSession
+        SQLAlchemy async session.
     card_id : str
         UUID of the card this source would be stored on.
     content : str
@@ -128,7 +132,7 @@ async def check_duplicate(
     """
     try:
         return await _check_duplicate_inner(
-            supabase=supabase,
+            db=db,
             card_id=card_id,
             content=content,
             url=url,
@@ -136,13 +140,13 @@ async def check_duplicate(
             ai_service=ai_service,
         )
     except Exception as exc:
-        # Dedup is NON-BLOCKING — if it fails, proceed with normal storage
+        # Dedup is NON-BLOCKING -- if it fails, proceed with normal storage
         logger.warning(f"Deduplication check failed (proceeding with store): {exc}")
         return _no_match_result()
 
 
 async def _check_duplicate_inner(
-    supabase: Client,
+    db: AsyncSession,
     card_id: str,
     content: str,
     url: str,
@@ -156,19 +160,18 @@ async def _check_duplicate_inner(
     # ------------------------------------------------------------------
     if url:
         try:
-            existing = (
-                supabase.table("sources")
-                .select("id")
-                .eq("card_id", card_id)
-                .eq("url", url)
-                .execute()
+            result = await db.execute(
+                select(Source.id)
+                .where(Source.card_id == card_id)
+                .where(Source.url == url)
             )
-            if existing.data:
+            existing_row = result.first()
+            if existing_row:
                 logger.debug(f"Dedup: URL match on card {card_id}: {url[:80]}")
                 return DedupResult(
                     is_duplicate=True,
                     is_related=False,
-                    duplicate_of_id=existing.data[0]["id"],
+                    duplicate_of_id=str(existing_row[0]),
                     similarity=1.0,
                     action="skip",
                 )
@@ -190,42 +193,40 @@ async def _check_duplicate_inner(
             logger.warning(f"Dedup: Embedding generation failed: {exc}")
 
     if resolved_embedding is None:
-        # No embedding available — fall back to URL-only (already checked above)
+        # No embedding available -- fall back to URL-only (already checked above)
         logger.debug("Dedup: No embedding available, falling back to URL-only check")
         return _no_match_result()
 
     # ------------------------------------------------------------------
-    # 3. Embedding similarity via RPC
+    # 3. Embedding similarity via vector_search_sources
     # ------------------------------------------------------------------
     try:
-        rpc_result = supabase.rpc(
-            "match_sources_by_embedding",
-            {
-                "query_embedding": resolved_embedding,
-                "target_card_id": card_id,
-                "match_threshold": RELATED_THRESHOLD,
-                "match_count": 5,
-            },
-        ).execute()
+        matches = await vector_search_sources(
+            db,
+            resolved_embedding,
+            target_card_id=card_id,
+            match_threshold=RELATED_THRESHOLD,
+            match_count=5,
+        )
     except Exception as exc:
-        logger.warning(f"Dedup: RPC match_sources_by_embedding failed: {exc}")
+        logger.warning(f"Dedup: vector_search_sources failed: {exc}")
         return _no_match_result()
 
-    if not rpc_result.data:
+    if not matches:
         # No similar sources found above the RELATED_THRESHOLD
         return _no_match_result()
 
     # ------------------------------------------------------------------
     # 4. Decision logic based on top match
     # ------------------------------------------------------------------
-    top_match = rpc_result.data[0]
+    top_match = matches[0]
     similarity = float(top_match.get("similarity", 0.0))
     match_id = str(top_match.get("id", ""))
     match_title = top_match.get("title", "")
 
     if similarity > DUPLICATE_THRESHOLD:
         logger.info(
-            f"Dedup: DUPLICATE detected (sim={similarity:.4f}) — "
+            f"Dedup: DUPLICATE detected (sim={similarity:.4f}) -- "
             f"source '{match_title[:50]}' (id={match_id}) on card {card_id}"
         )
         return DedupResult(
@@ -238,7 +239,7 @@ async def _check_duplicate_inner(
 
     if similarity >= RELATED_THRESHOLD:
         logger.info(
-            f"Dedup: RELATED source detected (sim={similarity:.4f}) — "
+            f"Dedup: RELATED source detected (sim={similarity:.4f}) -- "
             f"source '{match_title[:50]}' (id={match_id}) on card {card_id}"
         )
         return DedupResult(
@@ -249,6 +250,6 @@ async def _check_duplicate_inner(
             action="store_as_related",
         )
 
-    # Below RELATED_THRESHOLD — this shouldn't happen because the RPC filters,
+    # Below RELATED_THRESHOLD -- this shouldn't happen because the search filters,
     # but handle it gracefully.
     return _no_match_result()

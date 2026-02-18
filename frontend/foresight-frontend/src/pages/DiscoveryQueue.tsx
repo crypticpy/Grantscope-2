@@ -26,8 +26,8 @@ import {
   ArrowRight,
   Heart,
 } from "lucide-react";
-import { supabase } from "../App";
 import { useAuthContext } from "../hooks/useAuthContext";
+import { API_BASE_URL } from "../lib/config";
 import { useIsMobile } from "../hooks/use-mobile";
 import { useScrollRestoration } from "../hooks/useScrollRestoration";
 import { PillarBadge } from "../components/PillarBadge";
@@ -777,13 +777,14 @@ const DiscoveryQueue: React.FC = () => {
         throw new Error("Not authenticated");
       }
 
-      // Load pillars from Supabase
-      const { data: pillarsData } = await supabase
-        .from("pillars")
-        .select("*")
-        .order("name");
-
-      setPillars(pillarsData || []);
+      // Load pillars from taxonomy API
+      const taxonomyResponse = await fetch(`${API_BASE_URL}/api/v1/taxonomy`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (taxonomyResponse.ok) {
+        const taxonomy = await taxonomyResponse.json();
+        setPillars(taxonomy.pillars || []);
+      }
 
       // Load pending cards from backend API
       const pendingCards = await fetchPendingReviewCards(token);

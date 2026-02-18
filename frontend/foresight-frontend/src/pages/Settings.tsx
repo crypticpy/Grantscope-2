@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { User, Bell, Shield, Database, Mail } from "lucide-react";
-import { supabase } from "../App";
 import { useAuthContext } from "../hooks/useAuthContext";
 import { LoadingButton } from "../components/ui/LoadingButton";
 import { API_BASE_URL } from "../lib/config";
@@ -38,12 +37,18 @@ const Settings: React.FC = () => {
 
   const loadProfile = async () => {
     try {
-      const { data } = await supabase
-        .from("users")
-        .select("*")
-        .eq("id", user?.id)
-        .single();
+      const token = localStorage.getItem("gs2_token");
+      if (!token) return;
 
+      const response = await fetch(`${API_BASE_URL}/api/v1/me`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) throw new Error(`API error: ${response.status}`);
+
+      const data = await response.json();
       if (data) {
         setProfile({
           display_name: data.display_name || "",
@@ -63,12 +68,22 @@ const Settings: React.FC = () => {
     setMessage("");
 
     try {
-      const { error } = await supabase
-        .from("users")
-        .update(profile)
-        .eq("id", user?.id);
+      const token = localStorage.getItem("gs2_token");
+      if (!token) throw new Error("Authentication required");
 
-      if (error) throw error;
+      const response = await fetch(`${API_BASE_URL}/api/v1/me`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(profile),
+      });
+
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(errBody.detail || `Update failed: ${response.status}`);
+      }
 
       setMessage("Profile updated successfully!");
     } catch (error) {

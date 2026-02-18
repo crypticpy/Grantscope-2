@@ -13,7 +13,7 @@
  */
 
 import { useState, useEffect, useCallback, memo } from "react";
-import { supabase } from "../../App";
+import { API_BASE_URL } from "../../lib/config";
 import {
   X,
   Loader2,
@@ -82,17 +82,21 @@ export const AddToWorkstreamModal = memo(function AddToWorkstreamModal({
       setError(null);
 
       try {
-        const { data, error: fetchError } = await supabase
-          .from("workstreams")
-          .select("id, name, description, is_active, created_at")
-          .order("is_active", { ascending: false })
-          .order("name");
-
-        if (fetchError) {
-          throw new Error(fetchError.message);
+        const token = localStorage.getItem("gs2_token");
+        if (!token) {
+          throw new Error("Authentication required");
         }
-
-        setWorkstreams(data || []);
+        const response = await fetch(`${API_BASE_URL}/api/v1/me/workstreams`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) {
+          throw new Error("Failed to load workstreams");
+        }
+        const data = await response.json();
+        const workstreamList = Array.isArray(data)
+          ? data
+          : data.workstreams || [];
+        setWorkstreams(workstreamList);
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Failed to load workstreams",

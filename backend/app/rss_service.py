@@ -10,7 +10,7 @@ Phase 3, Layer 2.1
 Usage:
     from app.rss_service import RSSService
 
-    service = RSSService(supabase_client, ai_service)
+    service = RSSService(db_session, ai_service)
     stats = await service.check_feeds()
     process_stats = await service.process_new_items()
 """
@@ -20,7 +20,14 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from supabase import Client
+from sqlalchemy import select, update as sa_update, delete as sa_delete, func
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.helpers.db_utils import vector_search_cards
+from app.models.db.card import Card
+from app.models.db.rss import RssFeed, RssFeedItem
+from app.models.db.source import Source
 
 from .ai_service import AIService
 from .crawler import crawl_url
@@ -65,8 +72,8 @@ class RSSService:
       - Expose CRUD operations for feed management
     """
 
-    def __init__(self, supabase: Client, ai_service: AIService):
-        self.supabase = supabase
+    def __init__(self, db: AsyncSession, ai_service: AIService):
+        self.db = db
         self.ai_service = ai_service
 
     # -----------------------------------------------------------------------
@@ -94,16 +101,15 @@ class RSSService:
         }
 
         try:
-            result = (
-                self.supabase.table("rss_feeds")
-                .select("*")
-                .eq("status", "active")
-                .lte("next_check_at", _now_iso())
-                .order("next_check_at")
+            now = datetime.now(timezone.utc)
+            result = await self.db.execute(
+                select(RssFeed)
+                .where(RssFeed.status == "active")
+                .where(RssFeed.next_check_at <= now)
+                .order_by(RssFeed.next_check_at)
                 .limit(max_feeds)
-                .execute()
             )
-            feeds = result.data or []
+            feeds = result.scalars().all()
         except Exception as e:
             logger.error(f"Failed to query due feeds: {e}")
             return stats
@@ -121,7 +127,7 @@ class RSSService:
                 stats["items_found"] += feed_stats["items_found"]
                 stats["items_new"] += feed_stats["items_new"]
             except Exception as e:
-                logger.error(f"Error checking feed {feed.get('name', '?')}: {e}")
+                logger.error(f"Error checking feed {feed.name or '?'}: {e}")
                 stats["errors"] += 1
                 # Mark error on the feed record
                 await self._record_feed_error(feed, str(e))
@@ -137,7 +143,7 @@ class RSSService:
     # 2. _check_one_feed — fetch and store items from a single feed
     # -----------------------------------------------------------------------
 
-    async def _check_one_feed(self, feed: dict) -> Dict[str, Any]:
+    async def _check_one_feed(self, feed) -> Dict[str, Any]:
         """
         Fetch a single feed and insert new items into ``rss_feed_items``.
 
@@ -145,14 +151,14 @@ class RSSService:
         Deduplicates via ``ON CONFLICT`` on ``(feed_id, url)`` unique index.
 
         Args:
-            feed: Row dict from the ``rss_feeds`` table.
+            feed: RssFeed ORM object.
 
         Returns:
             Dict with items_found, items_new counts.
         """
-        feed_id = feed["id"]
-        feed_url = feed["url"]
-        feed_name = feed.get("name", feed_url)
+        feed_id = str(feed.id)
+        feed_url = feed.url
+        feed_name = feed.name or feed_url
 
         logger.debug(f"Checking feed: {feed_name} ({feed_url})")
 
@@ -169,37 +175,38 @@ class RSSService:
             try:
                 content_hash = _content_hash(article.title, article.url)
 
-                item_record = {
-                    "feed_id": feed_id,
+                item_data = {
+                    "feed_id": feed.id,
                     "url": article.url,
                     "title": (article.title or "Untitled")[:500],
                     "content": (article.content or "")[:10000],
                     "author": (article.author or "")[:200] if article.author else None,
                     "published_at": (
-                        article.published_at.isoformat()
-                        if article.published_at
-                        else None
+                        article.published_at if article.published_at else None
                     ),
                     "content_hash": content_hash,
-                    "metadata": {
+                    "metadata_": {
                         "tags": article.tags[:10] if article.tags else [],
                         "source_name": article.source_name,
                     },
                 }
 
                 # Upsert — the unique index on (feed_id, url) handles dedup
-                insert_result = (
-                    self.supabase.table("rss_feed_items")
-                    .upsert(item_record, on_conflict="feed_id,url")
-                    .execute()
+                stmt = pg_insert(RssFeedItem).values(**item_data)
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["feed_id", "url"],
+                    set_={
+                        "content": stmt.excluded.content,
+                        "content_hash": stmt.excluded.content_hash,
+                    },
                 )
+                stmt = stmt.returning(RssFeedItem.id, RssFeedItem.processed)
+                upsert_result = await self.db.execute(stmt)
+                row = upsert_result.fetchone()
+                await self.db.flush()
 
-                if insert_result.data:
-                    # Check if it was a new insert vs update.  New items have
-                    # processed=False by default; updated items keep their state.
-                    row = insert_result.data[0]
-                    if row.get("processed") is False:
-                        items_new += 1
+                if row and row.processed is False:
+                    items_new += 1
 
             except Exception as e:
                 logger.warning(
@@ -207,32 +214,30 @@ class RSSService:
                 )
 
         # Update feed metadata
-        now = _now_iso()
-        interval_hours = feed.get("check_interval_hours", 6)
-        next_check = (
-            datetime.now(timezone.utc) + timedelta(hours=interval_hours)
-        ).isoformat()
+        now = datetime.now(timezone.utc)
+        interval_hours = feed.check_interval_hours or 6
+        next_check = now + timedelta(hours=interval_hours)
 
-        update_data: Dict[str, Any] = {
+        update_values: Dict[str, Any] = {
             "last_checked_at": now,
             "next_check_at": next_check,
             "error_count": 0,
             "last_error": None,
             "updated_at": now,
-            "articles_found_total": (feed.get("articles_found_total", 0) or 0)
-            + items_found,
+            "articles_found_total": (feed.articles_found_total or 0) + items_found,
         }
 
         # Store feed-level metadata from the parsed feed
         if result.feed_title:
-            update_data["feed_title"] = result.feed_title
+            update_values["feed_title"] = result.feed_title
         if result.feed_link:
-            update_data["feed_link"] = result.feed_link
+            update_values["feed_link"] = result.feed_link
 
         try:
-            self.supabase.table("rss_feeds").update(update_data).eq(
-                "id", feed_id
-            ).execute()
+            await self.db.execute(
+                sa_update(RssFeed).where(RssFeed.id == feed.id).values(**update_values)
+            )
+            await self.db.flush()
         except Exception as e:
             logger.warning(f"Failed to update feed metadata for {feed_name}: {e}")
 
@@ -271,15 +276,16 @@ class RSSService:
         }
 
         try:
-            result = (
-                self.supabase.table("rss_feed_items")
-                .select("*, rss_feeds(name, category, pillar_id)")
-                .eq("processed", False)
-                .order("published_at", desc=True)
+            # We need a join to get feed info alongside items
+            from sqlalchemy.orm import aliased
+
+            result = await self.db.execute(
+                select(RssFeedItem)
+                .where(RssFeedItem.processed == False)  # noqa: E712
+                .order_by(RssFeedItem.published_at.desc())
                 .limit(batch_size)
-                .execute()
             )
-            items = result.data or []
+            items = result.scalars().all()
         except Exception as e:
             logger.error(f"Failed to fetch unprocessed items: {e}")
             return stats
@@ -294,11 +300,9 @@ class RSSService:
             try:
                 await self._process_one_item(item, stats)
             except Exception as e:
-                logger.error(
-                    f"Error processing item '{item.get('title', '?')[:50]}': {e}"
-                )
+                logger.error(f"Error processing item '{(item.title or '?')[:50]}': {e}")
                 # Still mark as processed to avoid infinite retry loops
-                self._mark_processed(item["id"], triage_result="irrelevant")
+                await self._mark_processed(item.id, triage_result="irrelevant")
                 stats["items_processed"] += 1
                 stats["items_irrelevant"] += 1
 
@@ -309,15 +313,15 @@ class RSSService:
         )
         return stats
 
-    async def _process_one_item(self, item: dict, stats: Dict[str, int]) -> None:
+    async def _process_one_item(self, item, stats: Dict[str, int]) -> None:
         """Process a single feed item through triage and card matching."""
-        item_id = item["id"]
-        feed_id = item["feed_id"]
-        title = item.get("title", "Untitled")
-        url = item.get("url", "")
+        item_id = item.id
+        feed_id = item.feed_id
+        title = item.title or "Untitled"
+        url = item.url or ""
 
         # Step 1: Crawl full content
-        content = item.get("content", "") or ""
+        content = item.content or ""
         if url:
             try:
                 crawl_result = await crawl_url(url)
@@ -328,7 +332,7 @@ class RSSService:
                 # Fall back to feed-provided content
 
         if not content and not title:
-            self._mark_processed(item_id, triage_result="irrelevant")
+            await self._mark_processed(item_id, triage_result="irrelevant")
             stats["items_processed"] += 1
             stats["items_irrelevant"] += 1
             return
@@ -337,7 +341,7 @@ class RSSService:
         triage = await self.ai_service.triage_source(title, content)
 
         if not triage.is_relevant:
-            self._mark_processed(item_id, triage_result="irrelevant")
+            await self._mark_processed(item_id, triage_result="irrelevant")
             stats["items_processed"] += 1
             stats["items_irrelevant"] += 1
             return
@@ -349,7 +353,7 @@ class RSSService:
         except Exception as e:
             logger.warning(f"Embedding generation failed for '{title[:50]}': {e}")
             # Mark as pending — signal agent can pick it up later
-            self._mark_processed(item_id, triage_result="pending")
+            await self._mark_processed(item_id, triage_result="pending")
             stats["items_processed"] += 1
             stats["items_pending"] += 1
             return
@@ -365,21 +369,21 @@ class RSSService:
                 url=url,
                 content=content,
                 triage=triage,
-                feed_name=self._feed_name(item),
+                feed_name=await self._feed_name(item),
             )
-            self._mark_processed(
+            await self._mark_processed(
                 item_id,
                 triage_result="matched",
                 card_id=matched_card_id,
                 source_id=source_id,
             )
             # Increment matched total on the feed
-            self._increment_feed_matched(feed_id)
+            await self._increment_feed_matched(feed_id)
             stats["items_processed"] += 1
             stats["items_matched"] += 1
         else:
             # Relevant but no card match — mark as pending for signal agent
-            self._mark_processed(item_id, triage_result="pending")
+            await self._mark_processed(item_id, triage_result="pending")
             stats["items_processed"] += 1
             stats["items_pending"] += 1
 
@@ -387,25 +391,21 @@ class RSSService:
         """
         Find a matching card using vector similarity search.
 
-        Tries the database ``find_similar_cards`` RPC first, falling back to
-        Python-based cosine similarity if the RPC is unavailable.
+        Uses the ``vector_search_cards`` helper function from db_utils.
 
         Returns:
             Card UUID string if a strong match is found, else None.
         """
-        # Try database RPC first
         try:
-            match_result = self.supabase.rpc(
-                "find_similar_cards",
-                {
-                    "query_embedding": embedding,
-                    "match_threshold": SIMILARITY_WEAK_THRESHOLD,
-                    "match_count": 3,
-                },
-            ).execute()
+            matches = await vector_search_cards(
+                self.db,
+                query_embedding=embedding,
+                match_threshold=SIMILARITY_WEAK_THRESHOLD,
+                match_count=3,
+            )
 
-            if match_result.data:
-                top = match_result.data[0]
+            if matches:
+                top = matches[0]
                 similarity = top.get("similarity", 0)
                 if similarity >= SIMILARITY_MATCH_THRESHOLD:
                     logger.info(
@@ -421,7 +421,7 @@ class RSSService:
                     )
                     return top["id"]
         except Exception as e:
-            logger.warning(f"find_similar_cards RPC failed: {e}")
+            logger.warning(f"vector_search_cards failed: {e}")
             # Fall back to Python-based search
             return await self._python_card_search(embedding)
 
@@ -434,14 +434,12 @@ class RSSService:
         from .discovery_service import cosine_similarity
 
         try:
-            cards_result = (
-                self.supabase.table("cards")
-                .select("id, name, embedding")
-                .eq("status", "approved")
+            result = await self.db.execute(
+                select(Card.id, Card.name, Card.embedding)
+                .where(Card.status == "approved")
                 .limit(200)
-                .execute()
             )
-            cards = cards_result.data or []
+            cards = result.all()
         except Exception as e:
             logger.error(f"Failed to fetch cards for Python fallback: {e}")
             return None
@@ -450,13 +448,13 @@ class RSSService:
         best_sim = 0.0
 
         for card in cards:
-            card_emb = card.get("embedding")
+            card_emb = card.embedding
             if not card_emb:
                 continue
             sim = cosine_similarity(embedding, card_emb)
             if sim > best_sim:
                 best_sim = sim
-                best_id = card["id"]
+                best_id = str(card.id)
 
         if best_id and best_sim >= SIMILARITY_WEAK_THRESHOLD:
             logger.info(
@@ -479,41 +477,39 @@ class RSSService:
         try:
             from app.source_quality import extract_domain
 
-            source_record = {
-                "card_id": card_id,
-                "url": url,
-                "title": (title or "Untitled")[:500],
-                "publication": feed_name[:200] if feed_name else None,
-                "full_text": content[:10000] if content else None,
-                "ai_summary": triage.reason if triage else None,
-                "relevance_to_card": (triage.confidence if triage else 0.5),
-                "api_source": "rss_monitor",
-                "domain": extract_domain(url),
-                "ingested_at": _now_iso(),
-            }
+            source_obj = Source(
+                card_id=card_id,
+                url=url,
+                title=(title or "Untitled")[:500],
+                publication=feed_name[:200] if feed_name else None,
+                full_text=content[:10000] if content else None,
+                ai_summary=triage.reason if triage else None,
+                relevance_to_card=(triage.confidence if triage else 0.5),
+                api_source="rss_monitor",
+                domain=extract_domain(url),
+                ingested_at=datetime.now(timezone.utc),
+            )
+            self.db.add(source_obj)
+            await self.db.flush()
+            await self.db.refresh(source_obj)
 
-            result = self.supabase.table("sources").insert(source_record).execute()
+            source_id = str(source_obj.id)
+            logger.info(
+                f"Created source {source_id} on card {card_id} "
+                f"from RSS: {title[:50]}"
+            )
 
-            if result.data:
-                source_id = result.data[0]["id"]
-                logger.info(
-                    f"Created source {source_id} on card {card_id} "
-                    f"from RSS: {title[:50]}"
+            # Compute quality score (non-blocking)
+            try:
+                from app.source_quality import compute_and_store_quality_score
+
+                compute_and_store_quality_score(self.db, source_id, triage=triage)
+            except Exception as e:
+                logger.warning(
+                    f"Quality score computation failed for source {source_id}: {e}"
                 )
 
-                # Compute quality score (non-blocking)
-                try:
-                    from app.source_quality import compute_and_store_quality_score
-
-                    compute_and_store_quality_score(
-                        self.supabase, source_id, triage=triage
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"Quality score computation failed for source {source_id}: {e}"
-                    )
-
-                return source_id
+            return source_id
 
         except Exception as e:
             if "duplicate" not in str(e).lower():
@@ -533,51 +529,55 @@ class RSSService:
         created in the last 7 days.
         """
         try:
-            feeds_result = (
-                self.supabase.table("rss_feeds").select("*").order("name").execute()
-            )
-            feeds = feeds_result.data or []
+            result = await self.db.execute(select(RssFeed).order_by(RssFeed.name))
+            feeds = result.scalars().all()
         except Exception as e:
             logger.error(f"Failed to fetch feed stats: {e}")
             return []
 
-        seven_days_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
 
         enriched: List[dict] = []
         for feed in feeds:
             # Count recent items for this feed
             recent_count = 0
             try:
-                count_result = (
-                    self.supabase.table("rss_feed_items")
-                    .select("id", count="exact")
-                    .eq("feed_id", feed["id"])
-                    .gte("created_at", seven_days_ago)
-                    .execute()
+                count_result = await self.db.execute(
+                    select(func.count(RssFeedItem.id))
+                    .where(RssFeedItem.feed_id == feed.id)
+                    .where(RssFeedItem.created_at >= seven_days_ago)
                 )
-                recent_count = count_result.count or 0
+                recent_count = count_result.scalar() or 0
             except Exception:
                 pass
 
             enriched.append(
                 {
-                    "id": feed["id"],
-                    "name": feed["name"],
-                    "url": feed["url"],
-                    "category": feed.get("category"),
-                    "pillar_id": feed.get("pillar_id"),
-                    "status": feed.get("status"),
-                    "check_interval_hours": feed.get("check_interval_hours"),
-                    "last_checked_at": feed.get("last_checked_at"),
-                    "error_count": feed.get("error_count", 0),
-                    "last_error": feed.get("last_error"),
-                    "feed_title": feed.get("feed_title"),
-                    "feed_link": feed.get("feed_link"),
-                    "articles_found_total": feed.get("articles_found_total", 0),
-                    "articles_matched_total": feed.get("articles_matched_total", 0),
+                    "id": str(feed.id),
+                    "name": feed.name,
+                    "url": feed.url,
+                    "category": feed.category,
+                    "pillar_id": feed.pillar_id,
+                    "status": feed.status,
+                    "check_interval_hours": feed.check_interval_hours,
+                    "last_checked_at": (
+                        feed.last_checked_at.isoformat()
+                        if feed.last_checked_at
+                        else None
+                    ),
+                    "error_count": feed.error_count or 0,
+                    "last_error": feed.last_error,
+                    "feed_title": feed.feed_title,
+                    "feed_link": feed.feed_link,
+                    "articles_found_total": feed.articles_found_total or 0,
+                    "articles_matched_total": feed.articles_matched_total or 0,
                     "recent_items_7d": recent_count,
-                    "created_at": feed.get("created_at"),
-                    "updated_at": feed.get("updated_at"),
+                    "created_at": (
+                        feed.created_at.isoformat() if feed.created_at else None
+                    ),
+                    "updated_at": (
+                        feed.updated_at.isoformat() if feed.updated_at else None
+                    ),
                 }
             )
 
@@ -603,47 +603,40 @@ class RSSService:
             name: Human-readable feed name.
             category: Feed category (gov_tech, municipal, academic, news, etc.).
             pillar_id: Optional strategic pillar to lock this feed to.
-            check_interval_hours: How often to check (1–168 hours).
+            check_interval_hours: How often to check (1-168 hours).
 
         Returns:
-            The inserted feed record dict.
+            The inserted feed record as a dict.
         """
-        feed_record = {
-            "url": url,
-            "name": name,
-            "category": category,
-            "pillar_id": pillar_id,
-            "check_interval_hours": max(1, min(168, check_interval_hours)),
-            "next_check_at": _now_iso(),
-        }
+        feed_obj = RssFeed(
+            url=url,
+            name=name,
+            category=category,
+            pillar_id=pillar_id,
+            check_interval_hours=max(1, min(168, check_interval_hours)),
+            next_check_at=datetime.now(timezone.utc),
+        )
 
         try:
-            result = self.supabase.table("rss_feeds").insert(feed_record).execute()
-            if not result.data:
-                raise ValueError("Insert returned no data")
-            feed = result.data[0]
+            self.db.add(feed_obj)
+            await self.db.flush()
+            await self.db.refresh(feed_obj)
         except Exception as e:
             logger.error(f"Failed to add feed '{name}' ({url}): {e}")
             raise
 
         # Perform initial check immediately
         try:
-            await self._check_one_feed(feed)
+            await self._check_one_feed(feed_obj)
         except Exception as e:
             logger.warning(f"Initial check failed for new feed '{name}': {e}")
 
         # Re-fetch to return the updated record (with feed_title, etc.)
         try:
-            refreshed = (
-                self.supabase.table("rss_feeds")
-                .select("*")
-                .eq("id", feed["id"])
-                .single()
-                .execute()
-            )
-            return refreshed.data or feed
+            await self.db.refresh(feed_obj)
+            return self._feed_to_dict(feed_obj)
         except Exception:
-            return feed
+            return self._feed_to_dict(feed_obj)
 
     # -----------------------------------------------------------------------
     # 6. update_feed
@@ -678,18 +671,19 @@ class RSSService:
                 1, min(168, update_data["check_interval_hours"])
             )
 
-        update_data["updated_at"] = _now_iso()
+        update_data["updated_at"] = datetime.now(timezone.utc)
 
         try:
-            result = (
-                self.supabase.table("rss_feeds")
-                .update(update_data)
-                .eq("id", feed_id)
-                .execute()
+            await self.db.execute(
+                sa_update(RssFeed).where(RssFeed.id == feed_id).values(**update_data)
             )
-            if result.data:
-                return result.data[0]
-            raise ValueError(f"Feed {feed_id} not found")
+            await self.db.flush()
+
+            result = await self.db.execute(select(RssFeed).where(RssFeed.id == feed_id))
+            feed = result.scalar_one_or_none()
+            if not feed:
+                raise ValueError(f"Feed {feed_id} not found")
+            return self._feed_to_dict(feed)
         except Exception as e:
             logger.error(f"Failed to update feed {feed_id}: {e}")
             raise
@@ -706,7 +700,8 @@ class RSSService:
             True if deleted successfully.
         """
         try:
-            self.supabase.table("rss_feeds").delete().eq("id", feed_id).execute()
+            await self.db.execute(sa_delete(RssFeed).where(RssFeed.id == feed_id))
+            await self.db.flush()
             logger.info(f"Deleted feed {feed_id}")
             return True
         except Exception as e:
@@ -717,43 +712,44 @@ class RSSService:
     # Private helpers
     # -----------------------------------------------------------------------
 
-    async def _record_feed_error(self, feed: dict, error_msg: str) -> None:
+    async def _record_feed_error(self, feed, error_msg: str) -> None:
         """Increment error count and optionally disable the feed."""
-        feed_id = feed["id"]
-        error_count = (feed.get("error_count", 0) or 0) + 1
+        feed_id = feed.id
+        error_count = (feed.error_count or 0) + 1
         new_status = (
-            "error" if error_count > MAX_ERROR_COUNT else feed.get("status", "active")
+            "error" if error_count > MAX_ERROR_COUNT else (feed.status or "active")
         )
 
         # Even on error, schedule the next check so it can recover
-        interval_hours = feed.get("check_interval_hours", 6)
-        next_check = (
-            datetime.now(timezone.utc) + timedelta(hours=interval_hours)
-        ).isoformat()
+        interval_hours = feed.check_interval_hours or 6
+        next_check = datetime.now(timezone.utc) + timedelta(hours=interval_hours)
 
         try:
-            self.supabase.table("rss_feeds").update(
-                {
-                    "error_count": error_count,
-                    "last_error": error_msg[:1000],
-                    "status": new_status,
-                    "last_checked_at": _now_iso(),
-                    "next_check_at": next_check,
-                    "updated_at": _now_iso(),
-                }
-            ).eq("id", feed_id).execute()
+            await self.db.execute(
+                sa_update(RssFeed)
+                .where(RssFeed.id == feed_id)
+                .values(
+                    error_count=error_count,
+                    last_error=error_msg[:1000],
+                    status=new_status,
+                    last_checked_at=datetime.now(timezone.utc),
+                    next_check_at=next_check,
+                    updated_at=datetime.now(timezone.utc),
+                )
+            )
+            await self.db.flush()
         except Exception as e:
             logger.warning(f"Failed to record error for feed {feed_id}: {e}")
 
         if error_count > MAX_ERROR_COUNT:
             logger.warning(
-                f"Feed '{feed.get('name', feed_id)}' disabled after "
+                f"Feed '{feed.name or feed_id}' disabled after "
                 f"{error_count} consecutive errors"
             )
 
-    def _mark_processed(
+    async def _mark_processed(
         self,
-        item_id: str,
+        item_id,
         triage_result: str,
         card_id: Optional[str] = None,
         source_id: Optional[str] = None,
@@ -769,41 +765,68 @@ class RSSService:
             update_data["source_id"] = source_id
 
         try:
-            self.supabase.table("rss_feed_items").update(update_data).eq(
-                "id", item_id
-            ).execute()
+            await self.db.execute(
+                sa_update(RssFeedItem)
+                .where(RssFeedItem.id == item_id)
+                .values(**update_data)
+            )
+            await self.db.flush()
         except Exception as e:
             logger.warning(f"Failed to mark item {item_id} as processed: {e}")
 
-    def _increment_feed_matched(self, feed_id: str) -> None:
+    async def _increment_feed_matched(self, feed_id) -> None:
         """Increment the articles_matched_total counter on a feed."""
         try:
-            # Read current value then increment (no RPC needed for simple +1)
-            feed_result = (
-                self.supabase.table("rss_feeds")
-                .select("articles_matched_total")
-                .eq("id", feed_id)
-                .single()
-                .execute()
+            result = await self.db.execute(
+                select(RssFeed.articles_matched_total).where(RssFeed.id == feed_id)
             )
-            current = (
-                feed_result.data.get("articles_matched_total", 0) or 0
-                if feed_result.data
-                else 0
+            current = result.scalar() or 0
+            await self.db.execute(
+                sa_update(RssFeed)
+                .where(RssFeed.id == feed_id)
+                .values(
+                    articles_matched_total=current + 1,
+                    updated_at=datetime.now(timezone.utc),
+                )
             )
-            self.supabase.table("rss_feeds").update(
-                {
-                    "articles_matched_total": current + 1,
-                    "updated_at": _now_iso(),
-                }
-            ).eq("id", feed_id).execute()
+            await self.db.flush()
         except Exception as e:
             logger.warning(f"Failed to increment matched count for feed {feed_id}: {e}")
 
+    async def _feed_name(self, item) -> str:
+        """Extract the feed name from a feed item by looking up the feed."""
+        try:
+            result = await self.db.execute(
+                select(RssFeed.name).where(RssFeed.id == item.feed_id)
+            )
+            name = result.scalar()
+            return name or "RSS Feed"
+        except Exception:
+            return "RSS Feed"
+
     @staticmethod
-    def _feed_name(item: dict) -> str:
-        """Extract the feed name from a joined item row."""
-        feed_info = item.get("rss_feeds")
-        if isinstance(feed_info, dict):
-            return feed_info.get("name", "RSS Feed")
-        return "RSS Feed"
+    def _feed_to_dict(feed) -> dict:
+        """Convert an RssFeed ORM object to a dict."""
+        return {
+            "id": str(feed.id),
+            "url": feed.url,
+            "name": feed.name,
+            "category": feed.category,
+            "pillar_id": feed.pillar_id,
+            "check_interval_hours": feed.check_interval_hours,
+            "status": feed.status,
+            "last_checked_at": (
+                feed.last_checked_at.isoformat() if feed.last_checked_at else None
+            ),
+            "next_check_at": (
+                feed.next_check_at.isoformat() if feed.next_check_at else None
+            ),
+            "error_count": feed.error_count or 0,
+            "last_error": feed.last_error,
+            "feed_title": feed.feed_title,
+            "feed_link": feed.feed_link,
+            "articles_found_total": feed.articles_found_total or 0,
+            "articles_matched_total": feed.articles_matched_total or 0,
+            "created_at": feed.created_at.isoformat() if feed.created_at else None,
+            "updated_at": feed.updated_at.isoformat() if feed.updated_at else None,
+        }

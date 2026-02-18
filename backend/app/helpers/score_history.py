@@ -9,7 +9,9 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from supabase import Client
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.db.card_extras import CardScoreHistory, CardTimeline
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +27,8 @@ SCORE_FIELDS = [
 ]
 
 
-def _record_score_history(
-    supabase_client: Client,
+async def _record_score_history(
+    db: AsyncSession,
     old_card_data: Dict[str, Any],
     new_card_data: Dict[str, Any],
     card_id: str,
@@ -38,7 +40,7 @@ def _record_score_history(
     one score value has changed. This enables temporal trend tracking.
 
     Args:
-        supabase_client: Supabase client instance
+        db: AsyncSession instance
         old_card_data: Card data before the update
         new_card_data: Card data after the update
         card_id: UUID of the card being tracked
@@ -63,22 +65,22 @@ def _record_score_history(
 
     try:
         # Prepare the history record with new scores
-        now = datetime.now(timezone.utc).isoformat()
-        history_record = {
-            "id": str(uuid.uuid4()),
-            "card_id": card_id,
-            "recorded_at": now,
-            "novelty_score": new_card_data.get("novelty_score"),
-            "maturity_score": new_card_data.get("maturity_score"),
-            "impact_score": new_card_data.get("impact_score"),
-            "relevance_score": new_card_data.get("relevance_score"),
-            "velocity_score": new_card_data.get("velocity_score"),
-            "risk_score": new_card_data.get("risk_score"),
-            "opportunity_score": new_card_data.get("opportunity_score"),
-        }
+        history_obj = CardScoreHistory(
+            id=uuid.uuid4(),
+            card_id=uuid.UUID(card_id) if isinstance(card_id, str) else card_id,
+            recorded_at=datetime.now(timezone.utc),
+            novelty_score=new_card_data.get("novelty_score"),
+            maturity_score=new_card_data.get("maturity_score"),
+            impact_score=new_card_data.get("impact_score"),
+            relevance_score=new_card_data.get("relevance_score"),
+            velocity_score=new_card_data.get("velocity_score"),
+            risk_score=new_card_data.get("risk_score"),
+            opportunity_score=new_card_data.get("opportunity_score"),
+        )
 
         # Insert the history record
-        supabase_client.table("card_score_history").insert(history_record).execute()
+        db.add(history_obj)
+        await db.flush()
         logger.info(f"Recorded score history for card {card_id}")
         return True
 
@@ -88,8 +90,8 @@ def _record_score_history(
         return False
 
 
-def _record_stage_history(
-    supabase_client: Client,
+async def _record_stage_history(
+    db: AsyncSession,
     old_card_data: Dict[str, Any],
     new_card_data: Dict[str, Any],
     card_id: str,
@@ -104,7 +106,7 @@ def _record_stage_history(
     old and new stage/horizon values for tracking maturity progression.
 
     Args:
-        supabase_client: Supabase client instance
+        db: AsyncSession instance
         old_card_data: Card data before the update
         new_card_data: Card data after the update
         card_id: UUID of the card being tracked
@@ -126,28 +128,29 @@ def _record_stage_history(
         return False
 
     try:
-        now = datetime.now(timezone.utc).isoformat()
-        timeline_entry = {
-            "card_id": card_id,
-            "event_type": "stage_changed",
-            "description": f"Stage changed from {old_stage or 'none'} to {new_stage or 'none'}",
-            "user_id": user_id,
-            "old_stage_id": int(old_stage) if old_stage else None,
-            "new_stage_id": int(new_stage) if new_stage else None,
-            "old_horizon": old_horizon,
-            "new_horizon": new_horizon,
-            "trigger": trigger,
-            "reason": reason,
-            "metadata": {
+        timeline_obj = CardTimeline(
+            card_id=uuid.UUID(card_id) if isinstance(card_id, str) else card_id,
+            event_type="stage_changed",
+            title="Stage Changed",
+            description=f"Stage changed from {old_stage or 'none'} to {new_stage or 'none'}",
+            created_by=uuid.UUID(user_id) if user_id else None,
+            old_stage_id=int(old_stage) if old_stage else None,
+            new_stage_id=int(new_stage) if new_stage else None,
+            old_horizon=old_horizon,
+            new_horizon=new_horizon,
+            trigger=trigger,
+            reason=reason,
+            metadata_={
                 "old_stage_id": old_stage,
                 "new_stage_id": new_stage,
                 "old_horizon": old_horizon,
                 "new_horizon": new_horizon,
             },
-            "created_at": now,
-        }
+            created_at=datetime.now(timezone.utc),
+        )
 
-        supabase_client.table("card_timeline").insert(timeline_entry).execute()
+        db.add(timeline_obj)
+        await db.flush()
         logger.info(
             f"Recorded stage transition for card {card_id}: {old_stage} -> {new_stage}"
         )

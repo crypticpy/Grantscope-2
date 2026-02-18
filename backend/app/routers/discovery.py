@@ -1,27 +1,70 @@
-"""Discovery pipeline router."""
+"""Discovery pipeline router -- SQLAlchemy 2.0 async."""
 
 import logging
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, date, timezone
+from decimal import Decimal
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
+from sqlalchemy import select, update, desc, asc
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.deps import supabase, get_current_user, _safe_error, openai_client, limiter
+from app.deps import (
+    get_db,
+    get_current_user_hardcoded,
+    _safe_error,
+    openai_client,
+    limiter,
+)
 from app.models.discovery_models import (
     DiscoveryConfigRequest,
-    DiscoveryRun,
+    DiscoveryRun as DiscoveryRunSchema,
     get_discovery_max_queries,
     get_discovery_max_sources,
 )
+from app.models.db.card import Card
+from app.models.db.card_extras import CardSnapshot
+from app.models.db.workstream import Workstream, WorkstreamCard
+from app.models.db.discovery import DiscoveryRun, DiscoverySchedule
+from app.models.db.user import User
 from app.alignment_service import AlignmentService
 from app.discovery_service import DiscoveryService
 from app.helpers.workstream_utils import _filter_cards_for_workstream
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["discovery"])
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _row_to_dict(obj, skip_cols=None) -> dict:
+    """Convert an ORM model instance to a plain dict, serialising special types."""
+    skip = skip_cols or set()
+    result = {}
+    for col in obj.__table__.columns:
+        if col.name in skip:
+            continue
+        value = getattr(obj, col.name, None)
+        if isinstance(value, uuid.UUID):
+            result[col.name] = str(value)
+        elif isinstance(value, (datetime, date)):
+            result[col.name] = value.isoformat()
+        elif isinstance(value, Decimal):
+            result[col.name] = float(value)
+        else:
+            result[col.name] = value
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Auto-distribution helper (uses its own session)
+# ---------------------------------------------------------------------------
 
 
 async def _distribute_cards_to_auto_add_workstreams(new_card_ids: List[str]):
@@ -43,101 +86,116 @@ async def _distribute_cards_to_auto_add_workstreams(new_card_ids: List[str]):
 
     logger.info(f"Distributing {len(new_card_ids)} new cards to auto_add workstreams")
 
-    # Fetch the new cards
-    cards_response = (
-        supabase.table("cards")
-        .select("id, pillar_id, goal_id, stage_id, horizon, name, summary, description")
-        .in_("id", new_card_ids)
-        .execute()
-    )
-    new_cards = cards_response.data or []
-    if not new_cards:
+    from app.database import async_session_factory
+
+    if async_session_factory is None:
+        logger.warning("No database session factory – skipping auto-distribution")
         return
 
-    # Fetch all active workstreams with auto_add enabled
-    ws_response = (
-        supabase.table("workstreams")
-        .select("id, user_id, pillar_ids, goal_ids, stage_ids, horizon, keywords")
-        .eq("auto_add", True)
-        .eq("is_active", True)
-        .execute()
-    )
-    workstreams = ws_response.data or []
-    if not workstreams:
-        logger.info("No active workstreams with auto_add enabled")
-        return
-
-    total_distributed = 0
-
-    for ws in workstreams:
+    async with async_session_factory() as db:
         try:
-            # Get existing card IDs in this workstream to avoid duplicates
-            existing_response = (
-                supabase.table("workstream_cards")
-                .select("card_id")
-                .eq("workstream_id", ws["id"])
-                .execute()
+            # Fetch the new cards
+            uuid_ids = [uuid.UUID(cid) for cid in new_card_ids]
+            stmt = select(Card).where(Card.id.in_(uuid_ids))
+            result = await db.execute(stmt)
+            card_rows = result.scalars().all()
+            new_cards = [_row_to_dict(c) for c in card_rows]
+            if not new_cards:
+                return
+
+            # Fetch all active workstreams with auto_add enabled
+            ws_stmt = (
+                select(Workstream)
+                .where(Workstream.auto_add == True)  # noqa: E712
+                .where(Workstream.is_active == True)  # noqa: E712
             )
-            existing_card_ids = {
-                item["card_id"] for item in existing_response.data or []
-            }
+            ws_result = await db.execute(ws_stmt)
+            workstream_rows = ws_result.scalars().all()
+            workstreams = [_row_to_dict(ws) for ws in workstream_rows]
+            if not workstreams:
+                logger.info("No active workstreams with auto_add enabled")
+                return
 
-            # Filter new cards against workstream criteria using shared helper
-            non_duplicate_cards = [
-                c for c in new_cards if c["id"] not in existing_card_ids
-            ]
-            matching_cards = _filter_cards_for_workstream(ws, non_duplicate_cards)
+            total_distributed = 0
 
-            if not matching_cards:
-                continue
+            for ws in workstreams:
+                try:
+                    ws_uuid = uuid.UUID(ws["id"])
 
-            # Get current max position in inbox for this workstream
-            pos_response = (
-                supabase.table("workstream_cards")
-                .select("position")
-                .eq("workstream_id", ws["id"])
-                .eq("status", "inbox")
-                .order("position", desc=True)
-                .limit(1)
-                .execute()
-            )
-            start_position = 0
-            if pos_response.data:
-                start_position = pos_response.data[0]["position"] + 1
+                    # Get existing card IDs in this workstream to avoid duplicates
+                    existing_stmt = select(WorkstreamCard.card_id).where(
+                        WorkstreamCard.workstream_id == ws_uuid
+                    )
+                    existing_result = await db.execute(existing_stmt)
+                    existing_card_ids = {str(row[0]) for row in existing_result.all()}
 
-            # Insert matching cards into workstream inbox
-            now = datetime.now(timezone.utc).isoformat()
-            records = [
-                {
-                    "workstream_id": ws["id"],
-                    "card_id": card["id"],
-                    "added_by": ws["user_id"],
-                    "added_at": now,
-                    "status": "inbox",
-                    "position": start_position + idx,
-                    "added_from": "auto_discovery",
-                    "updated_at": now,
-                }
-                for idx, card in enumerate(matching_cards)
-            ]
+                    # Filter new cards against workstream criteria using shared helper
+                    non_duplicate_cards = [
+                        c for c in new_cards if c["id"] not in existing_card_ids
+                    ]
+                    matching_cards = _filter_cards_for_workstream(
+                        ws, non_duplicate_cards
+                    )
 
-            supabase.table("workstream_cards").insert(records).execute()
-            total_distributed += len(records)
+                    if not matching_cards:
+                        continue
+
+                    # Get current max position in inbox for this workstream
+                    pos_stmt = (
+                        select(WorkstreamCard.position)
+                        .where(WorkstreamCard.workstream_id == ws_uuid)
+                        .where(WorkstreamCard.status == "inbox")
+                        .order_by(desc(WorkstreamCard.position))
+                        .limit(1)
+                    )
+                    pos_result = await db.execute(pos_stmt)
+                    pos_row = pos_result.scalar_one_or_none()
+                    start_position = (pos_row + 1) if pos_row is not None else 0
+
+                    # Insert matching cards into workstream inbox
+                    now = datetime.now(timezone.utc)
+                    for idx, card in enumerate(matching_cards):
+                        wc = WorkstreamCard(
+                            workstream_id=ws_uuid,
+                            card_id=uuid.UUID(card["id"]),
+                            added_by=(
+                                uuid.UUID(ws["user_id"]) if ws.get("user_id") else None
+                            ),
+                            added_at=now,
+                            status="inbox",
+                            position=start_position + idx,
+                            added_from="auto_discovery",
+                            updated_at=now,
+                        )
+                        db.add(wc)
+
+                    total_distributed += len(matching_cards)
+                    logger.info(
+                        f"Auto-added {len(matching_cards)} cards to workstream "
+                        f"'{ws['id']}' (auto_discovery)"
+                    )
+
+                except Exception as e:
+                    logger.error(
+                        f"Failed to distribute cards to workstream {ws.get('id')}: {e}"
+                    )
+                    continue
+
+            await db.commit()
+
             logger.info(
-                f"Auto-added {len(records)} cards to workstream "
-                f"'{ws['id']}' (auto_discovery)"
+                f"Post-discovery distribution complete: {total_distributed} cards "
+                f"distributed across {len(workstreams)} auto_add workstreams"
             )
 
         except Exception as e:
-            logger.error(
-                f"Failed to distribute cards to workstream {ws.get('id')}: {e}"
-            )
-            continue
+            await db.rollback()
+            logger.error(f"Auto-distribution transaction failed: {e}")
 
-    logger.info(
-        f"Post-discovery distribution complete: {total_distributed} cards "
-        f"distributed across {len(workstreams)} auto_add workstreams"
-    )
+
+# ---------------------------------------------------------------------------
+# Background discovery runner
+# ---------------------------------------------------------------------------
 
 
 async def execute_discovery_run_background(
@@ -149,6 +207,11 @@ async def execute_discovery_run_background(
     Updates run status through lifecycle: running -> completed/failed
     """
     from app.discovery_service import DiscoveryService, DiscoveryConfig
+    from app.database import async_session_factory
+
+    if async_session_factory is None:
+        logger.error("No database session factory – cannot run discovery")
+        return
 
     try:
         logger.info(f"Starting discovery run {run_id}")
@@ -163,28 +226,36 @@ async def execute_discovery_run_background(
         )
 
         # Execute discovery using the service (pass existing run_id to avoid duplicate)
-        service = DiscoveryService(
-            supabase, openai_client, triggered_by_user_id=user_id
-        )
-        result = await service.execute_discovery_run(
-            discovery_config, existing_run_id=run_id
-        )
+        async with async_session_factory() as db:
+            service = DiscoveryService(db, openai_client, triggered_by_user_id=user_id)
+            result = await service.execute_discovery_run(
+                discovery_config, existing_run_id=run_id
+            )
 
-        # Update the run record with results (service already updates its own record,
-        # but we update the one we created in the endpoint)
-        supabase.table("discovery_runs").update(
-            {
-                "status": result.status.value,
-                "completed_at": datetime.now(timezone.utc).isoformat(),
-                "queries_generated": result.queries_generated,
-                "sources_found": result.sources_discovered,
-                "sources_relevant": result.sources_triaged,
-                "cards_created": len(result.cards_created),
-                "cards_enriched": len(result.cards_enriched),
-                "cards_deduplicated": result.sources_duplicate,
-                "estimated_cost": result.estimated_cost,
-            }
-        ).eq("id", run_id).execute()
+        # Update the run record with results
+        async with async_session_factory() as db:
+            try:
+                run_uuid = uuid.UUID(run_id)
+                stmt = (
+                    update(DiscoveryRun)
+                    .where(DiscoveryRun.id == run_uuid)
+                    .values(
+                        status=result.status.value,
+                        completed_at=datetime.now(timezone.utc),
+                        queries_generated=result.queries_generated,
+                        sources_found=result.sources_discovered,
+                        sources_relevant=result.sources_triaged,
+                        cards_created=len(result.cards_created),
+                        cards_enriched=len(result.cards_enriched),
+                        cards_deduplicated=result.sources_duplicate,
+                        estimated_cost=result.estimated_cost,
+                    )
+                )
+                await db.execute(stmt)
+                await db.commit()
+            except Exception:
+                await db.rollback()
+                raise
 
         logger.info(
             f"Discovery run {run_id} completed: {len(result.cards_created)} cards created, {len(result.cards_enriched)} enriched"
@@ -202,13 +273,22 @@ async def execute_discovery_run_background(
     except Exception as e:
         logger.error(f"Discovery run {run_id} failed: {str(e)}", exc_info=True)
         # Update as failed
-        supabase.table("discovery_runs").update(
-            {
-                "status": "failed",
-                "completed_at": datetime.now(timezone.utc).isoformat(),
-                "error_message": str(e),
-            }
-        ).eq("id", run_id).execute()
+        try:
+            async with async_session_factory() as db:
+                run_uuid = uuid.UUID(run_id)
+                stmt = (
+                    update(DiscoveryRun)
+                    .where(DiscoveryRun.id == run_uuid)
+                    .values(
+                        status="failed",
+                        completed_at=datetime.now(timezone.utc),
+                        error_message=str(e),
+                    )
+                )
+                await db.execute(stmt)
+                await db.commit()
+        except Exception as update_err:
+            logger.error(f"Failed to mark discovery run as failed: {update_err}")
 
 
 # ============================================================================
@@ -223,37 +303,46 @@ async def run_weekly_discovery():
     Scheduled to run every Sunday at 2:00 AM UTC. Executes a full
     discovery run with default configuration across all pillars.
     """
+    from app.database import async_session_factory
+
     logger.info("Starting weekly discovery run...")
 
+    if async_session_factory is None:
+        logger.error("No database session factory – cannot run weekly discovery")
+        return
+
     try:
-        # Get system user for automated tasks
-        system_user = supabase.table("users").select("id").limit(1).execute()
-        user_id = system_user.data[0]["id"] if system_user.data else None
+        async with async_session_factory() as db:
+            # Get system user for automated tasks
+            user_stmt = select(User.id).limit(1)
+            user_result = await db.execute(user_stmt)
+            user_row = user_result.scalar_one_or_none()
 
-        if not user_id:
-            logger.warning("Weekly discovery: No system user found, skipping")
-            return
+            if not user_row:
+                logger.warning("Weekly discovery: No system user found, skipping")
+                return
 
-        # Create discovery run with default config
-        run_id = str(uuid.uuid4())
-        config = DiscoveryConfigRequest()  # Default values
+            user_id = str(user_row)
 
-        run_record = {
-            "id": run_id,
-            "status": "running",
-            "triggered_by": "scheduled",
-            "triggered_by_user": user_id,
-            "cards_created": 0,
-            "cards_enriched": 0,
-            "cards_deduplicated": 0,
-            "sources_found": 0,
-            "started_at": datetime.now(timezone.utc).isoformat(),
-            "summary_report": {"stage": "queued", "config": config.dict()},
-        }
+            # Create discovery run with default config
+            config = DiscoveryConfigRequest()  # Default values
 
-        supabase.table("discovery_runs").insert(run_record).execute()
+            run = DiscoveryRun(
+                status="running",
+                triggered_by="scheduled",
+                triggered_by_user=uuid.UUID(user_id),
+                cards_created=0,
+                cards_enriched=0,
+                cards_deduplicated=0,
+                sources_found=0,
+                started_at=datetime.now(timezone.utc),
+                summary_report={"stage": "queued", "config": config.dict()},
+            )
+            db.add(run)
+            await db.commit()
+            await db.refresh(run)
 
-        logger.info(f"Weekly discovery run queued: {run_id}")
+            logger.info(f"Weekly discovery run queued: {run.id}")
 
     except Exception as e:
         logger.error(f"Weekly discovery failed: {str(e)}")
@@ -265,7 +354,9 @@ async def run_weekly_discovery():
 
 
 @router.get("/discovery/config")
-async def get_discovery_config(current_user: dict = Depends(get_current_user)):
+async def get_discovery_config(
+    current_user: dict = Depends(get_current_user_hardcoded),
+):
     """
     Get current discovery configuration defaults.
 
@@ -283,12 +374,13 @@ async def get_discovery_config(current_user: dict = Depends(get_current_user)):
     }
 
 
-@router.post("/discovery/run", response_model=DiscoveryRun)
+@router.post("/discovery/run", response_model=DiscoveryRunSchema)
 @limiter.limit("3/minute")
 async def trigger_discovery_run(
     request: Request,
     config: DiscoveryConfigRequest = DiscoveryConfigRequest(),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Trigger a new discovery run.
@@ -310,31 +402,26 @@ async def trigger_discovery_run(
         }
 
         # Create discovery run record with resolved config
-        run_record = {
-            "status": "running",
-            "triggered_by": "manual",
-            "triggered_by_user": current_user["id"],
-            "summary_report": {"stage": "queued", "config": resolved_config},
-            "cards_created": 0,
-            "cards_enriched": 0,
-            "cards_deduplicated": 0,
-            "sources_found": 0,
-            "started_at": datetime.now(timezone.utc).isoformat(),
-        }
+        run = DiscoveryRun(
+            status="running",
+            triggered_by="manual",
+            triggered_by_user=uuid.UUID(current_user["id"]),
+            summary_report={"stage": "queued", "config": resolved_config},
+            cards_created=0,
+            cards_enriched=0,
+            cards_deduplicated=0,
+            sources_found=0,
+            started_at=datetime.now(timezone.utc),
+        )
+        db.add(run)
+        await db.flush()
+        await db.refresh(run)
 
-        result = supabase.table("discovery_runs").insert(run_record).execute()
-
-        if not result.data:
-            raise HTTPException(
-                status_code=500, detail="Failed to create discovery run"
-            )
-
-        run = result.data[0]
-        run_id = run["id"]
+        run_dict = _row_to_dict(run)
 
         # Discovery execution is handled by the background worker (see `app.worker`).
 
-        return DiscoveryRun(**run)
+        return DiscoveryRunSchema(**run_dict)
 
     except HTTPException:
         raise
@@ -345,9 +432,11 @@ async def trigger_discovery_run(
         ) from e
 
 
-@router.get("/discovery/runs/{run_id}", response_model=DiscoveryRun)
+@router.get("/discovery/runs/{run_id}", response_model=DiscoveryRunSchema)
 async def get_discovery_run(
-    run_id: str, current_user: dict = Depends(get_current_user)
+    run_id: str,
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get discovery run status.
@@ -355,86 +444,97 @@ async def get_discovery_run(
     Use this endpoint to poll for run completion after triggering a discovery run.
     Status values: running, completed, failed, cancelled
     """
-    result = (
-        supabase.table("discovery_runs").select("*").eq("id", run_id).single().execute()
-    )
+    try:
+        stmt = select(DiscoveryRun).where(DiscoveryRun.id == uuid.UUID(run_id))
+        result = await db.execute(stmt)
+        row = result.scalar_one_or_none()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=_safe_error("get discovery run", e)
+        ) from e
 
-    if not result.data:
+    if not row:
         raise HTTPException(status_code=404, detail="Discovery run not found")
 
-    return DiscoveryRun(**result.data)
+    return DiscoveryRunSchema(**_row_to_dict(row))
 
 
-@router.get("/discovery/runs", response_model=List[DiscoveryRun])
+@router.get("/discovery/runs", response_model=List[DiscoveryRunSchema])
 async def list_discovery_runs(
-    current_user: dict = Depends(get_current_user), limit: int = 20
+    current_user: dict = Depends(get_current_user_hardcoded),
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
 ):
     """
     List recent discovery runs.
 
     Returns the most recent runs, ordered by start time descending.
     """
-    result = (
-        supabase.table("discovery_runs")
-        .select("*")
-        .order("started_at", desc=True)
-        .limit(limit)
-        .execute()
-    )
+    try:
+        stmt = select(DiscoveryRun).order_by(desc(DiscoveryRun.started_at)).limit(limit)
+        result = await db.execute(stmt)
+        rows = result.scalars().all()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=_safe_error("list discovery runs", e)
+        ) from e
 
-    return [DiscoveryRun(**r) for r in result.data]
+    return [DiscoveryRunSchema(**_row_to_dict(r)) for r in rows]
 
 
 @router.post("/discovery/runs/{run_id}/cancel")
 async def cancel_discovery_run(
-    run_id: str, current_user: dict = Depends(get_current_user)
+    run_id: str,
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Cancel a running discovery run.
 
     Only runs with status 'running' can be cancelled.
     """
-    # Get current run status
-    response = supabase.table("discovery_runs").select("*").eq("id", run_id).execute()
+    try:
+        run_uuid = uuid.UUID(run_id)
+        stmt = select(DiscoveryRun).where(DiscoveryRun.id == run_uuid)
+        result = await db.execute(stmt)
+        run = result.scalar_one_or_none()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=_safe_error("cancel discovery run", e)
+        ) from e
 
-    if not response.data:
+    if not run:
         raise HTTPException(status_code=404, detail="Discovery run not found")
 
-    run = response.data[0]
-
     # Check if run can be cancelled
-    if run["status"] != "running":
+    if run.status != "running":
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot cancel run with status '{run['status']}'. Only 'running' runs can be cancelled.",
+            detail=f"Cannot cancel run with status '{run.status}'. Only 'running' runs can be cancelled.",
         )
 
     # Update status to cancelled
-    update_response = (
-        supabase.table("discovery_runs")
-        .update(
-            {
-                "status": "cancelled",
-                "completed_at": datetime.now(timezone.utc).isoformat(),
-                "error_message": f"Cancelled by user {current_user['id']}",
-            }
-        )
-        .eq("id", run_id)
-        .execute()
-    )
+    try:
+        run.status = "cancelled"
+        run.completed_at = datetime.now(timezone.utc)
+        run.error_message = f"Cancelled by user {current_user['id']}"
+        await db.flush()
+        await db.refresh(run)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=_safe_error("cancel discovery run update", e)
+        ) from e
 
-    if update_response.data:
-        logger.info(f"Discovery run {run_id} cancelled by user {current_user['id']}")
-        return DiscoveryRun(**update_response.data[0])
-    else:
-        raise HTTPException(status_code=500, detail="Failed to cancel discovery run")
+    logger.info(f"Discovery run {run_id} cancelled by user {current_user['id']}")
+    return DiscoveryRunSchema(**_row_to_dict(run))
 
 
 @router.post("/discovery/recover")
 @limiter.limit("1/hour")
 async def recover_cards(
     request: Request,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
     date_start: str = "2025-12-01",
     date_end: str = "2026-01-01",
 ):
@@ -448,7 +548,7 @@ async def recover_cards(
 
     try:
         result = await recover_cards_from_discovered_sources(
-            supabase=supabase,
+            db=db,
             date_start=date_start,
             date_end=date_end,
             triggered_by_user_id=current_user["id"],
@@ -463,7 +563,8 @@ async def recover_cards(
 @limiter.limit("1/hour")
 async def reprocess_errored_sources(
     request: Request,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
     date_start: str = "2025-12-01",
     date_end: str = "2026-02-13",
 ):
@@ -476,7 +577,7 @@ async def reprocess_errored_sources(
 
     try:
         result = await _reprocess(
-            supabase=supabase,
+            db=db,
             date_start=date_start,
             date_end=date_end,
             triggered_by_user_id=current_user["id"],
@@ -493,7 +594,8 @@ async def reprocess_errored_sources(
 @limiter.limit("3/hour")
 async def recover_analyzed_errors(
     request: Request,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
     date_start: str = "2025-12-01",
     date_end: str = "2026-02-01",
 ):
@@ -506,7 +608,7 @@ async def recover_analyzed_errors(
 
     try:
         result = await _recover(
-            supabase=supabase,
+            db=db,
             date_start=date_start,
             date_end=date_end,
             triggered_by_user_id=current_user["id"],
@@ -523,7 +625,8 @@ async def recover_analyzed_errors(
 @limiter.limit("3/hour")
 async def enrich_weak_signals(
     request: Request,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
     min_sources: int = 3,
     max_new_sources_per_card: int = 5,
 ):
@@ -536,7 +639,7 @@ async def enrich_weak_signals(
 
     try:
         result = await _enrich(
-            supabase=supabase,
+            db=db,
             min_sources=min_sources,
             max_new_sources_per_card=max_new_sources_per_card,
             triggered_by_user_id=current_user["id"],
@@ -551,7 +654,8 @@ async def enrich_weak_signals(
 @limiter.limit("30/hour")
 async def enrich_profiles(
     request: Request,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
     max_cards: int = 50,
 ):
     """Batch-generate rich signal profiles for cards with blank/thin descriptions."""
@@ -559,7 +663,7 @@ async def enrich_profiles(
 
     try:
         result = await enrich_signal_profiles(
-            supabase=supabase,
+            db=db,
             max_cards=max_cards,
             triggered_by_user_id=current_user["id"],
         )
@@ -572,7 +676,7 @@ async def enrich_profiles(
 
 
 # ============================================================================
-# Card Snapshots — version history for description/summary
+# Card Snapshots -- version history for description/summary
 # ============================================================================
 
 
@@ -580,106 +684,149 @@ async def enrich_profiles(
 async def list_card_snapshots(
     card_id: str,
     field_name: str = "description",
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
 ):
     """List all snapshots for a card field, newest first."""
-    result = (
-        supabase.table("card_snapshots")
-        .select("id, field_name, content_length, trigger, created_at, created_by")
-        .eq("card_id", card_id)
-        .eq("field_name", field_name)
-        .order("created_at", desc=True)
-        .limit(50)
-        .execute()
-    )
-    return {"snapshots": result.data or [], "card_id": card_id}
+    try:
+        card_uuid = uuid.UUID(card_id)
+        stmt = (
+            select(
+                CardSnapshot.id,
+                CardSnapshot.field_name,
+                CardSnapshot.content_length,
+                CardSnapshot.trigger,
+                CardSnapshot.created_at,
+                CardSnapshot.created_by,
+            )
+            .where(CardSnapshot.card_id == card_uuid)
+            .where(CardSnapshot.field_name == field_name)
+            .order_by(desc(CardSnapshot.created_at))
+            .limit(50)
+        )
+        result = await db.execute(stmt)
+        rows = result.all()
+
+        snapshots = []
+        for row in rows:
+            snap = {
+                "id": str(row.id) if isinstance(row.id, uuid.UUID) else row.id,
+                "field_name": row.field_name,
+                "content_length": row.content_length,
+                "trigger": row.trigger,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "created_by": str(row.created_by) if row.created_by else None,
+            }
+            snapshots.append(snap)
+
+        return {"snapshots": snapshots, "card_id": card_id}
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=_safe_error("list card snapshots", e)
+        ) from e
 
 
 @router.get("/cards/{card_id}/snapshots/{snapshot_id}")
 async def get_card_snapshot(
     card_id: str,
     snapshot_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get full content of a specific snapshot."""
-    result = (
-        supabase.table("card_snapshots")
-        .select("*")
-        .eq("id", snapshot_id)
-        .eq("card_id", card_id)
-        .single()
-        .execute()
-    )
-    if not result.data:
+    try:
+        stmt = (
+            select(CardSnapshot)
+            .where(CardSnapshot.id == uuid.UUID(snapshot_id))
+            .where(CardSnapshot.card_id == uuid.UUID(card_id))
+        )
+        result = await db.execute(stmt)
+        row = result.scalar_one_or_none()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=_safe_error("get card snapshot", e)
+        ) from e
+
+    if not row:
         raise HTTPException(status_code=404, detail="Snapshot not found")
-    return result.data
+    return _row_to_dict(row)
 
 
 @router.post("/cards/{card_id}/snapshots/{snapshot_id}/restore")
 async def restore_card_snapshot(
     card_id: str,
     snapshot_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
 ):
     """Restore a card field from a snapshot. Saves current value as a new snapshot first."""
-    # Get the snapshot to restore
-    snapshot = (
-        supabase.table("card_snapshots")
-        .select("*")
-        .eq("id", snapshot_id)
-        .eq("card_id", card_id)
-        .single()
-        .execute()
-    )
-    if not snapshot.data:
-        raise HTTPException(status_code=404, detail="Snapshot not found")
+    try:
+        card_uuid = uuid.UUID(card_id)
+        snap_uuid = uuid.UUID(snapshot_id)
 
-    field_name = snapshot.data["field_name"]
-    restore_content = snapshot.data["content"]
+        # Get the snapshot to restore
+        snap_stmt = (
+            select(CardSnapshot)
+            .where(CardSnapshot.id == snap_uuid)
+            .where(CardSnapshot.card_id == card_uuid)
+        )
+        snap_result = await db.execute(snap_stmt)
+        snapshot = snap_result.scalar_one_or_none()
 
-    # Get current value and save it as a snapshot before overwriting
-    card = (
-        supabase.table("cards")
-        .select(f"id, {field_name}")
-        .eq("id", card_id)
-        .single()
-        .execute()
-    )
-    if not card.data:
-        raise HTTPException(status_code=404, detail="Card not found")
+        if not snapshot:
+            raise HTTPException(status_code=404, detail="Snapshot not found")
 
-    current_content = card.data.get(field_name, "")
-    now = datetime.now(timezone.utc).isoformat()
+        field_name = snapshot.field_name
+        restore_content = snapshot.content
 
-    if current_content and len(current_content) > 10:
-        supabase.table("card_snapshots").insert(
-            {
-                "card_id": card_id,
-                "field_name": field_name,
-                "content": current_content,
-                "content_length": len(current_content),
-                "trigger": "restore",
-                "created_at": now,
-                "created_by": current_user.get("id", "user"),
-            }
-        ).execute()
+        # Get current card value
+        card_stmt = select(Card).where(Card.id == card_uuid)
+        card_result = await db.execute(card_stmt)
+        card = card_result.scalar_one_or_none()
 
-    # Restore the old content
-    supabase.table("cards").update({field_name: restore_content, "updated_at": now}).eq(
-        "id", card_id
-    ).execute()
+        if not card:
+            raise HTTPException(status_code=404, detail="Card not found")
 
-    logger.info(
-        f"Card {card_id} {field_name} restored from snapshot {snapshot_id} "
-        f"by user {current_user.get('id')}"
-    )
+        current_content = getattr(card, field_name, "") or ""
+        now = datetime.now(timezone.utc)
 
-    return {
-        "restored": True,
-        "field_name": field_name,
-        "snapshot_id": snapshot_id,
-        "content_length": len(restore_content),
-    }
+        # Save current content as a snapshot before overwriting
+        if current_content and len(current_content) > 10:
+            backup_snap = CardSnapshot(
+                card_id=card_uuid,
+                field_name=field_name,
+                content=current_content,
+                content_length=len(current_content),
+                trigger="restore",
+                created_at=now,
+                created_by=current_user.get("id", "user"),
+            )
+            db.add(backup_snap)
+
+        # Restore the old content
+        setattr(card, field_name, restore_content)
+        card.updated_at = now
+        await db.flush()
+
+        logger.info(
+            f"Card {card_id} {field_name} restored from snapshot {snapshot_id} "
+            f"by user {current_user.get('id')}"
+        )
+
+        return {
+            "restored": True,
+            "field_name": field_name,
+            "snapshot_id": snapshot_id,
+            "content_length": len(restore_content),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=_safe_error("restore card snapshot", e)
+        ) from e
 
 
 # ============================================================================
@@ -731,28 +878,31 @@ class DiscoveryScheduleUpdate(BaseModel):
 
 
 @router.get("/discovery/schedule", response_model=DiscoveryScheduleResponse)
-async def get_discovery_schedule(current_user: dict = Depends(get_current_user)):
+async def get_discovery_schedule(
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
+):
     """Get the current discovery schedule settings.
 
     Returns the default (or only) schedule configuration that controls
     automated discovery runs in the background worker.
     """
     try:
-        result = (
-            supabase.table("discovery_schedule")
-            .select("*")
-            .order("created_at", desc=False)
+        stmt = (
+            select(DiscoverySchedule)
+            .order_by(asc(DiscoverySchedule.created_at))
             .limit(1)
-            .execute()
         )
+        result = await db.execute(stmt)
+        row = result.scalar_one_or_none()
 
-        if not result.data:
+        if not row:
             raise HTTPException(
                 status_code=404,
                 detail="No discovery schedule configured. Run the migration first.",
             )
 
-        return DiscoveryScheduleResponse(**result.data[0])
+        return DiscoveryScheduleResponse(**_row_to_dict(row))
 
     except HTTPException:
         raise
@@ -766,7 +916,8 @@ async def get_discovery_schedule(current_user: dict = Depends(get_current_user))
 @router.put("/discovery/schedule", response_model=DiscoveryScheduleResponse)
 async def update_discovery_schedule(
     body: DiscoveryScheduleUpdate,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
 ):
     """Update discovery schedule settings.
 
@@ -776,48 +927,42 @@ async def update_discovery_schedule(
     """
     try:
         # Get existing schedule
-        existing = (
-            supabase.table("discovery_schedule")
-            .select("id")
-            .order("created_at", desc=False)
+        stmt = (
+            select(DiscoverySchedule)
+            .order_by(asc(DiscoverySchedule.created_at))
             .limit(1)
-            .execute()
         )
+        result = await db.execute(stmt)
+        schedule = result.scalar_one_or_none()
 
-        if not existing.data:
+        if not schedule:
             raise HTTPException(
                 status_code=404,
                 detail="No discovery schedule configured. Run the migration first.",
             )
-
-        schedule_id = existing.data[0]["id"]
 
         # Build update dict from non-None fields
         update_data = body.dict(exclude_none=True)
         if not update_data:
             raise HTTPException(status_code=400, detail="No fields to update")
 
-        update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        # Apply updates to the ORM object
+        for key, value in update_data.items():
+            setattr(schedule, key, value)
+        schedule.updated_at = datetime.now(timezone.utc)
 
-        result = (
-            supabase.table("discovery_schedule")
-            .update(update_data)
-            .eq("id", schedule_id)
-            .execute()
-        )
-
-        if not result.data:
-            raise HTTPException(status_code=500, detail="Failed to update schedule")
+        await db.flush()
+        await db.refresh(schedule)
 
         logger.info(
             f"Discovery schedule updated by user {current_user['id']}",
             extra={
-                "schedule_id": schedule_id,
+                "schedule_id": str(schedule.id),
                 "updated_fields": list(update_data.keys()),
             },
         )
 
-        return DiscoveryScheduleResponse(**result.data[0])
+        return DiscoveryScheduleResponse(**_row_to_dict(schedule))
 
     except HTTPException:
         raise
@@ -874,27 +1019,42 @@ class AutoMatchResponse(BaseModel):
 async def score_grant_against_program(
     card_id: str,
     program_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
 ):
     """Score a grant card against a program (workstream) for alignment.
 
     Returns a multi-factor alignment score showing how well the grant
     matches the program's goals, capacity, and timeline.
     """
-    # Fetch card
-    card_resp = supabase.table("cards").select("*").eq("id", card_id).execute()
-    if not card_resp.data:
-        raise HTTPException(status_code=404, detail="Card not found")
-    card = card_resp.data[0]
+    try:
+        # Fetch card
+        card_stmt = select(Card).where(Card.id == uuid.UUID(card_id))
+        card_result = await db.execute(card_stmt)
+        card_row = card_result.scalar_one_or_none()
+        if not card_row:
+            raise HTTPException(status_code=404, detail="Card not found")
+        card = _row_to_dict(card_row)
 
-    # Fetch workstream and verify ownership
-    ws_resp = supabase.table("workstreams").select("*").eq("id", program_id).execute()
-    if not ws_resp.data:
-        raise HTTPException(status_code=404, detail="Workstream not found")
-    workstream = ws_resp.data[0]
+        # Fetch workstream and verify ownership
+        ws_stmt = select(Workstream).where(Workstream.id == uuid.UUID(program_id))
+        ws_result = await db.execute(ws_stmt)
+        ws_row = ws_result.scalar_one_or_none()
+        if not ws_row:
+            raise HTTPException(status_code=404, detail="Workstream not found")
+        workstream = _row_to_dict(ws_row)
 
-    if workstream.get("user_id") != current_user["id"]:
-        raise HTTPException(status_code=403, detail="You do not own this workstream")
+        if workstream.get("user_id") != current_user["id"]:
+            raise HTTPException(
+                status_code=403, detail="You do not own this workstream"
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=_safe_error("alignment scoring lookup", e)
+        ) from e
 
     try:
         service = AlignmentService()
@@ -911,41 +1071,53 @@ async def score_grant_against_program(
 @router.get("/me/workstreams/{program_id}/matches", response_model=MatchesResponse)
 async def get_program_matches(
     program_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get top matching grants for a program (workstream).
 
     Scores active grant cards against the workstream and returns
     the top 20 matches sorted by overall alignment score.
     """
-    # Fetch workstream and verify ownership
-    ws_resp = supabase.table("workstreams").select("*").eq("id", program_id).execute()
-    if not ws_resp.data:
-        raise HTTPException(status_code=404, detail="Workstream not found")
-    workstream = ws_resp.data[0]
+    try:
+        # Fetch workstream and verify ownership
+        ws_stmt = select(Workstream).where(Workstream.id == uuid.UUID(program_id))
+        ws_result = await db.execute(ws_stmt)
+        ws_row = ws_result.scalar_one_or_none()
+        if not ws_row:
+            raise HTTPException(status_code=404, detail="Workstream not found")
+        workstream = _row_to_dict(ws_row)
 
-    if workstream.get("user_id") != current_user["id"]:
-        raise HTTPException(status_code=403, detail="You do not own this workstream")
+        if workstream.get("user_id") != current_user["id"]:
+            raise HTTPException(
+                status_code=403, detail="You do not own this workstream"
+            )
 
-    # Fetch active cards with grant fields (deadline null or >= now, status active)
-    now_iso = datetime.now(timezone.utc).isoformat()
-    cards_resp = (
-        supabase.table("cards")
-        .select(
-            "id, name, summary, grantor, funding_amount_min, funding_amount_max, "
-            "deadline, grant_type, status, pillar_id, stage_id, description"
+        # Fetch active cards with grant fields (status active)
+        now_iso = datetime.now(timezone.utc).isoformat()
+        cards_stmt = (
+            select(Card)
+            .where(Card.status == "active")
+            .order_by(desc(Card.created_at))
+            .limit(50)
         )
-        .eq("status", "active")
-        .order("created_at", desc=True)
-        .limit(50)
-        .execute()
-    )
-    cards = cards_resp.data or []
+        cards_result = await db.execute(cards_stmt)
+        card_rows = cards_result.scalars().all()
+        cards = [_row_to_dict(c) for c in card_rows]
 
-    # Filter: deadline is null or >= now
-    eligible_cards = [
-        c for c in cards if c.get("deadline") is None or c.get("deadline") >= now_iso
-    ]
+        # Filter: deadline is null or >= now
+        eligible_cards = [
+            c
+            for c in cards
+            if c.get("deadline") is None or c.get("deadline") >= now_iso
+        ]
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=_safe_error("program matches lookup", e)
+        ) from e
 
     try:
         service = AlignmentService()
@@ -998,7 +1170,8 @@ async def get_program_matches(
 )
 async def auto_match_program(
     program_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
 ):
     """Auto-add top matching grants to a program's pipeline.
 
@@ -1006,33 +1179,46 @@ async def auto_match_program(
     adds cards with overall_score >= 60 to the workstream_cards table
     with status 'discovered'. Skips cards already in the workstream.
     """
-    # Fetch workstream and verify ownership
-    ws_resp = supabase.table("workstreams").select("*").eq("id", program_id).execute()
-    if not ws_resp.data:
-        raise HTTPException(status_code=404, detail="Workstream not found")
-    workstream = ws_resp.data[0]
+    try:
+        program_uuid = uuid.UUID(program_id)
 
-    if workstream.get("user_id") != current_user["id"]:
-        raise HTTPException(status_code=403, detail="You do not own this workstream")
+        # Fetch workstream and verify ownership
+        ws_stmt = select(Workstream).where(Workstream.id == program_uuid)
+        ws_result = await db.execute(ws_stmt)
+        ws_row = ws_result.scalar_one_or_none()
+        if not ws_row:
+            raise HTTPException(status_code=404, detail="Workstream not found")
+        workstream = _row_to_dict(ws_row)
 
-    # Fetch active cards
-    now_iso = datetime.now(timezone.utc).isoformat()
-    cards_resp = (
-        supabase.table("cards")
-        .select(
-            "id, name, summary, grantor, funding_amount_min, funding_amount_max, "
-            "deadline, grant_type, status, pillar_id, stage_id, description"
+        if workstream.get("user_id") != current_user["id"]:
+            raise HTTPException(
+                status_code=403, detail="You do not own this workstream"
+            )
+
+        # Fetch active cards
+        now_iso = datetime.now(timezone.utc).isoformat()
+        cards_stmt = (
+            select(Card)
+            .where(Card.status == "active")
+            .order_by(desc(Card.created_at))
+            .limit(50)
         )
-        .eq("status", "active")
-        .order("created_at", desc=True)
-        .limit(50)
-        .execute()
-    )
-    cards = cards_resp.data or []
+        cards_result = await db.execute(cards_stmt)
+        card_rows = cards_result.scalars().all()
+        cards = [_row_to_dict(c) for c in card_rows]
 
-    eligible_cards = [
-        c for c in cards if c.get("deadline") is None or c.get("deadline") >= now_iso
-    ]
+        eligible_cards = [
+            c
+            for c in cards
+            if c.get("deadline") is None or c.get("deadline") >= now_iso
+        ]
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=_safe_error("auto-match lookup", e)
+        ) from e
 
     try:
         service = AlignmentService()
@@ -1049,38 +1235,42 @@ async def auto_match_program(
         (card, result) for card, result in scored if result.overall_score >= 60
     ]
 
-    # Get existing card IDs in this workstream to avoid duplicates
-    existing_resp = (
-        supabase.table("workstream_cards")
-        .select("card_id")
-        .eq("workstream_id", program_id)
-        .execute()
-    )
-    existing_card_ids = {row["card_id"] for row in (existing_resp.data or [])}
+    try:
+        # Get existing card IDs in this workstream to avoid duplicates
+        existing_stmt = select(WorkstreamCard.card_id).where(
+            WorkstreamCard.workstream_id == program_uuid
+        )
+        existing_result = await db.execute(existing_stmt)
+        existing_card_ids = {str(row[0]) for row in existing_result.all()}
 
-    # Build insert records for new qualifying cards
-    now = datetime.now(timezone.utc).isoformat()
-    new_card_ids = []
-    records = []
-    for card_data, _alignment_result in qualifying:
-        cid = card_data.get("id", "")
-        if cid and cid not in existing_card_ids:
-            new_card_ids.append(cid)
-            records.append(
-                {
-                    "workstream_id": program_id,
-                    "card_id": cid,
-                    "added_by": current_user["id"],
-                    "added_at": now,
-                    "status": "discovered",
-                    "added_from": "auto_match",
-                    "updated_at": now,
-                }
+        # Build insert records for new qualifying cards
+        now = datetime.now(timezone.utc)
+        new_card_ids = []
+        for card_data, _alignment_result in qualifying:
+            cid = card_data.get("id", "")
+            if cid and cid not in existing_card_ids:
+                new_card_ids.append(cid)
+                wc = WorkstreamCard(
+                    workstream_id=program_uuid,
+                    card_id=uuid.UUID(cid),
+                    added_by=uuid.UUID(current_user["id"]),
+                    added_at=now,
+                    status="discovered",
+                    added_from="auto_match",
+                    updated_at=now,
+                )
+                db.add(wc)
+
+        if new_card_ids:
+            await db.flush()
+            logger.info(
+                f"Auto-match added {len(new_card_ids)} cards to workstream {program_id}"
             )
 
-    if records:
-        supabase.table("workstream_cards").insert(records).execute()
-        logger.info(f"Auto-match added {len(records)} cards to workstream {program_id}")
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=_safe_error("auto-match insert", e)
+        ) from e
 
     return AutoMatchResponse(
         program_id=program_id,

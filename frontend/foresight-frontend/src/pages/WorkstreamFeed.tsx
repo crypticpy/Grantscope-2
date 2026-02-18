@@ -25,7 +25,6 @@ import {
   ChevronDown,
   MessageSquare,
 } from "lucide-react";
-import { supabase } from "../App";
 import { useAuthContext } from "../hooks/useAuthContext";
 import { API_BASE_URL } from "../lib/config";
 import { cn } from "../lib/utils";
@@ -339,27 +338,37 @@ const WorkstreamFeed: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      const { data, error: fetchError } = await supabase
-        .from("workstreams")
-        .select("*")
-        .eq("id", id)
-        .single();
+      const token = localStorage.getItem("gs2_token");
+      if (!token) {
+        setError("Authentication required.");
+        return;
+      }
 
-      if (fetchError) {
-        console.error("Error loading workstream:", fetchError);
+      const response = await fetch(`${API_BASE_URL}/api/v1/me/workstreams`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        console.error("Error loading workstreams:", response.status);
         setError(
           "Failed to load workstream. It may not exist or you may not have access.",
         );
         return;
       }
 
-      // Verify ownership
-      if (data.user_id !== user?.id) {
-        setError("You do not have access to this workstream.");
+      const workstreams: Workstream[] = await response.json();
+      const found = workstreams.find((ws) => ws.id === id);
+
+      if (!found) {
+        setError(
+          "Failed to load workstream. It may not exist or you may not have access.",
+        );
         return;
       }
 
-      setWorkstream(data);
+      setWorkstream(found);
     } catch (err) {
       console.error("Error loading workstream:", err);
       setError("An unexpected error occurred.");
@@ -369,11 +378,7 @@ const WorkstreamFeed: React.FC = () => {
   };
 
   /**
-   * Load cards matching workstream filters
-   *
-   * This queries cards based on the workstream's filter criteria.
-   * In a production environment, this would ideally call an API endpoint
-   * like GET /api/v1/me/workstreams/{id}/feed that handles the filtering server-side.
+   * Load cards matching workstream filters via the backend API.
    */
   const loadWorkstreamFeed = async () => {
     if (!workstream) return;
@@ -381,47 +386,56 @@ const WorkstreamFeed: React.FC = () => {
     try {
       setCardsLoading(true);
 
-      let query = supabase.from("cards").select("*").eq("status", "active");
+      const token = localStorage.getItem("gs2_token");
+      if (!token) return;
 
-      // Apply pillar filter
+      // Build query parameters from workstream filters
+      const params = new URLSearchParams();
+      params.set("status", "active");
+      params.set("sort", "-created_at");
+      params.set("limit", "200");
+
       if (workstream.pillar_ids && workstream.pillar_ids.length > 0) {
-        query = query.in("pillar_id", workstream.pillar_ids);
+        for (const pillar of workstream.pillar_ids) {
+          params.append("pillar_id", pillar);
+        }
       }
 
-      // Apply horizon filter
       if (workstream.horizon && workstream.horizon !== "ALL") {
-        query = query.eq("horizon", workstream.horizon);
+        params.set("horizon", workstream.horizon);
       }
 
-      // Apply stage filter
       if (workstream.stage_ids && workstream.stage_ids.length > 0) {
         const stageNumbers = workstream.stage_ids
           .map((s) => parseInt(s, 10))
           .filter((n) => !isNaN(n));
-        if (stageNumbers.length > 0) {
-          query = query.in("stage_id", stageNumbers);
+        for (const stage of stageNumbers) {
+          params.append("stage_id", String(stage));
         }
       }
 
-      // Note: Keyword filtering would ideally be done server-side with full-text search
-      // For now, we'll filter client-side if needed
-      const { data, error: fetchError } = await query.order("created_at", {
-        ascending: false,
-      });
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/cards?${params.toString()}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
 
-      if (fetchError) {
-        console.error("Error loading feed:", fetchError);
+      if (!response.ok) {
+        console.error("Error loading feed:", response.status);
         return;
       }
 
-      let filteredCards = data || [];
+      let fetchedCards: Card[] = await response.json();
 
       // Client-side keyword filtering (if keywords exist)
       if (workstream.keywords && workstream.keywords.length > 0) {
         const lowercaseKeywords = workstream.keywords.map((k) =>
           k.toLowerCase(),
         );
-        filteredCards = filteredCards.filter((card) => {
+        fetchedCards = fetchedCards.filter((card) => {
           const cardText = `${card.name} ${card.summary}`.toLowerCase();
           return lowercaseKeywords.some((keyword) =>
             cardText.includes(keyword),
@@ -429,7 +443,7 @@ const WorkstreamFeed: React.FC = () => {
         });
       }
 
-      setCards(filteredCards);
+      setCards(fetchedCards);
     } catch (err) {
       console.error("Error loading feed:", err);
     } finally {
@@ -444,13 +458,26 @@ const WorkstreamFeed: React.FC = () => {
     if (!user) return;
 
     try {
-      const { data } = await supabase
-        .from("card_follows")
-        .select("card_id")
-        .eq("user_id", user.id);
+      const token = localStorage.getItem("gs2_token");
+      if (!token) return;
 
-      if (data) {
-        setFollowedCardIds(new Set(data.map((f) => f.card_id)));
+      const response = await fetch(`${API_BASE_URL}/api/v1/me/following`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (Array.isArray(data)) {
+          setFollowedCardIds(
+            new Set(
+              data.map(
+                (f: { card_id?: string; id?: string }) => f.card_id || f.id,
+              ),
+            ),
+          );
+        }
       }
     } catch (err) {
       console.error("Error loading followed cards:", err);
@@ -467,13 +494,17 @@ const WorkstreamFeed: React.FC = () => {
     if (!user) return;
 
     try {
+      const token = localStorage.getItem("gs2_token");
+      if (!token) return;
+
       if (isCurrentlyFollowed) {
         // Unfollow
-        await supabase
-          .from("card_follows")
-          .delete()
-          .eq("user_id", user.id)
-          .eq("card_id", cardId);
+        await fetch(`${API_BASE_URL}/api/v1/cards/${cardId}/follow`, {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
 
         setFollowedCardIds((prev) => {
           const next = new Set(prev);
@@ -482,10 +513,12 @@ const WorkstreamFeed: React.FC = () => {
         });
       } else {
         // Follow
-        await supabase.from("card_follows").insert({
-          user_id: user.id,
-          card_id: cardId,
-          priority: "medium",
+        await fetch(`${API_BASE_URL}/api/v1/cards/${cardId}/follow`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
         });
 
         setFollowedCardIds((prev) => new Set([...prev, cardId]));

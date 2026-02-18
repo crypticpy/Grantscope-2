@@ -5,6 +5,13 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
+from sqlalchemy import select, update as sa_update, func
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.db.card import Card
+from app.models.db.source import Source, SignalSource
+from app.models.db.card_extras import CardTimeline
+
 logger = logging.getLogger(__name__)
 
 
@@ -41,7 +48,7 @@ async def _web_search(query: str, num_results: int = 7) -> list[dict]:
 
 
 async def enrich_weak_signals(
-    supabase,
+    db: AsyncSession,
     min_sources: int = 3,
     max_cards: int = 100,
     max_new_sources_per_card: int = 5,
@@ -59,32 +66,33 @@ async def enrich_weak_signals(
         }
 
     # Step 1: Find cards with source counts
-    cards_resp = (
-        supabase.table("cards")
-        .select("id, name, summary, pillar_id")
-        .eq("status", "active")
+    result = await db.execute(
+        select(Card.id, Card.name, Card.summary, Card.pillar_id)
+        .where(Card.status == "active")
         .limit(max_cards)
-        .execute()
     )
+    all_cards_rows = result.all()
 
-    all_cards = cards_resp.data or []
-    if not all_cards:
+    if not all_cards_rows:
         return {"error": "No active cards found", "enriched": 0, "sources_added": 0}
+
+    all_cards = [
+        {
+            "id": str(row.id),
+            "name": row.name,
+            "summary": row.summary,
+            "pillar_id": row.pillar_id,
+        }
+        for row in all_cards_rows
+    ]
 
     # For each card, count its sources
     weak_cards = []
     for card in all_cards:
-        src_resp = (
-            supabase.table("sources")
-            .select("id", count="exact")
-            .eq("card_id", card["id"])
-            .execute()
+        count_result = await db.execute(
+            select(func.count(Source.id)).where(Source.card_id == card["id"])
         )
-        source_count = (
-            src_resp.count
-            if hasattr(src_resp, "count") and src_resp.count is not None
-            else len(src_resp.data or [])
-        )
+        source_count = count_result.scalar() or 0
         if source_count < min_sources:
             card["_source_count"] = source_count
             weak_cards.append(card)
@@ -132,15 +140,10 @@ async def enrich_weak_signals(
                     return 0
 
                 # Get existing source URLs to avoid duplicates
-                existing_resp = (
-                    supabase.table("sources")
-                    .select("url")
-                    .eq("card_id", card["id"])
-                    .execute()
+                existing_result = await db.execute(
+                    select(Source.url).where(Source.card_id == card["id"])
                 )
-                existing_urls = {
-                    s["url"] for s in (existing_resp.data or []) if s.get("url")
-                }
+                existing_urls = {row.url for row in existing_result.all() if row.url}
 
                 sources_added = 0
                 now = datetime.now(timezone.utc).isoformat()
@@ -159,43 +162,42 @@ async def enrich_weak_signals(
                     if len(content) < 50:
                         continue
 
-                    source_record = {
-                        "card_id": card["id"],
-                        "url": url,
-                        "title": title,
-                        "full_text": content[:10000],
-                        "ai_summary": content[:500],
-                        "relevance_to_card": wr.get("score", 0.7),
-                        "api_source": f"{search_provider}_enrichment",
-                        "ingested_at": now,
-                    }
+                    new_source = Source(
+                        card_id=card["id"],
+                        url=url,
+                        title=title,
+                        full_text=content[:10000],
+                        ai_summary=content[:500],
+                        relevance_to_card=wr.get("score", 0.7),
+                        api_source=f"{search_provider}_enrichment",
+                        ingested_at=datetime.now(timezone.utc),
+                    )
 
                     try:
-                        src_result = (
-                            supabase.table("sources").insert(source_record).execute()
-                        )
-                        if src_result.data:
-                            source_id = src_result.data[0]["id"]
-                            try:
-                                supabase.table("signal_sources").insert(
-                                    {
-                                        "card_id": card["id"],
-                                        "source_id": source_id,
-                                        "relationship_type": "supporting",
-                                        "confidence": min(wr.get("score", 0.7), 1.0),
-                                        "agent_reasoning": (
-                                            f"Web enrichment via {search_provider} "
-                                            f"for '{card_name[:60]}'"
-                                        ),
-                                        "created_by": "enrichment_service",
-                                        "created_at": now,
-                                    }
-                                ).execute()
-                            except Exception:
-                                pass
+                        db.add(new_source)
+                        await db.flush()
+                        await db.refresh(new_source)
 
-                            sources_added += 1
-                            existing_urls.add(url)
+                        source_id = str(new_source.id)
+                        try:
+                            signal_source = SignalSource(
+                                card_id=card["id"],
+                                source_id=source_id,
+                                relationship_type="supporting",
+                                confidence=min(wr.get("score", 0.7), 1.0),
+                                agent_reasoning=(
+                                    f"Web enrichment via {search_provider} "
+                                    f"for '{card_name[:60]}'"
+                                ),
+                                created_by="enrichment_service",
+                            )
+                            db.add(signal_source)
+                            await db.flush()
+                        except Exception:
+                            pass
+
+                        sources_added += 1
+                        existing_urls.add(url)
                     except Exception as e:
                         if "duplicate" not in str(e).lower():
                             logger.warning(
@@ -204,27 +206,29 @@ async def enrich_weak_signals(
                             )
 
                 if sources_added > 0:
-                    supabase.table("cards").update({"updated_at": now}).eq(
-                        "id", card["id"]
-                    ).execute()
+                    await db.execute(
+                        sa_update(Card)
+                        .where(Card.id == card["id"])
+                        .values(updated_at=now)
+                    )
+                    await db.flush()
 
                     try:
-                        supabase.table("card_timeline").insert(
-                            {
-                                "card_id": card["id"],
-                                "event_type": "sources_enriched",
-                                "title": "Additional sources discovered",
-                                "description": (
-                                    f"Found {sources_added} additional supporting "
-                                    f"sources via {search_provider} web search"
-                                ),
-                                "metadata": {
-                                    "source": f"{search_provider}_enrichment",
-                                    "count": sources_added,
-                                },
-                                "created_at": now,
-                            }
-                        ).execute()
+                        timeline_event = CardTimeline(
+                            card_id=card["id"],
+                            event_type="sources_enriched",
+                            title="Additional sources discovered",
+                            description=(
+                                f"Found {sources_added} additional supporting "
+                                f"sources via {search_provider} web search"
+                            ),
+                            metadata_={
+                                "source": f"{search_provider}_enrichment",
+                                "count": sources_added,
+                            },
+                        )
+                        db.add(timeline_event)
+                        await db.flush()
                     except Exception:
                         pass
 
@@ -268,7 +272,7 @@ async def enrich_weak_signals(
 
 
 async def enrich_signal_profiles(
-    supabase,
+    db: AsyncSession,
     max_cards: int = 5,
     triggered_by_user_id: Optional[str] = None,
 ) -> dict:
@@ -291,29 +295,47 @@ async def enrich_signal_profiles(
     ai_service = AIService(azure_openai_client)
 
     # Fetch ALL active cards (scan everything, limit processing)
-    cards_resp = (
-        supabase.table("cards")
-        .select("id, name, summary, description, pillar_id, horizon")
-        .eq("status", "active")
-        .order("created_at", desc=True)
+    result = await db.execute(
+        select(
+            Card.id,
+            Card.name,
+            Card.summary,
+            Card.description,
+            Card.pillar_id,
+            Card.horizon,
+        )
+        .where(Card.status == "active")
+        .order_by(Card.created_at.desc())
         .limit(500)
-        .execute()
     )
+    all_cards_rows = result.all()
 
-    if not cards_resp.data:
+    if not all_cards_rows:
         return {"status": "no_cards", "enriched": 0}
+
+    all_cards_data = [
+        {
+            "id": str(row.id),
+            "name": row.name,
+            "summary": row.summary,
+            "description": row.description,
+            "pillar_id": row.pillar_id,
+            "horizon": row.horizon,
+        }
+        for row in all_cards_rows
+    ]
 
     # Filter to cards needing profiles
     cards_needing_profiles = [
         c
-        for c in cards_resp.data
+        for c in all_cards_data
         if not c.get("description") or len(c.get("description", "")) < 100
     ]
 
     if not cards_needing_profiles:
         return {
             "status": "all_cards_have_profiles",
-            "total_checked": len(cards_resp.data),
+            "total_checked": len(all_cards_data),
             "enriched": 0,
         }
 
@@ -330,18 +352,35 @@ async def enrich_signal_profiles(
             card_id = card["id"]
 
             # Fetch linked sources
-            sources_resp = (
-                supabase.table("sources")
-                .select("title, url, ai_summary, key_excerpts, full_text")
-                .eq("card_id", card_id)
-                .order("created_at", desc=True)
+            sources_result = await db.execute(
+                select(
+                    Source.id,
+                    Source.title,
+                    Source.url,
+                    Source.ai_summary,
+                    Source.key_excerpts,
+                    Source.full_text,
+                )
+                .where(Source.card_id == card_id)
+                .order_by(Source.created_at.desc())
                 .limit(10)
-                .execute()
             )
+            sources_rows = sources_result.all()
 
-            sources = sources_resp.data or []
-            if not sources:
+            if not sources_rows:
                 continue
+
+            sources = [
+                {
+                    "id": str(row.id),
+                    "title": row.title,
+                    "url": row.url,
+                    "ai_summary": row.ai_summary,
+                    "key_excerpts": row.key_excerpts,
+                    "full_text": row.full_text,
+                }
+                for row in sources_rows
+            ]
 
             # Backfill thin source content (if trafilatura available)
             if extract_content:
@@ -349,14 +388,17 @@ async def enrich_signal_profiles(
                     content = src.get("full_text") or src.get("ai_summary") or ""
                     if len(content) < 200 and src.get("url"):
                         try:
-                            text, title = await extract_content(src["url"])
-                            if text:
-                                src["full_text"] = text[:10000]
+                            text_content, title = await extract_content(src["url"])
+                            if text_content:
+                                src["full_text"] = text_content[:10000]
                                 # Update in DB too
                                 if src.get("id"):
-                                    supabase.table("sources").update(
-                                        {"full_text": text[:10000]}
-                                    ).eq("id", src["id"]).execute()
+                                    await db.execute(
+                                        sa_update(Source)
+                                        .where(Source.id == src["id"])
+                                        .values(full_text=text_content[:10000])
+                                    )
+                                    await db.flush()
                         except Exception:
                             pass
 
@@ -384,28 +426,27 @@ async def enrich_signal_profiles(
 
             if profile and len(profile) > 100:
                 # Update card description
-                supabase.table("cards").update(
-                    {
-                        "description": profile,
-                        "updated_at": now,
-                    }
-                ).eq("id", card_id).execute()
+                await db.execute(
+                    sa_update(Card)
+                    .where(Card.id == card_id)
+                    .values(description=profile, updated_at=now)
+                )
+                await db.flush()
 
                 # Create timeline event
-                supabase.table("card_timeline").insert(
-                    {
-                        "card_id": card_id,
-                        "event_type": "profile_generated",
-                        "title": "Signal profile auto-generated",
-                        "description": f"Rich profile generated from {len(sources)} source(s)",
-                        "metadata": {
-                            "sources_used": len(source_analyses),
-                            "profile_length": len(profile),
-                            "triggered_by": triggered_by_user_id,
-                        },
-                        "created_at": now,
-                    }
-                ).execute()
+                timeline_event = CardTimeline(
+                    card_id=card_id,
+                    event_type="profile_generated",
+                    title="Signal profile auto-generated",
+                    description=f"Rich profile generated from {len(sources)} source(s)",
+                    metadata_={
+                        "sources_used": len(source_analyses),
+                        "profile_length": len(profile),
+                        "triggered_by": triggered_by_user_id,
+                    },
+                )
+                db.add(timeline_event)
+                await db.flush()
 
                 enriched += 1
                 logger.info(
@@ -418,7 +459,7 @@ async def enrich_signal_profiles(
 
     return {
         "status": "completed",
-        "total_checked": len(cards_resp.data),
+        "total_checked": len(all_cards_data),
         "needing_profiles": len(cards_needing_profiles),
         "enriched": enriched,
         "errors": errors,

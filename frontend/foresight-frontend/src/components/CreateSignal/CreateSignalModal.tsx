@@ -54,7 +54,6 @@ import {
   type SourcePreferences,
 } from "./SourcePreferencesStep";
 import { useAuthContext } from "../../hooks/useAuthContext";
-import { supabase } from "../../App";
 import { API_BASE_URL } from "../../lib/config";
 
 // =============================================================================
@@ -320,14 +319,20 @@ export function CreateSignalModal({
       try {
         if (!user) return;
 
-        const { data } = await supabase
-          .from("workstreams")
-          .select("id, name")
-          .eq("user_id", user.id)
-          .order("name");
-
-        if (data) {
-          setWorkstreams(data);
+        const token = localStorage.getItem("gs2_token");
+        if (!token) return;
+        const response = await fetch(`${API_BASE_URL}/api/v1/me/workstreams`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          const list = Array.isArray(data) ? data : data.workstreams || [];
+          setWorkstreams(
+            list.map((ws: { id: string; name: string }) => ({
+              id: ws.id,
+              name: ws.name,
+            })),
+          );
         }
       } catch {
         // Silently fail - workstream selector is optional

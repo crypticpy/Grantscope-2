@@ -8,10 +8,9 @@ Provides RAG-powered conversational AI with four scopes:
 - wizard: Grant application advisor interview mode
 
 Uses Azure OpenAI for streaming chat completions and embedding generation.
-Context is assembled from Supabase and injected into the system prompt.
+Context is assembled from the database and injected into the system prompt.
 """
 
-import asyncio
 import json
 import os
 import re
@@ -19,7 +18,13 @@ import logging
 from datetime import datetime, timezone, timedelta
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
-from supabase import Client
+from sqlalchemy import select, update as sa_update, func
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.db.chat import ChatConversation, ChatMessage
+from app.models.db.wizard_session import WizardSession
+from app.models.db.card import Card
+from app.models.db.workstream import Workstream
 
 from app.rag_engine import RAGEngine
 from app.openai_provider import (
@@ -90,52 +95,38 @@ def _sse_error(message: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-async def _check_rate_limit(supabase: Client, user_id: str) -> bool:
+async def _check_rate_limit(db: AsyncSession, user_id: str) -> bool:
     """
     Check if user has exceeded the chat rate limit.
 
     Returns True if the request should be allowed, False if rate limited.
     """
     try:
-        one_minute_ago = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
+        one_minute_ago = datetime.now(timezone.utc) - timedelta(minutes=1)
 
-        # Count messages sent by this user in the last minute
-        # We join through conversations to filter by user_id
-        await asyncio.to_thread(
-            lambda: supabase.table("chat_messages")
-            .select("id", count="exact")
-            .eq("role", "user")
-            .gte("created_at", one_minute_ago)
-            .execute()
+        # Get all conversation IDs for this user
+        conv_result = await db.execute(
+            select(ChatConversation.id).where(ChatConversation.user_id == user_id)
         )
-
-        # Since we can't easily filter by user_id through a join in postgrest,
-        # we count via conversations
-        conv_result = await asyncio.to_thread(
-            lambda: supabase.table("chat_conversations")
-            .select("id")
-            .eq("user_id", user_id)
-            .execute()
-        )
-        if not conv_result.data:
+        conv_rows = conv_result.scalars().all()
+        if not conv_rows:
             return True  # No conversations = no messages = not rate limited
 
-        conv_ids = [c["id"] for c in conv_result.data]
+        conv_ids = [str(c) for c in conv_rows]
 
         # Count recent user messages across all their conversations
         count = 0
         # Process in batches to avoid query length limits
         for i in range(0, len(conv_ids), 20):
             batch = conv_ids[i : i + 20]
-            msg_result = await asyncio.to_thread(
-                lambda batch=batch: supabase.table("chat_messages")
-                .select("id", count="exact")
-                .in_("conversation_id", batch)
-                .eq("role", "user")
-                .gte("created_at", one_minute_ago)
-                .execute()
+            msg_result = await db.execute(
+                select(func.count(ChatMessage.id)).where(
+                    ChatMessage.conversation_id.in_(batch),
+                    ChatMessage.role == "user",
+                    ChatMessage.created_at >= one_minute_ago,
+                )
             )
-            count += msg_result.count or 0
+            count += msg_result.scalar() or 0
 
         return count < RATE_LIMIT_PER_MINUTE
 
@@ -211,7 +202,7 @@ def _format_wizard_context(data: Any) -> str:
 
 
 async def _build_wizard_system_prompt(
-    supabase: Client,
+    db: AsyncSession,
     scope_id: Optional[str],
 ) -> str:
     """Build the system prompt for wizard scope by loading the wizard session."""
@@ -220,17 +211,13 @@ async def _build_wizard_system_prompt(
 
     if scope_id:
         try:
-            session_resp = await asyncio.to_thread(
-                lambda: supabase.table("wizard_sessions")
-                .select("*")
-                .eq("id", scope_id)
-                .single()
-                .execute()
+            result = await db.execute(
+                select(WizardSession).where(WizardSession.id == scope_id)
             )
-            if session_resp.data:
-                session = session_resp.data
-                raw_grant_context = session.get("grant_context")
-                raw_interview_data = session.get("interview_data")
+            session_obj = result.scalar_one_or_none()
+            if session_obj:
+                raw_grant_context = session_obj.grant_context
+                raw_interview_data = session_obj.interview_data
 
                 if raw_grant_context:
                     grant_context = _format_wizard_context(raw_grant_context)
@@ -381,7 +368,7 @@ def _parse_citations(
 
 
 async def _get_or_create_conversation(
-    supabase: Client,
+    db: AsyncSession,
     user_id: str,
     scope: str,
     scope_id: Optional[str],
@@ -395,15 +382,15 @@ async def _get_or_create_conversation(
     """
     if conversation_id:
         # Verify the conversation exists and belongs to the user
-        result = await asyncio.to_thread(
-            lambda: supabase.table("chat_conversations")
-            .select("id")
-            .eq("id", conversation_id)
-            .eq("user_id", user_id)
-            .execute()
+        result = await db.execute(
+            select(ChatConversation.id).where(
+                ChatConversation.id == conversation_id,
+                ChatConversation.user_id == user_id,
+            )
         )
-        if result.data:
-            return conversation_id, False
+        row = result.scalar_one_or_none()
+        if row:
+            return str(row), False
         else:
             logger.warning(
                 f"Conversation {conversation_id} not found for user {user_id}"
@@ -433,28 +420,24 @@ async def _get_or_create_conversation(
         logger.warning(f"Failed to generate conversation title: {e}")
 
     # Create new conversation
-    now = datetime.now(timezone.utc).isoformat()
-    insert_data = {
-        "user_id": user_id,
-        "scope": scope,
-        "scope_id": scope_id,
-        "title": title,
-        "created_at": now,
-        "updated_at": now,
-    }
-
-    result = await asyncio.to_thread(
-        lambda: supabase.table("chat_conversations").insert(insert_data).execute()
+    now = datetime.now(timezone.utc)
+    new_conv = ChatConversation(
+        user_id=user_id,
+        scope=scope,
+        scope_id=scope_id,
+        title=title,
+        created_at=now,
+        updated_at=now,
     )
+    db.add(new_conv)
+    await db.flush()
+    await db.refresh(new_conv)
 
-    if result.data:
-        return result.data[0]["id"], True
-    else:
-        raise ValueError("Failed to create conversation")
+    return str(new_conv.id), True
 
 
 async def _get_conversation_history(
-    supabase: Client,
+    db: AsyncSession,
     conversation_id: str,
 ) -> List[Dict[str, str]]:
     """
@@ -462,22 +445,19 @@ async def _get_conversation_history(
 
     Returns messages in OpenAI format: [{"role": "...", "content": "..."}]
     """
-    result = await asyncio.to_thread(
-        lambda: supabase.table("chat_messages")
-        .select("role, content")
-        .eq("conversation_id", conversation_id)
-        .order("created_at")
+    result = await db.execute(
+        select(ChatMessage.role, ChatMessage.content)
+        .where(ChatMessage.conversation_id == conversation_id)
+        .order_by(ChatMessage.created_at)
         .limit(MAX_CONVERSATION_MESSAGES)
-        .execute()
     )
+    rows = result.all()
 
-    return [
-        {"role": msg["role"], "content": msg["content"]} for msg in (result.data or [])
-    ]
+    return [{"role": msg.role, "content": msg.content} for msg in rows]
 
 
 async def _store_message(
-    supabase: Client,
+    db: AsyncSession,
     conversation_id: str,
     role: str,
     content: str,
@@ -486,39 +466,38 @@ async def _store_message(
     model: Optional[str] = None,
 ) -> str:
     """Store a message in the database. Returns the message ID."""
-    now = datetime.now(timezone.utc).isoformat()
-    insert_data = {
-        "conversation_id": conversation_id,
-        "role": role,
-        "content": content,
-        "citations": citations or [],
-        "tokens_used": tokens_used,
-        "model": model,
-        "created_at": now,
-    }
-
-    result = await asyncio.to_thread(
-        lambda: supabase.table("chat_messages").insert(insert_data).execute()
+    now = datetime.now(timezone.utc)
+    new_msg = ChatMessage(
+        conversation_id=conversation_id,
+        role=role,
+        content=content,
+        citations=citations or [],
+        tokens_used=tokens_used,
+        model=model,
+        created_at=now,
     )
+    db.add(new_msg)
+    await db.flush()
+    await db.refresh(new_msg)
 
-    if result.data:
-        return result.data[0]["id"]
+    if new_msg.id:
+        return str(new_msg.id)
 
     logger.error(f"Failed to store {role} message for conversation {conversation_id}")
     return ""
 
 
 async def _update_conversation_timestamp(
-    supabase: Client, conversation_id: str
+    db: AsyncSession, conversation_id: str
 ) -> None:
     """Update the conversation's updated_at timestamp."""
     try:
-        await asyncio.to_thread(
-            lambda: supabase.table("chat_conversations")
-            .update({"updated_at": datetime.now(timezone.utc).isoformat()})
-            .eq("id", conversation_id)
-            .execute()
+        await db.execute(
+            sa_update(ChatConversation)
+            .where(ChatConversation.id == conversation_id)
+            .values(updated_at=datetime.now(timezone.utc))
         )
+        await db.flush()
     except Exception as e:
         logger.warning(f"Failed to update conversation timestamp: {e}")
 
@@ -534,7 +513,7 @@ async def chat(
     message: str,
     conversation_id: Optional[str],
     user_id: str,
-    supabase_client: Client,
+    db: AsyncSession,
     mentions: Optional[List[Dict[str, Any]]] = None,
 ) -> AsyncGenerator[str, None]:
     """
@@ -556,7 +535,7 @@ async def chat(
     """
     try:
         # 1. Rate limiting
-        if not await _check_rate_limit(supabase_client, user_id):
+        if not await _check_rate_limit(db, user_id):
             yield _sse_error(
                 "Rate limit exceeded. Please wait a moment before sending another message."
             )
@@ -565,7 +544,7 @@ async def chat(
         # 2. Conversation management
         try:
             conv_id, is_new = await _get_or_create_conversation(
-                supabase_client,
+                db,
                 user_id,
                 scope,
                 scope_id,
@@ -578,7 +557,7 @@ async def chat(
             return
 
         # Store the user message
-        await _store_message(supabase_client, conv_id, "user", message)
+        await _store_message(db, conv_id, "user", message)
 
         # 3. Context retrieval via hybrid RAG engine (skipped for wizard scope)
         source_map: Dict[int, Dict[str, Any]] = {}
@@ -591,9 +570,7 @@ async def chat(
                 {"step": "searching", "detail": "Loading grant application context..."},
             )
             try:
-                system_prompt = await _build_wizard_system_prompt(
-                    supabase_client, scope_id
-                )
+                system_prompt = await _build_wizard_system_prompt(db, scope_id)
             except Exception as e:
                 logger.error(f"Failed to build wizard system prompt: {e}")
                 yield _sse_error("Failed to load wizard session. Please try again.")
@@ -613,7 +590,7 @@ async def chat(
             )
 
             try:
-                engine = RAGEngine(supabase_client)
+                engine = RAGEngine(db)
                 context_text, scope_metadata = await engine.retrieve(
                     query=message,
                     scope=scope,
@@ -643,7 +620,7 @@ async def chat(
             system_prompt = _build_system_prompt(scope, context_text, scope_metadata)
 
         # Get conversation history (for multi-turn context)
-        history = await _get_conversation_history(supabase_client, conv_id)
+        history = await _get_conversation_history(db, conv_id)
 
         # Build the messages array
         messages = [{"role": "system", "content": system_prompt}]
@@ -675,6 +652,8 @@ async def chat(
             if os.getenv("TAVILY_API_KEY"):
                 tool_kwargs["tools"] = [WEB_SEARCH_TOOL]
                 tool_kwargs["tool_choice"] = "auto"
+
+            import asyncio
 
             stream = await azure_openai_async_client.chat.completions.create(
                 model=model_used,
@@ -900,13 +879,13 @@ async def chat(
             # Still store partial response if we got any
             if full_response:
                 await _store_message(
-                    supabase_client,
+                    db,
                     conv_id,
                     "assistant",
                     full_response,
                     model=model_used,
                 )
-                await _update_conversation_timestamp(supabase_client, conv_id)
+                await _update_conversation_timestamp(db, conv_id)
             return
 
         yield _sse_event(
@@ -939,7 +918,7 @@ async def chat(
 
         # 7. Store assistant message
         message_id = await _store_message(
-            supabase_client,
+            db,
             conv_id,
             "assistant",
             full_response,
@@ -949,7 +928,7 @@ async def chat(
         )
 
         # Update conversation timestamp
-        await _update_conversation_timestamp(supabase_client, conv_id)
+        await _update_conversation_timestamp(db, conv_id)
 
         # 8. Generate follow-up suggestions (non-blocking, best-effort)
         try:
@@ -1037,7 +1016,7 @@ Example: ["What are the implementation costs?", "Which cities have adopted this?
 async def generate_suggestions(
     scope: str,
     scope_id: Optional[str],
-    supabase_client: Client,
+    db: AsyncSession,
     user_id: str,
 ) -> List[str]:
     """
@@ -1051,30 +1030,28 @@ async def generate_suggestions(
     try:
         if scope == "signal" and scope_id:
             # Fetch just the card name/summary for generating suggestions
-            card_result = await asyncio.to_thread(
-                lambda: supabase_client.table("cards")
-                .select("name, summary, pillar_id, horizon, stage_id")
-                .eq("id", scope_id)
-                .execute()
+            result = await db.execute(
+                select(
+                    Card.name, Card.summary, Card.pillar_id, Card.horizon, Card.stage_id
+                ).where(Card.id == scope_id)
             )
-            if card_result.data:
-                card = card_result.data[0]
+            card_row = result.one_or_none()
+            if card_row:
                 scope_metadata = {
-                    "card_name": card.get("name"),
-                    "card_summary": card.get("summary", ""),
+                    "card_name": card_row.name,
+                    "card_summary": card_row.summary or "",
                 }
         elif scope == "workstream" and scope_id:
-            ws_result = await asyncio.to_thread(
-                lambda: supabase_client.table("workstreams")
-                .select("name, description, keywords")
-                .eq("id", scope_id)
-                .execute()
+            result = await db.execute(
+                select(
+                    Workstream.name, Workstream.description, Workstream.keywords
+                ).where(Workstream.id == scope_id)
             )
-            if ws_result.data:
-                ws = ws_result.data[0]
+            ws_row = result.one_or_none()
+            if ws_row:
                 scope_metadata = {
-                    "workstream_name": ws.get("name"),
-                    "workstream_description": ws.get("description", ""),
+                    "workstream_name": ws_row.name,
+                    "workstream_description": ws_row.description or "",
                     "card_count": 0,
                 }
     except Exception as e:

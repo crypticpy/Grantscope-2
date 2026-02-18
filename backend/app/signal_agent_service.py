@@ -15,7 +15,7 @@ Architecture:
 Usage:
     from app.signal_agent_service import SignalAgentService
 
-    agent = SignalAgentService(supabase, run_id, triggered_by_user_id)
+    agent = SignalAgentService(db, run_id, triggered_by_user_id)
     result = await agent.run_signal_detection(processed_sources, config)
 """
 
@@ -26,8 +26,15 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from supabase import Client
+from sqlalchemy import select, text
+from sqlalchemy import update as sa_update
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.helpers.db_utils import vector_search_cards
+from app.models.db.card import Card
+from app.models.db.card_extras import CardTimeline
+from app.models.db.source import DiscoveredSource, SignalSource, Source
+from app.models.db.discovery import DiscoveryRun
 from app.openai_provider import (
     azure_openai_async_client,
     azure_openai_async_embedding_client,
@@ -448,11 +455,11 @@ class SignalAgentService:
 
     def __init__(
         self,
-        supabase: Client,
+        db: AsyncSession,
         run_id: str,
         triggered_by_user_id: Optional[str] = None,
     ):
-        self.supabase = supabase
+        self.db = db
         self.run_id = run_id
         self.triggered_by_user_id = triggered_by_user_id
         self.tools = _define_tools()
@@ -635,9 +642,11 @@ class SignalAgentService:
 
             # Store stats on the discovery run
             try:
-                self.supabase.table("discovery_runs").update(
-                    {
-                        "signal_agent_stats": {
+                await self.db.execute(
+                    sa_update(DiscoveryRun)
+                    .where(DiscoveryRun.id == self.run_id)
+                    .values(
+                        signal_agent_stats={
                             "signals_created": len(result.signals_created),
                             "signals_enriched": len(result.signals_enriched),
                             "sources_linked": result.sources_linked,
@@ -647,8 +656,9 @@ class SignalAgentService:
                             "cost_estimate": round(result.cost_estimate, 4),
                             "pillar_stats": result.pillar_stats,
                         }
-                    }
-                ).eq("id", self.run_id).execute()
+                    )
+                )
+                await self.db.flush()
             except Exception as e:
                 logger.warning(f"Signal agent: Failed to store stats on run: {e}")
 
@@ -714,21 +724,18 @@ class SignalAgentService:
         centroid = _compute_centroid(embeddings)
 
         try:
-            match_result = self.supabase.rpc(
-                "find_similar_cards",
-                {
-                    "query_embedding": centroid,
-                    "match_threshold": 0.7,
-                    "match_count": 10,
-                },
-            ).execute()
+            matches = await vector_search_cards(
+                self.db,
+                centroid,
+                match_threshold=0.7,
+                match_count=10,
+            )
 
-            if match_result.data:
+            if matches:
                 logger.debug(
-                    f"Signal agent: Prefetch found {len(match_result.data)} "
-                    f"related signals"
+                    f"Signal agent: Prefetch found {len(matches)} " f"related signals"
                 )
-                return match_result.data
+                return matches
 
         except Exception as e:
             logger.warning(f"Signal agent: Prefetch RPC failed: {e}")
@@ -956,16 +963,12 @@ class SignalAgentService:
             embedding = resp.data[0].embedding
 
             # Search for similar cards
-            match_result = self.supabase.rpc(
-                "find_similar_cards",
-                {
-                    "query_embedding": embedding,
-                    "match_threshold": 0.7,
-                    "match_count": 10,
-                },
-            ).execute()
-
-            matches = match_result.data or []
+            matches = await vector_search_cards(
+                self.db,
+                embedding,
+                match_threshold=0.7,
+                match_count=10,
+            )
 
             if matches:
                 results = []
@@ -1124,18 +1127,16 @@ class SignalAgentService:
 
         # Validate the signal (card) exists in the DB
         try:
-            card_check = (
-                self.supabase.table("cards")
-                .select("id, name")
-                .eq("id", signal_id)
-                .execute()
+            result = await self.db.execute(
+                select(Card.id, Card.name).where(Card.id == signal_id)
             )
-            if not card_check.data:
+            row = result.first()
+            if not row:
                 return {
                     "error": f"Signal ID '{signal_id}' not found in database. "
                     f"Use search_existing_signals to find valid IDs."
                 }, None
-            card_name = card_check.data[0].get("name", "Unknown")
+            card_name = row.name or "Unknown"
         except Exception as e:
             return {"error": f"Failed to validate signal ID: {str(e)[:200]}"}, None
 
@@ -1375,16 +1376,15 @@ class SignalAgentService:
         # Generate unique slug
         slug = _generate_slug(action.signal_name)
         try:
-            existing = (
-                self.supabase.table("cards").select("id").eq("slug", slug).execute()
-            )
-            if existing.data:
+            result = await self.db.execute(select(Card.id).where(Card.slug == slug))
+            if result.first():
                 slug = f"{slug}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
         except Exception:
             # If slug check fails, append timestamp as safety
             slug = f"{slug}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
 
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(timezone.utc)
+        now_iso = now.isoformat()
 
         ai_confidence = None
         try:
@@ -1403,49 +1403,43 @@ class SignalAgentService:
                     }
                 )
 
-        card_data = {
-            "name": action.signal_name,
-            "slug": slug,
-            "summary": action.signal_summary or "",
-            "horizon": props.get("horizon", "H2"),
-            "stage_id": props.get("stage_id", "4_proof"),
-            "pillar_id": props.get("pillar_id", "HG"),
-            "impact_score": props.get("impact_score", 50),
-            "relevance_score": props.get("relevance_score", 50),
-            "novelty_score": props.get("novelty_score", 50),
-            "velocity_score": props.get("velocity_score", 50),
-            "risk_score": props.get("risk_score", 50),
-            "maturity_score": props.get("maturity_score", 50),
-            "status": "active",
-            "review_status": "active",
-            "discovered_at": now,
-            "discovery_run_id": self.run_id,
-            "ai_confidence": ai_confidence,
-            "discovery_metadata": {
-                "source_urls": source_urls,
-                "agent_reasoning": action.reasoning,
-                "source_count": len(action.source_indices),
-            },
-            "created_by": self.triggered_by_user_id,
-            "created_at": now,
-            "updated_at": now,
-        }
-
         try:
-            result = self.supabase.table("cards").insert(card_data).execute()
+            card = Card(
+                name=action.signal_name,
+                slug=slug,
+                summary=action.signal_summary or "",
+                horizon=props.get("horizon", "H2"),
+                stage_id=props.get("stage_id", "4_proof"),
+                pillar_id=props.get("pillar_id", "HG"),
+                impact_score=props.get("impact_score", 50),
+                relevance_score=props.get("relevance_score", 50),
+                novelty_score=props.get("novelty_score", 50),
+                velocity_score=props.get("velocity_score", 50),
+                risk_score=props.get("risk_score", 50),
+                maturity_score=props.get("maturity_score", 50),
+                status="active",
+                review_status="active",
+                discovered_at=now,
+                discovery_run_id=self.run_id,
+                ai_confidence=ai_confidence,
+                discovery_metadata={
+                    "source_urls": source_urls,
+                    "agent_reasoning": action.reasoning,
+                    "source_count": len(action.source_indices),
+                },
+                created_by=self.triggered_by_user_id,
+                created_at=now,
+                updated_at=now,
+            )
+            self.db.add(card)
+            await self.db.flush()
         except Exception as e:
             logger.error(
                 f"Signal agent: Failed to insert card '{action.signal_name}': {e}"
             )
             return None
 
-        if not result.data:
-            logger.error(
-                f"Signal agent: Card insert returned no data for '{action.signal_name}'"
-            )
-            return None
-
-        card_id = result.data[0]["id"]
+        card_id = str(card.id)
         logger.info(
             f"Signal agent: Created signal card '{action.signal_name}' -> {card_id}"
         )
@@ -1459,9 +1453,12 @@ class SignalAgentService:
             ]
             if source_embeddings:
                 centroid = _compute_centroid(source_embeddings)
-                self.supabase.table("cards").update({"embedding": centroid}).eq(
-                    "id", card_id
-                ).execute()
+                embedding_str = "[" + ",".join(str(v) for v in centroid) + "]"
+                await self.db.execute(
+                    text("UPDATE cards SET embedding = :emb::vector WHERE id = :cid"),
+                    {"emb": embedding_str, "cid": card_id},
+                )
+                await self.db.flush()
         except Exception as e:
             logger.warning(
                 f"Signal agent: Failed to store embedding on card {card_id}: {e}"
@@ -1485,7 +1482,7 @@ class SignalAgentService:
                 )
 
                 # Update discovered_sources audit trail
-                self._update_discovered_source(source, card_id, "card_created")
+                await self._update_discovered_source(source, card_id, "card_created")
 
         # Create timeline event
         await self._create_timeline_event(
@@ -1537,9 +1534,9 @@ class SignalAgentService:
             # Backfill thin content from URL
             if len(content) < 200 and src.raw.url:
                 try:
-                    text, _ = await extract_content(src.raw.url)
-                    if text and len(text) > len(content):
-                        content = text[:10000]
+                    text_content, _ = await extract_content(src.raw.url)
+                    if text_content and len(text_content) > len(content):
+                        content = text_content[:10000]
                 except Exception:
                     pass
 
@@ -1577,12 +1574,15 @@ class SignalAgentService:
         )
 
         if profile and len(profile) > 100:
-            self.supabase.table("cards").update(
-                {
-                    "description": profile,
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                }
-            ).eq("id", card_id).execute()
+            await self.db.execute(
+                sa_update(Card)
+                .where(Card.id == card_id)
+                .values(
+                    description=profile,
+                    updated_at=datetime.now(timezone.utc),
+                )
+            )
+            await self.db.flush()
 
             await self._create_timeline_event(
                 card_id=card_id,
@@ -1637,7 +1637,7 @@ class SignalAgentService:
                     junction_created += 1
 
                 # Update discovered_sources audit trail
-                self._update_discovered_source(source, card_id, "card_enriched")
+                await self._update_discovered_source(source, card_id, "card_enriched")
 
         if sources_stored > 0:
             # Create timeline event for enrichment
@@ -1652,9 +1652,12 @@ class SignalAgentService:
 
             # Update the card's updated_at timestamp
             try:
-                self.supabase.table("cards").update(
-                    {"updated_at": datetime.now(timezone.utc).isoformat()}
-                ).eq("id", card_id).execute()
+                await self.db.execute(
+                    sa_update(Card)
+                    .where(Card.id == card_id)
+                    .values(updated_at=datetime.now(timezone.utc))
+                )
+                await self.db.flush()
             except Exception as e:
                 logger.warning(
                     f"Signal agent: Failed to update card timestamp {card_id}: {e}"
@@ -1696,7 +1699,7 @@ class SignalAgentService:
                 pass  # Non-fatal — dedup will proceed without embedding generation
 
             dedup_result = await check_duplicate(
-                supabase=self.supabase,
+                db=self.db,
                 card_id=card_id,
                 content=source.raw.content or "",
                 url=source.raw.url or "",
@@ -1713,28 +1716,26 @@ class SignalAgentService:
 
             from app.source_quality import extract_domain
 
-            source_record = {
-                "card_id": card_id,
-                "url": source.raw.url,
-                "title": (source.raw.title or "Untitled")[:500],
-                "publication": (
+            source_obj = Source(
+                card_id=card_id,
+                url=source.raw.url,
+                title=(source.raw.title or "Untitled")[:500],
+                publication=(
                     (source.raw.source_name or "")[:200]
                     if source.raw.source_name
                     else None
                 ),
-                "full_text": (
-                    source.raw.content[:10000] if source.raw.content else None
-                ),
-                "ai_summary": (source.analysis.summary if source.analysis else None),
-                "key_excerpts": (
+                full_text=(source.raw.content[:10000] if source.raw.content else None),
+                ai_summary=(source.analysis.summary if source.analysis else None),
+                key_excerpts=(
                     source.analysis.key_excerpts[:5]
                     if source.analysis and source.analysis.key_excerpts
                     else []
                 ),
-                "relevance_to_card": (
+                relevance_to_card=(
                     source.analysis.relevance if source.analysis else 0.5
                 ),
-                "is_peer_reviewed": (
+                is_peer_reviewed=(
                     False
                     if getattr(source.raw, "is_preprint", False)
                     else (
@@ -1743,41 +1744,39 @@ class SignalAgentService:
                         else None
                     )
                 ),
-                "api_source": "discovery_scan",
-                "domain": extract_domain(source.raw.url or ""),
-                "ingested_at": datetime.now(timezone.utc).isoformat(),
-            }
+                api_source="discovery_scan",
+                domain=extract_domain(source.raw.url or ""),
+                ingested_at=datetime.now(timezone.utc),
+            )
 
             # If related (0.85-0.95 similarity), mark duplicate_of
             if (
                 dedup_result.action == "store_as_related"
                 and dedup_result.duplicate_of_id
             ):
-                source_record["duplicate_of"] = dedup_result.duplicate_of_id
+                source_obj.duplicate_of = dedup_result.duplicate_of_id
 
-            result = self.supabase.table("sources").insert(source_record).execute()
+            self.db.add(source_obj)
+            await self.db.flush()
 
-            if result.data:
-                source_id = result.data[0]["id"]
+            source_id = str(source_obj.id)
 
-                # Compute and store source quality score (non-blocking)
-                try:
-                    from app.source_quality import compute_and_store_quality_score
+            # Compute and store source quality score (non-blocking)
+            try:
+                from app.source_quality import compute_and_store_quality_score
 
-                    compute_and_store_quality_score(
-                        self.supabase,
-                        source_id,
-                        analysis=(
-                            source.analysis if hasattr(source, "analysis") else None
-                        ),
-                        triage=source.triage if hasattr(source, "triage") else None,
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to compute quality score for source {source_id}: {e}"
-                    )
+                compute_and_store_quality_score(
+                    self.db,
+                    source_id,
+                    analysis=(source.analysis if hasattr(source, "analysis") else None),
+                    triage=source.triage if hasattr(source, "triage") else None,
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to compute quality score for source {source_id}: {e}"
+                )
 
-                return source_id
+            return source_id
 
         except Exception as e:
             logger.error(
@@ -1801,17 +1800,17 @@ class SignalAgentService:
         Returns True if created, False otherwise.
         """
         try:
-            self.supabase.table("signal_sources").insert(
-                {
-                    "card_id": card_id,
-                    "source_id": source_id,
-                    "relationship_type": relationship_type,
-                    "confidence": round(confidence, 3),
-                    "agent_reasoning": reasoning[:500] if reasoning else None,
-                    "created_by": "signal_agent",
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                }
-            ).execute()
+            junction = SignalSource(
+                card_id=card_id,
+                source_id=source_id,
+                relationship_type=relationship_type,
+                confidence=round(confidence, 3),
+                agent_reasoning=reasoning[:500] if reasoning else None,
+                created_by="signal_agent",
+                created_at=datetime.now(timezone.utc),
+            )
+            self.db.add(junction)
+            await self.db.flush()
             return True
 
         except Exception as e:
@@ -1838,21 +1837,21 @@ class SignalAgentService:
     ) -> None:
         """Create a timeline event for a card."""
         try:
-            self.supabase.table("card_timeline").insert(
-                {
-                    "card_id": card_id,
-                    "event_type": event_type,
-                    "title": event_type.replace("_", " ").title(),
-                    "description": description,
-                    "triggered_by_source_id": source_id,
-                    "metadata": metadata or {},
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                }
-            ).execute()
+            event = CardTimeline(
+                card_id=card_id,
+                event_type=event_type,
+                title=event_type.replace("_", " ").title(),
+                description=description,
+                triggered_by_source_id=source_id,
+                metadata_=metadata or {},
+                created_at=datetime.now(timezone.utc),
+            )
+            self.db.add(event)
+            await self.db.flush()
         except Exception as e:
             logger.warning(f"Signal agent: Failed to create timeline event: {e}")
 
-    def _update_discovered_source(
+    async def _update_discovered_source(
         self,
         source: ProcessedSource,
         card_id: str,
@@ -1863,12 +1862,15 @@ class SignalAgentService:
         if not ds_id:
             return
         try:
-            self.supabase.table("discovered_sources").update(
-                {
-                    "processing_status": status,
-                    "resulting_card_id": card_id,
-                }
-            ).eq("id", ds_id).execute()
+            await self.db.execute(
+                sa_update(DiscoveredSource)
+                .where(DiscoveredSource.id == ds_id)
+                .values(
+                    processing_status=status,
+                    resulting_card_id=card_id,
+                )
+            )
+            await self.db.flush()
         except Exception as e:
             logger.warning(
                 f"Signal agent: Failed to update discovered_source {ds_id}: {e}"
@@ -1877,14 +1879,18 @@ class SignalAgentService:
     async def _auto_approve_card(self, card_id: str) -> None:
         """Auto-approve a card that exceeds the confidence threshold."""
         try:
-            self.supabase.table("cards").update(
-                {
-                    "status": "active",
-                    "review_status": "active",
-                    "auto_approved_at": datetime.now(timezone.utc).isoformat(),
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                }
-            ).eq("id", card_id).execute()
+            now = datetime.now(timezone.utc)
+            await self.db.execute(
+                sa_update(Card)
+                .where(Card.id == card_id)
+                .values(
+                    status="active",
+                    review_status="active",
+                    auto_approved_at=now,
+                    updated_at=now,
+                )
+            )
+            await self.db.flush()
 
             await self._create_timeline_event(
                 card_id=card_id,

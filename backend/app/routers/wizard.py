@@ -6,10 +6,12 @@ sessions that walk users through grant applications via AI-powered interviews.
 
 import json
 import logging
-from datetime import datetime, timezone
+import uuid as _uuid
+from datetime import datetime, date, timezone
+from decimal import Decimal
 from typing import Optional
 
-import fitz  # PyMuPDF — for PDF text extraction from uploaded files
+import fitz  # PyMuPDF -- for PDF text extraction from uploaded files
 from fastapi import (
     APIRouter,
     Depends,
@@ -19,13 +21,19 @@ from fastapi import (
     UploadFile,
     status,
 )
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.deps import supabase, get_current_user, _safe_error
+from app.deps import get_db, get_current_user_hardcoded, _safe_error
 from app.export_service import ExportService
+from app.models.db.card import Card
+from app.models.db.chat import ChatConversation, ChatMessage
+from app.models.db.proposal import Proposal as ProposalDB
+from app.models.db.wizard_session import WizardSession as WizardSessionDB
+from app.models.db.workstream import Workstream as WorkstreamDB
 from app.models.wizard import (
     GrantContext,
-    PlanData,
     ProcessGrantResponse,
     WizardSession,
     WizardSessionCreate,
@@ -43,12 +51,34 @@ router = APIRouter(prefix="/api/v1", tags=["wizard"])
 # ---------------------------------------------------------------------------
 
 
-async def _verify_session_ownership(session_id: str, user_id: str) -> dict:
+def _row_to_dict(obj, skip_cols=None) -> dict:
+    """Convert a SQLAlchemy ORM row into a plain dict for serialisation."""
+    skip = skip_cols or set()
+    result = {}
+    for col in obj.__table__.columns:
+        if col.name in skip:
+            continue
+        value = getattr(obj, col.name, None)
+        if isinstance(value, _uuid.UUID):
+            result[col.name] = str(value)
+        elif isinstance(value, (datetime, date)):
+            result[col.name] = value.isoformat()
+        elif isinstance(value, Decimal):
+            result[col.name] = float(value)
+        else:
+            result[col.name] = value
+    return result
+
+
+async def _verify_session_ownership(
+    session_id: str, user_id: str, db: AsyncSession
+) -> dict:
     """Fetch a wizard session by ID and verify ownership.
 
     Args:
         session_id: UUID of the wizard session.
         user_id: UUID of the authenticated user.
+        db: Async database session.
 
     Returns:
         The session row as a dict.
@@ -57,17 +87,25 @@ async def _verify_session_ownership(session_id: str, user_id: str) -> dict:
         HTTPException 404: Session not found.
         HTTPException 403: Not authorized.
     """
-    result = (
-        supabase.table("wizard_sessions").select("*").eq("id", session_id).execute()
-    )
+    try:
+        result = await db.execute(
+            select(WizardSessionDB).where(WizardSessionDB.id == session_id)
+        )
+        session_obj = result.scalar_one_or_none()
+    except Exception as e:
+        logger.error("Failed to fetch wizard session %s: %s", session_id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("fetching wizard session", e),
+        ) from e
 
-    if not result.data:
+    if session_obj is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Wizard session not found",
         )
 
-    session = result.data[0]
+    session = _row_to_dict(session_obj)
 
     if session["user_id"] != user_id:
         raise HTTPException(
@@ -120,7 +158,8 @@ def _extract_text_from_pdf_bytes(pdf_bytes: bytes) -> str:
 )
 async def create_wizard_session(
     body: WizardSessionCreate,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """Create a new wizard session.
 
@@ -135,25 +174,25 @@ async def create_wizard_session(
         The created WizardSession.
     """
     user_id = current_user["id"]
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
 
     # 1. Create the wizard session first (without conversation_id)
-    session_data = {
-        "user_id": user_id,
-        "entry_path": body.entry_path,
-        "current_step": 0,
-        "status": "in_progress",
-        "grant_context": {},
-        "interview_data": {},
-        "plan_data": {},
-        "created_at": now,
-        "updated_at": now,
-    }
+    session_obj = WizardSessionDB(
+        user_id=_uuid.UUID(user_id),
+        entry_path=body.entry_path,
+        current_step=0,
+        status="in_progress",
+        grant_context={},
+        interview_data={},
+        plan_data={},
+        created_at=now,
+        updated_at=now,
+    )
 
     try:
-        session_result = (
-            supabase.table("wizard_sessions").insert(session_data).execute()
-        )
+        db.add(session_obj)
+        await db.flush()
+        await db.refresh(session_obj)
     except Exception as e:
         logger.error("Failed to create wizard session: %s", e)
         raise HTTPException(
@@ -161,57 +200,36 @@ async def create_wizard_session(
             detail=_safe_error("wizard session creation", e),
         ) from e
 
-    if not session_result.data:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create wizard session record",
-        )
-
-    session = session_result.data[0]
-    session_id = session["id"]
+    session_id = session_obj.id
 
     # 2. Create a linked chat conversation with scope='wizard'
-    conversation_data = {
-        "user_id": user_id,
-        "scope": "wizard",
-        "scope_id": session_id,
-        "title": f"Wizard Session - {body.entry_path}",
-        "created_at": now,
-        "updated_at": now,
-    }
+    conversation_obj = ChatConversation(
+        user_id=_uuid.UUID(user_id),
+        scope="wizard",
+        scope_id=session_id,
+        title=f"Wizard Session - {body.entry_path}",
+        created_at=now,
+        updated_at=now,
+    )
 
     try:
-        conv_result = (
-            supabase.table("chat_conversations").insert(conversation_data).execute()
-        )
+        db.add(conversation_obj)
+        await db.flush()
+        await db.refresh(conversation_obj)
     except Exception as e:
         logger.error("Failed to create chat conversation for wizard: %s", e)
-        # Clean up the orphaned session
-        try:
-            supabase.table("wizard_sessions").delete().eq("id", session_id).execute()
-        except Exception:
-            pass
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("wizard conversation creation", e),
         ) from e
 
-    if not conv_result.data:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create wizard conversation record",
-        )
-
-    conversation_id = conv_result.data[0]["id"]
+    conversation_id = conversation_obj.id
 
     # 3. Link conversation_id back to the wizard session
     try:
-        update_result = (
-            supabase.table("wizard_sessions")
-            .update({"conversation_id": conversation_id})
-            .eq("id", session_id)
-            .execute()
-        )
+        session_obj.conversation_id = conversation_id
+        await db.flush()
+        await db.refresh(session_obj)
     except Exception as e:
         logger.error("Failed to link conversation to wizard session: %s", e)
         raise HTTPException(
@@ -219,19 +237,14 @@ async def create_wizard_session(
             detail=_safe_error("wizard session update", e),
         ) from e
 
-    if not update_result.data:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to link conversation to wizard session",
-        )
-
-    return WizardSession(**update_result.data[0])
+    return WizardSession(**_row_to_dict(session_obj))
 
 
 @router.get("/me/wizard/sessions", response_model=list[WizardSession])
 async def list_wizard_sessions(
     status_filter: Optional[str] = None,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """List the authenticated user's wizard sessions.
 
@@ -243,18 +256,18 @@ async def list_wizard_sessions(
         List of WizardSession records ordered by updated_at desc.
     """
     query = (
-        supabase.table("wizard_sessions")
-        .select("*")
-        .eq("user_id", current_user["id"])
-        .order("updated_at", desc=True)
+        select(WizardSessionDB)
+        .where(WizardSessionDB.user_id == current_user["id"])
+        .order_by(WizardSessionDB.updated_at.desc())
         .limit(20)
     )
 
     if status_filter:
-        query = query.eq("status", status_filter)
+        query = query.where(WizardSessionDB.status == status_filter)
 
     try:
-        result = query.execute()
+        result = await db.execute(query)
+        rows = list(result.scalars().all())
     except Exception as e:
         logger.error("Failed to list wizard sessions: %s", e)
         raise HTTPException(
@@ -262,13 +275,14 @@ async def list_wizard_sessions(
             detail=_safe_error("listing wizard sessions", e),
         ) from e
 
-    return [WizardSession(**row) for row in (result.data or [])]
+    return [WizardSession(**_row_to_dict(row)) for row in rows]
 
 
 @router.get("/me/wizard/sessions/{session_id}", response_model=WizardSession)
 async def get_wizard_session(
     session_id: str,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """Get a specific wizard session by ID.
 
@@ -283,7 +297,7 @@ async def get_wizard_session(
         HTTPException 404: Session not found.
         HTTPException 403: Not authorized.
     """
-    session = await _verify_session_ownership(session_id, current_user["id"])
+    session = await _verify_session_ownership(session_id, current_user["id"], db)
     return WizardSession(**session)
 
 
@@ -291,7 +305,8 @@ async def get_wizard_session(
 async def update_wizard_session(
     session_id: str,
     body: WizardSessionUpdate,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """Update a wizard session.
 
@@ -309,28 +324,37 @@ async def update_wizard_session(
         HTTPException 404: Session not found.
         HTTPException 403: Not authorized.
     """
-    await _verify_session_ownership(session_id, current_user["id"])
+    await _verify_session_ownership(session_id, current_user["id"], db)
 
-    update_data: dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    # Fetch the ORM object for mutation
+    try:
+        result = await db.execute(
+            select(WizardSessionDB).where(WizardSessionDB.id == session_id)
+        )
+        session_obj = result.scalar_one()
+    except Exception as e:
+        logger.error("Failed to fetch wizard session %s for update: %s", session_id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("wizard session update", e),
+        ) from e
+
+    session_obj.updated_at = datetime.now(timezone.utc)
 
     if body.current_step is not None:
-        update_data["current_step"] = body.current_step
+        session_obj.current_step = body.current_step
     if body.status is not None:
-        update_data["status"] = body.status
+        session_obj.status = body.status
     if body.grant_context is not None:
-        update_data["grant_context"] = body.grant_context.model_dump(mode="json")
+        session_obj.grant_context = body.grant_context.model_dump(mode="json")
     if body.interview_data is not None:
-        update_data["interview_data"] = body.interview_data
+        session_obj.interview_data = body.interview_data
     if body.plan_data is not None:
-        update_data["plan_data"] = body.plan_data.model_dump(mode="json")
+        session_obj.plan_data = body.plan_data.model_dump(mode="json")
 
     try:
-        result = (
-            supabase.table("wizard_sessions")
-            .update(update_data)
-            .eq("id", session_id)
-            .execute()
-        )
+        await db.flush()
+        await db.refresh(session_obj)
     except Exception as e:
         logger.error("Failed to update wizard session %s: %s", session_id, e)
         raise HTTPException(
@@ -338,13 +362,7 @@ async def update_wizard_session(
             detail=_safe_error("wizard session update", e),
         ) from e
 
-    if not result.data:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to update wizard session",
-        )
-
-    return WizardSession(**result.data[0])
+    return WizardSession(**_row_to_dict(session_obj))
 
 
 # ---------------------------------------------------------------------------
@@ -360,7 +378,8 @@ async def process_grant(
     session_id: str,
     url: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """Process a grant document (URL or file upload) and extract structured context.
 
@@ -383,7 +402,7 @@ async def process_grant(
         HTTPException 403: Not authorized.
     """
     user_id = current_user["id"]
-    await _verify_session_ownership(session_id, user_id)
+    await _verify_session_ownership(session_id, user_id, db)
 
     if not url and not file:
         raise HTTPException(
@@ -511,17 +530,16 @@ async def process_grant(
         # Non-fatal: we still have the grant context even if card creation fails
 
     # -- Update session with grant_context and card_id --
-    update_data: dict = {
-        "grant_context": grant_context_dict,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }
-    if card_id:
-        update_data["card_id"] = card_id
-
     try:
-        supabase.table("wizard_sessions").update(update_data).eq(
-            "id", session_id
-        ).execute()
+        result = await db.execute(
+            select(WizardSessionDB).where(WizardSessionDB.id == session_id)
+        )
+        session_obj = result.scalar_one()
+        session_obj.grant_context = grant_context_dict
+        session_obj.updated_at = datetime.now(timezone.utc)
+        if card_id:
+            session_obj.card_id = _uuid.UUID(card_id)
+        await db.flush()
     except Exception as e:
         logger.error("Failed to save grant context to session %s: %s", session_id, e)
         # Non-fatal: return the result even if session save fails
@@ -540,7 +558,8 @@ async def process_grant(
 @router.post("/me/wizard/sessions/{session_id}/synthesize-plan")
 async def synthesize_plan(
     session_id: str,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """Synthesize a structured project plan from the wizard interview.
 
@@ -560,7 +579,7 @@ async def synthesize_plan(
         HTTPException 400: Missing grant context or conversation.
     """
     user_id = current_user["id"]
-    session = await _verify_session_ownership(session_id, user_id)
+    session = await _verify_session_ownership(session_id, user_id, db)
 
     # Validate prerequisites
     grant_context = session.get("grant_context")
@@ -579,21 +598,20 @@ async def synthesize_plan(
 
     # Load conversation messages
     try:
-        messages_result = (
-            supabase.table("chat_messages")
-            .select("role, content")
-            .eq("conversation_id", conversation_id)
-            .order("created_at", desc=False)
-            .execute()
+        msg_result = await db.execute(
+            select(ChatMessage.role, ChatMessage.content)
+            .where(ChatMessage.conversation_id == conversation_id)
+            .order_by(ChatMessage.created_at.asc())
         )
+        messages = [
+            {"role": row.role, "content": row.content} for row in msg_result.all()
+        ]
     except Exception as e:
         logger.error("Failed to load conversation messages: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("loading conversation messages", e),
         ) from e
-
-    messages = messages_result.data or []
 
     if not messages:
         raise HTTPException(
@@ -620,12 +638,13 @@ async def synthesize_plan(
     # Save plan_data to the session
     plan_data_dict = plan_data.model_dump(mode="json")
     try:
-        supabase.table("wizard_sessions").update(
-            {
-                "plan_data": plan_data_dict,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }
-        ).eq("id", session_id).execute()
+        result = await db.execute(
+            select(WizardSessionDB).where(WizardSessionDB.id == session_id)
+        )
+        session_obj = result.scalar_one()
+        session_obj.plan_data = plan_data_dict
+        session_obj.updated_at = datetime.now(timezone.utc)
+        await db.flush()
     except Exception as e:
         logger.warning("Failed to save plan data to session %s: %s", session_id, e)
 
@@ -640,7 +659,8 @@ async def synthesize_plan(
 @router.post("/me/wizard/sessions/{session_id}/generate-proposal")
 async def generate_proposal(
     session_id: str,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """Generate a full grant proposal from the wizard session data.
 
@@ -660,7 +680,7 @@ async def generate_proposal(
         HTTPException 400: Missing required data (card, workstream).
     """
     user_id = current_user["id"]
-    session = await _verify_session_ownership(session_id, user_id)
+    session = await _verify_session_ownership(session_id, user_id, db)
 
     card_id = session.get("card_id")
     if not card_id:
@@ -670,58 +690,63 @@ async def generate_proposal(
         )
 
     # Fetch the card
-    card_result = supabase.table("cards").select("*").eq("id", card_id).execute()
-    if not card_result.data:
+    try:
+        card_result = await db.execute(select(Card).where(Card.id == card_id))
+        card_obj = card_result.scalar_one_or_none()
+    except Exception as e:
+        logger.error("Failed to fetch card %s: %s", card_id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("fetching card", e),
+        ) from e
+
+    if card_obj is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Associated card not found",
         )
-    card = card_result.data[0]
+    card = _row_to_dict(card_obj)
 
     # Find or create a workstream for this wizard session
-    # First, check if user has any workstreams; use the first one or create a default
-    ws_result = (
-        supabase.table("workstreams")
-        .select("*")
-        .eq("user_id", user_id)
-        .limit(1)
-        .execute()
-    )
+    try:
+        ws_result = await db.execute(
+            select(WorkstreamDB).where(WorkstreamDB.user_id == user_id).limit(1)
+        )
+        workstream_obj = ws_result.scalar_one_or_none()
+    except Exception as e:
+        logger.error("Failed to query workstreams: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("querying workstreams", e),
+        ) from e
 
-    if ws_result.data:
-        workstream = ws_result.data[0]
+    if workstream_obj is not None:
+        workstream = _row_to_dict(workstream_obj)
     else:
         # Create a default workstream for the user
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(timezone.utc)
+        workstream_obj = WorkstreamDB(
+            user_id=_uuid.UUID(user_id),
+            name="Grant Applications",
+            description="Default workstream for grant proposals generated via the wizard.",
+            created_at=now,
+            updated_at=now,
+        )
         try:
-            ws_create_result = (
-                supabase.table("workstreams")
-                .insert(
-                    {
-                        "user_id": user_id,
-                        "name": "Grant Applications",
-                        "description": "Default workstream for grant proposals generated via the wizard.",
-                        "created_at": now,
-                        "updated_at": now,
-                    }
-                )
-                .execute()
-            )
+            db.add(workstream_obj)
+            await db.flush()
+            await db.refresh(workstream_obj)
         except Exception as e:
             logger.error("Failed to create default workstream: %s", e)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=_safe_error("default workstream creation", e),
             ) from e
-
-        if not ws_create_result.data:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create default workstream",
-            )
-        workstream = ws_create_result.data[0]
+        workstream = _row_to_dict(workstream_obj)
 
     # Build additional context from interview and plan data
+    # NOTE: additional_context is assembled for future use when ProposalService
+    # supports it; currently generate_full_proposal does not accept it.
     additional_context_parts: list[str] = []
     if session.get("interview_data"):
         additional_context_parts.append(
@@ -731,27 +756,29 @@ async def generate_proposal(
         additional_context_parts.append(
             f"Project Plan:\n{json.dumps(session['plan_data'], indent=2, default=str)}"
         )
-    additional_context = (
+    _additional_context = (  # noqa: F841
         "\n\n".join(additional_context_parts) if additional_context_parts else None
     )
 
     # Create the proposal record
-    now = datetime.now(timezone.utc).isoformat()
-    proposal_data = {
-        "card_id": card_id,
-        "workstream_id": workstream["id"],
-        "user_id": user_id,
-        "title": f"Proposal: {card.get('name', 'Untitled Grant')}",
-        "version": 1,
-        "status": "draft",
-        "sections": {},
-        "ai_generation_metadata": {},
-        "created_at": now,
-        "updated_at": now,
-    }
+    now = datetime.now(timezone.utc)
+    proposal_obj = ProposalDB(
+        card_id=_uuid.UUID(card_id),
+        workstream_id=workstream_obj.id,
+        user_id=_uuid.UUID(user_id),
+        title=f"Proposal: {card.get('name', 'Untitled Grant')}",
+        version=1,
+        status="draft",
+        sections={},
+        ai_generation_metadata={},
+        created_at=now,
+        updated_at=now,
+    )
 
     try:
-        proposal_result = supabase.table("proposals").insert(proposal_data).execute()
+        db.add(proposal_obj)
+        await db.flush()
+        await db.refresh(proposal_obj)
     except Exception as e:
         logger.error("Failed to create proposal: %s", e)
         raise HTTPException(
@@ -759,14 +786,7 @@ async def generate_proposal(
             detail=_safe_error("proposal creation", e),
         ) from e
 
-    if not proposal_result.data:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create proposal record",
-        )
-
-    proposal = proposal_result.data[0]
-    proposal_id = proposal["id"]
+    proposal_id = str(proposal_obj.id)
 
     # Generate all sections using ProposalService
     proposal_service = ProposalService()
@@ -785,26 +805,20 @@ async def generate_proposal(
         ) from e
 
     # Persist generated sections
+    now_iso = now.isoformat()
     model_used = generation_result["model_used"]
     gen_metadata = {
-        section_name: {"model": model_used, "generated_at": now}
+        section_name: {"model": model_used, "generated_at": now_iso}
         for section_name in generation_result["sections"]
     }
 
     try:
-        update_result = (
-            supabase.table("proposals")
-            .update(
-                {
-                    "sections": generation_result["sections"],
-                    "ai_model": model_used,
-                    "ai_generation_metadata": gen_metadata,
-                    "updated_at": now,
-                }
-            )
-            .eq("id", proposal_id)
-            .execute()
-        )
+        proposal_obj.sections = generation_result["sections"]
+        proposal_obj.ai_model = model_used
+        proposal_obj.ai_generation_metadata = gen_metadata
+        proposal_obj.updated_at = datetime.now(timezone.utc)
+        await db.flush()
+        await db.refresh(proposal_obj)
     except Exception as e:
         logger.error("Failed to persist generated proposal %s: %s", proposal_id, e)
         raise HTTPException(
@@ -814,12 +828,13 @@ async def generate_proposal(
 
     # Link proposal_id to wizard session
     try:
-        supabase.table("wizard_sessions").update(
-            {
-                "proposal_id": proposal_id,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }
-        ).eq("id", session_id).execute()
+        ws_result = await db.execute(
+            select(WizardSessionDB).where(WizardSessionDB.id == session_id)
+        )
+        session_obj = ws_result.scalar_one()
+        session_obj.proposal_id = proposal_obj.id
+        session_obj.updated_at = datetime.now(timezone.utc)
+        await db.flush()
     except Exception as e:
         logger.warning(
             "Failed to link proposal %s to wizard session %s: %s",
@@ -828,9 +843,10 @@ async def generate_proposal(
             e,
         )
 
+    proposal_dict = _row_to_dict(proposal_obj)
     return {
         "proposal_id": proposal_id,
-        "proposal": update_result.data[0] if update_result.data else proposal,
+        "proposal": proposal_dict,
     }
 
 
@@ -842,7 +858,8 @@ async def generate_proposal(
 @router.get("/me/wizard/sessions/{session_id}/export/pdf")
 async def export_session_pdf(
     session_id: str,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """Export the wizard session's proposal as a PDF.
 
@@ -863,7 +880,7 @@ async def export_session_pdf(
         HTTPException 500: PDF generation failed.
     """
     user_id = current_user["id"]
-    session = await _verify_session_ownership(session_id, user_id)
+    session = await _verify_session_ownership(session_id, user_id, db)
 
     proposal_id = session.get("proposal_id")
     if not proposal_id:
@@ -873,20 +890,29 @@ async def export_session_pdf(
         )
 
     # Fetch the proposal
-    proposal_result = (
-        supabase.table("proposals").select("*").eq("id", proposal_id).execute()
-    )
-    if not proposal_result.data:
+    try:
+        proposal_result = await db.execute(
+            select(ProposalDB).where(ProposalDB.id == proposal_id)
+        )
+        proposal_obj = proposal_result.scalar_one_or_none()
+    except Exception as e:
+        logger.error("Failed to fetch proposal %s: %s", proposal_id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("fetching proposal", e),
+        ) from e
+
+    if proposal_obj is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Linked proposal not found",
         )
 
-    proposal = proposal_result.data[0]
+    proposal = _row_to_dict(proposal_obj)
 
     # Generate PDF via ExportService
     try:
-        export_service = ExportService(supabase)
+        export_service = ExportService(db)
         pdf_path = await export_service.generate_proposal_pdf(
             proposal_data=proposal,
             grant_context=session.get("grant_context"),

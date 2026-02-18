@@ -60,7 +60,7 @@ export interface GrantInputProps {
 type TabId = "url" | "upload";
 
 /**
- * Retrieves the current Supabase session access token.
+ * Retrieves the current session access token.
  */
 async function getToken(): Promise<string | null> {
   const token = localStorage.getItem("gs2_token");

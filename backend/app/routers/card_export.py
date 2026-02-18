@@ -2,13 +2,18 @@
 
 import io
 import logging
+import uuid
+from datetime import datetime, date
+from decimal import Decimal
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse, FileResponse
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.deps import supabase, get_current_user, _safe_error
+from app.deps import get_db, get_current_user_hardcoded, _safe_error
 from app.export_service import ExportService
 from app.models.export import (
     ExportFormat,
@@ -16,6 +21,9 @@ from app.models.export import (
     EXPORT_CONTENT_TYPES,
     get_export_filename,
 )
+from app.models.db.card import Card
+from app.models.db.research import ResearchTask
+from app.models.db.workstream import Workstream
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +40,8 @@ async def export_card(
     card_id: str,
     format: str,
     include_charts: bool = True,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Export a single card in the specified format.
@@ -60,89 +69,97 @@ async def export_card(
             detail=f"Invalid export format: {format}. Supported formats: pdf, pptx, csv",
         ) from e
 
-    # Fetch card from database with joined reference data
-    response = (
-        supabase.table("cards")
-        .select("*, pillars(name), goals(name), stages(name)")
-        .eq("id", card_id)
-        .single()
-        .execute()
-    )
+    # Fetch card from database
+    try:
+        result = await db.execute(select(Card).where(Card.id == card_id))
+        card_obj = result.scalar_one_or_none()
+    except Exception as e:
+        logger.error(f"Failed to fetch card {card_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("card retrieval for export", e),
+        ) from e
 
-    if not response.data:
+    if not card_obj:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=f"Card not found: {card_id}"
         )
 
-    card_data = response.data
-
-    # Extract joined names
-    pillar_name = (
-        card_data.get("pillars", {}).get("name") if card_data.get("pillars") else None
-    )
-    goal_name = (
-        card_data.get("goals", {}).get("name") if card_data.get("goals") else None
-    )
-    stage_name = (
-        card_data.get("stages", {}).get("name") if card_data.get("stages") else None
-    )
+    # Note: pillar_name, goal_name, stage_name were previously fetched via
+    # PostgREST joins on reference tables (pillars, goals, stages). These
+    # reference tables may not have ORM models, so we pass None and let the
+    # export service handle display.
+    pillar_name = None
+    goal_name = None
+    stage_name = None
 
     # Fetch latest completed deep research report for this card
     research_report = None
     research_reports = []
     try:
-        research_response = (
-            supabase.table("research_tasks")
-            .select("id, task_type, result_summary, completed_at")
-            .eq("card_id", card_id)
-            .eq("status", "completed")
-            .eq("task_type", "deep_research")
-            .order("completed_at", desc=True)
-            .limit(3)
-            .execute()
-        )
-
-        if research_response.data:
-            research_reports.extend(
-                {
-                    "completed_at": task.get("completed_at"),
-                    "report": task["result_summary"]["report_preview"],
-                }
-                for task in research_response.data
-                if task.get("result_summary", {}).get("report_preview")
+        research_result = await db.execute(
+            select(ResearchTask)
+            .where(
+                ResearchTask.card_id == card_id,
+                ResearchTask.status == "completed",
+                ResearchTask.task_type == "deep_research",
             )
-            # Use the most recent report as the main one
-            if research_reports:
-                research_report = research_reports[0]["report"]
+            .order_by(ResearchTask.completed_at.desc())
+            .limit(3)
+        )
+        research_tasks = research_result.scalars().all()
+
+        for task in research_tasks:
+            result_summary = task.result_summary or {}
+            if result_summary.get("report_preview"):
+                research_reports.append(
+                    {
+                        "completed_at": (
+                            task.completed_at.isoformat() if task.completed_at else None
+                        ),
+                        "report": result_summary["report_preview"],
+                    }
+                )
+        # Use the most recent report as the main one
+        if research_reports:
+            research_report = research_reports[0]["report"]
     except Exception as e:
         logger.warning(f"Failed to fetch research reports for export: {e}")
 
     # Create CardExportData from raw data with enriched names and research
     try:
         export_data = CardExportData(
-            id=card_data["id"],
-            name=card_data["name"],
-            slug=card_data.get("slug", ""),
-            summary=card_data.get("summary"),
-            description=card_data.get("description"),
-            pillar_id=card_data.get("pillar_id"),
+            id=str(card_obj.id),
+            name=card_obj.name,
+            slug=card_obj.slug or "",
+            summary=card_obj.summary,
+            description=card_obj.description,
+            pillar_id=card_obj.pillar_id,
             pillar_name=pillar_name,
-            goal_id=card_data.get("goal_id"),
+            goal_id=card_obj.goal_id,
             goal_name=goal_name,
-            anchor_id=card_data.get("anchor_id"),
-            stage_id=card_data.get("stage_id"),
+            anchor_id=card_obj.anchor_id,
+            stage_id=card_obj.stage_id,
             stage_name=stage_name,
-            horizon=card_data.get("horizon"),
-            novelty_score=card_data.get("novelty_score"),
-            maturity_score=card_data.get("maturity_score"),
-            impact_score=card_data.get("impact_score"),
-            relevance_score=card_data.get("relevance_score"),
-            velocity_score=card_data.get("velocity_score"),
-            risk_score=card_data.get("risk_score"),
-            opportunity_score=card_data.get("opportunity_score"),
-            status=card_data.get("status"),
-            created_at=card_data.get("created_at"),
-            updated_at=card_data.get("updated_at"),
+            horizon=card_obj.horizon,
+            novelty_score=card_obj.novelty_score,
+            maturity_score=card_obj.maturity_score,
+            impact_score=card_obj.impact_score,
+            relevance_score=card_obj.relevance_score,
+            velocity_score=(
+                float(card_obj.velocity_score)
+                if card_obj.velocity_score is not None
+                else None
+            ),
+            risk_score=card_obj.risk_score,
+            opportunity_score=card_obj.opportunity_score,
+            status=card_obj.status,
+            created_at=(
+                card_obj.created_at.isoformat() if card_obj.created_at else None
+            ),
+            updated_at=(
+                card_obj.updated_at.isoformat() if card_obj.updated_at else None
+            ),
             deep_research_report=research_report,
         )
     except Exception as e:
@@ -153,7 +170,7 @@ async def export_card(
         ) from e
 
     # Initialize export service
-    export_service = ExportService(supabase)
+    export_service = ExportService(db)
 
     # Generate export based on format
     try:
@@ -223,9 +240,10 @@ async def export_card(
 async def export_workstream_report(
     workstream_id: str,
     format: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_hardcoded),
     include_charts: bool = True,
     max_cards: int = 50,
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Export a workstream report in the specified format.
@@ -269,25 +287,32 @@ async def export_workstream_report(
         max_cards = min(max(max_cards, 1), 100)
 
     # Verify workstream exists and belongs to user
-    ws_response = (
-        supabase.table("workstreams").select("*").eq("id", workstream_id).execute()
-    )
-    if not ws_response.data:
+    try:
+        ws_result = await db.execute(
+            select(Workstream).where(Workstream.id == workstream_id)
+        )
+        workstream = ws_result.scalar_one_or_none()
+    except Exception as e:
+        logger.error(f"Failed to fetch workstream {workstream_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("workstream retrieval for export", e),
+        ) from e
+
+    if not workstream:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Workstream not found"
         )
 
-    workstream = ws_response.data[0]
-
     # Verify ownership
-    if workstream.get("user_id") != current_user["id"]:
+    if str(workstream.user_id) != current_user["id"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to export this workstream",
         )
 
     # Initialize export service
-    export_service = ExportService(supabase)
+    export_service = ExportService(db)
 
     # Get export format enum
     export_format = ExportFormat.PDF if format_lower == "pdf" else ExportFormat.PPTX
@@ -330,7 +355,7 @@ async def export_workstream_report(
             )
 
         # Generate filename for download
-        workstream_name = workstream.get("name", "workstream-report")
+        workstream_name = workstream.name or "workstream-report"
         filename = get_export_filename(workstream_name, export_format)
 
         # Get content type

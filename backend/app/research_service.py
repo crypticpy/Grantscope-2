@@ -19,14 +19,23 @@ Research Types:
 import asyncio
 import logging
 import os
+import uuid as uuid_mod
 from datetime import date, datetime, timezone
 from typing import Optional, Dict, Any, List, Tuple
 from dataclasses import dataclass
 from gpt_researcher import GPTResearcher
-from supabase import Client
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, update as sa_update, delete as sa_delete, func, and_, or_
 import openai
 
 from .ai_service import AIService, AnalysisResult, TriageResult
+
+from app.models.db.card import Card
+from app.models.db.card_extras import CardSnapshot, CardTimeline, Entity
+from app.models.db.source import Source
+from app.models.db.research import ResearchTask
+from app.models.db.workstream import Workstream
+from app.helpers.db_utils import vector_search_cards, increment_deep_research_count
 
 logger = logging.getLogger(__name__)
 
@@ -210,6 +219,26 @@ Prioritize actionable intelligence for city strategic planning and horizon scann
 # ============================================================================
 
 
+def _to_uuid(val: Any) -> uuid_mod.UUID:
+    """Convert a string to uuid.UUID if needed."""
+    if isinstance(val, uuid_mod.UUID):
+        return val
+    return uuid_mod.UUID(str(val))
+
+
+def _card_to_dict(card: Card) -> dict:
+    """Convert a Card ORM object to a dictionary for compatibility with existing code."""
+    result = {}
+    for col in Card.__table__.columns:
+        val = getattr(card, col.key, None)
+        if isinstance(val, uuid_mod.UUID):
+            val = str(val)
+        elif isinstance(val, (datetime, date)):
+            val = val.isoformat() if val else None
+        result[col.key] = val
+    return result
+
+
 class ResearchService:
     """
     Handles research operations using hybrid GPT Researcher + AI analysis pipeline.
@@ -231,8 +260,8 @@ class ResearchService:
     VECTOR_MATCH_THRESHOLD = 0.82
     STRONG_MATCH_THRESHOLD = 0.92
 
-    def __init__(self, supabase: Client, openai_client: openai.OpenAI):
-        self.supabase = supabase
+    def __init__(self, db: AsyncSession, openai_client: openai.OpenAI):
+        self.db = db
         self.openai_client = openai_client
         self.ai_service = AIService(openai_client)
 
@@ -240,7 +269,7 @@ class ResearchService:
     # Card Snapshots — version history before overwrites
     # ========================================================================
 
-    def _snapshot_card_fields(
+    async def _snapshot_card_fields(
         self, card_id: str, card_data: dict, trigger: str
     ) -> None:
         """Save snapshots of description and summary before they get overwritten.
@@ -250,25 +279,27 @@ class ResearchService:
             card_data: Current card data (must have 'description' and/or 'summary')
             trigger: What triggered the overwrite (deep_research, profile_refresh, etc.)
         """
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(timezone.utc)
         for field in ("description", "summary"):
             content = card_data.get(field)
             if content and len(content) > 10:
                 try:
-                    self.supabase.table("card_snapshots").insert(
-                        {
-                            "card_id": card_id,
-                            "field_name": field,
-                            "content": content,
-                            "content_length": len(content),
-                            "trigger": trigger,
-                            "created_at": now,
-                        }
-                    ).execute()
+                    snapshot = CardSnapshot(
+                        card_id=_to_uuid(card_id),
+                        field_name=field,
+                        content=content,
+                        content_length=len(content),
+                        trigger=trigger,
+                        created_at=now,
+                    )
+                    self.db.add(snapshot)
+                    await self.db.flush()
                 except Exception as e:
                     logger.warning(f"Snapshot save failed for {card_id}/{field}: {e}")
 
-    def _save_draft_snapshot(self, card_id: str, content: str, trigger: str) -> None:
+    async def _save_draft_snapshot(
+        self, card_id: str, content: str, trigger: str
+    ) -> None:
         """Save a generated description as a draft snapshot for user review.
 
         Unlike _snapshot_card_fields which saves the CURRENT content before
@@ -279,16 +310,16 @@ class ResearchService:
         if not content or len(content) < 10:
             return
         try:
-            self.supabase.table("card_snapshots").insert(
-                {
-                    "card_id": card_id,
-                    "field_name": "description",
-                    "content": content,
-                    "content_length": len(content),
-                    "trigger": trigger,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                }
-            ).execute()
+            snapshot = CardSnapshot(
+                card_id=_to_uuid(card_id),
+                field_name="description",
+                content=content,
+                content_length=len(content),
+                trigger=trigger,
+                created_at=datetime.now(timezone.utc),
+            )
+            self.db.add(snapshot)
+            await self.db.flush()
             logger.info(
                 f"Card {card_id}: draft description saved "
                 f"({len(content)} chars, trigger={trigger})"
@@ -302,28 +333,29 @@ class ResearchService:
         Non-blocking: logs warnings on failure and continues.
         """
         try:
-            card_result = (
-                self.supabase.table("cards")
-                .select("name, summary, description")
-                .eq("id", card_id)
-                .single()
-                .execute()
+            result = await self.db.execute(
+                select(Card.name, Card.summary, Card.description).where(
+                    Card.id == _to_uuid(card_id)
+                )
             )
+            card_row = result.one_or_none()
 
-            if not card_result.data:
+            if not card_row:
                 return
 
-            card = card_result.data
-            embed_text = f"{card.get('name', '')} {card.get('summary', '')} {card.get('description', '') or ''}"
+            embed_text = f"{card_row.name or ''} {card_row.summary or ''} {card_row.description or ''}"
 
             if len(embed_text.strip()) < 10:
                 return
 
             embedding = await self.ai_service.generate_embedding(embed_text)
 
-            self.supabase.table("cards").update({"embedding": embedding}).eq(
-                "id", card_id
-            ).execute()
+            await self.db.execute(
+                sa_update(Card)
+                .where(Card.id == _to_uuid(card_id))
+                .values(embedding=embedding)
+            )
+            await self.db.flush()
 
             logger.info(f"Card {card_id}: embedding updated ({len(embed_text)} chars)")
         except Exception as e:
@@ -335,33 +367,38 @@ class ResearchService:
 
     async def check_rate_limit(self, card_id: str) -> bool:
         """Check if deep research is allowed for this card today."""
-        result = (
-            self.supabase.table("cards")
-            .select("deep_research_count_today, deep_research_reset_date")
-            .eq("id", card_id)
-            .single()
-            .execute()
+        result = await self.db.execute(
+            select(Card.deep_research_count_today, Card.deep_research_reset_date).where(
+                Card.id == _to_uuid(card_id)
+            )
         )
+        card_row = result.one_or_none()
 
-        if not result.data:
+        if not card_row:
             return False
 
-        card = result.data
-        today = date.today().isoformat()
+        today = date.today()
+        today_str = today.isoformat()
 
-        if card.get("deep_research_reset_date") != today:
-            self.supabase.table("cards").update(
-                {"deep_research_count_today": 0, "deep_research_reset_date": today}
-            ).eq("id", card_id).execute()
+        reset_date = card_row.deep_research_reset_date
+        reset_date_str = reset_date.isoformat() if reset_date else None
+
+        if reset_date_str != today_str:
+            await self.db.execute(
+                sa_update(Card)
+                .where(Card.id == _to_uuid(card_id))
+                .values(deep_research_count_today=0, deep_research_reset_date=today)
+            )
+            await self.db.flush()
             return True
 
-        return card.get("deep_research_count_today", 0) < self.DAILY_DEEP_RESEARCH_LIMIT
+        return (
+            card_row.deep_research_count_today or 0
+        ) < self.DAILY_DEEP_RESEARCH_LIMIT
 
     async def increment_research_count(self, card_id: str) -> None:
         """Increment the daily research counter for a card."""
-        self.supabase.rpc(
-            "increment_deep_research_count", {"p_card_id": card_id}
-        ).execute()
+        await increment_deep_research_count(self.db, card_id=card_id)
 
     # ========================================================================
     # Step 1: Discovery (GPT Researcher + Supplementary Search)
@@ -770,20 +807,19 @@ class ResearchService:
         # Vector similarity search against existing cards
         # Note: This requires pgvector extension and proper embedding column
         try:
-            # Use Supabase RPC for vector similarity search
-            result = self.supabase.rpc(
-                "match_cards_by_embedding",
-                {
-                    "query_embedding": processed.embedding,
-                    "match_threshold": self.VECTOR_MATCH_THRESHOLD,
-                    "match_count": 5,
-                },
-            ).execute()
+            # Use vector_search_cards (replaces match_cards_by_embedding RPC)
+            matches = await vector_search_cards(
+                self.db,
+                query_embedding=processed.embedding,
+                match_threshold=self.VECTOR_MATCH_THRESHOLD,
+                match_count=5,
+                require_active=True,
+            )
 
-            if not result.data:
+            if not matches:
                 return None, processed.analysis.is_new_concept
 
-            top_match = result.data[0]
+            top_match = matches[0]
             similarity = top_match.get("similarity", 0)
 
             if similarity > self.STRONG_MATCH_THRESHOLD:
@@ -792,20 +828,19 @@ class ResearchService:
 
             elif similarity > self.VECTOR_MATCH_THRESHOLD:
                 # Moderate match - use LLM to decide
-                card = (
-                    self.supabase.table("cards")
-                    .select("name, summary")
-                    .eq("id", top_match["id"])
-                    .single()
-                    .execute()
+                result = await self.db.execute(
+                    select(Card.name, Card.summary).where(
+                        Card.id == _to_uuid(top_match["id"])
+                    )
                 )
+                card_row = result.one_or_none()
 
-                if card.data:
+                if card_row:
                     decision = await self.ai_service.check_card_match(
                         source_summary=processed.analysis.summary,
                         source_card_name=processed.analysis.suggested_card_name,
-                        existing_card_name=card.data["name"],
-                        existing_card_summary=card.data.get("summary", ""),
+                        existing_card_name=card_row.name,
+                        existing_card_summary=card_row.summary or "",
                     )
 
                     if decision.get("is_match") and decision.get("confidence", 0) > 0.7:
@@ -845,7 +880,7 @@ class ResearchService:
             from app.deduplication import check_duplicate
 
             dedup_result = await check_duplicate(
-                supabase=self.supabase,
+                db=self.db,
                 card_id=card_id,
                 content=processed.raw.content or "",
                 url=processed.raw.url or "",
@@ -865,95 +900,87 @@ class ResearchService:
             # Prepare insert data with safe defaults
             from app.source_quality import extract_domain
 
-            insert_data = {
-                "card_id": card_id,
-                "url": processed.raw.url,
-                "title": (processed.raw.title or "Untitled")[:500],
-                "publication": (
+            source_obj = Source(
+                card_id=_to_uuid(card_id),
+                url=processed.raw.url,
+                title=(processed.raw.title or "Untitled")[:500],
+                publication=(
                     (processed.raw.source_name or "")[:200]
                     if processed.raw.source_name
                     else None
                 ),
-                "full_text": (
+                full_text=(
                     processed.raw.content[:10000] if processed.raw.content else None
                 ),
-                "ai_summary": (
-                    processed.analysis.summary if processed.analysis else None
-                ),
-                "key_excerpts": (
+                ai_summary=(processed.analysis.summary if processed.analysis else None),
+                key_excerpts=(
                     processed.analysis.key_excerpts[:5]
                     if processed.analysis and processed.analysis.key_excerpts
                     else []
                 ),
-                "relevance_to_card": (
+                relevance_to_card=(
                     processed.analysis.relevance if processed.analysis else 0.5
                 ),
-                "api_source": "gpt_researcher",
-                "domain": extract_domain(processed.raw.url or ""),
-                "ingested_at": datetime.now(timezone.utc).isoformat(),
-            }
+                api_source="gpt_researcher",
+                domain=extract_domain(processed.raw.url or ""),
+                ingested_at=datetime.now(timezone.utc),
+            )
 
             # If related (0.85-0.95 similarity), mark duplicate_of
             if (
                 dedup_result.action == "store_as_related"
                 and dedup_result.duplicate_of_id
             ):
-                insert_data["duplicate_of"] = dedup_result.duplicate_of_id
+                source_obj.duplicate_of = _to_uuid(dedup_result.duplicate_of_id)
 
             # Insert with full schema
-            result = self.supabase.table("sources").insert(insert_data).execute()
+            self.db.add(source_obj)
+            await self.db.flush()
+            await self.db.refresh(source_obj)
 
-            if result.data:
-                source_id = result.data[0]["id"]
-                logger.info(
-                    f"Stored source: {processed.raw.title[:50]}... (id: {source_id})"
+            source_id = str(source_obj.id)
+            logger.info(
+                f"Stored source: {processed.raw.title[:50]}... (id: {source_id})"
+            )
+
+            # Store entities for graph (non-blocking)
+            try:
+                if processed.analysis and processed.analysis.entities:
+                    await self._store_entities(
+                        source_id, card_id, processed.analysis.entities
+                    )
+            except Exception as e:
+                logger.warning(f"Entity storage failed (source still saved): {e}")
+
+            # Create timeline event (non-blocking)
+            try:
+                await self._create_timeline_event(
+                    card_id=card_id,
+                    event_type="source_added",
+                    description=f"New source: {processed.raw.title[:100]}",
+                    source_id=source_id,
+                )
+            except Exception as e:
+                logger.warning(f"Timeline event failed (source still saved): {e}")
+
+            # Compute and store source quality score (non-blocking)
+            try:
+                from app.source_quality import compute_and_store_quality_score
+
+                compute_and_store_quality_score(
+                    self.db,
+                    source_id,
+                    analysis=(
+                        processed.analysis if hasattr(processed, "analysis") else None
+                    ),
+                    triage=(processed.triage if hasattr(processed, "triage") else None),
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to compute quality score for source {source_id}: {e}"
                 )
 
-                # Store entities for graph (non-blocking)
-                try:
-                    if processed.analysis and processed.analysis.entities:
-                        await self._store_entities(
-                            source_id, card_id, processed.analysis.entities
-                        )
-                except Exception as e:
-                    logger.warning(f"Entity storage failed (source still saved): {e}")
-
-                # Create timeline event (non-blocking)
-                try:
-                    await self._create_timeline_event(
-                        card_id=card_id,
-                        event_type="source_added",
-                        description=f"New source: {processed.raw.title[:100]}",
-                        source_id=source_id,
-                    )
-                except Exception as e:
-                    logger.warning(f"Timeline event failed (source still saved): {e}")
-
-                # Compute and store source quality score (non-blocking)
-                try:
-                    from app.source_quality import compute_and_store_quality_score
-
-                    compute_and_store_quality_score(
-                        self.supabase,
-                        source_id,
-                        analysis=(
-                            processed.analysis
-                            if hasattr(processed, "analysis")
-                            else None
-                        ),
-                        triage=(
-                            processed.triage if hasattr(processed, "triage") else None
-                        ),
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to compute quality score for source {source_id}: {e}"
-                    )
-
-                return source_id
-
-            logger.warning(f"Insert returned no data for: {processed.raw.url[:50]}...")
-            return None
+            return source_id
 
         except Exception as e:
             error_msg = str(e)
@@ -1000,16 +1027,16 @@ class ResearchService:
         # Store in entities table (if exists)
         try:
             for entity in entities:
-                self.supabase.table("entities").insert(
-                    {
-                        "name": entity.name,
-                        "entity_type": entity.entity_type,
-                        "context": entity.context,
-                        "source_id": source_id,
-                        "card_id": card_id,
-                        "created_at": datetime.now(timezone.utc).isoformat(),
-                    }
-                ).execute()
+                entity_obj = Entity(
+                    name=entity.name,
+                    entity_type=entity.entity_type,
+                    context=entity.context,
+                    source_id=_to_uuid(source_id),
+                    card_id=_to_uuid(card_id),
+                    created_at=datetime.now(timezone.utc),
+                )
+                self.db.add(entity_obj)
+            await self.db.flush()
         except Exception as e:
             # Table might not exist yet - log but don't fail
             logger.warning(f"Entity storage failed (table may not exist): {e}")
@@ -1035,64 +1062,50 @@ class ResearchService:
         slug = "-".join(slug.split())[:50]
 
         # Ensure unique slug
-        existing = self.supabase.table("cards").select("id").eq("slug", slug).execute()
-        if existing.data:
+        existing = await self.db.execute(select(Card.id).where(Card.slug == slug))
+        if existing.scalar_one_or_none():
             slug = f"{slug}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
 
-        result = (
-            self.supabase.table("cards")
-            .insert(
-                {
-                    "name": analysis.suggested_card_name,
-                    "slug": slug,
-                    "summary": analysis.summary,
-                    "horizon": analysis.horizon,
-                    "stage_id": f"{analysis.suggested_stage}_stage",  # Adjust to your schema
-                    "pillar_id": analysis.pillars[0] if analysis.pillars else None,
-                    "goal_id": analysis.goals[0] if analysis.goals else None,
-                    # Arrays (if your schema supports them)
-                    # "pillars": analysis.pillars,
-                    # "goals": analysis.goals,
-                    # "steep_categories": analysis.steep_categories,
-                    # "anchors": analysis.anchors,
-                    # Scoring (convert AI scale to 0-100 and clamp)
-                    "maturity_score": max(
-                        0, min(int(analysis.credibility * 20), 100)
-                    ),  # 1-5 -> 0-100
-                    "novelty_score": max(
-                        0, min(int(analysis.novelty * 20), 100)
-                    ),  # 1-5 -> 0-100
-                    "impact_score": max(
-                        0, min(int(analysis.impact * 20), 100)
-                    ),  # 1-5 -> 0-100
-                    "relevance_score": max(
-                        0, min(int(analysis.relevance * 20), 100)
-                    ),  # 1-5 -> 0-100
-                    "velocity_score": max(
-                        0, min(int(analysis.velocity * 10), 100)
-                    ),  # 1-10 -> 0-100
-                    "status": "active",
-                    "created_by": created_by,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                }
-            )
-            .execute()
+        now = datetime.now(timezone.utc)
+        card_obj = Card(
+            name=analysis.suggested_card_name,
+            slug=slug,
+            summary=analysis.summary,
+            horizon=analysis.horizon,
+            stage_id=f"{analysis.suggested_stage}_stage",  # Adjust to your schema
+            pillar_id=analysis.pillars[0] if analysis.pillars else None,
+            goal_id=analysis.goals[0] if analysis.goals else None,
+            # Scoring (convert AI scale to 0-100 and clamp)
+            maturity_score=max(
+                0, min(int(analysis.credibility * 20), 100)
+            ),  # 1-5 -> 0-100
+            novelty_score=max(0, min(int(analysis.novelty * 20), 100)),  # 1-5 -> 0-100
+            impact_score=max(0, min(int(analysis.impact * 20), 100)),  # 1-5 -> 0-100
+            relevance_score=max(
+                0, min(int(analysis.relevance * 20), 100)
+            ),  # 1-5 -> 0-100
+            velocity_score=max(
+                0, min(int(analysis.velocity * 10), 100)
+            ),  # 1-10 -> 0-100
+            status="active",
+            created_by=_to_uuid(created_by) if created_by else None,
+            created_at=now,
+            updated_at=now,
+        )
+        self.db.add(card_obj)
+        await self.db.flush()
+        await self.db.refresh(card_obj)
+
+        card_id = str(card_obj.id)
+
+        # Create timeline event
+        await self._create_timeline_event(
+            card_id=card_id,
+            event_type="created",
+            description="Card created from research",
         )
 
-        if result.data:
-            card_id = result.data[0]["id"]
-
-            # Create timeline event
-            await self._create_timeline_event(
-                card_id=card_id,
-                event_type="created",
-                description="Card created from research",
-            )
-
-            return card_id
-
-        raise Exception("Failed to create card")
+        return card_id
 
     async def _create_timeline_event(
         self,
@@ -1103,29 +1116,28 @@ class ResearchService:
         metadata: Optional[Dict] = None,
     ) -> None:
         """Create a timeline event for a card."""
-        self.supabase.table("card_timeline").insert(
-            {
-                "card_id": card_id,
-                "event_type": event_type,
-                "title": event_type.replace("_", " ").title(),
-                "description": description,
-                "triggered_by_source_id": source_id,
-                "metadata": metadata or {},
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            }
-        ).execute()
+        timeline_obj = CardTimeline(
+            card_id=_to_uuid(card_id),
+            event_type=event_type,
+            title=event_type.replace("_", " ").title(),
+            description=description,
+            triggered_by_source_id=_to_uuid(source_id) if source_id else None,
+            metadata_=metadata or {},
+            created_at=datetime.now(timezone.utc),
+        )
+        self.db.add(timeline_obj)
+        await self.db.flush()
 
     async def _update_card_from_analysis(
         self, card_id: str, analysis: AnalysisResult
     ) -> None:
         """Update card metrics based on new analysis."""
-        self.supabase.table("cards").update(
-            {
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-                # Optionally update scores if novelty warrants it
-                # This could be more sophisticated - averaging, weighting, etc.
-            }
-        ).eq("id", card_id).execute()
+        await self.db.execute(
+            sa_update(Card)
+            .where(Card.id == _to_uuid(card_id))
+            .values(updated_at=datetime.now(timezone.utc))
+        )
+        await self.db.flush()
 
     # ========================================================================
     # Profile Auto-Refresh
@@ -1141,32 +1153,21 @@ class ResearchService:
         """
         try:
             # Get card data including profile tracking columns
-            card = (
-                self.supabase.table("cards")
-                .select(
-                    "id, name, summary, description, pillar_id, horizon, "
-                    "profile_generated_at, profile_source_count"
-                )
-                .eq("id", card_id)
-                .single()
-                .execute()
+            result = await self.db.execute(
+                select(Card).where(Card.id == _to_uuid(card_id))
             )
+            card_obj = result.scalar_one_or_none()
 
-            if not card.data:
+            if not card_obj:
                 return
 
-            card_data = card.data
+            card_data = _card_to_dict(card_obj)
 
             # Count current sources on this card
-            source_count_resp = (
-                self.supabase.table("sources")
-                .select("id", count="exact")
-                .eq("card_id", card_id)
-                .execute()
+            count_result = await self.db.execute(
+                select(func.count(Source.id)).where(Source.card_id == _to_uuid(card_id))
             )
-            current_source_count = source_count_resp.count or len(
-                source_count_resp.data or []
-            )
+            current_source_count = count_result.scalar() or 0
 
             # Check if enough new sources to warrant refresh
             previous_count = card_data.get("profile_source_count") or 0
@@ -1184,31 +1185,36 @@ class ResearchService:
             )
 
             # Get source data for profile generation
-            sources_resp = (
-                self.supabase.table("sources")
-                .select(
-                    "title, ai_summary, key_excerpts, url, full_text, ingested_at, created_at"
+            sources_result = await self.db.execute(
+                select(
+                    Source.title,
+                    Source.ai_summary,
+                    Source.key_excerpts,
+                    Source.url,
+                    Source.full_text,
+                    Source.ingested_at,
+                    Source.created_at,
                 )
-                .eq("card_id", card_id)
-                .order("created_at", desc=True)
+                .where(Source.card_id == _to_uuid(card_id))
+                .order_by(Source.created_at.desc())
                 .limit(20)
-                .execute()
             )
+            source_rows = sources_result.all()
 
-            if not sources_resp.data:
+            if not source_rows:
                 return
 
             # Build source_analyses list in the format expected by
             # AIService.generate_signal_profile
             source_analyses = []
-            for src in sources_resp.data:
+            for src in source_rows:
                 source_analyses.append(
                     {
-                        "title": src.get("title", "Untitled"),
-                        "url": src.get("url", ""),
-                        "summary": src.get("ai_summary", ""),
-                        "key_excerpts": src.get("key_excerpts") or [],
-                        "content": src.get("full_text", "") or "",
+                        "title": src.title or "Untitled",
+                        "url": src.url or "",
+                        "summary": src.ai_summary or "",
+                        "key_excerpts": src.key_excerpts or [],
+                        "content": src.full_text or "",
                     }
                 )
 
@@ -1223,23 +1229,25 @@ class ResearchService:
 
             if updated_profile:
                 # Snapshot before overwrite
-                self._snapshot_card_fields(card_id, card_data, "profile_refresh")
+                await self._snapshot_card_fields(card_id, card_data, "profile_refresh")
 
                 update_data = {
                     "description": updated_profile,
-                    "profile_generated_at": datetime.now(timezone.utc).isoformat(),
+                    "profile_generated_at": datetime.now(timezone.utc),
                     "profile_source_count": current_source_count,
                 }
 
                 # Analyze trend trajectory from source publication patterns
                 try:
                     source_dates = [
-                        s.get("ingested_at") or s.get("created_at", "")
-                        for s in sources_resp.data
+                        (
+                            (s.ingested_at or s.created_at or "").isoformat()
+                            if hasattr(s.ingested_at or s.created_at or "", "isoformat")
+                            else str(s.ingested_at or s.created_at or "")
+                        )
+                        for s in source_rows
                     ]
-                    source_summaries = [
-                        s.get("ai_summary", "") for s in sources_resp.data
-                    ]
+                    source_summaries = [s.ai_summary or "" for s in source_rows]
                     trend = await self.ai_service.analyze_trend_trajectory(
                         signal_name=card_data.get("name", ""),
                         source_dates=source_dates,
@@ -1251,29 +1259,32 @@ class ResearchService:
                 except Exception as te:
                     logger.warning(f"Trend analysis failed for card {card_id}: {te}")
 
-                self.supabase.table("cards").update(update_data).eq(
-                    "id", card_id
-                ).execute()
+                await self.db.execute(
+                    sa_update(Card)
+                    .where(Card.id == _to_uuid(card_id))
+                    .values(**update_data)
+                )
+                await self.db.flush()
 
                 await self._update_card_embedding(card_id)
 
                 # Log timeline event
-                self.supabase.table("card_timeline").insert(
-                    {
-                        "card_id": card_id,
-                        "event_type": "profile_updated",
-                        "title": "Profile Updated",
-                        "description": (
-                            f"Profile auto-refreshed with {new_sources} new sources"
-                        ),
-                        "metadata": {
-                            "new_sources": new_sources,
-                            "total_sources": current_source_count,
-                            "trend_direction": update_data.get("trend_direction"),
-                        },
-                        "created_at": datetime.now(timezone.utc).isoformat(),
-                    }
-                ).execute()
+                timeline_obj = CardTimeline(
+                    card_id=_to_uuid(card_id),
+                    event_type="profile_updated",
+                    title="Profile Updated",
+                    description=(
+                        f"Profile auto-refreshed with {new_sources} new sources"
+                    ),
+                    metadata_={
+                        "new_sources": new_sources,
+                        "total_sources": current_source_count,
+                        "trend_direction": update_data.get("trend_direction"),
+                    },
+                    created_at=datetime.now(timezone.utc),
+                )
+                self.db.add(timeline_obj)
+                await self.db.flush()
 
                 logger.info(
                     f"Card {card_id}: profile refreshed "
@@ -1294,7 +1305,7 @@ class ResearchService:
         try:
             from .connection_service import ConnectionService
 
-            conn_service = ConnectionService(self.supabase, self.ai_service)
+            conn_service = ConnectionService(self.db, self.ai_service)
             count = await conn_service.discover_connections(card_id)
             if count > 0:
                 logger.info(f"Card {card_id}: discovered {count} new connections")
@@ -1320,18 +1331,15 @@ class ResearchService:
         logger.info(f"Starting update research for card {card_id} (task: {task_id})")
 
         # Get card details
-        card_result = (
-            self.supabase.table("cards")
-            .select("name, summary")
-            .eq("id", card_id)
-            .single()
-            .execute()
+        result = await self.db.execute(
+            select(Card.name, Card.summary).where(Card.id == _to_uuid(card_id))
         )
+        card_row = result.one_or_none()
 
-        if not card_result.data:
+        if not card_row:
             raise ValueError(f"Card not found: {card_id}")
 
-        card = card_result.data
+        card = {"name": card_row.name, "summary": card_row.summary or ""}
 
         # Step 1: Build customized query
         query = UPDATE_QUERY_TEMPLATE.format(
@@ -1376,15 +1384,20 @@ class ResearchService:
         if sources_added > 0 or report:
             try:
                 # Get full card details for enhancement
-                full_card = (
-                    self.supabase.table("cards")
-                    .select("name, summary, description")
-                    .eq("id", card_id)
-                    .single()
-                    .execute()
+                full_result = await self.db.execute(
+                    select(Card.name, Card.summary, Card.description).where(
+                        Card.id == _to_uuid(card_id)
+                    )
                 )
+                full_card_row = full_result.one_or_none()
 
-                if full_card.data:
+                if full_card_row:
+                    full_card_data = {
+                        "name": full_card_row.name,
+                        "summary": full_card_row.summary or "",
+                        "description": full_card_row.description or "",
+                    }
+
                     # Collect source summaries for enhancement
                     source_summaries = [
                         p.analysis.summary
@@ -1393,9 +1406,9 @@ class ResearchService:
                     ]
 
                     enhancement = await self.ai_service.enhance_card_from_research(
-                        current_name=full_card.data["name"],
-                        current_summary=full_card.data.get("summary", ""),
-                        current_description=full_card.data.get("description", ""),
+                        current_name=full_card_data["name"],
+                        current_summary=full_card_data.get("summary", ""),
+                        current_description=full_card_data.get("description", ""),
                         research_report=report or "",
                         source_summaries=source_summaries,
                     )
@@ -1403,18 +1416,23 @@ class ResearchService:
                     # Save generated description as a draft snapshot for
                     # user review — do NOT overwrite the current description.
                     new_desc = enhancement.get("enhanced_description")
-                    if new_desc and new_desc != full_card.data.get("description"):
-                        self._save_draft_snapshot(card_id, new_desc, "enhance_research")
+                    if new_desc and new_desc != full_card_data.get("description"):
+                        await self._save_draft_snapshot(
+                            card_id, new_desc, "enhance_research"
+                        )
 
                     # Update summary and timestamp only (description preserved)
-                    self.supabase.table("cards").update(
-                        {
-                            "summary": enhancement.get(
-                                "enhanced_summary", full_card.data.get("summary")
+                    await self.db.execute(
+                        sa_update(Card)
+                        .where(Card.id == _to_uuid(card_id))
+                        .values(
+                            summary=enhancement.get(
+                                "enhanced_summary", full_card_data.get("summary")
                             ),
-                            "updated_at": datetime.now(timezone.utc).isoformat(),
-                        }
-                    ).eq("id", card_id).execute()
+                            updated_at=datetime.now(timezone.utc),
+                        )
+                    )
+                    await self.db.flush()
 
                     await self._update_card_embedding(card_id)
 
@@ -1424,14 +1442,20 @@ class ResearchService:
             except Exception as e:
                 logger.warning(f"Card enhancement failed (research still saved): {e}")
                 # Still update timestamp even if enhancement fails
-                self.supabase.table("cards").update(
-                    {"updated_at": datetime.now(timezone.utc).isoformat()}
-                ).eq("id", card_id).execute()
+                await self.db.execute(
+                    sa_update(Card)
+                    .where(Card.id == _to_uuid(card_id))
+                    .values(updated_at=datetime.now(timezone.utc))
+                )
+                await self.db.flush()
         else:
             # Just update timestamp if no new sources
-            self.supabase.table("cards").update(
-                {"updated_at": datetime.now(timezone.utc).isoformat()}
-            ).eq("id", card_id).execute()
+            await self.db.execute(
+                sa_update(Card)
+                .where(Card.id == _to_uuid(card_id))
+                .values(updated_at=datetime.now(timezone.utc))
+            )
+            await self.db.flush()
 
         # Create summary timeline event
         await self._create_timeline_event(
@@ -1484,18 +1508,13 @@ class ResearchService:
             raise Exception("Daily deep research limit reached (2 per day per card)")
 
         # Get card details
-        card_result = (
-            self.supabase.table("cards")
-            .select("*")
-            .eq("id", card_id)
-            .single()
-            .execute()
-        )
+        result = await self.db.execute(select(Card).where(Card.id == _to_uuid(card_id)))
+        card_obj = result.scalar_one_or_none()
 
-        if not card_result.data:
+        if not card_obj:
             raise ValueError(f"Card not found: {card_id}")
 
-        card = card_result.data
+        card = _card_to_dict(card_obj)
 
         # Step 1: Build comprehensive query
         query = DEEP_RESEARCH_QUERY_TEMPLATE.format(
@@ -1527,24 +1546,23 @@ class ResearchService:
         existing_source_urls = []
         existing_source_context = []
         try:
-            existing_sources_result = (
-                self.supabase.table("sources")
-                .select("url, title, ai_summary, full_text")
-                .eq("card_id", card_id)
-                .order("created_at", desc=True)
+            existing_sources_result = await self.db.execute(
+                select(Source.url, Source.title, Source.ai_summary, Source.full_text)
+                .where(Source.card_id == _to_uuid(card_id))
+                .order_by(Source.created_at.desc())
                 .limit(20)
-                .execute()
             )
-            if existing_sources_result.data:
-                for es in existing_sources_result.data:
-                    if es.get("url"):
-                        existing_source_urls.append(es["url"])
-                    if es.get("ai_summary"):
+            existing_source_rows = existing_sources_result.all()
+            if existing_source_rows:
+                for es in existing_source_rows:
+                    if es.url:
+                        existing_source_urls.append(es.url)
+                    if es.ai_summary:
                         existing_source_context.append(
                             {
-                                "title": es.get("title", "Untitled"),
-                                "url": es.get("url", ""),
-                                "summary": es["ai_summary"],
+                                "title": es.title or "Untitled",
+                                "url": es.url or "",
+                                "summary": es.ai_summary,
                             }
                         )
                 logger.info(
@@ -1811,7 +1829,7 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
                         else:
                             entry = f"{i}. {title}"
                         if source_name:
-                            entry += f" — *{source_name}*"
+                            entry += f" --- *{source_name}*"
                         fallback_report += entry + "\n"
 
                     comprehensive_report = fallback_report
@@ -1830,17 +1848,28 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
 
         # Step 7c: Research evolution summary (if card has previous reports)
         try:
-            prev_research = (
-                self.supabase.table("research_tasks")
-                .select("result_summary, completed_at")
-                .eq("card_id", card_id)
-                .eq("status", "completed")
-                .eq("task_type", "deep_research")
-                .order("completed_at", desc=True)
+            prev_result = await self.db.execute(
+                select(ResearchTask.result_summary, ResearchTask.completed_at)
+                .where(
+                    and_(
+                        ResearchTask.card_id == _to_uuid(card_id),
+                        ResearchTask.status == "completed",
+                        ResearchTask.task_type == "deep_research",
+                    )
+                )
+                .order_by(ResearchTask.completed_at.desc())
                 .limit(2)
-                .execute()
             )
-            prev_reports = prev_research.data or []
+            prev_rows = prev_result.all()
+            prev_reports = [
+                {
+                    "result_summary": row.result_summary,
+                    "completed_at": (
+                        row.completed_at.isoformat() if row.completed_at else None
+                    ),
+                }
+                for row in prev_rows
+            ]
             # If there's a prior report (second entry since current is being created)
             if len(prev_reports) >= 1 and comprehensive_report:
                 prior = prev_reports[0]
@@ -1900,16 +1929,19 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
             # review — do NOT overwrite the current description.
             new_desc = enhancement.get("enhanced_description")
             if new_desc and new_desc != card.get("description"):
-                self._save_draft_snapshot(card_id, new_desc, "deep_research")
+                await self._save_draft_snapshot(card_id, new_desc, "deep_research")
 
             # Update summary and timestamps only (description preserved)
-            self.supabase.table("cards").update(
-                {
-                    "summary": enhancement.get("enhanced_summary", card.get("summary")),
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                    "deep_research_at": datetime.now(timezone.utc).isoformat(),
-                }
-            ).eq("id", card_id).execute()
+            await self.db.execute(
+                sa_update(Card)
+                .where(Card.id == _to_uuid(card_id))
+                .values(
+                    summary=enhancement.get("enhanced_summary", card.get("summary")),
+                    updated_at=datetime.now(timezone.utc),
+                    deep_research_at=datetime.now(timezone.utc),
+                )
+            )
+            await self.db.flush()
 
             await self._update_card_embedding(card_id)
 
@@ -1919,12 +1951,15 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
         except Exception as e:
             logger.warning(f"Card enhancement failed (research still saved): {e}")
             # Still update timestamps even if enhancement fails
-            self.supabase.table("cards").update(
-                {
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                    "deep_research_at": datetime.now(timezone.utc).isoformat(),
-                }
-            ).eq("id", card_id).execute()
+            await self.db.execute(
+                sa_update(Card)
+                .where(Card.id == _to_uuid(card_id))
+                .values(
+                    updated_at=datetime.now(timezone.utc),
+                    deep_research_at=datetime.now(timezone.utc),
+                )
+            )
+            await self.db.flush()
 
         # Increment rate limit
         await self.increment_research_count(card_id)
@@ -1988,18 +2023,19 @@ Research analyzed {len(source_analyses)} sources related to {card["name"]}.
         )
 
         # Get workstream details
-        ws_result = (
-            self.supabase.table("workstreams")
-            .select("*")
-            .eq("id", workstream_id)
-            .single()
-            .execute()
+        result = await self.db.execute(
+            select(Workstream).where(Workstream.id == _to_uuid(workstream_id))
         )
+        ws_obj = result.scalar_one_or_none()
 
-        if not ws_result.data:
+        if not ws_obj:
             raise ValueError(f"Workstream not found: {workstream_id}")
 
-        ws = ws_result.data
+        ws = {
+            "name": ws_obj.name or "",
+            "description": ws_obj.description or "",
+            "keywords": ws_obj.keywords or [],
+        }
         keywords = ws.get("keywords", [])
 
         # Step 1: Build workstream query

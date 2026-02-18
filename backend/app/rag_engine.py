@@ -20,6 +20,17 @@ import os
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.helpers.db_utils import hybrid_search_cards, hybrid_search_sources
+from app.models.db.card import Card
+from app.models.db.source import Source
+from app.models.db.card_extras import CardTimeline
+from app.models.db.research import ResearchTask
+from app.models.db.workstream import Workstream, WorkstreamCard
+from app.models.db.analytics import PatternInsight
+
 from app.openai_provider import (
     azure_openai_async_client,
     azure_openai_async_embedding_client,
@@ -41,8 +52,8 @@ class RAGEngine:
     MAX_CONTEXT_CHARS = 120_000  # ~30K tokens, generous for 1M context window
     MAX_MENTION_CONTEXT_CHARS = 15_000
 
-    def __init__(self, supabase_client: Any) -> None:
-        self.supabase = supabase_client
+    def __init__(self, db: AsyncSession) -> None:
+        self.db = db
         self._ws_card_ids_cache: Dict[str, List[str]] = {}
 
     # ------------------------------------------------------------------
@@ -183,7 +194,7 @@ class RAGEngine:
             return []
 
     # ------------------------------------------------------------------
-    # Hybrid search (FTS + vector via Supabase RPCs)
+    # Hybrid search (FTS + vector via db_utils)
     # ------------------------------------------------------------------
 
     async def _hybrid_search(
@@ -195,7 +206,7 @@ class RAGEngine:
         scope_id: Optional[str],
     ) -> Dict[str, list]:
         """
-        Run ``hybrid_search_cards`` and ``hybrid_search_sources`` RPCs
+        Run ``hybrid_search_cards`` and ``hybrid_search_sources``
         in parallel and return their combined results.
         """
         if not embedding:
@@ -221,26 +232,26 @@ class RAGEngine:
             card_scope_ids = None
         # Global: no filters (both stay None)
 
-        # Build RPC params --------------------------------------------------
-        card_params: Dict[str, Any] = {
+        # Build params for db_utils functions
+        card_kwargs: Dict[str, Any] = {
             "query_text": fts_query_text,
             "query_embedding": embedding,
             "match_count": 25,
         }
         if card_scope_ids is not None:
-            card_params["scope_card_ids"] = card_scope_ids
+            card_kwargs["scope_card_ids"] = card_scope_ids
 
-        source_params: Dict[str, Any] = {
+        source_kwargs: Dict[str, Any] = {
             "query_text": fts_query_text,
             "query_embedding": embedding,
             "match_count": 30,
         }
         if source_scope_ids is not None:
-            source_params["scope_card_ids"] = source_scope_ids
+            source_kwargs["scope_card_ids"] = source_scope_ids
 
-        # Execute both RPCs in parallel
-        card_task = self._rpc_safe("hybrid_search_cards", card_params)
-        source_task = self._rpc_safe("hybrid_search_sources", source_params)
+        # Execute both searches in parallel
+        card_task = hybrid_search_cards(self.db, **card_kwargs)
+        source_task = hybrid_search_sources(self.db, **source_kwargs)
 
         card_results, source_results = await asyncio.gather(card_task, source_task)
 
@@ -282,11 +293,10 @@ class RAGEngine:
         # Full card data (always fetch to get ALL columns)
         async def fetch_card() -> None:
             try:
-                result = (
-                    self.supabase.table("cards").select("*").eq("id", card_id).execute()
-                )
-                if result.data:
-                    enrichment["primary_card"] = result.data[0]
+                result = await self.db.execute(select(Card).where(Card.id == card_id))
+                card = result.scalar_one_or_none()
+                if card:
+                    enrichment["primary_card"] = _card_to_dict(card)
                     # If not already in search results, flag it
                     if card_id not in existing_ids:
                         enrichment["primary_card_missing_from_search"] = True
@@ -298,17 +308,42 @@ class RAGEngine:
         # ALL sources for the primary card
         async def fetch_all_sources() -> None:
             try:
-                result = (
-                    self.supabase.table("sources")
-                    .select(
-                        "id, title, url, ai_summary, key_excerpts, full_text, "
-                        "source_type, publisher, published_date, relevance_score"
+                result = await self.db.execute(
+                    select(
+                        Source.id,
+                        Source.title,
+                        Source.url,
+                        Source.ai_summary,
+                        Source.key_excerpts,
+                        Source.full_text,
+                        Source.source_type,
+                        Source.publisher,
+                        Source.published_date,
+                        Source.relevance_score,
                     )
-                    .eq("card_id", card_id)
-                    .order("relevance_score", desc=True)
-                    .execute()
+                    .where(Source.card_id == card_id)
+                    .order_by(Source.relevance_score.desc().nullslast())
                 )
-                enrichment["all_sources"] = result.data or []
+                rows = result.all()
+                enrichment["all_sources"] = [
+                    {
+                        "id": str(r.id),
+                        "title": r.title,
+                        "url": r.url,
+                        "ai_summary": r.ai_summary,
+                        "key_excerpts": r.key_excerpts,
+                        "full_text": r.full_text,
+                        "source_type": r.source_type,
+                        "publisher": r.publisher,
+                        "published_date": (
+                            r.published_date.isoformat() if r.published_date else None
+                        ),
+                        "relevance_score": (
+                            float(r.relevance_score) if r.relevance_score else None
+                        ),
+                    }
+                    for r in rows
+                ]
             except Exception:
                 logger.warning(
                     "Failed to fetch sources for card %s", card_id, exc_info=True
@@ -318,15 +353,31 @@ class RAGEngine:
         # Timeline events
         async def fetch_timeline() -> None:
             try:
-                result = (
-                    self.supabase.table("card_timeline")
-                    .select("event_type, title, description, metadata, created_at")
-                    .eq("card_id", card_id)
-                    .order("created_at", desc=True)
+                result = await self.db.execute(
+                    select(
+                        CardTimeline.event_type,
+                        CardTimeline.title,
+                        CardTimeline.description,
+                        CardTimeline.metadata_,
+                        CardTimeline.created_at,
+                    )
+                    .where(CardTimeline.card_id == card_id)
+                    .order_by(CardTimeline.created_at.desc())
                     .limit(15)
-                    .execute()
                 )
-                enrichment["timeline"] = result.data or []
+                rows = result.all()
+                enrichment["timeline"] = [
+                    {
+                        "event_type": r.event_type,
+                        "title": r.title,
+                        "description": r.description,
+                        "metadata": r.metadata_,
+                        "created_at": (
+                            r.created_at.isoformat() if r.created_at else None
+                        ),
+                    }
+                    for r in rows
+                ]
             except Exception:
                 logger.warning(
                     "Failed to fetch timeline for card %s", card_id, exc_info=True
@@ -336,16 +387,30 @@ class RAGEngine:
         # Research tasks
         async def fetch_research() -> None:
             try:
-                result = (
-                    self.supabase.table("research_tasks")
-                    .select("task_type, result_summary, completed_at")
-                    .eq("card_id", card_id)
-                    .eq("status", "completed")
-                    .order("completed_at", desc=True)
+                result = await self.db.execute(
+                    select(
+                        ResearchTask.task_type,
+                        ResearchTask.result_summary,
+                        ResearchTask.completed_at,
+                    )
+                    .where(
+                        ResearchTask.card_id == card_id,
+                        ResearchTask.status == "completed",
+                    )
+                    .order_by(ResearchTask.completed_at.desc())
                     .limit(3)
-                    .execute()
                 )
-                enrichment["research_tasks"] = result.data or []
+                rows = result.all()
+                enrichment["research_tasks"] = [
+                    {
+                        "task_type": r.task_type,
+                        "result_summary": r.result_summary,
+                        "completed_at": (
+                            r.completed_at.isoformat() if r.completed_at else None
+                        ),
+                    }
+                    for r in rows
+                ]
             except Exception:
                 logger.warning(
                     "Failed to fetch research tasks for card %s",
@@ -363,16 +428,28 @@ class RAGEngine:
         enrichment: Dict[str, Any] = {}
 
         try:
-            ws_result = (
-                self.supabase.table("workstreams")
-                .select(
-                    "id, name, description, keywords, pillar_ids, goal_ids, horizon"
-                )
-                .eq("id", workstream_id)
-                .execute()
+            ws_result = await self.db.execute(
+                select(
+                    Workstream.id,
+                    Workstream.name,
+                    Workstream.description,
+                    Workstream.keywords,
+                    Workstream.pillar_ids,
+                    Workstream.goal_ids,
+                    Workstream.horizon,
+                ).where(Workstream.id == workstream_id)
             )
-            if ws_result.data:
-                enrichment["workstream"] = ws_result.data[0]
+            ws = ws_result.one_or_none()
+            if ws:
+                enrichment["workstream"] = {
+                    "id": str(ws.id),
+                    "name": ws.name,
+                    "description": ws.description,
+                    "keywords": ws.keywords,
+                    "pillar_ids": ws.pillar_ids,
+                    "goal_ids": ws.goal_ids,
+                    "horizon": ws.horizon,
+                }
         except Exception:
             logger.warning(
                 "Failed to fetch workstream %s", workstream_id, exc_info=True
@@ -381,16 +458,38 @@ class RAGEngine:
         try:
             card_ids = await self._fetch_workstream_card_ids(workstream_id)
             if card_ids:
-                cards_result = (
-                    self.supabase.table("cards")
-                    .select(
-                        "id, slug, name, summary, pillar_id, horizon, stage_id, "
-                        "impact_score, relevance_score, velocity_score"
-                    )
-                    .in_("id", card_ids)
-                    .execute()
+                cards_result = await self.db.execute(
+                    select(
+                        Card.id,
+                        Card.slug,
+                        Card.name,
+                        Card.summary,
+                        Card.pillar_id,
+                        Card.horizon,
+                        Card.stage_id,
+                        Card.impact_score,
+                        Card.relevance_score,
+                        Card.velocity_score,
+                    ).where(Card.id.in_(card_ids))
                 )
-                enrichment["workstream_cards"] = cards_result.data or []
+                rows = cards_result.all()
+                enrichment["workstream_cards"] = [
+                    {
+                        "id": str(r.id),
+                        "slug": r.slug,
+                        "name": r.name,
+                        "summary": r.summary,
+                        "pillar_id": r.pillar_id,
+                        "horizon": r.horizon,
+                        "stage_id": r.stage_id,
+                        "impact_score": r.impact_score,
+                        "relevance_score": r.relevance_score,
+                        "velocity_score": (
+                            float(r.velocity_score) if r.velocity_score else None
+                        ),
+                    }
+                    for r in rows
+                ]
             else:
                 enrichment["workstream_cards"] = []
         except Exception:
@@ -407,18 +506,31 @@ class RAGEngine:
         """Fetch active pattern insights for cross-signal context."""
         enrichment: Dict[str, Any] = {}
         try:
-            result = (
-                self.supabase.table("pattern_insights")
-                .select(
-                    "pattern_title, pattern_summary, opportunity, "
-                    "affected_pillars, urgency, confidence"
+            result = await self.db.execute(
+                select(
+                    PatternInsight.pattern_title,
+                    PatternInsight.pattern_summary,
+                    PatternInsight.opportunity,
+                    PatternInsight.affected_pillars,
+                    PatternInsight.urgency,
+                    PatternInsight.confidence,
                 )
-                .eq("status", "active")
-                .order("created_at", desc=True)
+                .where(PatternInsight.status == "active")
+                .order_by(PatternInsight.created_at.desc())
                 .limit(10)
-                .execute()
             )
-            enrichment["pattern_insights"] = result.data or []
+            rows = result.all()
+            enrichment["pattern_insights"] = [
+                {
+                    "pattern_title": r.pattern_title,
+                    "pattern_summary": r.pattern_summary,
+                    "opportunity": r.opportunity,
+                    "affected_pillars": r.affected_pillars,
+                    "urgency": r.urgency,
+                    "confidence": float(r.confidence) if r.confidence else None,
+                }
+                for r in rows
+            ]
         except Exception:
             logger.warning("Failed to fetch pattern insights", exc_info=True)
             enrichment["pattern_insights"] = []
@@ -484,15 +596,27 @@ class RAGEngine:
             if card:
                 # Fetch top 5 sources
                 try:
-                    src_result = (
-                        self.supabase.table("sources")
-                        .select("title, url, ai_summary, key_excerpts")
-                        .eq("card_id", card["id"])
-                        .order("relevance_score", desc=True)
+                    src_result = await self.db.execute(
+                        select(
+                            Source.title,
+                            Source.url,
+                            Source.ai_summary,
+                            Source.key_excerpts,
+                        )
+                        .where(Source.card_id == card["id"])
+                        .order_by(Source.relevance_score.desc().nullslast())
                         .limit(5)
-                        .execute()
                     )
-                    card["_sources"] = src_result.data or []
+                    rows = src_result.all()
+                    card["_sources"] = [
+                        {
+                            "title": r.title,
+                            "url": r.url,
+                            "ai_summary": r.ai_summary,
+                            "key_excerpts": r.key_excerpts,
+                        }
+                        for r in rows
+                    ]
                 except Exception:
                     card["_sources"] = []
                 return {"type": "signal", "data": card}
@@ -502,25 +626,18 @@ class RAGEngine:
             ws = await self._lookup_workstream(entity_id, title)
             if ws:
                 try:
-                    wc_result = (
-                        self.supabase.table("workstream_cards")
-                        .select("card_id")
-                        .eq("workstream_id", ws["id"])
+                    wc_result = await self.db.execute(
+                        select(WorkstreamCard.card_id)
+                        .where(WorkstreamCard.workstream_id == ws["id"])
                         .limit(20)
-                        .execute()
                     )
-                    card_ids = [wc["card_id"] for wc in (wc_result.data or [])]
+                    card_ids = [str(wc.card_id) for wc in wc_result.all()]
                     if card_ids:
-                        cards_result = (
-                            self.supabase.table("cards")
-                            .select("name")
-                            .in_("id", card_ids)
-                            .execute()
+                        cards_result = await self.db.execute(
+                            select(Card.name).where(Card.id.in_(card_ids))
                         )
                         ws["_card_names"] = [
-                            c["name"]
-                            for c in (cards_result.data or [])
-                            if c.get("name")
+                            r.name for r in cards_result.all() if r.name
                         ]
                     else:
                         ws["_card_names"] = []
@@ -1002,14 +1119,12 @@ class RAGEngine:
             return self._ws_card_ids_cache[workstream_id]
 
         try:
-            result = (
-                self.supabase.table("workstream_cards")
-                .select("card_id")
-                .eq("workstream_id", workstream_id)
+            result = await self.db.execute(
+                select(WorkstreamCard.card_id)
+                .where(WorkstreamCard.workstream_id == workstream_id)
                 .limit(50)
-                .execute()
             )
-            card_ids = [wc["card_id"] for wc in (result.data or [])]
+            card_ids = [str(wc.card_id) for wc in result.all()]
             self._ws_card_ids_cache[workstream_id] = card_ids
             return card_ids
         except Exception:
@@ -1026,31 +1141,44 @@ class RAGEngine:
         """Look up a card by ID or by ILIKE name search."""
         try:
             if card_id:
-                result = (
-                    self.supabase.table("cards")
-                    .select(
-                        "id, slug, name, summary, description, pillar_id, "
-                        "horizon, stage_id, impact_score, relevance_score"
-                    )
-                    .eq("id", card_id)
-                    .execute()
+                result = await self.db.execute(
+                    select(
+                        Card.id,
+                        Card.slug,
+                        Card.name,
+                        Card.summary,
+                        Card.description,
+                        Card.pillar_id,
+                        Card.horizon,
+                        Card.stage_id,
+                        Card.impact_score,
+                        Card.relevance_score,
+                    ).where(Card.id == card_id)
                 )
-                if result.data:
-                    return result.data[0]
+                row = result.one_or_none()
+                if row:
+                    return _row_to_card_dict(row)
 
             if title:
-                result = (
-                    self.supabase.table("cards")
-                    .select(
-                        "id, slug, name, summary, description, pillar_id, "
-                        "horizon, stage_id, impact_score, relevance_score"
+                result = await self.db.execute(
+                    select(
+                        Card.id,
+                        Card.slug,
+                        Card.name,
+                        Card.summary,
+                        Card.description,
+                        Card.pillar_id,
+                        Card.horizon,
+                        Card.stage_id,
+                        Card.impact_score,
+                        Card.relevance_score,
                     )
-                    .ilike("name", f"%{title}%")
+                    .where(Card.name.ilike(f"%{title}%"))
                     .limit(1)
-                    .execute()
                 )
-                if result.data:
-                    return result.data[0]
+                row = result.one_or_none()
+                if row:
+                    return _row_to_card_dict(row)
         except Exception:
             logger.warning(
                 "Card lookup failed for id=%s title=%s", card_id, title, exc_info=True
@@ -1063,25 +1191,32 @@ class RAGEngine:
         """Look up a workstream by ID or by ILIKE name search."""
         try:
             if workstream_id:
-                result = (
-                    self.supabase.table("workstreams")
-                    .select("id, name, description")
-                    .eq("id", workstream_id)
-                    .execute()
+                result = await self.db.execute(
+                    select(
+                        Workstream.id, Workstream.name, Workstream.description
+                    ).where(Workstream.id == workstream_id)
                 )
-                if result.data:
-                    return result.data[0]
+                row = result.one_or_none()
+                if row:
+                    return {
+                        "id": str(row.id),
+                        "name": row.name,
+                        "description": row.description,
+                    }
 
             if title:
-                result = (
-                    self.supabase.table("workstreams")
-                    .select("id, name, description")
-                    .ilike("name", f"%{title}%")
+                result = await self.db.execute(
+                    select(Workstream.id, Workstream.name, Workstream.description)
+                    .where(Workstream.name.ilike(f"%{title}%"))
                     .limit(1)
-                    .execute()
                 )
-                if result.data:
-                    return result.data[0]
+                row = result.one_or_none()
+                if row:
+                    return {
+                        "id": str(row.id),
+                        "name": row.name,
+                        "description": row.description,
+                    }
         except Exception:
             logger.warning(
                 "Workstream lookup failed for id=%s title=%s",
@@ -1090,15 +1225,6 @@ class RAGEngine:
                 exc_info=True,
             )
         return None
-
-    async def _rpc_safe(self, fn_name: str, params: Dict[str, Any]) -> list:
-        """Call a Supabase RPC function with error handling."""
-        try:
-            result = self.supabase.rpc(fn_name, params).execute()
-            return result.data or []
-        except Exception:
-            logger.error("RPC %s failed", fn_name, exc_info=True)
-            return []
 
     @staticmethod
     async def web_search(query: str, max_results: int = 5) -> list[dict]:
@@ -1159,4 +1285,40 @@ def _build_source_map_entry(
         "url": src.get("url", ""),
         "published_date": src.get("published_date"),
         "excerpt": excerpt,
+    }
+
+
+def _card_to_dict(card: Card) -> Dict[str, Any]:
+    """Convert a Card ORM object to a dict."""
+    return {
+        "id": str(card.id),
+        "slug": card.slug,
+        "name": card.name,
+        "summary": card.summary,
+        "description": card.description,
+        "pillar_id": card.pillar_id,
+        "horizon": card.horizon,
+        "stage_id": card.stage_id,
+        "impact_score": card.impact_score,
+        "relevance_score": card.relevance_score,
+        "velocity_score": float(card.velocity_score) if card.velocity_score else None,
+        "risk_score": card.risk_score,
+        "signal_quality_score": card.signal_quality_score,
+        "status": card.status,
+    }
+
+
+def _row_to_card_dict(row) -> Dict[str, Any]:
+    """Convert a named-tuple row from a select() to a dict."""
+    return {
+        "id": str(row.id),
+        "slug": row.slug,
+        "name": row.name,
+        "summary": row.summary,
+        "description": row.description,
+        "pillar_id": row.pillar_id,
+        "horizon": row.horizon,
+        "stage_id": row.stage_id,
+        "impact_score": row.impact_score,
+        "relevance_score": row.relevance_score,
     }

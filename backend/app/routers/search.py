@@ -1,16 +1,19 @@
-"""Saved searches and search history router."""
+"""Saved searches and search history router.
+
+Migrated from Supabase PostgREST to SQLAlchemy 2.0 async.
+"""
 
 import logging
-from datetime import datetime, timezone
+import uuid
+from datetime import date, datetime, timezone
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.deps import (
-    supabase,
-    get_current_user,
-    _safe_error,
-    _is_missing_supabase_table_error,
-)
+from app.deps import get_db, get_current_user_hardcoded, _safe_error
+from app.models.db.search import SavedSearch as SavedSearchORM, SearchHistory
 from app.models.search import (
     SavedSearchCreate,
     SavedSearchUpdate,
@@ -25,36 +28,59 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["search"])
 
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _row_to_dict(obj, skip_cols=None) -> dict:
+    """Convert an ORM model instance to a plain dict with JSON-safe values."""
+    skip = skip_cols or set()
+    result = {}
+    for col in obj.__table__.columns:
+        if col.name in skip:
+            continue
+        value = getattr(obj, col.name, None)
+        if isinstance(value, uuid.UUID):
+            result[col.name] = str(value)
+        elif isinstance(value, (datetime, date)):
+            result[col.name] = value.isoformat()
+        elif isinstance(value, Decimal):
+            result[col.name] = float(value)
+        else:
+            result[col.name] = value
+    return result
+
+
 # ============================================================================
 # Saved Searches
 # ============================================================================
 
 
 @router.get("/saved-searches", response_model=SavedSearchList)
-async def list_saved_searches(current_user: dict = Depends(get_current_user)):
+async def list_saved_searches(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
+):
     """
     List all saved searches for the current user.
 
     Returns saved searches ordered by last_used_at descending (most recently used first).
     """
     try:
-        response = (
-            supabase.table("saved_searches")
-            .select("*")
-            .eq("user_id", current_user["id"])
-            .order("last_used_at", desc=True)
-            .execute()
+        result = await db.execute(
+            select(SavedSearchORM)
+            .where(SavedSearchORM.user_id == uuid.UUID(current_user["id"]))
+            .order_by(SavedSearchORM.last_used_at.desc())
         )
+        rows = list(result.scalars().all())
     except Exception as e:
-        if _is_missing_supabase_table_error(e, "saved_searches"):
-            logger.warning("saved_searches table missing; returning empty list")
-            return SavedSearchList(saved_searches=[], total_count=0)
-        logger.error(f"Failed to list saved searches: {e}")
+        logger.error("Failed to list saved searches: %s", e)
         raise HTTPException(
-            status_code=500, detail="Failed to list saved searches"
+            status_code=500, detail=_safe_error("listing saved searches", e)
         ) from e
 
-    saved_searches = [SavedSearch(**ss) for ss in (response.data or [])]
+    saved_searches = [SavedSearch(**_row_to_dict(row)) for row in rows]
     return SavedSearchList(
         saved_searches=saved_searches, total_count=len(saved_searches)
     )
@@ -66,7 +92,9 @@ async def list_saved_searches(current_user: dict = Depends(get_current_user)):
     status_code=status.HTTP_201_CREATED,
 )
 async def create_saved_search(
-    saved_search_data: SavedSearchCreate, current_user: dict = Depends(get_current_user)
+    saved_search_data: SavedSearchCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Create a new saved search.
@@ -84,37 +112,34 @@ async def create_saved_search(
     Raises:
         HTTPException 400: Failed to create saved search
     """
-    now = datetime.now(timezone.utc).isoformat()
-    ss_dict = {
-        "user_id": current_user["id"],
-        "name": saved_search_data.name,
-        "query_config": saved_search_data.query_config,
-        "created_at": now,
-        "last_used_at": now,
-        "updated_at": now,
-    }
+    now = datetime.now(timezone.utc)
+    item = SavedSearchORM(
+        user_id=uuid.UUID(current_user["id"]),
+        name=saved_search_data.name,
+        query_config=saved_search_data.query_config,
+        created_at=now,
+        last_used_at=now,
+        updated_at=now,
+    )
 
     try:
-        response = supabase.table("saved_searches").insert(ss_dict).execute()
+        db.add(item)
+        await db.flush()
+        await db.refresh(item)
     except Exception as e:
-        if _is_missing_supabase_table_error(e, "saved_searches"):
-            raise HTTPException(
-                status_code=503,
-                detail="Saved searches are not configured (missing saved_searches table)",
-            ) from e
-        logger.error(f"Failed to create saved search: {e}")
+        logger.error("Failed to create saved search: %s", e)
         raise HTTPException(
-            status_code=500, detail="Failed to create saved search"
+            status_code=500, detail=_safe_error("saved search creation", e)
         ) from e
-    if response.data:
-        return SavedSearch(**response.data[0])
-    else:
-        raise HTTPException(status_code=400, detail="Failed to create saved search")
+
+    return SavedSearch(**_row_to_dict(item))
 
 
 @router.get("/saved-searches/{saved_search_id}", response_model=SavedSearch)
 async def get_saved_search(
-    saved_search_id: str, current_user: dict = Depends(get_current_user)
+    saved_search_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Get a specific saved search by ID.
@@ -132,68 +157,50 @@ async def get_saved_search(
         HTTPException 404: Saved search not found
         HTTPException 403: Saved search belongs to another user
     """
-    # Fetch the saved search
     try:
-        response = (
-            supabase.table("saved_searches")
-            .select("*")
-            .eq("id", saved_search_id)
-            .execute()
+        result = await db.execute(
+            select(SavedSearchORM).where(
+                SavedSearchORM.id == uuid.UUID(saved_search_id)
+            )
         )
+        item = result.scalar_one_or_none()
     except Exception as e:
-        if _is_missing_supabase_table_error(e, "saved_searches"):
-            raise HTTPException(
-                status_code=503,
-                detail="Saved searches are not configured (missing saved_searches table)",
-            ) from e
-        logger.error(f"Failed to fetch saved search {saved_search_id}: {e}")
+        logger.error("Failed to fetch saved search %s: %s", saved_search_id, e)
         raise HTTPException(
-            status_code=500, detail="Failed to fetch saved search"
+            status_code=500, detail=_safe_error("fetching saved search", e)
         ) from e
 
-    if not response.data:
+    if item is None:
         raise HTTPException(status_code=404, detail="Saved search not found")
 
-    saved_search = response.data[0]
-
     # Verify ownership
-    if saved_search["user_id"] != current_user["id"]:
+    if str(item.user_id) != current_user["id"]:
         raise HTTPException(
             status_code=403, detail="Not authorized to access this saved search"
         )
 
     # Update last_used_at timestamp
     try:
-        update_response = (
-            supabase.table("saved_searches")
-            .update({"last_used_at": datetime.now(timezone.utc).isoformat()})
-            .eq("id", saved_search_id)
-            .execute()
-        )
+        item.last_used_at = datetime.now(timezone.utc)
+        await db.flush()
+        await db.refresh(item)
     except Exception as e:
-        if _is_missing_supabase_table_error(e, "saved_searches"):
-            raise HTTPException(
-                status_code=503,
-                detail="Saved searches are not configured (missing saved_searches table)",
-            ) from e
         logger.error(
-            f"Failed to update saved search last_used_at {saved_search_id}: {e}"
+            "Failed to update saved search last_used_at %s: %s", saved_search_id, e
         )
         raise HTTPException(
-            status_code=500, detail="Failed to update saved search"
+            status_code=500, detail=_safe_error("updating saved search", e)
         ) from e
 
-    if update_response.data:
-        return SavedSearch(**update_response.data[0])
-    else:
-        return SavedSearch(**saved_search)
+    return SavedSearch(**_row_to_dict(item))
 
 
 @router.patch("/saved-searches/{saved_search_id}", response_model=SavedSearch)
 async def update_saved_search(
     saved_search_id: str,
     saved_search_data: SavedSearchUpdate,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Update an existing saved search.
@@ -214,30 +221,27 @@ async def update_saved_search(
         HTTPException 404: Saved search not found
         HTTPException 403: Saved search belongs to another user
     """
-    # First check if saved search exists
+    # Fetch existing saved search
     try:
-        ss_check = (
-            supabase.table("saved_searches")
-            .select("*")
-            .eq("id", saved_search_id)
-            .execute()
+        result = await db.execute(
+            select(SavedSearchORM).where(
+                SavedSearchORM.id == uuid.UUID(saved_search_id)
+            )
         )
+        item = result.scalar_one_or_none()
     except Exception as e:
-        if _is_missing_supabase_table_error(e, "saved_searches"):
-            raise HTTPException(
-                status_code=503,
-                detail="Saved searches are not configured (missing saved_searches table)",
-            ) from e
-        logger.error(f"Failed to fetch saved search for update {saved_search_id}: {e}")
+        logger.error(
+            "Failed to fetch saved search for update %s: %s", saved_search_id, e
+        )
         raise HTTPException(
-            status_code=500, detail="Failed to fetch saved search"
+            status_code=500, detail=_safe_error("fetching saved search", e)
         ) from e
 
-    if not ss_check.data:
+    if item is None:
         raise HTTPException(status_code=404, detail="Saved search not found")
 
     # Verify ownership
-    if ss_check.data[0]["user_id"] != current_user["id"]:
+    if str(item.user_id) != current_user["id"]:
         raise HTTPException(
             status_code=403, detail="Not authorized to update this saved search"
         )
@@ -247,39 +251,30 @@ async def update_saved_search(
 
     if not update_dict:
         # No updates provided, return existing saved search
-        return SavedSearch(**ss_check.data[0])
+        return SavedSearch(**_row_to_dict(item))
 
-    # Add updated_at timestamp
-    update_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
+    # Apply updates
+    for key, value in update_dict.items():
+        setattr(item, key, value)
+    item.updated_at = datetime.now(timezone.utc)
 
-    # Perform update
     try:
-        response = (
-            supabase.table("saved_searches")
-            .update(update_dict)
-            .eq("id", saved_search_id)
-            .execute()
-        )
+        await db.flush()
+        await db.refresh(item)
     except Exception as e:
-        if _is_missing_supabase_table_error(e, "saved_searches"):
-            raise HTTPException(
-                status_code=503,
-                detail="Saved searches are not configured (missing saved_searches table)",
-            ) from e
-        logger.error(f"Failed to update saved search {saved_search_id}: {e}")
+        logger.error("Failed to update saved search %s: %s", saved_search_id, e)
         raise HTTPException(
-            status_code=500, detail="Failed to update saved search"
+            status_code=500, detail=_safe_error("saved search update", e)
         ) from e
 
-    if response.data:
-        return SavedSearch(**response.data[0])
-    else:
-        raise HTTPException(status_code=400, detail="Failed to update saved search")
+    return SavedSearch(**_row_to_dict(item))
 
 
 @router.delete("/saved-searches/{saved_search_id}")
 async def delete_saved_search(
-    saved_search_id: str, current_user: dict = Depends(get_current_user)
+    saved_search_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Delete a saved search.
@@ -298,46 +293,39 @@ async def delete_saved_search(
         HTTPException 404: Saved search not found
         HTTPException 403: Saved search belongs to another user
     """
-    # First check if saved search exists
+    # Fetch existing saved search
     try:
-        ss_check = (
-            supabase.table("saved_searches")
-            .select("*")
-            .eq("id", saved_search_id)
-            .execute()
+        result = await db.execute(
+            select(SavedSearchORM).where(
+                SavedSearchORM.id == uuid.UUID(saved_search_id)
+            )
         )
+        item = result.scalar_one_or_none()
     except Exception as e:
-        if _is_missing_supabase_table_error(e, "saved_searches"):
-            raise HTTPException(
-                status_code=503,
-                detail="Saved searches are not configured (missing saved_searches table)",
-            ) from e
-        logger.error(f"Failed to fetch saved search for delete {saved_search_id}: {e}")
+        logger.error(
+            "Failed to fetch saved search for delete %s: %s", saved_search_id, e
+        )
         raise HTTPException(
-            status_code=500, detail="Failed to fetch saved search"
+            status_code=500, detail=_safe_error("fetching saved search", e)
         ) from e
 
-    if not ss_check.data:
+    if item is None:
         raise HTTPException(status_code=404, detail="Saved search not found")
 
     # Verify ownership
-    if ss_check.data[0]["user_id"] != current_user["id"]:
+    if str(item.user_id) != current_user["id"]:
         raise HTTPException(
             status_code=403, detail="Not authorized to delete this saved search"
         )
 
     # Perform delete
     try:
-        supabase.table("saved_searches").delete().eq("id", saved_search_id).execute()
+        await db.delete(item)
+        await db.flush()
     except Exception as e:
-        if _is_missing_supabase_table_error(e, "saved_searches"):
-            raise HTTPException(
-                status_code=503,
-                detail="Saved searches are not configured (missing saved_searches table)",
-            ) from e
-        logger.error(f"Failed to delete saved search {saved_search_id}: {e}")
+        logger.error("Failed to delete saved search %s: %s", saved_search_id, e)
         raise HTTPException(
-            status_code=500, detail="Failed to delete saved search"
+            status_code=500, detail=_safe_error("saved search deletion", e)
         ) from e
 
     return {"status": "deleted", "message": "Saved search successfully deleted"}
@@ -350,7 +338,9 @@ async def delete_saved_search(
 
 @router.get("/search-history", response_model=SearchHistoryList)
 async def list_search_history(
-    current_user: dict = Depends(get_current_user), limit: int = 20
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Get user's recent search history.
@@ -368,24 +358,23 @@ async def list_search_history(
     limit = min(limit, 50)
 
     try:
-        response = (
-            supabase.table("search_history")
-            .select("*")
-            .eq("user_id", current_user["id"])
-            .order("executed_at", desc=True)
+        result = await db.execute(
+            select(SearchHistory)
+            .where(SearchHistory.user_id == uuid.UUID(current_user["id"]))
+            .order_by(SearchHistory.executed_at.desc())
             .limit(limit)
-            .execute()
         )
+        rows = list(result.scalars().all())
 
         history_entries = [
             SearchHistoryEntry(
-                id=entry["id"],
-                user_id=entry["user_id"],
-                query_config=entry.get("query_config", {}),
-                executed_at=entry["executed_at"],
-                result_count=entry.get("result_count", 0),
+                id=str(row.id),
+                user_id=str(row.user_id),
+                query_config=row.query_config or {},
+                executed_at=row.executed_at,
+                result_count=row.result_count or 0,
             )
-            for entry in response.data or []
+            for row in rows
         ]
 
         return SearchHistoryList(
@@ -393,10 +382,7 @@ async def list_search_history(
         )
 
     except Exception as e:
-        if _is_missing_supabase_table_error(e, "search_history"):
-            logger.warning("search_history table missing; returning empty list")
-            return SearchHistoryList(history=[], total_count=0)
-        logger.error(f"Failed to fetch search history: {str(e)}")
+        logger.error("Failed to fetch search history: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("search history retrieval", e),
@@ -409,7 +395,9 @@ async def list_search_history(
     status_code=status.HTTP_201_CREATED,
 )
 async def record_search_history(
-    history_data: SearchHistoryCreate, current_user: dict = Depends(get_current_user)
+    history_data: SearchHistoryCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Record a search in the user's history.
@@ -426,49 +414,39 @@ async def record_search_history(
     Returns:
         SearchHistoryEntry with the created history record
     """
+    now = datetime.now(timezone.utc)
+    item = SearchHistory(
+        user_id=uuid.UUID(current_user["id"]),
+        query_config=history_data.query_config,
+        result_count=history_data.result_count,
+        executed_at=now,
+    )
+
     try:
-        history_record = {
-            "user_id": current_user["id"],
-            "query_config": history_data.query_config,
-            "result_count": history_data.result_count,
-            "executed_at": datetime.now(timezone.utc).isoformat(),
-        }
-
-        response = supabase.table("search_history").insert(history_record).execute()
-
-        if not response.data:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to record search history",
-            )
-
-        entry = response.data[0]
-        return SearchHistoryEntry(
-            id=entry["id"],
-            user_id=entry["user_id"],
-            query_config=entry.get("query_config", {}),
-            executed_at=entry["executed_at"],
-            result_count=entry.get("result_count", 0),
-        )
-
-    except HTTPException:
-        raise
+        db.add(item)
+        await db.flush()
+        await db.refresh(item)
     except Exception as e:
-        if _is_missing_supabase_table_error(e, "search_history"):
-            raise HTTPException(
-                status_code=503,
-                detail="Search history is not configured (missing search_history table)",
-            ) from e
-        logger.error(f"Failed to record search history: {str(e)}")
+        logger.error("Failed to record search history: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("search history recording", e),
         ) from e
 
+    return SearchHistoryEntry(
+        id=str(item.id),
+        user_id=str(item.user_id),
+        query_config=item.query_config or {},
+        executed_at=item.executed_at,
+        result_count=item.result_count or 0,
+    )
+
 
 @router.delete("/search-history/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_search_history_entry(
-    entry_id: str, current_user: dict = Depends(get_current_user)
+    entry_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """
     Delete a specific search history entry.
@@ -480,36 +458,30 @@ async def delete_search_history_entry(
     """
     try:
         # Verify entry exists and belongs to user
-        check_response = (
-            supabase.table("search_history")
-            .select("id")
-            .eq("id", entry_id)
-            .eq("user_id", current_user["id"])
-            .execute()
+        result = await db.execute(
+            select(SearchHistory).where(
+                SearchHistory.id == uuid.UUID(entry_id),
+                SearchHistory.user_id == uuid.UUID(current_user["id"]),
+            )
         )
+        item = result.scalar_one_or_none()
 
-        if not check_response.data:
+        if item is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Search history entry not found",
             )
 
         # Delete the entry
-        supabase.table("search_history").delete().eq("id", entry_id).eq(
-            "user_id", current_user["id"]
-        ).execute()
+        await db.delete(item)
+        await db.flush()
 
         return None
 
     except HTTPException:
         raise
     except Exception as e:
-        if _is_missing_supabase_table_error(e, "search_history"):
-            raise HTTPException(
-                status_code=503,
-                detail="Search history is not configured (missing search_history table)",
-            ) from e
-        logger.error(f"Failed to delete search history entry: {str(e)}")
+        logger.error("Failed to delete search history entry: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("search history deletion", e),
@@ -517,26 +489,27 @@ async def delete_search_history_entry(
 
 
 @router.delete("/search-history", status_code=status.HTTP_204_NO_CONTENT)
-async def clear_search_history(current_user: dict = Depends(get_current_user)):
+async def clear_search_history(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
+):
     """
     Clear all search history for the current user.
 
     This permanently deletes all search history entries for the user.
     """
     try:
-        supabase.table("search_history").delete().eq(
-            "user_id", current_user["id"]
-        ).execute()
+        await db.execute(
+            delete(SearchHistory).where(
+                SearchHistory.user_id == uuid.UUID(current_user["id"])
+            )
+        )
+        await db.flush()
 
         return None
 
     except Exception as e:
-        if _is_missing_supabase_table_error(e, "search_history"):
-            raise HTTPException(
-                status_code=503,
-                detail="Search history is not configured (missing search_history table)",
-            ) from e
-        logger.error(f"Failed to clear search history: {str(e)}")
+        logger.error("Failed to clear search history: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("search history clearing", e),

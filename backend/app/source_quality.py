@@ -31,10 +31,10 @@ Usage
     quality = score_source(source_data, analysis=analysis, domain_reputation=rep)
 
     # Compute, persist, and return score for a single source
-    score = compute_and_store_quality_score(supabase_client, source_id)
+    score = await compute_and_store_quality_score(db, source_id)
 
     # Backfill all unscored sources
-    stats = await backfill_quality_scores(supabase_client, batch_size=100)
+    stats = await backfill_quality_scores(db, batch_size=100)
 
 Dependencies
 ------------
@@ -49,7 +49,11 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
-from supabase import Client
+from sqlalchemy import select, update as sa_update, func, and_
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.db.source import Source
+from app.models.db.analytics import DomainReputation
 
 from .ai_service import AnalysisResult, TriageResult
 
@@ -489,8 +493,42 @@ def score_source(
 # ============================================================================
 
 
-def compute_and_store_quality_score(
-    supabase: Client,
+def _source_to_dict(source_obj: Source) -> dict:
+    """Convert a Source ORM object to a dict for scoring functions."""
+    return {
+        "id": str(source_obj.id) if source_obj.id else None,
+        "url": source_obj.url,
+        "full_text": source_obj.full_text,
+        "content": source_obj.content,
+        "ai_summary": source_obj.ai_summary,
+        "summary": source_obj.summary,
+        "key_excerpts": source_obj.key_excerpts,
+        "relevance_to_card": source_obj.relevance_to_card,
+        "relevance_score": source_obj.relevance_score,
+        "published_date": source_obj.published_date,
+        "is_peer_reviewed": source_obj.is_peer_reviewed,
+        "domain_reputation_id": source_obj.domain_reputation_id,
+        "quality_score": source_obj.quality_score,
+        "domain": source_obj.domain,
+    }
+
+
+def _domain_rep_to_dict(dr_obj: DomainReputation) -> dict:
+    """Convert a DomainReputation ORM object to a dict for scoring functions."""
+    return {
+        "id": str(dr_obj.id) if dr_obj.id else None,
+        "domain_pattern": dr_obj.domain_pattern,
+        "curated_tier": dr_obj.curated_tier,
+        "composite_score": dr_obj.composite_score,
+        "user_quality_avg": dr_obj.user_quality_avg,
+        "triage_pass_rate": dr_obj.triage_pass_rate,
+        "texas_relevance_bonus": dr_obj.texas_relevance_bonus,
+        "is_active": dr_obj.is_active,
+    }
+
+
+async def compute_and_store_quality_score(
+    db: AsyncSession,
     source_id: str,
     analysis: Optional[AnalysisResult] = None,
     triage: Optional[TriageResult] = None,
@@ -504,8 +542,8 @@ def compute_and_store_quality_score(
 
     Parameters
     ----------
-    supabase : Client
-        Authenticated Supabase client (service role).
+    db : AsyncSession
+        SQLAlchemy async database session.
     source_id : str
         UUID of the source to score.
     analysis : AnalysisResult, optional
@@ -520,28 +558,24 @@ def compute_and_store_quality_score(
     """
     try:
         # Fetch the source record.
-        resp = (
-            supabase.table("sources").select("*").eq("id", source_id).limit(1).execute()
-        )
-        if not resp.data:
+        result = await db.execute(select(Source).where(Source.id == source_id).limit(1))
+        source_obj = result.scalar_one_or_none()
+        if not source_obj:
             logger.warning("Source not found for quality scoring: %s", source_id)
             return 0
 
-        source_data = resp.data[0]
+        source_data = _source_to_dict(source_obj)
 
         # Look up domain reputation if the source has a linked entry.
         domain_rep = None
-        dr_id = source_data.get("domain_reputation_id")
+        dr_id = source_obj.domain_reputation_id
         if dr_id:
-            dr_resp = (
-                supabase.table("domain_reputation")
-                .select("*")
-                .eq("id", dr_id)
-                .limit(1)
-                .execute()
+            dr_result = await db.execute(
+                select(DomainReputation).where(DomainReputation.id == dr_id).limit(1)
             )
-            if dr_resp.data:
-                domain_rep = dr_resp.data[0]
+            dr_obj = dr_result.scalar_one_or_none()
+            if dr_obj:
+                domain_rep = _domain_rep_to_dict(dr_obj)
 
         # Compute score.
         quality = score_source(
@@ -552,15 +586,18 @@ def compute_and_store_quality_score(
         )
 
         # Extract domain from URL.
-        url = source_data.get("url") or ""
+        url = source_obj.url or ""
         domain = extract_domain(url)
 
         # Persist quality_score and domain.
-        update_data: Dict[str, Any] = {"quality_score": quality}
+        update_values: Dict[str, Any] = {"quality_score": quality}
         if domain:
-            update_data["domain"] = domain
+            update_values["domain"] = domain
 
-        supabase.table("sources").update(update_data).eq("id", source_id).execute()
+        await db.execute(
+            sa_update(Source).where(Source.id == source_id).values(**update_values)
+        )
+        await db.flush()
 
         logger.debug(
             "Scored source %s: quality=%d, domain=%s",
@@ -582,7 +619,7 @@ def compute_and_store_quality_score(
 # ============================================================================
 
 
-def get_domain_stats(supabase: Client, limit: int = 50) -> List[dict]:
+async def get_domain_stats(db: AsyncSession, limit: int = 50) -> List[dict]:
     """Return aggregated quality statistics per domain.
 
     Queries the ``sources`` table grouped by the ``domain`` column to
@@ -591,8 +628,8 @@ def get_domain_stats(supabase: Client, limit: int = 50) -> List[dict]:
 
     Parameters
     ----------
-    supabase : Client
-        Authenticated Supabase client.
+    db : AsyncSession
+        SQLAlchemy async database session.
     limit : int
         Maximum number of domains to return (default 50).
 
@@ -608,75 +645,61 @@ def get_domain_stats(supabase: Client, limit: int = 50) -> List[dict]:
         - ``scored_sources``: count of sources that have a quality_score.
     """
     try:
-        # Use a PostgREST query to fetch sources grouped by domain.
-        # Since PostgREST doesn't support GROUP BY directly, we fetch
-        # scored sources and aggregate in Python.
-        resp = (
-            supabase.table("sources")
-            .select("domain, quality_score")
-            .not_.is_("domain", "null")
-            .not_.is_("quality_score", "null")
-            .order("domain")
-            .limit(10000)
-            .execute()
+        # Fetch scored sources grouped by domain using SQLAlchemy aggregation.
+        scored_stmt = (
+            select(
+                Source.domain,
+                func.count(Source.id).label("scored_sources"),
+                func.avg(Source.quality_score).label("avg_quality"),
+                func.min(Source.quality_score).label("min_quality"),
+                func.max(Source.quality_score).label("max_quality"),
+            )
+            .where(
+                and_(
+                    Source.domain.isnot(None),
+                    Source.quality_score.isnot(None),
+                )
+            )
+            .group_by(Source.domain)
         )
+        scored_result = await db.execute(scored_stmt)
+        scored_rows = scored_result.all()
 
-        if not resp.data:
+        if not scored_rows:
             return []
 
-        # Aggregate in Python.
-        domain_agg: Dict[str, Dict[str, Any]] = {}
-
-        for row in resp.data:
-            domain = row.get("domain")
-            qs = row.get("quality_score")
-            if not domain or qs is None:
-                continue
-
-            if domain not in domain_agg:
-                domain_agg[domain] = {
-                    "domain": domain,
-                    "scores": [],
-                }
-            domain_agg[domain]["scores"].append(int(qs))
-
-        # Build result list.
-        results: List[dict] = []
-        for domain, data in domain_agg.items():
-            scores = data["scores"]
-            results.append(
-                {
-                    "domain": domain,
-                    "total_sources": len(scores),
-                    "scored_sources": len(scores),
-                    "avg_quality": round(sum(scores) / len(scores)) if scores else 0,
-                    "min_quality": min(scores) if scores else 0,
-                    "max_quality": max(scores) if scores else 0,
-                }
-            )
+        # Build result dict keyed by domain.
+        domain_data: Dict[str, dict] = {}
+        for row in scored_rows:
+            domain_data[row.domain] = {
+                "domain": row.domain,
+                "scored_sources": row.scored_sources,
+                "avg_quality": round(float(row.avg_quality)) if row.avg_quality else 0,
+                "min_quality": row.min_quality or 0,
+                "max_quality": row.max_quality or 0,
+                "total_sources": row.scored_sources,  # Will be overwritten below
+            }
 
         # Also count total sources per domain (including unscored).
-        total_resp = (
-            supabase.table("sources")
-            .select("domain", count="exact")
-            .not_.is_("domain", "null")
-            .limit(10000)
-            .execute()
+        total_stmt = (
+            select(
+                Source.domain,
+                func.count(Source.id).label("total"),
+            )
+            .where(Source.domain.isnot(None))
+            .group_by(Source.domain)
         )
-        if total_resp.data:
-            total_counts: Dict[str, int] = {}
-            for row in total_resp.data:
-                d = row.get("domain")
-                if d:
-                    total_counts[d] = total_counts.get(d, 0) + 1
+        total_result = await db.execute(total_stmt)
+        total_rows = total_result.all()
 
-            for entry in results:
-                entry["total_sources"] = total_counts.get(
-                    entry["domain"], entry["scored_sources"]
-                )
+        for row in total_rows:
+            if row.domain in domain_data:
+                domain_data[row.domain]["total_sources"] = row.total
 
         # Sort by total_sources descending, limit.
-        results.sort(key=lambda x: x["total_sources"], reverse=True)
+        results = sorted(
+            domain_data.values(), key=lambda x: x["total_sources"], reverse=True
+        )
         return results[:limit]
 
     except Exception:
@@ -690,7 +713,7 @@ def get_domain_stats(supabase: Client, limit: int = 50) -> List[dict]:
 
 
 async def backfill_quality_scores(
-    supabase: Client,
+    db: AsyncSession,
     batch_size: int = 50,
 ) -> dict:
     """Batch-score sources that don't have a quality_score yet.
@@ -701,8 +724,8 @@ async def backfill_quality_scores(
 
     Parameters
     ----------
-    supabase : Client
-        Authenticated Supabase client (service role).
+    db : AsyncSession
+        SQLAlchemy async database session.
     batch_size : int
         Number of sources to process per batch (default 50).
 
@@ -728,62 +751,58 @@ async def backfill_quality_scores(
     while True:
         try:
             # Fetch a batch of unscored sources.
-            resp = (
-                supabase.table("sources")
-                .select(
-                    "id, url, full_text, content, ai_summary, summary, "
-                    "key_excerpts, relevance_to_card, relevance_score, "
-                    "published_date, is_peer_reviewed, domain_reputation_id"
-                )
-                .is_("quality_score", "null")
-                .limit(batch_size)
-                .execute()
+            result = await db.execute(
+                select(Source).where(Source.quality_score.is_(None)).limit(batch_size)
             )
+            batch = result.scalars().all()
 
-            if not resp.data:
+            if not batch:
                 logger.info("No more unscored sources. Backfill complete.")
                 break
 
-            batch = resp.data
             logger.info("Processing batch of %d unscored sources", len(batch))
 
-            for source_data in batch:
+            for source_obj in batch:
                 total_processed += 1
-                source_id = source_data.get("id")
+                source_id = source_obj.id
                 if not source_id:
                     total_failed += 1
                     continue
 
                 try:
+                    source_data = _source_to_dict(source_obj)
+
                     # Look up domain reputation if linked.
                     domain_rep = None
-                    dr_id = source_data.get("domain_reputation_id")
+                    dr_id = source_obj.domain_reputation_id
                     if dr_id:
-                        dr_resp = (
-                            supabase.table("domain_reputation")
-                            .select("*")
-                            .eq("id", dr_id)
+                        dr_result = await db.execute(
+                            select(DomainReputation)
+                            .where(DomainReputation.id == dr_id)
                             .limit(1)
-                            .execute()
                         )
-                        if dr_resp.data:
-                            domain_rep = dr_resp.data[0]
+                        dr_obj = dr_result.scalar_one_or_none()
+                        if dr_obj:
+                            domain_rep = _domain_rep_to_dict(dr_obj)
 
                     # Compute score.
                     quality = score_source(source_data, domain_reputation=domain_rep)
 
                     # Extract domain.
-                    url = source_data.get("url") or ""
+                    url = source_obj.url or ""
                     domain = extract_domain(url)
 
                     # Persist.
-                    update_data: Dict[str, Any] = {"quality_score": quality}
+                    update_values: Dict[str, Any] = {"quality_score": quality}
                     if domain:
-                        update_data["domain"] = domain
+                        update_values["domain"] = domain
 
-                    supabase.table("sources").update(update_data).eq(
-                        "id", source_id
-                    ).execute()
+                    await db.execute(
+                        sa_update(Source)
+                        .where(Source.id == source_id)
+                        .values(**update_values)
+                    )
+                    await db.flush()
 
                     total_scored += 1
                     all_scores.append(quality)

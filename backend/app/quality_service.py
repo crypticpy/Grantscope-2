@@ -73,13 +73,13 @@ Usage
     from app.quality_service import calculate_sqi, recalculate_all_cards, get_breakdown
 
     # Calculate (or recalculate) SQI for one card
-    breakdown = calculate_sqi(supabase_client, card_id="card-abc")
+    breakdown = await calculate_sqi(db, card_id="card-abc")
 
     # Read the stored breakdown without recalculating
-    breakdown = get_breakdown(supabase_client, card_id="card-abc")
+    breakdown = await get_breakdown(db, card_id="card-abc")
 
     # Batch recalculate every card in the system (nightly job)
-    summary = recalculate_all_cards(supabase_client)
+    summary = await recalculate_all_cards(db)
 """
 
 import logging
@@ -87,8 +87,11 @@ from datetime import datetime, timezone
 from typing import Optional
 from urllib.parse import urlparse
 
-from supabase import Client
+from sqlalchemy import select, update as sa_update
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.db.card import Card
+from app.models.db.source import Source
 from . import domain_reputation_service
 from . import story_clustering_service
 
@@ -111,8 +114,8 @@ WEIGHT_MUNICIPAL_SPECIFICITY = 0.15
 # ============================================================================
 
 
-def _calculate_source_authority(
-    supabase_client: Client,
+async def _calculate_source_authority(
+    db: AsyncSession,
     sources: list[dict],
 ) -> int:
     """
@@ -138,8 +141,8 @@ def _calculate_source_authority(
 
     Parameters
     ----------
-    supabase_client : Client
-        Authenticated Supabase client.
+    db : AsyncSession
+        SQLAlchemy async session.
     sources : list[dict]
         Source rows from the ``sources`` table.
 
@@ -156,7 +159,7 @@ def _calculate_source_authority(
         return 0
 
     # Batch lookup -- leverages the in-memory cache for efficiency.
-    reputations = domain_reputation_service.get_reputation_batch(supabase_client, urls)
+    reputations = domain_reputation_service.get_reputation_batch(db, urls)
 
     # Score each URL.  URLs not found in the reputation table get None,
     # which get_authority_score() handles by returning the untiered default (20).
@@ -233,8 +236,8 @@ def _calculate_source_diversity(sources: list[dict]) -> int:
     return 20 if count == 1 else 0
 
 
-def _calculate_corroboration(
-    supabase_client: Client,
+async def _calculate_corroboration(
+    db: AsyncSession,
     card_id: str,
 ) -> tuple[int, int]:
     """
@@ -272,8 +275,8 @@ def _calculate_corroboration(
 
     Parameters
     ----------
-    supabase_client : Client
-        Authenticated Supabase client.
+    db : AsyncSession
+        SQLAlchemy async session.
     card_id : str
         The card to evaluate.
 
@@ -283,7 +286,7 @@ def _calculate_corroboration(
         (corroboration_score, cluster_count) -- the sub-score and the raw
         cluster count (stored in the breakdown for transparency).
     """
-    cluster_count = story_clustering_service.get_cluster_count(supabase_client, card_id)
+    cluster_count = await story_clustering_service.get_cluster_count(db, card_id)
 
     if cluster_count >= 5:
         score = 100
@@ -357,7 +360,7 @@ def _calculate_recency(sources: list[dict]) -> int:
             continue
 
         try:
-            # Supabase returns ISO 8601 strings; parse them.
+            # Parse ISO 8601 strings or datetime objects
             if isinstance(date_str, str):
                 # Handle both "Z" suffix and "+00:00" offset formats
                 date_str = date_str.replace("Z", "+00:00")
@@ -466,7 +469,7 @@ def _calculate_municipal_specificity(sources: list[dict]) -> int:
 # ============================================================================
 
 
-def _fetch_card_sources(supabase_client: Client, card_id: str) -> list[dict]:
+async def _fetch_card_sources(db: AsyncSession, card_id: str) -> list[dict]:
     """
     Fetch all source rows for a card.
 
@@ -475,8 +478,8 @@ def _fetch_card_sources(supabase_client: Client, card_id: str) -> list[dict]:
 
     Parameters
     ----------
-    supabase_client : Client
-        Authenticated Supabase client.
+    db : AsyncSession
+        SQLAlchemy async session.
     card_id : str
         The card whose sources to fetch.
 
@@ -487,13 +490,32 @@ def _fetch_card_sources(supabase_client: Client, card_id: str) -> list[dict]:
         and relevance_to_card fields.
     """
     try:
-        resp = (
-            supabase_client.table("sources")
-            .select("id, url, api_source, published_at, created_at, relevance_to_card")
-            .eq("card_id", card_id)
-            .execute()
+        result = await db.execute(
+            select(
+                Source.id,
+                Source.url,
+                Source.api_source,
+                Source.published_at,
+                Source.created_at,
+                Source.relevance_to_card,
+            ).where(Source.card_id == card_id)
         )
-        return resp.data or []
+        rows = result.all()
+        return [
+            {
+                "id": str(row.id),
+                "url": row.url,
+                "api_source": row.api_source,
+                "published_at": row.published_at,
+                "created_at": row.created_at,
+                "relevance_to_card": (
+                    float(row.relevance_to_card)
+                    if row.relevance_to_card is not None
+                    else None
+                ),
+            }
+            for row in rows
+        ]
     except Exception as e:
         logger.error("Failed to fetch sources for card %s: %s", card_id, e)
         return []
@@ -542,7 +564,7 @@ def _compute_composite_sqi(
 # ============================================================================
 
 
-def calculate_sqi(supabase_client: Client, card_id: str) -> dict:
+async def calculate_sqi(db: AsyncSession, card_id: str) -> dict:
     """
     Calculate the Source Quality Index for a card and persist the result.
 
@@ -555,8 +577,8 @@ def calculate_sqi(supabase_client: Client, card_id: str) -> dict:
 
     Parameters
     ----------
-    supabase_client : Client
-        Authenticated Supabase client (service_role for write access).
+    db : AsyncSession
+        SQLAlchemy async session (service_role for write access).
     card_id : str
         UUID of the card to score.
 
@@ -580,16 +602,16 @@ def calculate_sqi(supabase_client: Client, card_id: str) -> dict:
     logger.info("Calculating SQI for card %s", card_id)
 
     # 1. Fetch sources
-    sources = _fetch_card_sources(supabase_client, card_id)
+    sources = await _fetch_card_sources(db, card_id)
     source_count = len(sources)
 
     if source_count == 0:
         logger.info("Card %s has no sources; SQI will be 0", card_id)
 
     # 2. Calculate each component
-    authority = _calculate_source_authority(supabase_client, sources)
+    authority = await _calculate_source_authority(db, sources)
     diversity = _calculate_source_diversity(sources)
-    corroboration, cluster_count = _calculate_corroboration(supabase_client, card_id)
+    corroboration, cluster_count = await _calculate_corroboration(db, card_id)
     recency = _calculate_recency(sources)
     municipal_specificity = _calculate_municipal_specificity(sources)
 
@@ -617,12 +639,15 @@ def calculate_sqi(supabase_client: Client, card_id: str) -> dict:
 
     # 5. Persist to cards table
     try:
-        supabase_client.table("cards").update(
-            {
-                "signal_quality_score": composite,
-                "quality_breakdown": breakdown,
-            }
-        ).eq("id", card_id).execute()
+        await db.execute(
+            sa_update(Card)
+            .where(Card.id == card_id)
+            .values(
+                signal_quality_score=composite,
+                quality_breakdown=breakdown,
+            )
+        )
+        await db.flush()
 
         logger.info(
             "SQI for card %s: %d (authority=%d, diversity=%d, corroboration=%d, "
@@ -643,7 +668,7 @@ def calculate_sqi(supabase_client: Client, card_id: str) -> dict:
     return breakdown
 
 
-def recalculate_all_cards(supabase_client: Client) -> dict:
+async def recalculate_all_cards(db: AsyncSession) -> dict:
     """
     Batch recalculate the SQI for every card in the system.
 
@@ -657,8 +682,8 @@ def recalculate_all_cards(supabase_client: Client) -> dict:
 
     Parameters
     ----------
-    supabase_client : Client
-        Authenticated Supabase client (service_role for write access).
+    db : AsyncSession
+        SQLAlchemy async session (service_role for write access).
 
     Returns
     -------
@@ -679,8 +704,8 @@ def recalculate_all_cards(supabase_client: Client) -> dict:
 
     # Fetch all card IDs
     try:
-        resp = supabase_client.table("cards").select("id").execute()
-        card_rows = resp.data or []
+        result = await db.execute(select(Card.id))
+        card_rows = result.all()
     except Exception as e:
         msg = f"Failed to fetch card list for batch recalculation: {e}"
         logger.error(msg)
@@ -698,11 +723,11 @@ def recalculate_all_cards(supabase_client: Client) -> dict:
     domain_reputation_service.clear_batch_cache()
 
     for row in card_rows:
-        card_id = row["id"]
+        card_id = str(row[0])
         summary["cards_processed"] += 1
 
         try:
-            calculate_sqi(supabase_client, card_id)
+            await calculate_sqi(db, card_id)
             summary["cards_succeeded"] += 1
         except Exception as e:
             msg = f"Failed to calculate SQI for card {card_id}: {e}"
@@ -720,7 +745,7 @@ def recalculate_all_cards(supabase_client: Client) -> dict:
     return summary
 
 
-def get_breakdown(supabase_client: Client, card_id: str) -> Optional[dict]:
+async def get_breakdown(db: AsyncSession, card_id: str) -> Optional[dict]:
     """
     Retrieve the stored SQI breakdown for a card without recalculating.
 
@@ -731,8 +756,8 @@ def get_breakdown(supabase_client: Client, card_id: str) -> Optional[dict]:
 
     Parameters
     ----------
-    supabase_client : Client
-        Authenticated Supabase client.
+    db : AsyncSession
+        SQLAlchemy async session.
     card_id : str
         UUID of the card to look up.
 
@@ -743,19 +768,18 @@ def get_breakdown(supabase_client: Client, card_id: str) -> Optional[dict]:
         or None if the card does not exist or has no breakdown stored.
     """
     try:
-        resp = (
-            supabase_client.table("cards")
-            .select("quality_score, quality_breakdown")
-            .eq("id", card_id)
-            .execute()
+        result = await db.execute(
+            select(Card.signal_quality_score, Card.quality_breakdown).where(
+                Card.id == card_id
+            )
         )
-        rows = resp.data or []
+        row = result.first()
     except Exception as e:
         logger.error("Failed to fetch quality breakdown for card %s: %s", card_id, e)
         return None
 
-    if not rows:
+    if not row:
         return None
 
-    breakdown = rows[0].get("quality_breakdown")
+    breakdown = row.quality_breakdown
     return None if not breakdown or breakdown == {} else breakdown

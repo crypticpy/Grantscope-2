@@ -475,7 +475,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
   // Effects
   // ============================================================================
 
-  // On mount: restore conversation from prop → sessionStorage → Supabase (most recent)
+  // On mount: restore conversation from prop → sessionStorage → backend (most recent)
   // When forceNew is set, skip restoration and show blank chat with suggestions.
   useEffect(() => {
     let cancelled = false;
@@ -504,7 +504,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
         return;
       }
 
-      // Slow path: query Supabase for the most recent conversation in this scope
+      // Slow path: query the backend for the most recent conversation in this scope
       try {
         const conversations = await fetchConversations({
           scope,

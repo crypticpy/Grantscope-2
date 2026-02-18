@@ -1,15 +1,35 @@
-"""Card sub-resource router -- sources, timeline, history, related, follow, notes, assets, velocity."""
+"""Card sub-resource router -- sources, timeline, history, related, follow, notes, assets, velocity.
+
+Migrated from Supabase PostgREST to SQLAlchemy 2.0 async.
+"""
 
 import logging
 import re
-from datetime import datetime, timedelta, timezone
+import uuid as _uuid
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Dict, Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
+from sqlalchemy import or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.deps import supabase, get_current_user, _safe_error
-from app.models.core import Card
+from app.deps import get_db, get_current_user_hardcoded, _safe_error
+from app.models.db.card import Card
+from app.models.db.card_extras import (
+    CardFollow,
+    CardNote,
+    CardTimeline,
+    CardScoreHistory,
+    CardRelationship,
+    Entity,
+    UserSignalPreference,
+)
+from app.models.db.source import Source
+from app.models.db.research import ResearchTask
+from app.models.db.brief import ExecutiveBrief
+from app.models.db.workstream import Workstream, WorkstreamCard
 from app.models.history import (
     ScoreHistory,
     ScoreHistoryResponse,
@@ -24,6 +44,31 @@ from app.models.assets import CardAsset, CardAssetsResponse
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["card-subresources"])
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+_SKIP_COLS = {"embedding", "search_vector", "content_embedding"}
+
+
+def _row_to_dict(obj, skip_cols: set | None = None) -> dict:
+    """Convert an ORM object to a plain dict, serialising special types."""
+    skip = skip_cols or _SKIP_COLS
+    result: dict[str, Any] = {}
+    for col in obj.__table__.columns:
+        if col.name in skip:
+            continue
+        value = getattr(obj, col.name, None)
+        if isinstance(value, _uuid.UUID):
+            result[col.name] = str(value)
+        elif isinstance(value, (datetime, date)):
+            result[col.name] = value.isoformat()
+        elif isinstance(value, Decimal):
+            result[col.name] = float(value)
+        else:
+            result[col.name] = value
+    return result
 
 
 # ============================================================================
@@ -53,29 +98,45 @@ class EntityListResponse(BaseModel):
 
 
 @router.get("/cards/{card_id}/sources")
-async def get_card_sources(card_id: str):
+async def get_card_sources(
+    card_id: str,
+    db: AsyncSession = Depends(get_db),
+):
     """Get sources for a card"""
-    response = (
-        supabase.table("sources")
-        .select("*")
-        .eq("card_id", card_id)
-        .order("relevance_score", desc=True)
-        .execute()
-    )
-    return response.data
+    try:
+        result = await db.execute(
+            select(Source)
+            .where(Source.card_id == card_id)
+            .order_by(Source.relevance_score.desc().nulls_last())
+        )
+        sources = result.scalars().all()
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("card sources retrieval", e),
+        ) from e
+    return [_row_to_dict(s) for s in sources]
 
 
 @router.get("/cards/{card_id}/timeline")
-async def get_card_timeline(card_id: str):
+async def get_card_timeline(
+    card_id: str,
+    db: AsyncSession = Depends(get_db),
+):
     """Get timeline for a card"""
-    response = (
-        supabase.table("card_timeline")
-        .select("*")
-        .eq("card_id", card_id)
-        .order("created_at", desc=True)
-        .execute()
-    )
-    return response.data
+    try:
+        result = await db.execute(
+            select(CardTimeline)
+            .where(CardTimeline.card_id == card_id)
+            .order_by(CardTimeline.created_at.desc())
+        )
+        events = result.scalars().all()
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("card timeline retrieval", e),
+        ) from e
+    return [_row_to_dict(ev) for ev in events]
 
 
 @router.get("/cards/{card_id}/entities", response_model=EntityListResponse)
@@ -83,6 +144,7 @@ async def get_card_entities(
     card_id: str,
     entity_type: Optional[str] = None,
     limit: int = 50,
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get entities extracted from a card's sources.
@@ -99,29 +161,44 @@ async def get_card_entities(
     Returns:
         EntityListResponse with list of entities and metadata
     """
-    # First verify the card exists
-    card_response = supabase.table("cards").select("id").eq("id", card_id).execute()
-    if not card_response.data:
-        raise HTTPException(status_code=404, detail="Card not found")
+    try:
+        # First verify the card exists
+        card_result = await db.execute(select(Card.id).where(Card.id == card_id))
+        if card_result.scalar_one_or_none() is None:
+            raise HTTPException(status_code=404, detail="Card not found")
 
-    # Build query for entities
-    query = (
-        supabase.table("entities")
-        .select("id, name, entity_type, context, source_id, canonical_name, created_at")
-        .eq("card_id", card_id)
-    )
+        # Build query for entities
+        stmt = select(Entity).where(Entity.card_id == card_id)
 
-    # Apply optional entity_type filter
-    if entity_type:
-        query = query.eq("entity_type", entity_type)
+        # Apply optional entity_type filter
+        if entity_type:
+            stmt = stmt.where(Entity.entity_type == entity_type)
 
-    # Execute query ordered by name, with limit
-    response = query.order("name").limit(limit).execute()
+        # Execute query ordered by name, with limit
+        stmt = stmt.order_by(Entity.name).limit(limit)
+        result = await db.execute(stmt)
+        rows = result.scalars().all()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("card entities retrieval", e),
+        ) from e
 
     # Convert to EntityItem models
-    entities = (
-        [EntityItem(**record) for record in response.data] if response.data else []
-    )
+    entities = [
+        EntityItem(
+            id=str(ent.id),
+            name=ent.name,
+            entity_type=ent.entity_type,
+            context=ent.context,
+            source_id=str(ent.source_id) if ent.source_id else None,
+            canonical_name=ent.canonical_name,
+            created_at=ent.created_at.isoformat() if ent.created_at else "",
+        )
+        for ent in rows
+    ]
 
     return EntityListResponse(
         entities=entities,
@@ -135,7 +212,8 @@ async def get_card_score_history(
     card_id: str,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get historical score data for a card to enable trend visualization.
@@ -152,27 +230,49 @@ async def get_card_score_history(
     Returns:
         ScoreHistoryResponse with list of ScoreHistory records and metadata
     """
-    # First verify the card exists
-    card_response = supabase.table("cards").select("id").eq("id", card_id).execute()
-    if not card_response.data:
-        raise HTTPException(status_code=404, detail="Card not found")
+    try:
+        # First verify the card exists
+        card_result = await db.execute(select(Card.id).where(Card.id == card_id))
+        if card_result.scalar_one_or_none() is None:
+            raise HTTPException(status_code=404, detail="Card not found")
 
-    # Build query for score history
-    query = supabase.table("card_score_history").select("*").eq("card_id", card_id)
+        # Build query for score history
+        stmt = select(CardScoreHistory).where(CardScoreHistory.card_id == card_id)
 
-    # Apply date filters if provided
-    if start_date:
-        query = query.gte("recorded_at", start_date.isoformat())
-    if end_date:
-        query = query.lte("recorded_at", end_date.isoformat())
+        # Apply date filters if provided
+        if start_date:
+            stmt = stmt.where(CardScoreHistory.recorded_at >= start_date)
+        if end_date:
+            stmt = stmt.where(CardScoreHistory.recorded_at <= end_date)
 
-    # Execute query ordered by recorded_at descending
-    response = query.order("recorded_at", desc=True).execute()
+        # Execute query ordered by recorded_at descending
+        stmt = stmt.order_by(CardScoreHistory.recorded_at.desc())
+        result = await db.execute(stmt)
+        rows = result.scalars().all()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("card score history retrieval", e),
+        ) from e
 
     # Convert to ScoreHistory models
-    history_records = (
-        [ScoreHistory(**record) for record in response.data] if response.data else []
-    )
+    history_records = [
+        ScoreHistory(
+            id=str(row.id),
+            card_id=str(row.card_id),
+            recorded_at=row.recorded_at,
+            maturity_score=row.maturity_score,
+            velocity_score=row.velocity_score,
+            novelty_score=row.novelty_score,
+            impact_score=row.impact_score,
+            relevance_score=row.relevance_score,
+            risk_score=row.risk_score,
+            opportunity_score=row.opportunity_score,
+        )
+        for row in rows
+    ]
 
     return ScoreHistoryResponse(
         history=history_records,
@@ -185,7 +285,9 @@ async def get_card_score_history(
 
 @router.get("/cards/{card_id}/stage-history", response_model=StageHistoryList)
 async def get_card_stage_history(
-    card_id: str, current_user: dict = Depends(get_current_user)
+    card_id: str,
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get maturity stage transition history for a card.
@@ -203,42 +305,49 @@ async def get_card_stage_history(
     Returns:
         StageHistoryList with stage transition records and metadata
     """
-    # First verify the card exists
-    card_response = supabase.table("cards").select("id").eq("id", card_id).execute()
-    if not card_response.data:
-        raise HTTPException(status_code=404, detail="Card not found")
+    try:
+        # First verify the card exists
+        card_result = await db.execute(select(Card.id).where(Card.id == card_id))
+        if card_result.scalar_one_or_none() is None:
+            raise HTTPException(status_code=404, detail="Card not found")
 
-    # Query card_timeline for stage change events
-    # Filter by event_type='stage_changed' to get only stage transitions
-    response = (
-        supabase.table("card_timeline")
-        .select(
-            "id, card_id, created_at, old_stage_id, new_stage_id, old_horizon, new_horizon, trigger, reason"
+        # Query card_timeline for stage change events
+        result = await db.execute(
+            select(CardTimeline)
+            .where(
+                CardTimeline.card_id == card_id,
+                CardTimeline.event_type == "stage_changed",
+            )
+            .order_by(CardTimeline.created_at.desc())
         )
-        .eq("card_id", card_id)
-        .eq("event_type", "stage_changed")
-        .order("created_at", desc=True)
-        .execute()
-    )
+        rows = result.scalars().all()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("card stage history retrieval", e),
+        ) from e
 
     # Convert to StageHistory models, mapping created_at to changed_at
     history_records = []
-    if response.data:
-        history_records.extend(
+    for row in rows:
+        if row.new_stage_id is None:
+            continue
+        history_records.append(
             StageHistory(
-                id=record["id"],
-                card_id=record["card_id"],
-                changed_at=record["created_at"],  # Map created_at to changed_at
-                old_stage_id=record.get("old_stage_id"),
-                new_stage_id=record["new_stage_id"],
-                old_horizon=record.get("old_horizon"),
-                new_horizon=record.get("new_horizon", "H3"),  # Default to H3 if not set
-                trigger=record.get("trigger"),
-                reason=record.get("reason"),
+                id=str(row.id),
+                card_id=str(row.card_id),
+                changed_at=row.created_at,  # Map created_at to changed_at
+                old_stage_id=row.old_stage_id,
+                new_stage_id=row.new_stage_id,
+                old_horizon=row.old_horizon,
+                new_horizon=row.new_horizon or "H3",  # Default to H3 if not set
+                trigger=row.trigger,
+                reason=row.reason,
             )
-            for record in response.data
-            if record.get("new_stage_id") is not None
         )
+
     return StageHistoryList(
         history=history_records, total_count=len(history_records), card_id=card_id
     )
@@ -246,7 +355,10 @@ async def get_card_stage_history(
 
 @router.get("/cards/{card_id}/related", response_model=RelatedCardsList)
 async def get_related_cards(
-    card_id: str, limit: int = 20, current_user: dict = Depends(get_current_user)
+    card_id: str,
+    limit: int = 20,
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get cards related to the specified card for concept network visualization.
@@ -262,42 +374,29 @@ async def get_related_cards(
     Returns:
         RelatedCardsList with related card details and relationship metadata
     """
-    # First verify the card exists
-    card_response = supabase.table("cards").select("id").eq("id", card_id).execute()
-    if not card_response.data:
-        raise HTTPException(status_code=404, detail="Card not found")
+    try:
+        # First verify the card exists
+        card_result = await db.execute(select(Card.id).where(Card.id == card_id))
+        if card_result.scalar_one_or_none() is None:
+            raise HTTPException(status_code=404, detail="Card not found")
 
-    # Query relationships where this card is either source or target
-    # Get relationships where card is the source
-    source_response = (
-        supabase.table("card_relationships")
-        .select(
-            "id, source_card_id, target_card_id, relationship_type, strength, created_at"
+        # Query relationships where this card is either source or target
+        result = await db.execute(
+            select(CardRelationship).where(
+                or_(
+                    CardRelationship.source_card_id == card_id,
+                    CardRelationship.target_card_id == card_id,
+                )
+            )
         )
-        .eq("source_card_id", card_id)
-        .limit(limit)
-        .execute()
-    )
-
-    # Get relationships where card is the target
-    target_response = (
-        supabase.table("card_relationships")
-        .select(
-            "id, source_card_id, target_card_id, relationship_type, strength, created_at"
-        )
-        .eq("target_card_id", card_id)
-        .limit(limit)
-        .execute()
-    )
-
-    # Combine and deduplicate relationships
-    all_relationships = []
-    seen_relationship_ids = set()
-
-    for rel in (source_response.data or []) + (target_response.data or []):
-        if rel["id"] not in seen_relationship_ids:
-            seen_relationship_ids.add(rel["id"])
-            all_relationships.append(rel)
+        all_relationships = list(result.scalars().all())
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("card relationships retrieval", e),
+        ) from e
 
     # If no relationships found, return empty list
     if not all_relationships:
@@ -306,44 +405,52 @@ async def get_related_cards(
     # Get the related card IDs (the "other" card in each relationship)
     related_card_ids = set()
     for rel in all_relationships:
-        if rel["source_card_id"] == card_id:
-            related_card_ids.add(rel["target_card_id"])
+        src = str(rel.source_card_id)
+        tgt = str(rel.target_card_id)
+        if src == card_id:
+            related_card_ids.add(tgt)
         else:
-            related_card_ids.add(rel["source_card_id"])
+            related_card_ids.add(src)
 
-    # Fetch full card details for all related cards
-    cards_response = (
-        supabase.table("cards")
-        .select("id, name, slug, summary, pillar_id, stage_id, horizon")
-        .in_("id", list(related_card_ids))
-        .execute()
-    )
+    try:
+        # Fetch full card details for all related cards
+        cards_result = await db.execute(
+            select(Card).where(Card.id.in_(list(related_card_ids)))
+        )
+        related_card_objs = cards_result.scalars().all()
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("related cards retrieval", e),
+        ) from e
 
     # Create a lookup map for cards
-    cards_map = {card["id"]: card for card in (cards_response.data or [])}
+    cards_map = {str(c.id): c for c in related_card_objs}
 
     # Build the related cards list with relationship context
-    related_cards = []
+    related_cards: list[RelatedCard] = []
     for rel in all_relationships:
+        src = str(rel.source_card_id)
+        tgt = str(rel.target_card_id)
         # Determine which card is the "related" one (not the source card_id)
-        if rel["source_card_id"] == card_id:
-            related_id = rel["target_card_id"]
-        else:
-            related_id = rel["source_card_id"]
+        related_id = tgt if src == card_id else src
 
-        if card_data := cards_map.get(related_id):
+        card_data = cards_map.get(related_id)
+        if card_data is not None:
             related_cards.append(
                 RelatedCard(
-                    id=card_data["id"],
-                    name=card_data["name"],
-                    slug=card_data["slug"],
-                    summary=card_data.get("summary"),
-                    pillar_id=card_data.get("pillar_id"),
-                    stage_id=card_data.get("stage_id"),
-                    horizon=card_data.get("horizon"),
-                    relationship_type=rel["relationship_type"],
-                    relationship_strength=rel.get("strength"),
-                    relationship_id=rel["id"],
+                    id=str(card_data.id),
+                    name=card_data.name,
+                    slug=card_data.slug,
+                    summary=card_data.summary,
+                    pillar_id=card_data.pillar_id,
+                    stage_id=card_data.stage_id,
+                    horizon=card_data.horizon,
+                    relationship_type=rel.relationship_type,
+                    relationship_strength=(
+                        float(rel.strength) if rel.strength is not None else None
+                    ),
+                    relationship_id=str(rel.id),
                 )
             )
 
@@ -363,38 +470,68 @@ async def get_related_cards(
 
 
 @router.post("/cards/{card_id}/follow")
-async def follow_card(card_id: str, current_user: dict = Depends(get_current_user)):
+async def follow_card(
+    card_id: str,
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
+):
     """Follow a card"""
-    response = (
-        supabase.table("card_follows")
-        .insert({"user_id": current_user["id"], "card_id": card_id})
-        .execute()
-    )
+    try:
+        follow = CardFollow(
+            user_id=_uuid.UUID(current_user["id"]),
+            card_id=_uuid.UUID(card_id),
+        )
+        db.add(follow)
+        await db.flush()
+    except Exception as e:
+        logger.warning("Failed to follow card %s: %s", card_id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("follow card", e),
+        ) from e
+
     try:
         from app.signal_quality import update_signal_quality_score
 
-        update_signal_quality_score(supabase, card_id)
+        await update_signal_quality_score(db, card_id)
     except Exception as e:
         logger.warning(f"Failed to update signal quality score for {card_id}: {e}")
+
     return {"status": "followed"}
 
 
 @router.delete("/cards/{card_id}/follow")
-async def unfollow_card(card_id: str, current_user: dict = Depends(get_current_user)):
+async def unfollow_card(
+    card_id: str,
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
+):
     """Unfollow a card"""
-    response = (
-        supabase.table("card_follows")
-        .delete()
-        .eq("user_id", current_user["id"])
-        .eq("card_id", card_id)
-        .execute()
-    )
+    try:
+        result = await db.execute(
+            select(CardFollow).where(
+                CardFollow.user_id == current_user["id"],
+                CardFollow.card_id == card_id,
+            )
+        )
+        follow = result.scalar_one_or_none()
+        if follow:
+            await db.delete(follow)
+            await db.flush()
+    except Exception as e:
+        logger.warning("Failed to unfollow card %s: %s", card_id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("unfollow card", e),
+        ) from e
+
     try:
         from app.signal_quality import update_signal_quality_score
 
-        update_signal_quality_score(supabase, card_id)
+        await update_signal_quality_score(db, card_id)
     except Exception as e:
         logger.warning(f"Failed to update signal quality score for {card_id}: {e}")
+
     return {"status": "unfollowed"}
 
 
@@ -404,20 +541,46 @@ async def unfollow_card(card_id: str, current_user: dict = Depends(get_current_u
 
 
 @router.get("/me/following")
-async def get_following_cards(current_user: dict = Depends(get_current_user)):
+async def get_following_cards(
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
+):
     """Get cards followed by current user"""
-    response = (
-        supabase.table("card_follows")
-        .select(
-            """
-        *,
-        cards!inner(*)
-    """
+    try:
+        user_id = current_user["id"]
+
+        # Get all follows for the user
+        follows_result = await db.execute(
+            select(CardFollow).where(CardFollow.user_id == user_id)
         )
-        .eq("user_id", current_user["id"])
-        .execute()
-    )
-    return response.data
+        follows = follows_result.scalars().all()
+
+        if not follows:
+            return []
+
+        # Get the card IDs
+        card_ids = [str(f.card_id) for f in follows]
+
+        # Fetch full card data
+        cards_result = await db.execute(select(Card).where(Card.id.in_(card_ids)))
+        cards = cards_result.scalars().all()
+        cards_map = {str(c.id): c for c in cards}
+
+        # Build response: follow record with nested card data
+        response_data = []
+        for f in follows:
+            follow_dict = _row_to_dict(f)
+            card = cards_map.get(str(f.card_id))
+            if card:
+                follow_dict["cards"] = _row_to_dict(card)
+            response_data.append(follow_dict)
+
+        return response_data
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("following cards retrieval", e),
+        ) from e
 
 
 @router.get("/me/signals")
@@ -435,169 +598,190 @@ async def get_my_signals(
         None, description="Filter by: followed, created, workstream"
     ),
     quality_min: Optional[int] = Query(None, ge=0, le=100),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get user's personal intelligence hub: followed, created, and workstream signals."""
     user_id = current_user["id"]
 
-    # 1. Get followed card IDs
-    follows_resp = (
-        supabase.table("card_follows")
-        .select("card_id, created_at, priority, notes")
-        .eq("user_id", user_id)
-        .execute()
-    )
-    followed_map = {f["card_id"]: f for f in (follows_resp.data or [])}
-    followed_ids = list(followed_map.keys())
-
-    # 2. Get user-created card IDs
-    created_resp = (
-        supabase.table("cards")
-        .select("id")
-        .eq("created_by", user_id)
-        .eq("status", "active")
-        .execute()
-    )
-    created_ids = [c["id"] for c in (created_resp.data or [])]
-
-    # 3. Get cards in user's workstreams
-    ws_resp = (
-        supabase.table("workstreams")
-        .select("id, name")
-        .eq("user_id", user_id)
-        .execute()
-    )
-    workstreams = ws_resp.data or []
-    ws_ids = [ws["id"] for ws in workstreams]
-    ws_card_ids = []
-    ws_card_map: Dict[str, List[str]] = {}  # card_id -> list of workstream names
-    if ws_ids:
-        wc_resp = (
-            supabase.table("workstream_cards")
-            .select("card_id, workstream_id")
-            .in_("workstream_id", ws_ids)
-            .execute()
+    try:
+        # 1. Get followed card IDs
+        follows_result = await db.execute(
+            select(CardFollow).where(CardFollow.user_id == user_id)
         )
-        ws_name_map = {ws["id"]: ws["name"] for ws in workstreams}
-        for wc in wc_resp.data or []:
-            cid = wc["card_id"]
-            ws_card_ids.append(cid)
-            if cid not in ws_card_map:
-                ws_card_map[cid] = []
-            ws_card_map[cid].append(ws_name_map.get(wc["workstream_id"], "Unknown"))
+        follows = follows_result.scalars().all()
+        followed_map = {
+            str(f.card_id): {
+                "card_id": str(f.card_id),
+                "created_at": f.created_at.isoformat() if f.created_at else None,
+                "priority": f.priority,
+                "notes": f.notes,
+            }
+            for f in follows
+        }
+        followed_ids = list(followed_map.keys())
 
-    # 4. Union unique card IDs, applying source filter if specified
-    if source == "followed":
-        all_ids = list(set(followed_ids))
-    elif source == "created":
-        all_ids = list(set(created_ids))
-    elif source == "workstream":
-        all_ids = list(set(ws_card_ids))
-    else:
-        all_ids = list(set(followed_ids + created_ids + ws_card_ids))
+        # 2. Get user-created card IDs
+        created_result = await db.execute(
+            select(Card.id).where(Card.created_by == user_id, Card.status == "active")
+        )
+        created_ids = [str(row[0]) for row in created_result.all()]
 
-    if not all_ids:
+        # 3. Get cards in user's workstreams
+        ws_result = await db.execute(
+            select(Workstream).where(Workstream.user_id == user_id)
+        )
+        workstreams_objs = ws_result.scalars().all()
+        workstreams = [{"id": str(ws.id), "name": ws.name} for ws in workstreams_objs]
+        ws_ids = [str(ws.id) for ws in workstreams_objs]
+
+        ws_card_ids: list[str] = []
+        ws_card_map: Dict[str, List[str]] = {}  # card_id -> list of workstream names
+        if ws_ids:
+            wc_result = await db.execute(
+                select(WorkstreamCard).where(WorkstreamCard.workstream_id.in_(ws_ids))
+            )
+            wc_rows = wc_result.scalars().all()
+            ws_name_map = {ws["id"]: ws["name"] for ws in workstreams}
+            for wc in wc_rows:
+                cid = str(wc.card_id)
+                ws_card_ids.append(cid)
+                if cid not in ws_card_map:
+                    ws_card_map[cid] = []
+                ws_card_map[cid].append(
+                    ws_name_map.get(str(wc.workstream_id), "Unknown")
+                )
+
+        # 4. Union unique card IDs, applying source filter if specified
+        if source == "followed":
+            all_ids = list(set(followed_ids))
+        elif source == "created":
+            all_ids = list(set(created_ids))
+        elif source == "workstream":
+            all_ids = list(set(ws_card_ids))
+        else:
+            all_ids = list(set(followed_ids + created_ids + ws_card_ids))
+
+        if not all_ids:
+            return {
+                "signals": [],
+                "stats": {
+                    "total": 0,
+                    "followed_count": 0,
+                    "created_count": 0,
+                    "workstream_count": len(workstreams),
+                    "updates_this_week": 0,
+                    "needs_research": 0,
+                },
+                "workstreams": workstreams,
+            }
+
+        # 5. Fetch full card data for all IDs
+        cards_stmt = select(Card).where(Card.id.in_(all_ids), Card.status == "active")
+
+        if search:
+            safe_search = re.sub(r"[,.()\[\]]", "", search)
+            cards_stmt = cards_stmt.where(
+                or_(
+                    Card.name.ilike(f"%{safe_search}%"),
+                    Card.summary.ilike(f"%{safe_search}%"),
+                )
+            )
+        if pillar:
+            cards_stmt = cards_stmt.where(Card.pillar_id == pillar)
+        if horizon:
+            cards_stmt = cards_stmt.where(Card.horizon == horizon)
+        if quality_min is not None and quality_min > 0:
+            cards_stmt = cards_stmt.where(Card.signal_quality_score >= quality_min)
+
+        cards_result = await db.execute(cards_stmt)
+        cards = cards_result.scalars().all()
+
+        # 6. Get user signal preferences (pins) -- gracefully degrade if table missing
+        prefs_map: dict[str, dict] = {}
+        try:
+            prefs_result = await db.execute(
+                select(UserSignalPreference).where(
+                    UserSignalPreference.user_id == user_id
+                )
+            )
+            prefs = prefs_result.scalars().all()
+            prefs_map = {str(p.card_id): _row_to_dict(p) for p in prefs}
+        except Exception:
+            logger.warning(
+                "user_signal_preferences table may not exist; skipping pin data"
+            )
+
+        # 7. Enrich cards with personal metadata
+        one_week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        enriched = []
+        for card in cards:
+            card_dict = _row_to_dict(card)
+            cid = str(card.id)
+            pref = prefs_map.get(cid, {})
+            follow_data = followed_map.get(cid)
+            card_dict.update(
+                {
+                    "is_followed": cid in followed_ids,
+                    "is_created": cid in created_ids,
+                    "is_pinned": pref.get("is_pinned", False),
+                    "personal_notes": pref.get("notes"),
+                    "follow_priority": (
+                        follow_data.get("priority") if follow_data else None
+                    ),
+                    "followed_at": (
+                        follow_data.get("created_at") if follow_data else None
+                    ),
+                    "workstream_names": ws_card_map.get(cid, []),
+                }
+            )
+            enriched.append(card_dict)
+
+        # 8. Sort
+        if sort_by == "quality":
+            enriched.sort(
+                key=lambda c: c.get("signal_quality_score") or 0, reverse=True
+            )
+        elif sort_by == "followed":
+            enriched.sort(key=lambda c: c.get("followed_at") or "", reverse=True)
+        elif sort_by == "name":
+            enriched.sort(key=lambda c: c.get("name", "").lower())
+        else:  # default: updated
+            enriched.sort(
+                key=lambda c: c.get("updated_at") or c.get("created_at") or "",
+                reverse=True,
+            )
+
+        # Pinned first
+        enriched.sort(key=lambda c: 0 if c.get("is_pinned") else 1)
+
+        # 9. Stats
+        updates_this_week = sum(
+            bool((c.get("updated_at") or "") >= one_week_ago) for c in enriched
+        )
+        needs_research = sum(
+            bool((c.get("signal_quality_score") or 0) < 30) for c in enriched
+        )
+
         return {
-            "signals": [],
+            "signals": enriched,
             "stats": {
-                "total": 0,
-                "followed_count": 0,
-                "created_count": 0,
+                "total": len(enriched),
+                "followed_count": sum(bool(c.get("is_followed")) for c in enriched),
+                "created_count": sum(bool(c.get("is_created")) for c in enriched),
                 "workstream_count": len(workstreams),
-                "updates_this_week": 0,
-                "needs_research": 0,
+                "updates_this_week": updates_this_week,
+                "needs_research": needs_research,
             },
             "workstreams": workstreams,
         }
-
-    # 5. Fetch full card data for all IDs
-    cards_query = (
-        supabase.table("cards").select("*").in_("id", all_ids).eq("status", "active")
-    )
-
-    if search:
-        safe_search = re.sub(r"[,.()\[\]]", "", search)
-        cards_query = cards_query.or_(
-            f"name.ilike.%{safe_search}%,summary.ilike.%{safe_search}%"
-        )
-    if pillar:
-        cards_query = cards_query.eq("pillar_id", pillar)
-    if horizon:
-        cards_query = cards_query.eq("horizon", horizon)
-    if quality_min is not None and quality_min > 0:
-        cards_query = cards_query.gte("signal_quality_score", quality_min)
-
-    cards_resp = cards_query.execute()
-    cards = cards_resp.data or []
-
-    # 6. Get user signal preferences (pins) -- gracefully degrade if table missing
-    try:
-        prefs_resp = (
-            supabase.table("user_signal_preferences")
-            .select("*")
-            .eq("user_id", user_id)
-            .execute()
-        )
-        prefs_map = {p["card_id"]: p for p in (prefs_resp.data or [])}
-    except Exception:
-        logger.warning("user_signal_preferences table may not exist; skipping pin data")
-        prefs_map = {}
-
-    # 7. Enrich cards with personal metadata
-    one_week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
-    enriched = []
-    for card in cards:
-        cid = card["id"]
-        pref = prefs_map.get(cid, {})
-        follow_data = followed_map.get(cid)
-        enriched.append(
-            {
-                **card,
-                "is_followed": cid in followed_ids,
-                "is_created": cid in created_ids,
-                "is_pinned": pref.get("is_pinned", False),
-                "personal_notes": pref.get("notes"),
-                "follow_priority": follow_data.get("priority") if follow_data else None,
-                "followed_at": follow_data.get("created_at") if follow_data else None,
-                "workstream_names": ws_card_map.get(cid, []),
-            }
-        )
-
-    # 8. Sort
-    if sort_by == "quality":
-        enriched.sort(key=lambda c: c.get("signal_quality_score") or 0, reverse=True)
-    elif sort_by == "followed":
-        enriched.sort(key=lambda c: c.get("followed_at") or "", reverse=True)
-    elif sort_by == "name":
-        enriched.sort(key=lambda c: c.get("name", "").lower())
-    else:  # default: updated
-        enriched.sort(
-            key=lambda c: c.get("updated_at") or c.get("created_at") or "", reverse=True
-        )
-
-    # Pinned first
-    enriched.sort(key=lambda c: 0 if c.get("is_pinned") else 1)
-
-    # 9. Stats
-    updates_this_week = sum(
-        bool((c.get("updated_at") or "") >= one_week_ago) for c in enriched
-    )
-    needs_research = sum(
-        bool((c.get("signal_quality_score") or 0) < 30) for c in enriched
-    )
-
-    return {
-        "signals": enriched,
-        "stats": {
-            "total": len(enriched),
-            "followed_count": sum(bool(c.get("is_followed")) for c in enriched),
-            "created_count": sum(bool(c.get("is_created")) for c in enriched),
-            "workstream_count": len(workstreams),
-            "updates_this_week": updates_this_week,
-            "needs_research": needs_research,
-        },
-        "workstreams": workstreams,
-    }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("my signals retrieval", e),
+        ) from e
 
 
 # ============================================================================
@@ -606,36 +790,46 @@ async def get_my_signals(
 
 
 @router.post("/me/signals/{card_id}/pin")
-async def pin_signal(card_id: str, current_user: dict = Depends(get_current_user)):
+async def pin_signal(
+    card_id: str,
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
+):
     """Pin/unpin a signal in the user's personal hub."""
     user_id = current_user["id"]
 
-    # Check if preference exists
-    existing = (
-        supabase.table("user_signal_preferences")
-        .select("id, is_pinned")
-        .eq("user_id", user_id)
-        .eq("card_id", card_id)
-        .execute()
-    )
+    try:
+        # Check if preference exists
+        result = await db.execute(
+            select(UserSignalPreference).where(
+                UserSignalPreference.user_id == user_id,
+                UserSignalPreference.card_id == card_id,
+            )
+        )
+        existing = result.scalar_one_or_none()
 
-    if existing.data:
-        # Toggle pin
-        new_val = not existing.data[0].get("is_pinned", False)
-        supabase.table("user_signal_preferences").update(
-            {"is_pinned": new_val, "updated_at": datetime.now(timezone.utc).isoformat()}
-        ).eq("id", existing.data[0]["id"]).execute()
-        return {"is_pinned": new_val}
-    else:
-        # Create with pinned=True
-        supabase.table("user_signal_preferences").insert(
-            {
-                "user_id": user_id,
-                "card_id": card_id,
-                "is_pinned": True,
-            }
-        ).execute()
-        return {"is_pinned": True}
+        if existing:
+            # Toggle pin
+            new_val = not (existing.is_pinned or False)
+            existing.is_pinned = new_val
+            existing.updated_at = datetime.now(timezone.utc)
+            await db.flush()
+            return {"is_pinned": new_val}
+        else:
+            # Create with pinned=True
+            pref = UserSignalPreference(
+                user_id=_uuid.UUID(user_id),
+                card_id=_uuid.UUID(card_id),
+                is_pinned=True,
+            )
+            db.add(pref)
+            await db.flush()
+            return {"is_pinned": True}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("signal pin toggle", e),
+        ) from e
 
 
 # ============================================================================
@@ -644,38 +838,73 @@ async def pin_signal(card_id: str, current_user: dict = Depends(get_current_user
 
 
 @router.get("/cards/{card_id}/notes")
-async def get_card_notes(card_id: str, current_user: dict = Depends(get_current_user)):
+async def get_card_notes(
+    card_id: str,
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
+):
     """Get notes for a card"""
-    response = (
-        supabase.table("card_notes")
-        .select("*")
-        .eq("card_id", card_id)
-        .or_(f"user_id.eq.{current_user['id']},is_private.eq.false")
-        .order("created_at", desc=True)
-        .execute()
-    )
-    return [Note(**note) for note in response.data]
+    try:
+        result = await db.execute(
+            select(CardNote)
+            .where(
+                CardNote.card_id == card_id,
+                or_(
+                    CardNote.user_id == current_user["id"],
+                    CardNote.is_private == False,  # noqa: E712
+                ),
+            )
+            .order_by(CardNote.created_at.desc())
+        )
+        notes = result.scalars().all()
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("card notes retrieval", e),
+        ) from e
+
+    return [
+        Note(
+            id=str(n.id),
+            content=n.content,
+            is_private=n.is_private or False,
+            created_at=n.created_at,
+        )
+        for n in notes
+    ]
 
 
 @router.post("/cards/{card_id}/notes")
 async def create_note(
-    card_id: str, note_data: NoteCreate, current_user: dict = Depends(get_current_user)
+    card_id: str,
+    note_data: NoteCreate,
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
 ):
     """Create note for a card"""
-    note_dict = note_data.dict()
-    note_dict.update(
-        {
-            "user_id": current_user["id"],
-            "card_id": card_id,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }
-    )
+    try:
+        note = CardNote(
+            user_id=_uuid.UUID(current_user["id"]),
+            card_id=_uuid.UUID(card_id),
+            content=note_data.content,
+            is_private=note_data.is_private,
+            created_at=datetime.now(timezone.utc),
+        )
+        db.add(note)
+        await db.flush()
+        await db.refresh(note)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_safe_error("note creation", e),
+        ) from e
 
-    response = supabase.table("card_notes").insert(note_dict).execute()
-    if response.data:
-        return Note(**response.data[0])
-    else:
-        raise HTTPException(status_code=400, detail="Failed to create note")
+    return Note(
+        id=str(note.id),
+        content=note.content,
+        is_private=note.is_private or False,
+        created_at=note.created_at,
+    )
 
 
 # ============================================================================
@@ -684,7 +913,11 @@ async def create_note(
 
 
 @router.get("/cards/{card_id}/assets", response_model=CardAssetsResponse)
-async def get_card_assets(card_id: str, current_user: dict = Depends(get_current_user)):
+async def get_card_assets(
+    card_id: str,
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
+):
     """
     Get all generated assets for a card.
 
@@ -703,83 +936,69 @@ async def get_card_assets(card_id: str, current_user: dict = Depends(get_current
     """
     try:
         # Verify card exists
-        card_response = (
-            supabase.table("cards").select("id, name").eq("id", card_id).execute()
+        card_result = await db.execute(
+            select(Card.id, Card.name).where(Card.id == card_id)
         )
-        if not card_response.data:
+        card_row = card_result.one_or_none()
+        if not card_row:
             raise HTTPException(status_code=404, detail="Card not found")
 
-        card_name = card_response.data[0].get("name", "Unknown Card")
-        assets = []
+        assets: list[CardAsset] = []
 
         # 1. Fetch executive briefs for this card
-        briefs_response = (
-            supabase.table("executive_briefs")
-            .select(
-                "id, version, status, summary, generated_at, model_used, created_at"
-            )
-            .eq("card_id", card_id)
-            .order("created_at", desc=True)
-            .execute()
+        briefs_result = await db.execute(
+            select(ExecutiveBrief)
+            .where(ExecutiveBrief.card_id == card_id)
+            .order_by(ExecutiveBrief.created_at.desc())
         )
+        briefs = briefs_result.scalars().all()
 
-        for brief in briefs_response.data or []:
+        for brief in briefs:
             # Map status
             brief_status = (
-                "ready"
-                if brief.get("status") == "completed"
-                else brief.get("status", "ready")
+                "ready" if brief.status == "completed" else brief.status or "ready"
             )
             if brief_status == "generating":
                 brief_status = "generating"
             elif brief_status in ("pending", "failed"):
                 brief_status = "failed" if brief_status == "failed" else "ready"
 
-            title = f"Executive Brief v{brief.get('version', 1)}"
-            if brief.get("summary"):
-                # Truncate summary for title if needed
-                summary_preview = (
-                    brief["summary"][:50] + "..."
-                    if len(brief.get("summary", "")) > 50
-                    else brief.get("summary", "")
-                )
-                title = f"Executive Brief v{brief.get('version', 1)}"
+            title = f"Executive Brief v{brief.version or 1}"
+
+            created_at_val = brief.generated_at or brief.created_at
 
             assets.append(
                 CardAsset(
-                    id=brief["id"],
+                    id=str(brief.id),
                     type="brief",
                     title=title,
-                    created_at=brief.get("generated_at") or brief.get("created_at"),
-                    version=brief.get("version", 1),
+                    created_at=(created_at_val.isoformat() if created_at_val else ""),
+                    version=brief.version or 1,
                     ai_generated=True,
-                    ai_model=brief.get("model_used"),
+                    ai_model=brief.model_used,
                     status=brief_status,
                     metadata={
                         "summary_preview": (
-                            brief.get("summary", "")[:200]
-                            if brief.get("summary")
-                            else None
+                            brief.summary[:200] if brief.summary else None
                         )
                     },
                 )
             )
 
         # 2. Fetch research tasks (deep research reports)
-        research_response = (
-            supabase.table("research_tasks")
-            .select("id, task_type, status, result_summary, completed_at, created_at")
-            .eq("card_id", card_id)
-            .order("created_at", desc=True)
-            .execute()
+        research_result = await db.execute(
+            select(ResearchTask)
+            .where(ResearchTask.card_id == card_id)
+            .order_by(ResearchTask.created_at.desc())
         )
+        tasks = research_result.scalars().all()
 
-        for task in research_response.data or []:
+        for task in tasks:
             # Only include completed or failed tasks as assets
-            if task.get("status") not in ("completed", "failed"):
+            if task.status not in ("completed", "failed"):
                 continue
 
-            task_type = task.get("task_type", "research")
+            task_type = task.task_type or "research"
             asset_type = "research"
             if task_type == "deep_research":
                 title = "Strategic Intelligence Report"
@@ -788,20 +1007,22 @@ async def get_card_assets(card_id: str, current_user: dict = Depends(get_current
             else:
                 title = f"{task_type.replace('_', ' ').title()} Report"
 
-            result = task.get("result_summary", {}) or {}
+            result_summary = task.result_summary or {}
+
+            created_at_val = task.completed_at or task.created_at
 
             assets.append(
                 CardAsset(
-                    id=task["id"],
+                    id=str(task.id),
                     type=asset_type,
                     title=title,
-                    created_at=task.get("completed_at") or task.get("created_at"),
+                    created_at=(created_at_val.isoformat() if created_at_val else ""),
                     ai_generated=True,
-                    status="ready" if task.get("status") == "completed" else "failed",
+                    status="ready" if task.status == "completed" else "failed",
                     metadata={
                         "task_type": task_type,
-                        "sources_found": result.get("sources_found"),
-                        "sources_added": result.get("sources_added"),
+                        "sources_found": result_summary.get("sources_found"),
+                        "sources_added": result_summary.get("sources_added"),
                     },
                 )
             )
@@ -831,12 +1052,13 @@ async def get_card_assets(card_id: str, current_user: dict = Depends(get_current
 @router.get("/cards/{card_id}/velocity")
 async def get_card_velocity(
     card_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get velocity trend summary for a specific card."""
     from app.velocity_service import get_velocity_summary
 
-    summary = get_velocity_summary(card_id, supabase)
+    summary = await get_velocity_summary(card_id, db)
     if summary is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

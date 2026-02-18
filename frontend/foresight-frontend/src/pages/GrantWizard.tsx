@@ -68,7 +68,7 @@ const STEP_LABELS = [
 // =============================================================================
 
 /**
- * Retrieves the current Supabase session access token.
+ * Retrieves the current session access token.
  */
 async function getToken(): Promise<string | null> {
   const token = localStorage.getItem("gs2_token");

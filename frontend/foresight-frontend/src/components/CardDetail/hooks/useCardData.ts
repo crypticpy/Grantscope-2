@@ -3,7 +3,7 @@
  *
  * Custom hook for loading and managing card-related data in the CardDetail component.
  * Handles loading card details, sources, timeline, notes, research history,
- * score/stage history, and related cards from Supabase and the Discovery API.
+ * score/stage history, and related cards from the backend API.
  *
  * @module useCardData
  *
@@ -27,7 +27,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "../../../App";
+import { API_BASE_URL } from "../../../lib/config";
 import {
   getScoreHistory,
   getStageHistory,
@@ -94,7 +94,7 @@ export interface UseCardDataReturn {
  *
  * This hook centralizes all data fetching logic for the CardDetail component,
  * including:
- * - Card details from Supabase
+ * - Card details from the backend API
  * - Sources, timeline, notes, and research history
  * - Score and stage history from Discovery API
  * - Related cards for network visualization
@@ -143,59 +143,67 @@ export function useCardData(
   }, []);
 
   /**
-   * Load card detail and related data from Supabase
+   * Load card detail and related data from backend API
    */
   const loadCardDetail = useCallback(async () => {
     if (!slug) return;
 
     try {
-      const { data: cardData } = await supabase
-        .from("cards")
-        .select("*")
-        .eq("slug", slug)
-        .eq("status", "active")
-        .single();
+      const token = await getAuthToken();
+      if (!token) return;
 
-      if (cardData) {
-        setCard(cardData);
+      const params = new URLSearchParams({ slug, status: "active" });
+      const cardResponse = await fetch(
+        `${API_BASE_URL}/api/v1/cards?${params.toString()}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!cardResponse.ok) return;
+      const cardResult = await cardResponse.json();
+      const cardData = Array.isArray(cardResult)
+        ? cardResult[0]
+        : cardResult.cards?.[0] || cardResult;
+      if (!cardData?.id) return;
 
-        // Load related data in parallel
-        const [sourcesRes, timelineRes, notesRes, researchRes] =
-          await Promise.all([
-            supabase
-              .from("sources")
-              .select("*")
-              .eq("card_id", cardData.id)
-              .order("relevance_score", { ascending: false }),
-            supabase
-              .from("card_timeline")
-              .select("*")
-              .eq("card_id", cardData.id)
-              .order("created_at", { ascending: false }),
-            supabase
-              .from("card_notes")
-              .select("*")
-              .eq("card_id", cardData.id)
-              .or(`user_id.eq.${user?.id},is_private.eq.false`)
-              .order("created_at", { ascending: false }),
-            supabase
-              .from("research_tasks")
-              .select("*")
-              .eq("card_id", cardData.id)
-              .eq("status", "completed")
-              .order("completed_at", { ascending: false })
-              .limit(10),
-          ]);
+      setCard(cardData);
 
-        setSources(sourcesRes.data || []);
-        setTimeline(timelineRes.data || []);
-        setNotes(notesRes.data || []);
-        setResearchHistory(researchRes.data || []);
-      }
+      // Load related data in parallel
+      const [sourcesRes, timelineRes, notesRes, researchRes] =
+        await Promise.all([
+          fetch(`${API_BASE_URL}/api/v1/cards/${cardData.id}/sources`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch(`${API_BASE_URL}/api/v1/cards/${cardData.id}/timeline`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch(`${API_BASE_URL}/api/v1/cards/${cardData.id}/notes`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch(`${API_BASE_URL}/api/v1/cards/${cardData.id}/research`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
+
+      const sourcesData = sourcesRes.ok ? await sourcesRes.json() : [];
+      const timelineData = timelineRes.ok ? await timelineRes.json() : [];
+      const notesData = notesRes.ok ? await notesRes.json() : [];
+      const researchData = researchRes.ok ? await researchRes.json() : [];
+
+      setSources(
+        Array.isArray(sourcesData) ? sourcesData : sourcesData.sources || [],
+      );
+      setTimeline(
+        Array.isArray(timelineData)
+          ? timelineData
+          : timelineData.timeline || [],
+      );
+      setNotes(Array.isArray(notesData) ? notesData : notesData.notes || []);
+      setResearchHistory(
+        Array.isArray(researchData) ? researchData : researchData.tasks || [],
+      );
     } finally {
       setLoading(false);
     }
-  }, [slug, user?.id]);
+  }, [slug, user?.id, getAuthToken]);
 
   /**
    * Load score history from Discovery API
@@ -273,18 +281,26 @@ export function useCardData(
     if (!user || !card?.id) return;
 
     try {
-      const { data } = await supabase
-        .from("card_follows")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("card_id", card.id)
-        .maybeSingle();
-
-      setIsFollowing(!!data);
+      const token = await getAuthToken();
+      if (!token) return;
+      const response = await fetch(`${API_BASE_URL}/api/v1/me/following`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const followedCards = await response.json();
+        const ids = Array.isArray(followedCards)
+          ? followedCards.map(
+              (c: { card_id?: string; id?: string }) => c.card_id || c.id,
+            )
+          : [];
+        setIsFollowing(ids.includes(card.id));
+      } else {
+        setIsFollowing(false);
+      }
     } catch {
       setIsFollowing(false);
     }
-  }, [user, card?.id]);
+  }, [user, card?.id, getAuthToken]);
 
   /**
    * Toggle follow status for the current user
@@ -293,25 +309,25 @@ export function useCardData(
     if (!user || !card) return;
 
     try {
+      const token = await getAuthToken();
+      if (!token) return;
       if (isFollowing) {
-        await supabase
-          .from("card_follows")
-          .delete()
-          .eq("user_id", user.id)
-          .eq("card_id", card.id);
+        await fetch(`${API_BASE_URL}/api/v1/cards/${card.id}/follow`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
         setIsFollowing(false);
       } else {
-        await supabase.from("card_follows").insert({
-          user_id: user.id,
-          card_id: card.id,
-          priority: "medium",
+        await fetch(`${API_BASE_URL}/api/v1/cards/${card.id}/follow`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
         });
         setIsFollowing(true);
       }
     } catch (_err) {
       // Silently fail - the UI will remain in sync with actual state on next load
     }
-  }, [user, card, isFollowing]);
+  }, [user, card, isFollowing, getAuthToken]);
 
   /**
    * Add a new note to the card
@@ -324,18 +340,22 @@ export function useCardData(
       if (!user || !card || !content.trim()) return false;
 
       try {
-        const { data } = await supabase
-          .from("card_notes")
-          .insert({
-            user_id: user.id,
-            card_id: card.id,
-            content,
-            is_private: false,
-          })
-          .select()
-          .single();
+        const token = await getAuthToken();
+        if (!token) return false;
+        const response = await fetch(
+          `${API_BASE_URL}/api/v1/cards/${card.id}/notes`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ content, is_private: false }),
+          },
+        );
 
-        if (data) {
+        if (response.ok) {
+          const data = await response.json();
           setNotes((prev) => [data, ...prev]);
           return true;
         }
@@ -344,7 +364,7 @@ export function useCardData(
         return false;
       }
     },
-    [user, card],
+    [user, card, getAuthToken],
   );
 
   /**

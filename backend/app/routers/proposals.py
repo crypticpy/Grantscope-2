@@ -1,11 +1,17 @@
 """Proposals router for AI-assisted grant proposal generation."""
 
 import logging
-from datetime import datetime, timezone
-
+import uuid as _uuid
+from datetime import datetime, date, timezone
+from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.deps import supabase, get_current_user, _safe_error
+from app.deps import get_db, get_current_user_hardcoded, _safe_error
+from app.models.db.card import Card
+from app.models.db.proposal import Proposal as ProposalDB
+from app.models.db.workstream import Workstream as WorkstreamDB
 from app.models.proposal import (
     Proposal,
     ProposalCreate,
@@ -25,6 +31,25 @@ router = APIRouter(prefix="/api/v1", tags=["proposals"])
 # ---------------------------------------------------------------------------
 
 
+def _row_to_dict(obj, skip_cols=None) -> dict:
+    """Convert a SQLAlchemy ORM row into a plain dict for serialisation."""
+    skip = skip_cols or set()
+    result = {}
+    for col in obj.__table__.columns:
+        if col.name in skip:
+            continue
+        value = getattr(obj, col.name, None)
+        if isinstance(value, _uuid.UUID):
+            result[col.name] = str(value)
+        elif isinstance(value, (datetime, date)):
+            result[col.name] = value.isoformat()
+        elif isinstance(value, Decimal):
+            result[col.name] = float(value)
+        else:
+            result[col.name] = value
+    return result
+
+
 def _verify_proposal_ownership(proposal: dict, user_id: str) -> None:
     """Raise 403 if the proposal does not belong to the user."""
     if proposal["user_id"] != user_id:
@@ -34,15 +59,29 @@ def _verify_proposal_ownership(proposal: dict, user_id: str) -> None:
         )
 
 
-async def _get_proposal_or_404(proposal_id: str, user_id: str) -> dict:
+async def _get_proposal_or_404(
+    proposal_id: str, user_id: str, db: AsyncSession
+) -> dict:
     """Fetch a proposal by ID and verify ownership. Raises 404/403."""
-    result = supabase.table("proposals").select("*").eq("id", proposal_id).execute()
-    if not result.data:
+    try:
+        result = await db.execute(
+            select(ProposalDB).where(ProposalDB.id == proposal_id)
+        )
+        proposal_obj = result.scalar_one_or_none()
+    except Exception as e:
+        logger.error("Failed to fetch proposal %s: %s", proposal_id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("fetching proposal", e),
+        ) from e
+
+    if proposal_obj is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Proposal not found",
         )
-    proposal = result.data[0]
+
+    proposal = _row_to_dict(proposal_obj)
     _verify_proposal_ownership(proposal, user_id)
     return proposal
 
@@ -57,7 +96,8 @@ async def list_proposals(
     status_filter: str | None = None,
     limit: int = 20,
     offset: int = 0,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """List the authenticated user's proposals.
 
@@ -70,22 +110,42 @@ async def list_proposals(
     Returns:
         ProposalListResponse with proposals and total count.
     """
-    query = (
-        supabase.table("proposals")
-        .select("*", count="exact")
-        .eq("user_id", current_user["id"])
-        .order("updated_at", desc=True)
+    # Build the count query
+    count_query = (
+        select(func.count())
+        .select_from(ProposalDB)
+        .where(ProposalDB.user_id == current_user["id"])
     )
-
     if status_filter:
-        query = query.eq("status", status_filter)
+        count_query = count_query.where(ProposalDB.status == status_filter)
 
-    query = query.range(offset, offset + limit - 1)
-    result = query.execute()
+    # Build the data query
+    data_query = (
+        select(ProposalDB)
+        .where(ProposalDB.user_id == current_user["id"])
+        .order_by(ProposalDB.updated_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    if status_filter:
+        data_query = data_query.where(ProposalDB.status == status_filter)
+
+    try:
+        count_result = await db.execute(count_query)
+        total = count_result.scalar() or 0
+
+        data_result = await db.execute(data_query)
+        rows = list(data_result.scalars().all())
+    except Exception as e:
+        logger.error("Failed to list proposals: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("listing proposals", e),
+        ) from e
 
     return ProposalListResponse(
-        proposals=[Proposal(**row) for row in (result.data or [])],
-        total=result.count or 0,
+        proposals=[Proposal(**_row_to_dict(row)) for row in rows],
+        total=total,
     )
 
 
@@ -96,7 +156,8 @@ async def list_proposals(
 )
 async def create_proposal(
     body: ProposalCreate,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """Create a new proposal draft.
 
@@ -118,73 +179,86 @@ async def create_proposal(
     user_id = current_user["id"]
 
     # Verify card exists
-    card_result = (
-        supabase.table("cards").select("id, name").eq("id", body.card_id).execute()
-    )
-    if not card_result.data:
+    try:
+        card_result = await db.execute(
+            select(Card.id, Card.name).where(Card.id == body.card_id)
+        )
+        card_row = card_result.one_or_none()
+    except Exception as e:
+        logger.error("Failed to verify card %s: %s", body.card_id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("verifying card", e),
+        ) from e
+
+    if card_row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Card not found",
         )
-    card = card_result.data[0]
 
     # Verify workstream exists and belongs to user
-    ws_result = (
-        supabase.table("workstreams")
-        .select("id, user_id")
-        .eq("id", body.workstream_id)
-        .execute()
-    )
-    if not ws_result.data:
+    try:
+        ws_result = await db.execute(
+            select(WorkstreamDB.id, WorkstreamDB.user_id).where(
+                WorkstreamDB.id == body.workstream_id
+            )
+        )
+        ws_row = ws_result.one_or_none()
+    except Exception as e:
+        logger.error("Failed to verify workstream %s: %s", body.workstream_id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("verifying workstream", e),
+        ) from e
+
+    if ws_row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Workstream not found",
         )
-    if ws_result.data[0]["user_id"] != user_id:
+    if str(ws_row.user_id) != user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to access this workstream",
         )
 
     # Auto-generate title from card name if not provided
-    title = body.title or f"Proposal: {card.get('name', 'Untitled Grant')}"
+    title = body.title or f"Proposal: {card_row.name or 'Untitled Grant'}"
 
-    now = datetime.now(timezone.utc).isoformat()
-    insert_data = {
-        "card_id": body.card_id,
-        "workstream_id": body.workstream_id,
-        "user_id": user_id,
-        "title": title,
-        "version": 1,
-        "status": "draft",
-        "sections": {},
-        "ai_generation_metadata": {},
-        "created_at": now,
-        "updated_at": now,
-    }
+    now = datetime.now(timezone.utc)
+    proposal_obj = ProposalDB(
+        card_id=_uuid.UUID(body.card_id),
+        workstream_id=_uuid.UUID(body.workstream_id),
+        user_id=_uuid.UUID(user_id),
+        title=title,
+        version=1,
+        status="draft",
+        sections={},
+        ai_generation_metadata={},
+        created_at=now,
+        updated_at=now,
+    )
 
     try:
-        result = supabase.table("proposals").insert(insert_data).execute()
+        db.add(proposal_obj)
+        await db.flush()
+        await db.refresh(proposal_obj)
     except Exception as e:
-        logger.error(f"Failed to create proposal: {e}")
+        logger.error("Failed to create proposal: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("proposal creation", e),
         ) from e
 
-    if not result.data:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create proposal record",
-        )
-
-    return Proposal(**result.data[0])
+    return Proposal(**_row_to_dict(proposal_obj))
 
 
 @router.get("/me/proposals/{proposal_id}", response_model=Proposal)
 async def get_proposal(
     proposal_id: str,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """Get a specific proposal by ID.
 
@@ -199,7 +273,7 @@ async def get_proposal(
         HTTPException 404: Proposal not found.
         HTTPException 403: Not authorized.
     """
-    proposal = await _get_proposal_or_404(proposal_id, current_user["id"])
+    proposal = await _get_proposal_or_404(proposal_id, current_user["id"], db)
     return Proposal(**proposal)
 
 
@@ -207,7 +281,8 @@ async def get_proposal(
 async def update_proposal(
     proposal_id: str,
     body: ProposalUpdate,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """Update a proposal.
 
@@ -225,39 +300,42 @@ async def update_proposal(
         HTTPException 404: Proposal not found.
         HTTPException 403: Not authorized.
     """
-    await _get_proposal_or_404(proposal_id, current_user["id"])
+    await _get_proposal_or_404(proposal_id, current_user["id"], db)
 
-    update_data: dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
-    if body.title is not None:
-        update_data["title"] = body.title
-    if body.status is not None:
-        update_data["status"] = body.status
-    if body.sections is not None:
-        update_data["sections"] = body.sections
-    if body.review_notes is not None:
-        update_data["review_notes"] = body.review_notes
-
+    # Fetch ORM object for mutation
     try:
-        result = (
-            supabase.table("proposals")
-            .update(update_data)
-            .eq("id", proposal_id)
-            .execute()
+        result = await db.execute(
+            select(ProposalDB).where(ProposalDB.id == proposal_id)
         )
+        proposal_obj = result.scalar_one()
     except Exception as e:
-        logger.error(f"Failed to update proposal {proposal_id}: {e}")
+        logger.error("Failed to fetch proposal %s for update: %s", proposal_id, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("proposal update", e),
         ) from e
 
-    if not result.data:
+    proposal_obj.updated_at = datetime.now(timezone.utc)
+    if body.title is not None:
+        proposal_obj.title = body.title
+    if body.status is not None:
+        proposal_obj.status = body.status
+    if body.sections is not None:
+        proposal_obj.sections = body.sections
+    if body.review_notes is not None:
+        proposal_obj.review_notes = body.review_notes
+
+    try:
+        await db.flush()
+        await db.refresh(proposal_obj)
+    except Exception as e:
+        logger.error("Failed to update proposal %s: %s", proposal_id, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to update proposal",
-        )
+            detail=_safe_error("proposal update", e),
+        ) from e
 
-    return Proposal(**result.data[0])
+    return Proposal(**_row_to_dict(proposal_obj))
 
 
 @router.delete(
@@ -266,7 +344,8 @@ async def update_proposal(
 )
 async def delete_proposal(
     proposal_id: str,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """Delete a proposal.
 
@@ -278,12 +357,18 @@ async def delete_proposal(
         HTTPException 404: Proposal not found.
         HTTPException 403: Not authorized.
     """
-    await _get_proposal_or_404(proposal_id, current_user["id"])
+    await _get_proposal_or_404(proposal_id, current_user["id"], db)
 
+    # Fetch ORM object for deletion
     try:
-        supabase.table("proposals").delete().eq("id", proposal_id).execute()
+        result = await db.execute(
+            select(ProposalDB).where(ProposalDB.id == proposal_id)
+        )
+        proposal_obj = result.scalar_one()
+        await db.delete(proposal_obj)
+        await db.flush()
     except Exception as e:
-        logger.error(f"Failed to delete proposal {proposal_id}: {e}")
+        logger.error("Failed to delete proposal %s: %s", proposal_id, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("proposal deletion", e),
@@ -302,7 +387,8 @@ async def delete_proposal(
 async def generate_section(
     proposal_id: str,
     body: GenerateSectionRequest,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """AI-generate a single proposal section.
 
@@ -322,34 +408,50 @@ async def generate_section(
         HTTPException 403: Not authorized.
         HTTPException 500: AI generation failure.
     """
-    proposal = await _get_proposal_or_404(proposal_id, current_user["id"])
+    proposal = await _get_proposal_or_404(proposal_id, current_user["id"], db)
 
     # Fetch card context
-    card_result = (
-        supabase.table("cards").select("*").eq("id", proposal["card_id"]).execute()
-    )
-    if not card_result.data:
+    try:
+        card_result = await db.execute(
+            select(Card).where(Card.id == proposal["card_id"])
+        )
+        card_obj = card_result.scalar_one_or_none()
+    except Exception as e:
+        logger.error("Failed to fetch card %s: %s", proposal["card_id"], e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("fetching card", e),
+        ) from e
+
+    if card_obj is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Associated card not found",
         )
-    card = card_result.data[0]
+    card = _row_to_dict(card_obj)
 
     # Fetch workstream context
-    ws_result = (
-        supabase.table("workstreams")
-        .select("*")
-        .eq("id", proposal["workstream_id"])
-        .execute()
-    )
-    if not ws_result.data:
+    try:
+        ws_result = await db.execute(
+            select(WorkstreamDB).where(WorkstreamDB.id == proposal["workstream_id"])
+        )
+        ws_obj = ws_result.scalar_one_or_none()
+    except Exception as e:
+        logger.error("Failed to fetch workstream %s: %s", proposal["workstream_id"], e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("fetching workstream", e),
+        ) from e
+
+    if ws_obj is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Associated workstream not found",
         )
-    workstream = ws_result.data[0]
+    workstream = _row_to_dict(ws_obj)
 
     # Generate the section
+    # TODO: migrate ProposalService to SQLAlchemy
     service = ProposalService()
     try:
         ai_draft, model_used = await service.generate_section(
@@ -365,7 +467,7 @@ async def generate_section(
             detail=str(e),
         ) from e
     except Exception as e:
-        logger.error(f"AI generation failed for proposal {proposal_id}: {e}")
+        logger.error("AI generation failed for proposal %s: %s", proposal_id, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("AI section generation", e),
@@ -380,22 +482,23 @@ async def generate_section(
     }
 
     try:
-        supabase.table("proposals").update(
-            {
-                "sections": sections,
-                "ai_model": model_used,
-                "ai_generation_metadata": {
-                    **proposal.get("ai_generation_metadata", {}),
-                    body.section_name: {
-                        "model": model_used,
-                        "generated_at": datetime.now(timezone.utc).isoformat(),
-                    },
-                },
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }
-        ).eq("id", proposal_id).execute()
+        result = await db.execute(
+            select(ProposalDB).where(ProposalDB.id == proposal_id)
+        )
+        proposal_obj = result.scalar_one()
+        proposal_obj.sections = sections
+        proposal_obj.ai_model = model_used
+        proposal_obj.ai_generation_metadata = {
+            **(proposal.get("ai_generation_metadata") or {}),
+            body.section_name: {
+                "model": model_used,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+            },
+        }
+        proposal_obj.updated_at = datetime.now(timezone.utc)
+        await db.flush()
     except Exception as e:
-        logger.error(f"Failed to persist generated section for {proposal_id}: {e}")
+        logger.error("Failed to persist generated section for %s: %s", proposal_id, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("saving generated section", e),
@@ -414,7 +517,8 @@ async def generate_section(
 )
 async def generate_all_sections(
     proposal_id: str,
-    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
 ):
     """AI-generate all proposal sections at once.
 
@@ -434,34 +538,50 @@ async def generate_all_sections(
         HTTPException 403: Not authorized.
         HTTPException 500: AI generation failure.
     """
-    proposal = await _get_proposal_or_404(proposal_id, current_user["id"])
+    proposal = await _get_proposal_or_404(proposal_id, current_user["id"], db)
 
     # Fetch card context
-    card_result = (
-        supabase.table("cards").select("*").eq("id", proposal["card_id"]).execute()
-    )
-    if not card_result.data:
+    try:
+        card_result = await db.execute(
+            select(Card).where(Card.id == proposal["card_id"])
+        )
+        card_obj = card_result.scalar_one_or_none()
+    except Exception as e:
+        logger.error("Failed to fetch card %s: %s", proposal["card_id"], e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("fetching card", e),
+        ) from e
+
+    if card_obj is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Associated card not found",
         )
-    card = card_result.data[0]
+    card = _row_to_dict(card_obj)
 
     # Fetch workstream context
-    ws_result = (
-        supabase.table("workstreams")
-        .select("*")
-        .eq("id", proposal["workstream_id"])
-        .execute()
-    )
-    if not ws_result.data:
+    try:
+        ws_result = await db.execute(
+            select(WorkstreamDB).where(WorkstreamDB.id == proposal["workstream_id"])
+        )
+        ws_obj = ws_result.scalar_one_or_none()
+    except Exception as e:
+        logger.error("Failed to fetch workstream %s: %s", proposal["workstream_id"], e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("fetching workstream", e),
+        ) from e
+
+    if ws_obj is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Associated workstream not found",
         )
-    workstream = ws_result.data[0]
+    workstream = _row_to_dict(ws_obj)
 
     # Generate all sections
+    # TODO: migrate ProposalService to SQLAlchemy
     service = ProposalService()
     try:
         generation_result = await service.generate_full_proposal(
@@ -469,46 +589,38 @@ async def generate_all_sections(
             workstream=workstream,
         )
     except Exception as e:
-        logger.error(f"Full proposal generation failed for {proposal_id}: {e}")
+        logger.error("Full proposal generation failed for %s: %s", proposal_id, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("full proposal generation", e),
         ) from e
 
     # Build per-section generation metadata
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
     model_used = generation_result["model_used"]
     gen_metadata = {
-        section_name: {"model": model_used, "generated_at": now}
+        section_name: {"model": model_used, "generated_at": now_iso}
         for section_name in generation_result["sections"]
     }
 
     # Persist
     try:
-        result = (
-            supabase.table("proposals")
-            .update(
-                {
-                    "sections": generation_result["sections"],
-                    "ai_model": model_used,
-                    "ai_generation_metadata": gen_metadata,
-                    "updated_at": now,
-                }
-            )
-            .eq("id", proposal_id)
-            .execute()
+        result = await db.execute(
+            select(ProposalDB).where(ProposalDB.id == proposal_id)
         )
+        proposal_obj = result.scalar_one()
+        proposal_obj.sections = generation_result["sections"]
+        proposal_obj.ai_model = model_used
+        proposal_obj.ai_generation_metadata = gen_metadata
+        proposal_obj.updated_at = now
+        await db.flush()
+        await db.refresh(proposal_obj)
     except Exception as e:
-        logger.error(f"Failed to persist generated proposal {proposal_id}: {e}")
+        logger.error("Failed to persist generated proposal %s: %s", proposal_id, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("saving generated proposal", e),
         ) from e
 
-    if not result.data:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to update proposal with generated content",
-        )
-
-    return Proposal(**result.data[0])
+    return Proposal(**_row_to_dict(proposal_obj))

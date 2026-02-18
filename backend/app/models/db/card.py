@@ -49,7 +49,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.db.base import Base
 
-__all__ = ["Card"]
+__all__ = ["Card", "CardEmbedding"]
 
 
 class Card(Base):
@@ -271,3 +271,25 @@ class Card(Base):
     competition_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     urgency_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     probability_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# card_embeddings
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class CardEmbedding(Base):
+    """Standalone embedding store for cards (separate from Card.embedding)."""
+
+    __tablename__ = "card_embeddings"
+
+    card_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    # pgvector VECTOR(1536) — use old-style Column(NullType) because
+    # SQLAlchemy 2.0 Mapped[] cannot resolve pgvector types.
+    embedding = Column("embedding", NullType(), nullable=True)
+    created_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=True
+    )
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=True
+    )

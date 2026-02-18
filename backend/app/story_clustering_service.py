@@ -48,17 +48,17 @@ Usage
     )
 
     # Cluster a batch of sources by their IDs
-    result = cluster_sources(supabase, ["src-1", "src-2", "src-3"])
+    result = await cluster_sources(db, ["src-1", "src-2", "src-3"])
     # result = {
     #     "cluster_count": 2,
     #     "clusters": {"<uuid-a>": ["src-1", "src-2"], "<uuid-b>": ["src-3"]}
     # }
 
     # Count unique story clusters for a given card
-    count = get_cluster_count(supabase, card_id="card-xyz")
+    count = await get_cluster_count(db, card_id="card-xyz")
 
     # Incrementally cluster new sources against a card's existing sources
-    result = cluster_new_sources(supabase, card_id="card-xyz", new_source_ids=["src-4"])
+    result = await cluster_new_sources(db, card_id="card-xyz", new_source_ids=["src-4"])
 """
 
 import logging
@@ -66,7 +66,10 @@ import uuid
 from typing import Any, Dict, List, Optional
 
 import numpy as np
-from supabase import Client
+from sqlalchemy import select, update as sa_update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.db.source import Source
 
 logger = logging.getLogger(__name__)
 
@@ -154,8 +157,8 @@ def _cosine_similarity_matrix(embeddings: np.ndarray) -> np.ndarray:
     return normed @ normed.T
 
 
-def _fetch_sources_with_embeddings(
-    supabase: Client,
+async def _fetch_sources_with_embeddings(
+    db: AsyncSession,
     source_ids: List[str],
 ) -> List[Dict[str, Any]]:
     """
@@ -163,8 +166,8 @@ def _fetch_sources_with_embeddings(
 
     Parameters
     ----------
-    supabase : Client
-        Authenticated Supabase client.
+    db : AsyncSession
+        SQLAlchemy async session.
     source_ids : list[str]
         Source UUIDs to fetch.
 
@@ -177,24 +180,29 @@ def _fetch_sources_with_embeddings(
     if not source_ids:
         return []
 
-    # Supabase PostgREST `in_` filter accepts a CSV list.
-    # Fetch in batches if the list is very large to avoid URL length limits.
+    # Fetch in batches if the list is very large to avoid query limits.
     batch_size = 200
     results: List[Dict[str, Any]] = []
     for i in range(0, len(source_ids), batch_size):
         batch = source_ids[i : i + batch_size]
-        resp = (
-            supabase.table("sources")
-            .select("id, card_id, embedding")
-            .in_("id", batch)
-            .execute()
+        result = await db.execute(
+            select(Source.id, Source.card_id, Source.embedding).where(
+                Source.id.in_(batch)
+            )
         )
-        results.extend(resp.data or [])
+        for row in result.all():
+            results.append(
+                {
+                    "id": str(row.id),
+                    "card_id": str(row.card_id) if row.card_id else None,
+                    "embedding": row.embedding,
+                }
+            )
     return results
 
 
-def _update_story_cluster_ids(
-    supabase: Client,
+async def _update_story_cluster_ids(
+    db: AsyncSession,
     assignments: Dict[str, str],
 ) -> None:
     """
@@ -202,26 +210,28 @@ def _update_story_cluster_ids(
 
     Parameters
     ----------
-    supabase : Client
-        Authenticated Supabase client.
+    db : AsyncSession
+        SQLAlchemy async session.
     assignments : dict[str, str]
         Mapping of source_id -> story_cluster_id (UUID string).
     """
     if not assignments:
         return
 
-    # Update one row at a time.  Supabase PostgREST does not support
-    # batch updates with varying values in a single call, and the
-    # typical cluster count per card is small (< 50 sources).
+    # Update one row at a time. The typical cluster count per card is
+    # small (< 50 sources).
     for source_id, cluster_id in assignments.items():
         try:
-            supabase.table("sources").update({"story_cluster_id": cluster_id}).eq(
-                "id", source_id
-            ).execute()
+            await db.execute(
+                sa_update(Source)
+                .where(Source.id == source_id)
+                .values(story_cluster_id=cluster_id)
+            )
         except Exception:
             logger.exception(
                 "Failed to update story_cluster_id for source %s", source_id
             )
+    await db.flush()
 
 
 def _build_clusters(
@@ -288,8 +298,8 @@ def _build_clusters(
 # ===========================================================================
 
 
-def cluster_sources(
-    supabase_client: Client,
+async def cluster_sources(
+    db: AsyncSession,
     source_ids: List[str],
 ) -> Dict[str, Any]:
     """
@@ -302,8 +312,8 @@ def cluster_sources(
 
     Parameters
     ----------
-    supabase_client : Client
-        Authenticated Supabase client.
+    db : AsyncSession
+        SQLAlchemy async session.
     source_ids : list[str]
         IDs of sources to cluster.
 
@@ -326,7 +336,7 @@ def cluster_sources(
     logger.info("Clustering %d sources", len(source_ids))
 
     # 1. Fetch sources with embeddings.
-    sources = _fetch_sources_with_embeddings(supabase_client, source_ids)
+    sources = await _fetch_sources_with_embeddings(db, source_ids)
 
     if not sources:
         logger.warning(
@@ -354,7 +364,7 @@ def cluster_sources(
         for sid in member_ids:
             assignments[sid] = cluster_id
 
-    _update_story_cluster_ids(supabase_client, assignments)
+    await _update_story_cluster_ids(db, assignments)
 
     logger.info(
         "Clustering complete: %d sources -> %d clusters",
@@ -365,8 +375,8 @@ def cluster_sources(
     return {"cluster_count": len(clusters), "clusters": clusters}
 
 
-def get_cluster_count(
-    supabase_client: Client,
+async def get_cluster_count(
+    db: AsyncSession,
     card_id: str,
 ) -> int:
     """
@@ -378,8 +388,8 @@ def get_cluster_count(
 
     Parameters
     ----------
-    supabase_client : Client
-        Authenticated Supabase client.
+    db : AsyncSession
+        SQLAlchemy async session.
     card_id : str
         The card whose sources should be inspected.
 
@@ -390,33 +400,30 @@ def get_cluster_count(
         sources.  Sources with NULL ``story_cluster_id`` (not yet
         clustered) are each counted as one cluster to avoid under-counting.
     """
-    resp = (
-        supabase_client.table("sources")
-        .select("id, story_cluster_id")
-        .eq("card_id", card_id)
-        .execute()
+    result = await db.execute(
+        select(Source.id, Source.story_cluster_id).where(Source.card_id == card_id)
     )
-    rows = resp.data or []
+    rows = result.all()
 
     if not rows:
         return 0
 
     # Collect distinct non-NULL cluster IDs.
     cluster_ids = {
-        r["story_cluster_id"] for r in rows if r.get("story_cluster_id") is not None
+        row.story_cluster_id for row in rows if row.story_cluster_id is not None
     }
 
     # Each source with NULL story_cluster_id is treated as its own
     # unique cluster because it hasn't been compared yet.  This avoids
     # artificially deflating the corroboration count before clustering
     # has run.
-    unclustered_count = sum(bool(r.get("story_cluster_id") is None) for r in rows)
+    unclustered_count = sum(bool(row.story_cluster_id is None) for row in rows)
 
     return len(cluster_ids) + unclustered_count
 
 
-def cluster_new_sources(
-    supabase_client: Client,
+async def cluster_new_sources(
+    db: AsyncSession,
     card_id: str,
     new_source_ids: List[str],
 ) -> Dict[str, Any]:
@@ -434,8 +441,8 @@ def cluster_new_sources(
 
     Parameters
     ----------
-    supabase_client : Client
-        Authenticated Supabase client.
+    db : AsyncSession
+        SQLAlchemy async session.
     card_id : str
         The card that owns the sources.
     new_source_ids : list[str]
@@ -463,14 +470,14 @@ def cluster_new_sources(
             card_id,
         )
         # Return current state without re-clustering.
-        count = get_cluster_count(supabase_client, card_id)
+        count = await get_cluster_count(db, card_id)
         return {"cluster_count": count, "clusters": {}}
 
     # Fetch all existing source IDs for this card.
-    existing_resp = (
-        supabase_client.table("sources").select("id").eq("card_id", card_id).execute()
+    existing_result = await db.execute(
+        select(Source.id).where(Source.card_id == card_id)
     )
-    existing_ids = [r["id"] for r in (existing_resp.data or [])]
+    existing_ids = [str(r[0]) for r in existing_result.all()]
 
     # Combine existing + new, deduplicated, preserving order.
     seen: set = set()
@@ -490,4 +497,4 @@ def cluster_new_sources(
 
     # Delegate to the full clustering function which handles fetch,
     # cluster, and persistence.
-    return cluster_sources(supabase_client, all_ids)
+    return await cluster_sources(db, all_ids)

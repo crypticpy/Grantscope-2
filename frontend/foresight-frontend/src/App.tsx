@@ -7,7 +7,6 @@ import {
   useParams,
   useLocation,
 } from "react-router-dom";
-import { createClient } from "@supabase/supabase-js";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
 import Header from "./components/Header";
 import { AuthContextProvider } from "./hooks/useAuthContext";
@@ -52,19 +51,7 @@ const GuideDiscover = lazy(() => import("./pages/GuideDiscover"));
 const GuideWorkstreams = lazy(() => import("./pages/GuideWorkstreams"));
 
 // ---------------------------------------------------------------------------
-// Supabase client -- kept for data-access queries only (tables, rpc, etc.)
-// Authentication is handled via our own JWT endpoints.
-// ---------------------------------------------------------------------------
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-export const supabase =
-  supabaseUrl && supabaseAnonKey
-    ? createClient(supabaseUrl, supabaseAnonKey)
-    : (null as unknown as ReturnType<typeof createClient>);
-
-// ---------------------------------------------------------------------------
-// Custom user type (replaces Supabase User)
+// Custom user type
 // ---------------------------------------------------------------------------
 export interface GS2User {
   id: string;

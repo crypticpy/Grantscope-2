@@ -39,7 +39,6 @@ import {
   MessageSquare,
   FileSpreadsheet,
 } from "lucide-react";
-import { supabase } from "../App";
 import { useAuthContext } from "../hooks/useAuthContext";
 import { API_BASE_URL } from "../lib/config";
 import { cn } from "../lib/utils";
@@ -562,7 +561,7 @@ const WorkstreamKanban: React.FC = () => {
   // ============================================================================
 
   /**
-   * Get the authentication token from Supabase session.
+   * Get the authentication token (gs2_token) from localStorage.
    */
   const getAuthToken = useCallback(async (): Promise<string | null> => {
     const token = localStorage.getItem("gs2_token");
@@ -637,33 +636,43 @@ const WorkstreamKanban: React.FC = () => {
   // ============================================================================
 
   /**
-   * Load workstream details from Supabase.
+   * Load workstream details from the backend API.
    */
   const loadWorkstream = useCallback(async () => {
     if (!id || !user) return;
 
     try {
-      const { data, error: fetchError } = await supabase
-        .from("workstreams")
-        .select("*")
-        .eq("id", id)
-        .single();
+      const token = localStorage.getItem("gs2_token");
+      if (!token) {
+        setError("Authentication required.");
+        return;
+      }
 
-      if (fetchError) {
-        console.error("Error loading workstream:", fetchError);
+      const response = await fetch(`${API_BASE_URL}/api/v1/me/workstreams`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        console.error("Error loading workstreams:", response.status);
         setError(
           "Failed to load program. It may not exist or you may not have access.",
         );
         return;
       }
 
-      // Verify ownership
-      if (data.user_id !== user.id) {
-        setError("You do not have access to this program.");
+      const workstreams: Workstream[] = await response.json();
+      const found = workstreams.find((ws) => ws.id === id);
+
+      if (!found) {
+        setError(
+          "Failed to load program. It may not exist or you may not have access.",
+        );
         return;
       }
 
-      setWorkstream(data);
+      setWorkstream(found);
     } catch (err) {
       console.error("Error loading workstream:", err);
       setError("An unexpected error occurred.");
