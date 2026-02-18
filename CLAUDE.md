@@ -168,10 +168,10 @@ VITE_API_URL=http://localhost:8000   # FastAPI backend URL
 
 Backend tests use pytest with async support. Frontend uses Vitest for unit tests and Playwright for E2E.
 
-Test user credentials for local development:
+Test user credentials for local development are configured via environment variables:
 
-- Email: `test@grantscope.austintexas.gov`
-- Password: `TestPassword123!`
+- Email: `SEED_USER_EMAIL` (default: `test@grantscope.austintexas.gov`)
+- Password: `SEED_USER_PASSWORD` (set in `backend/.env`)
 
 ## Docker Services
 

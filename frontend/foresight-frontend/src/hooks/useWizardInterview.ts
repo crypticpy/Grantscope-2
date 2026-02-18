@@ -168,7 +168,7 @@ export function useWizardInterview(
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [chat.messages.length, chat.isStreaming, chat.sendMessage]);
+  }, [chat.messages.length, chat.isStreaming, chat.sendMessage, grantName]);
 
   // ---------------------------------------------------------------------------
   // Strip topic markers from messages for display

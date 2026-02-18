@@ -568,7 +568,8 @@ async def fetch_grants_gov_opportunities(
                     break
 
                 hits = data.get("hitCount", data.get("hits", 0))
-                total_api_results += hits
+                if offset == 0:
+                    total_api_results += hits
                 opp_hits = data.get("oppHits", [])
 
                 if not opp_hits:
