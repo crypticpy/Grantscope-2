@@ -1022,7 +1022,7 @@ class DocxExportService:
         doc.add_page_break()
 
     @staticmethod
-    def _render_paragraph_section(
+    def _add_text_section(
         doc: Document,
         heading: str,
         text: str,
@@ -1046,7 +1046,7 @@ class DocxExportService:
                 doc.add_paragraph(stripped)
 
     @staticmethod
-    def _render_bullet_section(
+    def _add_bulleted_list_section(
         doc: Document,
         heading: str,
         items: list,
@@ -1069,6 +1069,59 @@ class DocxExportService:
         doc.add_heading(heading, level=1)
         for item_text in cleaned:
             doc.add_paragraph(item_text, style="List Bullet")
+
+    @staticmethod
+    def _add_grant_opportunity_section(
+        doc: Document,
+        grant_context: dict,
+    ) -> None:
+        """Add a Grant Opportunity section with name, grantor, deadline, and funding range.
+
+        Renders a level-1 heading followed by bold-label / value pairs for each
+        non-empty field, plus a computed funding range line when min/max amounts
+        are available.
+
+        Args:
+            doc: python-docx Document to append to.
+            grant_context: Dict with keys such as grant_name, name, grantor,
+                deadline, funding_amount_min, funding_amount_max.
+        """
+        doc.add_heading("Grant Opportunity", level=1)
+
+        gc_fields = [
+            (
+                "Grant Name",
+                grant_context.get("grant_name") or grant_context.get("name"),
+            ),
+            ("Grantor", grant_context.get("grantor")),
+            ("Deadline", grant_context.get("deadline")),
+        ]
+
+        # Funding range
+        funding_min = grant_context.get("funding_amount_min")
+        funding_max = grant_context.get("funding_amount_max")
+        funding_min_val = _safe_float(funding_min) if funding_min is not None else None
+        funding_max_val = _safe_float(funding_max) if funding_max is not None else None
+        if funding_min_val is not None and funding_max_val is not None:
+            gc_fields.append(
+                (
+                    "Funding Range",
+                    f"${funding_min_val:,.0f} \u2013 ${funding_max_val:,.0f}",
+                )
+            )
+        elif funding_max_val is not None:
+            gc_fields.append(("Funding Amount", f"Up to ${funding_max_val:,.0f}"))
+        elif funding_min_val is not None:
+            gc_fields.append(("Funding Amount", f"From ${funding_min_val:,.0f}"))
+
+        for label, value in gc_fields:
+            if value:
+                para = doc.add_paragraph()
+                label_run = para.add_run(f"{label}: ")
+                label_run.bold = True
+                para.add_run(str(value))
+
+        doc.add_paragraph("")
 
     # ------------------------------------------------------------------
     # Program Summary DOCX
@@ -1143,12 +1196,12 @@ class DocxExportService:
             # Key Needs is rendered as a bulleted list
             if key == "key_needs":
                 if isinstance(value, list) and len(value) > 0:
-                    svc._render_bullet_section(doc, heading, value)
+                    svc._add_bulleted_list_section(doc, heading, value)
                     continue
                 # Fall through to render as paragraph if it's a string
 
             # Everything else is paragraph text
-            svc._render_paragraph_section(doc, heading, str(value))
+            svc._add_text_section(doc, heading, str(value))
 
         # ---- Save to bytes ----
         buffer = io.BytesIO()
@@ -1222,50 +1275,11 @@ class DocxExportService:
 
         # ---- Grant Opportunity (if grant_context provided) ----
         if grant_context:
-            doc.add_heading("Grant Opportunity", level=1)
-
-            gc_fields = [
-                (
-                    "Grant Name",
-                    grant_context.get("grant_name") or grant_context.get("name"),
-                ),
-                ("Grantor", grant_context.get("grantor")),
-                ("Deadline", grant_context.get("deadline")),
-            ]
-
-            # Funding range
-            funding_min = grant_context.get("funding_amount_min")
-            funding_max = grant_context.get("funding_amount_max")
-            funding_min_val = (
-                _safe_float(funding_min) if funding_min is not None else None
-            )
-            funding_max_val = (
-                _safe_float(funding_max) if funding_max is not None else None
-            )
-            if funding_min_val is not None and funding_max_val is not None:
-                gc_fields.append(
-                    (
-                        "Funding Range",
-                        f"${funding_min_val:,.0f} \u2013 ${funding_max_val:,.0f}",
-                    )
-                )
-            elif funding_max_val is not None:
-                gc_fields.append(("Funding Amount", f"Up to ${funding_max_val:,.0f}"))
-            elif funding_min_val is not None:
-                gc_fields.append(("Funding Amount", f"From ${funding_min_val:,.0f}"))
-
-            for label, value in gc_fields:
-                if value:
-                    para = doc.add_paragraph()
-                    label_run = para.add_run(f"{label}: ")
-                    label_run.bold = True
-                    para.add_run(str(value))
-
-            doc.add_paragraph("")
+            svc._add_grant_opportunity_section(doc, grant_context)
 
         # ---- Program Narrative ----
         narrative = plan_data.get("program_overview", "")
-        svc._render_paragraph_section(doc, "Program Narrative", narrative)
+        svc._add_text_section(doc, "Program Narrative", narrative)
 
         # ---- Staffing Plan Table ----
         staffing = plan_data.get("staffing_plan")
@@ -1357,7 +1371,7 @@ class DocxExportService:
         # ---- Deliverables ----
         deliverables = plan_data.get("deliverables")
         if deliverables and isinstance(deliverables, list) and len(deliverables) > 0:
-            svc._render_bullet_section(doc, "Deliverables", deliverables)
+            svc._add_bulleted_list_section(doc, "Deliverables", deliverables)
 
         # ---- Success Metrics Table ----
         metrics = plan_data.get("metrics")
@@ -1383,9 +1397,9 @@ class DocxExportService:
         partnerships = plan_data.get("partnerships")
         if partnerships:
             if isinstance(partnerships, list) and len(partnerships) > 0:
-                svc._render_bullet_section(doc, "Partnerships", partnerships)
+                svc._add_bulleted_list_section(doc, "Partnerships", partnerships)
             elif isinstance(partnerships, str) and partnerships.strip():
-                svc._render_paragraph_section(doc, "Partnerships", partnerships)
+                svc._add_text_section(doc, "Partnerships", partnerships)
 
         # ---- Save to bytes ----
         buffer = io.BytesIO()

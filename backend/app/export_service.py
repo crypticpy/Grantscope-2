@@ -4452,30 +4452,31 @@ class ExportService:
     # Shared PDF helpers (program summary / project plan)
     # ====================================================================
 
-    def _add_cover(
+    def _build_cover_elements(
         self,
-        elements: List[Any],
+        title: str,
+        subtitle: Optional[str],
+        profile_data: Optional[Dict[str, Any]],
         styles: Dict[str, ParagraphStyle],
         md_parser: "MarkdownToPDFParser",
-        title: str,
-        subtitle: Optional[str] = None,
-        profile_data: Optional[Dict[str, Any]] = None,
-    ) -> None:
-        """Add a standard cover block: title, optional subtitle, author, date, and HR.
+    ) -> List[Any]:
+        """Build a standard cover block: title, optional subtitle, author, date, and HR.
 
         Args:
-            elements: List of ReportLab flowable elements to append to.
-            styles: Professional PDF styles dictionary.
-            md_parser: MarkdownToPDFParser instance (used for XML escaping).
             title: Document title (rendered with DocTitle style).
             subtitle: Optional subtitle (rendered with DocSubtitle style).
             profile_data: Optional user profile dict; if it contains
                 ``display_name`` an author line is emitted.
+            styles: Professional PDF styles dictionary.
+            md_parser: MarkdownToPDFParser instance (used for XML escaping).
+
+        Returns:
+            List of ReportLab flowable elements for the cover block.
         """
-        elements.append(Paragraph(title, styles["DocTitle"]))
+        cover: List[Any] = [Paragraph(title, styles["DocTitle"])]
 
         if subtitle:
-            elements.append(
+            cover.append(
                 Paragraph(md_parser.escape_xml(subtitle), styles["DocSubtitle"])
             )
 
@@ -4486,7 +4487,7 @@ class ExportService:
                 author_parts = [display_name]
                 if prof_dept:
                     author_parts.append(prof_dept)
-                elements.append(
+                cover.append(
                     Paragraph(
                         f"Prepared by {', '.join(author_parts)}",
                         styles["MetadataText"],
@@ -4494,10 +4495,10 @@ class ExportService:
                 )
 
         date_str = datetime.now(timezone.utc).strftime("%B %d, %Y")
-        elements.append(Paragraph(date_str, styles["MetadataText"]))
-        elements.append(Spacer(1, 8))
+        cover.append(Paragraph(date_str, styles["MetadataText"]))
+        cover.append(Spacer(1, 8))
 
-        elements.append(
+        cover.append(
             HRFlowable(
                 width="100%",
                 thickness=2,
@@ -4507,22 +4508,24 @@ class ExportService:
             )
         )
 
+        return cover
+
     def _add_bullet_section(
         self,
         elements: List[Any],
-        styles: Dict[str, ParagraphStyle],
-        md_parser: "MarkdownToPDFParser",
         heading: str,
         items: List[Any],
+        styles: Dict[str, ParagraphStyle],
+        md_parser: "MarkdownToPDFParser",
     ) -> None:
         """Add a heading followed by a bulleted list of items.
 
         Args:
             elements: List of ReportLab flowable elements to append to.
-            styles: Professional PDF styles dictionary.
-            md_parser: MarkdownToPDFParser instance (used for XML escaping).
             heading: Section heading text.
             items: List of items to render as bullets.
+            styles: Professional PDF styles dictionary.
+            md_parser: MarkdownToPDFParser instance (used for XML escaping).
         """
         cleaned = [str(i).strip() for i in items if str(i).strip()]
         if not cleaned:
@@ -4546,19 +4549,19 @@ class ExportService:
     def _add_markdown_section(
         self,
         elements: List[Any],
-        styles: Dict[str, ParagraphStyle],
-        md_parser: "MarkdownToPDFParser",
         heading: str,
         text: str,
+        styles: Dict[str, ParagraphStyle],
+        md_parser: "MarkdownToPDFParser",
     ) -> None:
         """Add a heading followed by markdown-parsed body text.
 
         Args:
             elements: List of ReportLab flowable elements to append to.
-            styles: Professional PDF styles dictionary.
-            md_parser: MarkdownToPDFParser instance (used for XML escaping).
             heading: Section heading text.
             text: Body text (may contain markdown).
+            styles: Professional PDF styles dictionary.
+            md_parser: MarkdownToPDFParser instance (used for XML escaping).
         """
         text = str(text).strip()
         if not text:
@@ -4577,15 +4580,23 @@ class ExportService:
         self,
         table_data: List[List[Any]],
         col_widths: List[float],
-        highlight_last_row: bool = False,
+        styles_overrides: Optional[List[Tuple]] = None,
+        alignments: Optional[Dict[int, str]] = None,
     ) -> Table:
         """Build a Table with zebra-striped rows and branded header.
 
         Args:
             table_data: 2-D list where the first row is the header.
             col_widths: Column widths (ReportLab units, e.g. ``1.5 * inch``).
-            highlight_last_row: If *True*, the last row gets a bold font and
-                a distinct background (useful for totals rows).
+            styles_overrides: Optional list of additional ``TableStyle`` command
+                tuples to apply after the base style (e.g. totals-row
+                highlighting).  Example::
+
+                    [("BACKGROUND", (0, -1), (-1, -1), hex_to_rl_color("#E8EEF4")),
+                     ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold")]
+            alignments: Optional mapping of **column index** to alignment
+                string (``"LEFT"``, ``"CENTER"``, ``"RIGHT"``).  Applied to
+                all rows (header + body).
 
         Returns:
             A styled ``Table`` object ready to be appended to elements.
@@ -4612,11 +4623,14 @@ class ExportService:
                 ("BACKGROUND", (0, i), (-1, i), hex_to_rl_color("#F8F9FA"))
             )
 
-        if highlight_last_row:
-            style_commands.append(
-                ("BACKGROUND", (0, -1), (-1, -1), hex_to_rl_color("#E8EEF4"))
-            )
-            style_commands.append(("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"))
+        # Apply column alignments
+        if alignments:
+            for col_idx, align in alignments.items():
+                style_commands.append(("ALIGN", (col_idx, 0), (col_idx, -1), align))
+
+        # Apply caller-provided overrides last so they win
+        if styles_overrides:
+            style_commands.extend(styles_overrides)
 
         tbl.setStyle(TableStyle(style_commands))
         return tbl
@@ -4656,13 +4670,14 @@ class ExportService:
 
             # --- Cover area ---
             program_name = summary_data.get("program_name", "Program Summary")
-            self._add_cover(
-                elements,
-                styles,
-                md_parser,
-                title="Program Summary",
-                subtitle=program_name,
-                profile_data=profile_data,
+            elements.extend(
+                self._build_cover_elements(
+                    title="Program Summary",
+                    subtitle=program_name,
+                    profile_data=profile_data,
+                    styles=styles,
+                    md_parser=md_parser,
+                )
             )
 
             # --- Sections ---
@@ -4686,7 +4701,7 @@ class ExportService:
                 if key == "key_needs":
                     if isinstance(value, list) and len(value) > 0:
                         self._add_bullet_section(
-                            elements, styles, md_parser, heading, value
+                            elements, heading, value, styles, md_parser
                         )
                         continue
                     # Fall through to render as paragraph if it's a string
@@ -4695,7 +4710,7 @@ class ExportService:
                 if not text:
                     continue
 
-                self._add_markdown_section(elements, styles, md_parser, heading, text)
+                self._add_markdown_section(elements, heading, text, styles, md_parser)
 
             # Build with professional header/footer
             title_display = program_name if program_name else "Program Summary"
@@ -4758,13 +4773,14 @@ class ExportService:
             if subtitle_text and len(subtitle_text) > 120:
                 subtitle_text = subtitle_text[:117] + "..."
 
-            self._add_cover(
-                elements,
-                styles,
-                md_parser,
-                title="Project Plan",
-                subtitle=subtitle_text or None,
-                profile_data=profile_data,
+            elements.extend(
+                self._build_cover_elements(
+                    title="Project Plan",
+                    subtitle=subtitle_text or None,
+                    profile_data=profile_data,
+                    styles=styles,
+                    md_parser=md_parser,
+                )
             )
 
             # --- Grant Overview (if grant_context provided) ---
@@ -4823,7 +4839,7 @@ class ExportService:
             # --- Program Narrative ---
             narrative = plan_data.get("program_overview", "")
             self._add_markdown_section(
-                elements, styles, md_parser, "Program Narrative", narrative
+                elements, "Program Narrative", narrative, styles, md_parser
             )
 
             # --- Staffing Plan Table ---
@@ -4902,10 +4918,14 @@ class ExportService:
 
                 col_widths = [1.8 * inch, 1.2 * inch, 4.0 * inch]
                 budget_table = self._build_zebra_table(
-                    table_data, col_widths, highlight_last_row=True
+                    table_data,
+                    col_widths,
+                    styles_overrides=[
+                        ("BACKGROUND", (0, -1), (-1, -1), hex_to_rl_color("#E8EEF4")),
+                        ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+                    ],
+                    alignments={1: "RIGHT"},
                 )
-                # Right-align the Amount column
-                budget_table.setStyle(TableStyle([("ALIGN", (1, 0), (1, -1), "RIGHT")]))
                 elements.append(budget_table)
                 elements.append(Spacer(1, 12))
 
@@ -4968,7 +4988,7 @@ class ExportService:
                 and len(deliverables) > 0
             ):
                 self._add_bullet_section(
-                    elements, styles, md_parser, "Deliverables", deliverables
+                    elements, "Deliverables", deliverables, styles, md_parser
                 )
 
             # --- Success Metrics Table ---
@@ -5008,11 +5028,11 @@ class ExportService:
             if partnerships:
                 if isinstance(partnerships, list) and len(partnerships) > 0:
                     self._add_bullet_section(
-                        elements, styles, md_parser, "Partnerships", partnerships
+                        elements, "Partnerships", partnerships, styles, md_parser
                     )
                 elif isinstance(partnerships, str) and partnerships.strip():
                     self._add_markdown_section(
-                        elements, styles, md_parser, "Partnerships", partnerships
+                        elements, "Partnerships", partnerships, styles, md_parser
                     )
 
             # Build with professional header/footer
