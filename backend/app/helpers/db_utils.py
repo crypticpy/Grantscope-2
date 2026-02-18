@@ -15,6 +15,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 logger = logging.getLogger(__name__)
 
 
+async def store_card_embedding(
+    db: AsyncSession,
+    card_id: str,
+    embedding: list[float],
+) -> None:
+    """Persist a pgvector embedding on a card using raw SQL CAST.
+
+    Centralises the pgvector NullType workaround so callers don't need
+    to know about the ``CAST(:vec AS vector)`` idiom.
+    """
+    vec_str = "[" + ",".join(str(v) for v in embedding) + "]"
+    await db.execute(
+        text(
+            "UPDATE cards SET embedding = CAST(:vec AS vector) "
+            "WHERE id = CAST(:cid AS uuid)"
+        ),
+        {"vec": vec_str, "cid": card_id},
+    )
+
+
 async def vector_search_cards(
     db: AsyncSession,
     query_embedding: list[float],

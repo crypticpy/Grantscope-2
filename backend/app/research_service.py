@@ -32,7 +32,6 @@ from sqlalchemy import (
     func,
     and_,
     or_,
-    text,
 )
 import openai
 
@@ -43,7 +42,11 @@ from app.models.db.card_extras import CardSnapshot, CardTimeline, Entity
 from app.models.db.source import Source
 from app.models.db.research import ResearchTask
 from app.models.db.workstream import Workstream
-from app.helpers.db_utils import vector_search_cards, increment_deep_research_count
+from app.helpers.db_utils import (
+    vector_search_cards,
+    increment_deep_research_count,
+    store_card_embedding,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -390,14 +393,7 @@ class ResearchService:
 
             embedding = await self.ai_service.generate_embedding(embed_text)
 
-            # pgvector NullType column requires raw SQL with CAST
-            vec_str = "[" + ",".join(str(v) for v in embedding) + "]"
-            await self.db.execute(
-                text(
-                    "UPDATE cards SET embedding = CAST(:vec AS vector) WHERE id = CAST(:cid AS uuid)"
-                ),
-                {"vec": vec_str, "cid": card_id},
-            )
+            await store_card_embedding(self.db, card_id, embedding)
             await self.db.flush()
 
             logger.info(f"Card {card_id}: embedding updated ({len(embed_text)} chars)")
@@ -1373,6 +1369,130 @@ class ResearchService:
             logger.warning(f"Connection discovery failed for card {card_id}: {e}")
 
     # ========================================================================
+    # Deep Research Helpers
+    # ========================================================================
+
+    async def _collect_uploaded_document_sources(self, card_id: str) -> List[RawSource]:
+        """Collect user-uploaded card documents as high-priority research sources.
+
+        Queries ``CardDocument`` for completed extractions and returns them as
+        ``RawSource`` objects with ``source_type="uploaded_document"``.
+        """
+        uploaded_doc_sources: List[RawSource] = []
+        try:
+            from app.models.db.card_document import CardDocument
+
+            doc_result = await self.db.execute(
+                select(
+                    CardDocument.filename,
+                    CardDocument.original_filename,
+                    CardDocument.extracted_text,
+                    CardDocument.document_type,
+                )
+                .where(
+                    CardDocument.card_id == _to_uuid(card_id),
+                    CardDocument.extraction_status == "completed",
+                )
+                .order_by(CardDocument.created_at.desc())
+                .limit(5)
+            )
+            doc_rows = doc_result.all()
+            for doc in doc_rows:
+                if doc.extracted_text and len(doc.extracted_text) > 50:
+                    uploaded_doc_sources.append(
+                        RawSource(
+                            url=f"uploaded://card/{card_id}/{doc.filename}",
+                            title=f"[Uploaded] {doc.original_filename}",
+                            content=doc.extracted_text[:15000],
+                            source_name="User Upload",
+                            relevance=0.98,
+                            source_type="uploaded_document",
+                        )
+                    )
+            if uploaded_doc_sources:
+                logger.info(
+                    f"Collected {len(uploaded_doc_sources)} uploaded documents for research"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to fetch card documents for research: {e}")
+        return uploaded_doc_sources
+
+    async def _collect_grant_detail_sources(
+        self, card: Dict[str, Any], existing_source_urls: List[str]
+    ) -> List[RawSource]:
+        """Fetch Grants.gov NOFO details and attachment URLs for a grant card.
+
+        Returns high-relevance ``RawSource`` objects built from the Grants.gov
+        API response.  As a side-effect, NOFO attachment URLs are appended to
+        *existing_source_urls* so the crawler picks them up later.
+        """
+        grant_detail_sources: List[RawSource] = []
+        if not card.get("grants_gov_id"):
+            return grant_detail_sources
+        try:
+            from .source_fetchers.grants_gov_fetcher import (
+                fetch_opportunity_details,
+                extract_nofo_attachment_urls,
+                format_opportunity_detail,
+            )
+
+            detail = await fetch_opportunity_details(card["grants_gov_id"])
+            if detail:
+                # Create a high-relevance source from the full detail
+                detail_text = format_opportunity_detail(detail)
+                if detail_text and len(detail_text) > 100:
+                    grant_detail_sources.append(
+                        RawSource(
+                            url=f"https://www.grants.gov/search-results-detail/{card['grants_gov_id']}",
+                            title=f"Grants.gov NOFO: {card['name']}",
+                            content=detail_text,
+                            source_name="Grants.gov",
+                            relevance=0.95,
+                            source_type="grants_gov",
+                        )
+                    )
+                    logger.info(
+                        f"Grants.gov detail fetched for opportunity {card['grants_gov_id']} "
+                        f"({len(detail_text)} chars)"
+                    )
+
+                # Extract NOFO PDF attachment URLs and add to existing_source_urls
+                # The crawler will download and extract text from these PDFs
+                attachments = extract_nofo_attachment_urls(detail)
+                for att in attachments[:3]:  # Limit to 3 PDFs
+                    existing_source_urls.append(att["url"])
+                    logger.info(
+                        f"Added Grants.gov attachment: {att['filename']} "
+                        f"({att['folder_type']})"
+                    )
+        except Exception as e:
+            logger.warning(f"Grants.gov detail fetch failed: {e}")
+        return grant_detail_sources
+
+    async def _run_supplementary_search(
+        self,
+        label: str,
+        query: str,
+        target_sources: List[RawSource],
+        num_results: int,
+        search_depth: str = "basic",
+    ) -> None:
+        """Run a supplementary search and append results to *target_sources*.
+
+        Wraps :meth:`_search_supplementary` with the common try/except/log
+        pattern used throughout ``execute_deep_research``.
+        """
+        try:
+            results = await self._search_supplementary(
+                query, num_results=num_results, search_depth=search_depth
+            )
+            if results:
+                target_sources.extend(results)
+                logger.info(f"{label} added {len(results)} sources")
+        except Exception as e:
+            logger.warning(f"{label} failed: {e}")
+
+    # ========================================================================
     # Main Entry Points
     # ========================================================================
 
@@ -1649,85 +1769,14 @@ class ResearchService:
             logger.warning(f"Failed to fetch existing sources: {e}")
 
         # Step 1b2: Collect user-uploaded card documents for research
-        uploaded_doc_sources: List[RawSource] = []
-        try:
-            from app.models.db.card_document import CardDocument
-
-            doc_result = await self.db.execute(
-                select(
-                    CardDocument.filename,
-                    CardDocument.original_filename,
-                    CardDocument.extracted_text,
-                    CardDocument.document_type,
-                )
-                .where(
-                    CardDocument.card_id == _to_uuid(card_id),
-                    CardDocument.extraction_status == "completed",
-                )
-                .order_by(CardDocument.created_at.desc())
-                .limit(5)
-            )
-            doc_rows = doc_result.all()
-            for doc in doc_rows:
-                if doc.extracted_text and len(doc.extracted_text) > 50:
-                    uploaded_doc_sources.append(
-                        RawSource(
-                            url=f"uploaded://card/{card_id}/{doc.filename}",
-                            title=f"[Uploaded] {doc.original_filename}",
-                            content=doc.extracted_text[:15000],
-                            source_name="User Upload",
-                            relevance=0.98,
-                            source_type="uploaded_document",
-                        )
-                    )
-            if uploaded_doc_sources:
-                logger.info(
-                    f"Collected {len(uploaded_doc_sources)} uploaded documents for research"
-                )
-        except Exception as e:
-            logger.warning(f"Failed to fetch card documents for research: {e}")
+        uploaded_doc_sources = await self._collect_uploaded_document_sources(card_id)
 
         # Step 1c: For grant cards, fetch NOFO details from Grants.gov API
         grant_detail_sources: List[RawSource] = []
-        if is_grant_card and card.get("grants_gov_id"):
-            try:
-                from .source_fetchers.grants_gov_fetcher import (
-                    fetch_opportunity_details,
-                    extract_nofo_attachment_urls,
-                    format_opportunity_detail,
-                )
-
-                detail = await fetch_opportunity_details(card["grants_gov_id"])
-                if detail:
-                    # Create a high-relevance source from the full detail
-                    detail_text = format_opportunity_detail(detail)
-                    if detail_text and len(detail_text) > 100:
-                        grant_detail_sources.append(
-                            RawSource(
-                                url=f"https://www.grants.gov/search-results-detail/{card['grants_gov_id']}",
-                                title=f"Grants.gov NOFO: {card['name']}",
-                                content=detail_text,
-                                source_name="Grants.gov",
-                                relevance=0.95,
-                                source_type="grants_gov",
-                            )
-                        )
-                        logger.info(
-                            f"Grants.gov detail fetched for opportunity {card['grants_gov_id']} "
-                            f"({len(detail_text)} chars)"
-                        )
-
-                    # Extract NOFO PDF attachment URLs and add to existing_source_urls
-                    # The crawler will download and extract text from these PDFs
-                    attachments = extract_nofo_attachment_urls(detail)
-                    for att in attachments[:3]:  # Limit to 3 PDFs
-                        existing_source_urls.append(att["url"])
-                        logger.info(
-                            f"Added Grants.gov attachment: {att['filename']} "
-                            f"({att['folder_type']})"
-                        )
-            except Exception as e:
-                logger.warning(f"Grants.gov detail fetch failed: {e}")
+        if is_grant_card:
+            grant_detail_sources = await self._collect_grant_detail_sources(
+                card, existing_source_urls
+            )
 
         # Step 2: Discover sources (GPT Researcher + supplementary search - detailed report for more depth)
         sources, report, cost = await self._discover_sources(
@@ -1750,12 +1799,13 @@ class ResearchService:
                 peer_query = (
                     f'"{card["name"]}" ({" OR ".join(peer_cities)}) city implementation'
                 )
-                peer_sources = await self._search_supplementary(
-                    peer_query, num_results=8, search_depth="advanced"
+                await self._run_supplementary_search(
+                    label="Peer city search",
+                    query=peer_query,
+                    target_sources=sources,
+                    num_results=8,
+                    search_depth="advanced",
                 )
-                if peer_sources:
-                    sources.extend(peer_sources)
-                    logger.info(f"Peer city search added {len(peer_sources)} sources")
         except Exception as e:
             logger.warning(f"Peer city benchmarking search failed: {e}")
 
@@ -1779,17 +1829,13 @@ class ResearchService:
                 grant_queries.append(f'"{card["name"]}" grant application city Texas')
 
                 for gq in grant_queries[:3]:
-                    try:
-                        grant_supp = await self._search_supplementary(
-                            gq, num_results=5, search_depth="advanced"
-                        )
-                        if grant_supp:
-                            sources.extend(grant_supp)
-                            logger.info(
-                                f"Grant search '{gq[:50]}' added {len(grant_supp)} sources"
-                            )
-                    except Exception:
-                        pass
+                    await self._run_supplementary_search(
+                        label=f"Grant search '{gq[:50]}'",
+                        query=gq,
+                        target_sources=sources,
+                        num_results=5,
+                        search_depth="advanced",
+                    )
             except Exception as e:
                 logger.warning(f"Grant supplementary search failed: {e}")
 
