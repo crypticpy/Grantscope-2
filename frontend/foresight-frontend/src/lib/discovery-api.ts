@@ -1419,3 +1419,178 @@ export async function restoreCardSnapshot(
     method: "POST",
   });
 }
+
+// ============================================================================
+// Card Documents API
+// ============================================================================
+
+/**
+ * Document type classification for uploaded card documents.
+ */
+export type CardDocumentType =
+  | "nofo"
+  | "budget"
+  | "narrative"
+  | "letter_of_support"
+  | "application_guide"
+  | "other";
+
+/**
+ * A document attached to a card (response from API).
+ */
+export interface CardDocumentResponse {
+  id: string;
+  card_id: string;
+  uploaded_by: string;
+  filename: string;
+  original_filename: string;
+  blob_path: string;
+  content_type: string;
+  file_size_bytes: number;
+  extraction_status: string;
+  document_type: string;
+  description?: string | null;
+  metadata?: Record<string, unknown> | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+/**
+ * Response from the list card documents endpoint.
+ */
+export interface CardDocumentListResponse {
+  documents: CardDocumentResponse[];
+  total: number;
+}
+
+/**
+ * Response from the upload card document endpoint.
+ */
+export interface CardDocumentUploadResponse {
+  document: CardDocumentResponse;
+  message: string;
+}
+
+/**
+ * Response from the document download URL endpoint.
+ */
+export interface CardDocumentDownloadUrlResponse {
+  url: string;
+  expires_in_hours: number;
+}
+
+/**
+ * Upload a document to a card.
+ *
+ * Sends a multipart/form-data request with the file and optional metadata.
+ * Supported formats: pdf, docx, doc, txt, pptx, xlsx (max 25 MB).
+ *
+ * @param token - Authentication token
+ * @param cardId - UUID of the card
+ * @param file - The document file to upload
+ * @param documentType - Classification of the document (default: 'other')
+ * @param description - Optional human-readable description
+ * @returns CardDocumentUploadResponse with the created document metadata
+ */
+export async function uploadCardDocument(
+  token: string,
+  cardId: string,
+  file: File,
+  documentType?: CardDocumentType,
+  description?: string,
+): Promise<CardDocumentUploadResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (documentType) {
+    formData.append("document_type", documentType);
+  }
+  if (description) {
+    formData.append("description", description);
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/cards/${cardId}/documents`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        // Note: Do NOT set Content-Type for FormData — the browser sets it
+        // with the correct multipart boundary automatically.
+      },
+      body: formData,
+    },
+  );
+
+  if (!response.ok) {
+    const error = await response
+      .json()
+      .catch(() => ({ message: "Upload failed" }));
+    throw new Error(
+      error.detail || error.message || `API error: ${response.status}`,
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * List all documents for a card.
+ *
+ * Returns document metadata without extracted text to keep responses compact.
+ *
+ * @param token - Authentication token
+ * @param cardId - UUID of the card
+ * @returns CardDocumentListResponse with list of documents and total count
+ */
+export async function listCardDocuments(
+  token: string,
+  cardId: string,
+): Promise<CardDocumentListResponse> {
+  return apiRequest<CardDocumentListResponse>(
+    `/api/v1/cards/${cardId}/documents`,
+    token,
+  );
+}
+
+/**
+ * Delete a document from a card.
+ *
+ * Removes the file from blob storage and the database record.
+ * Only the uploader may delete a document.
+ *
+ * @param token - Authentication token
+ * @param cardId - UUID of the card
+ * @param documentId - UUID of the document to delete
+ */
+export async function deleteCardDocument(
+  token: string,
+  cardId: string,
+  documentId: string,
+): Promise<void> {
+  return apiRequest<void>(
+    `/api/v1/cards/${cardId}/documents/${documentId}`,
+    token,
+    { method: "DELETE" },
+  );
+}
+
+/**
+ * Get a time-limited download URL for a card document.
+ *
+ * Generates a SAS URL valid for 1 hour.
+ *
+ * @param token - Authentication token
+ * @param cardId - UUID of the card
+ * @param documentId - UUID of the document
+ * @returns Object with the SAS URL and expiry info
+ */
+export async function getDocumentDownloadUrl(
+  token: string,
+  cardId: string,
+  documentId: string,
+): Promise<CardDocumentDownloadUrlResponse> {
+  return apiRequest<CardDocumentDownloadUrlResponse>(
+    `/api/v1/cards/${cardId}/documents/${documentId}/download`,
+    token,
+  );
+}
