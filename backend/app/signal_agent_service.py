@@ -1767,7 +1767,7 @@ class SignalAgentService:
             try:
                 from app.source_quality import compute_and_store_quality_score
 
-                compute_and_store_quality_score(
+                await compute_and_store_quality_score(
                     self.db,
                     source_id,
                     analysis=(source.analysis if hasattr(source, "analysis") else None),

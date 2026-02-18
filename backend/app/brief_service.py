@@ -23,7 +23,7 @@ import logging
 import os
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 from functools import wraps
 from dataclasses import dataclass
@@ -680,7 +680,7 @@ class ExecutiveBriefService:
             error_message: Error message if failed
             **kwargs: Additional fields to update
         """
-        update_data = {"status": status, "updated_at": datetime.utcnow().isoformat()}
+        update_data = {"status": status, "updated_at": datetime.now(timezone.utc)}
 
         if error_message:
             update_data["error_message"] = error_message
@@ -937,8 +937,9 @@ class ExecutiveBriefService:
         # Get Azure deployment name for chat completions
         model_deployment = get_chat_deployment()
 
-        # Call Azure OpenAI API (synchronous client)
-        response = self.openai_client.chat.completions.create(
+        # Call Azure OpenAI API (synchronous client wrapped in thread to avoid blocking)
+        response = await asyncio.to_thread(
+            self.openai_client.chat.completions.create,
             model=model_deployment,
             messages=[
                 {
@@ -1025,7 +1026,7 @@ class ExecutiveBriefService:
                 content=result.content_json,
                 content_markdown=result.content_markdown,
                 summary=result.summary,
-                generated_at=datetime.utcnow().isoformat(),
+                generated_at=datetime.now(timezone.utc),
                 generation_time_ms=generation_time_ms,
                 model_used=result.model_used,
                 prompt_tokens=result.prompt_tokens,

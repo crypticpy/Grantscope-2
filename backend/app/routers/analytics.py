@@ -138,7 +138,7 @@ def _row_to_dict(obj, skip_cols=None) -> dict:
     for col in obj.__table__.columns:
         if col.name in skip:
             continue
-        value = getattr(obj, col.name, None)
+        value = getattr(obj, col.key, None)
         if isinstance(value, uuid.UUID):
             result[col.name] = str(value)
         elif isinstance(value, (datetime, date_type)):
@@ -617,7 +617,8 @@ async def get_analytics_insights(
         try:
             prompt = INSIGHTS_GENERATION_PROMPT.format(trends_data=trends_data)
 
-            ai_response = openai_client.chat.completions.create(
+            ai_response = await asyncio.to_thread(
+                openai_client.chat.completions.create,
                 model=get_chat_mini_deployment(),
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"},

@@ -93,6 +93,8 @@ export interface Card {
 export interface ResearchTask {
   /** Unique identifier for the task */
   id: string;
+  /** Card this research task is associated with */
+  card_id?: string;
   /** Type of research: 'update' for quick refresh, 'deep_research' for comprehensive */
   task_type: "update" | "deep_research";
   /** Current status of the task */
@@ -220,7 +222,8 @@ export type CardDetailTab =
   | "notes"
   | "related"
   | "assets"
-  | "chat";
+  | "chat"
+  | "documents";
 
 /**
  * Score color classes for consistent styling across components

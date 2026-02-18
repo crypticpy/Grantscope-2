@@ -3,6 +3,7 @@
 Migrated from Supabase PostgREST to SQLAlchemy 2.0 async.
 """
 
+import asyncio
 import logging
 import uuid
 from datetime import date, datetime, timezone
@@ -436,8 +437,10 @@ async def search_cards(
         if request.use_vector_search and request.query:
             try:
                 # Get embedding for search query
-                embedding_response = azure_openai_embedding_client.embeddings.create(
-                    model=get_embedding_deployment(), input=request.query
+                embedding_response = await asyncio.to_thread(
+                    azure_openai_embedding_client.embeddings.create,
+                    model=get_embedding_deployment(),
+                    input=request.query,
                 )
                 query_embedding = embedding_response.data[0].embedding
 

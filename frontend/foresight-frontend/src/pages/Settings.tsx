@@ -588,11 +588,16 @@ const Settings: React.FC = () => {
         {/* Privacy & Security */}
         <div className="bg-white dark:bg-dark-surface rounded-lg shadow">
           <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-            <div className="flex items-center">
-              <Shield className="h-5 w-5 text-gray-400 mr-2" />
-              <h2 className="text-lg font-medium text-gray-900 dark:text-white">
-                Privacy & Security
-              </h2>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <Shield className="h-5 w-5 text-gray-400 mr-2" />
+                <h2 className="text-lg font-medium text-gray-900 dark:text-white">
+                  Privacy & Security
+                </h2>
+              </div>
+              <span className="text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded">
+                Coming Soon
+              </span>
             </div>
           </div>
           <div className="p-6">
@@ -608,8 +613,9 @@ const Settings: React.FC = () => {
                 </div>
                 <input
                   type="checkbox"
-                  className="h-4 w-4 text-brand-blue focus:ring-brand-blue border-gray-300 dark:border-gray-600 rounded"
+                  className="h-4 w-4 text-brand-blue focus:ring-brand-blue border-gray-300 dark:border-gray-600 rounded opacity-50"
                   defaultChecked
+                  disabled
                 />
               </div>
 
@@ -625,7 +631,8 @@ const Settings: React.FC = () => {
                 </div>
                 <input
                   type="checkbox"
-                  className="h-4 w-4 text-brand-blue focus:ring-brand-blue border-gray-300 dark:border-gray-600 rounded"
+                  className="h-4 w-4 text-brand-blue focus:ring-brand-blue border-gray-300 dark:border-gray-600 rounded opacity-50"
+                  disabled
                 />
               </div>
             </div>

@@ -373,15 +373,19 @@ const Discover: React.FC = () => {
   }, [user?.id]);
 
   // Load cards when filters change
+  // Note: followedCardIds is intentionally excluded — it only matters when
+  // quickFilter === "following", and loadCards reads it from the closure.
+  // Including it would cause a double load on mount (once initially, once
+  // when loadFollowedCards() updates the set).
   useEffect(() => {
     loadCards();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     debouncedFilters,
     selectedPillar,
     selectedStage,
     selectedHorizon,
     quickFilter,
-    followedCardIds,
     dateFrom,
     dateTo,
     useSemanticSearch,

@@ -34,6 +34,7 @@ import {
   GitBranch,
   FolderOpen,
   MessageSquare,
+  Paperclip,
 } from "lucide-react";
 import { useAuthContext } from "../../hooks/useAuthContext";
 import { cn } from "../../lib/utils";
@@ -55,6 +56,7 @@ import { SourcesTab } from "./tabs/SourcesTab";
 import { TimelineTab } from "./tabs/TimelineTab";
 import { NotesTab } from "./tabs/NotesTab";
 import { AssetsTab } from "./AssetsTab";
+import { CardDocuments } from "./CardDocuments";
 const ChatTabContent = React.lazy(() => import("./ChatTabContent"));
 
 // Visualization Components
@@ -204,12 +206,15 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = "" }) => {
             fetch(`${API_BASE_URL}/api/v1/cards/${cardData.id}/notes`, {
               headers: { Authorization: `Bearer ${token}` },
             }).then((r) => (r.ok ? r.json() : [])),
-            fetch(
-              `${API_BASE_URL}/api/v1/research?card_id=${cardData.id}&status=completed&limit=10`,
-              {
-                headers: { Authorization: `Bearer ${token}` },
-              },
-            ).then((r) => (r.ok ? r.json() : [])),
+            fetch(`${API_BASE_URL}/api/v1/me/research-tasks?limit=50`, {
+              headers: { Authorization: `Bearer ${token}` },
+            })
+              .then((r) => (r.ok ? r.json() : []))
+              .then((tasks: ResearchTask[]) =>
+                tasks.filter(
+                  (t) => t.card_id === cardData.id && t.status === "completed",
+                ),
+              ),
           ]);
 
         setSources(
@@ -219,9 +224,7 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = "" }) => {
           Array.isArray(timelineRes) ? timelineRes : timelineRes.timeline || [],
         );
         setNotes(Array.isArray(notesRes) ? notesRes : notesRes.notes || []);
-        setResearchHistory(
-          Array.isArray(researchRes) ? researchRes : researchRes.tasks || [],
-        );
+        setResearchHistory(Array.isArray(researchRes) ? researchRes : []);
       }
     } finally {
       setLoading(false);
@@ -498,6 +501,7 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = "" }) => {
     { id: "related" as const, name: "Related", icon: GitBranch },
     { id: "chat" as const, name: "Chat", icon: MessageSquare },
     { id: "assets" as const, name: "Assets", icon: FolderOpen },
+    { id: "documents" as const, name: "Documents", icon: Paperclip },
   ];
 
   // Loading state - structured skeleton loader
@@ -795,6 +799,7 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = "" }) => {
           onRefresh={loadAssets}
         />
       )}
+      {activeTab === "documents" && <CardDocuments cardId={card.id} />}
     </div>
   );
 };

@@ -45,11 +45,16 @@ CONTAINER_NAME = "application-attachments"
 MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB
 
 
-def _require_blob() -> None:
+def _require_blob(connection_string: str | None = None) -> None:
     if not _blob_available:
         raise RuntimeError(
             "azure-storage-blob is not installed. "
             "Run: pip install azure-storage-blob>=12.19.0"
+        )
+    if connection_string is not None and not connection_string:
+        raise RuntimeError(
+            "AZURE_STORAGE_CONNECTION_STRING is not set. "
+            "File upload/download requires Azure Blob Storage configuration."
         )
 
 
@@ -88,7 +93,7 @@ class AttachmentStorage:
         Returns the blob path (not the full URL) for storage in the DB.
         Raises ValueError if file exceeds MAX_FILE_SIZE_BYTES.
         """
-        _require_blob()
+        _require_blob(self.connection_string)
         if len(data) > MAX_FILE_SIZE_BYTES:
             raise ValueError(
                 f"File size {len(data)} bytes exceeds maximum of "
@@ -112,7 +117,7 @@ class AttachmentStorage:
 
     async def download(self, blob_path: str) -> bytes:
         """Download a file by its blob path."""
-        _require_blob()
+        _require_blob(self.connection_string)
         async with BlobServiceClient.from_connection_string(
             self.connection_string
         ) as client:
@@ -124,7 +129,7 @@ class AttachmentStorage:
 
     async def delete(self, blob_path: str) -> None:
         """Delete a file from Azure Blob Storage."""
-        _require_blob()
+        _require_blob(self.connection_string)
         async with BlobServiceClient.from_connection_string(
             self.connection_string
         ) as client:
@@ -155,7 +160,7 @@ class AttachmentStorage:
         Returns the blob path (not the full URL) for storage in the DB.
         Raises ValueError if file exceeds MAX_FILE_SIZE_BYTES.
         """
-        _require_blob()
+        _require_blob(self.connection_string)
         if len(data) > MAX_FILE_SIZE_BYTES:
             raise ValueError(
                 f"File size {len(data)} bytes exceeds maximum of "
@@ -187,7 +192,7 @@ class AttachmentStorage:
 
         The URL is valid for ``expiry_hours`` (default 1 hour).
         """
-        _require_blob()
+        _require_blob(self.connection_string)
         if not self.account_name or not self.account_key:
             # Try to extract from connection string
             if self.connection_string:

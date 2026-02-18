@@ -42,6 +42,7 @@ from app.models.db.card_extras import CardSnapshot, CardTimeline, Entity
 from app.models.db.source import Source
 from app.models.db.research import ResearchTask
 from app.models.db.workstream import Workstream
+from app.discovery_service import STAGE_NUMBER_TO_ID
 from app.helpers.db_utils import (
     vector_search_cards,
     increment_deep_research_count,
@@ -1023,7 +1024,7 @@ class ResearchService:
             try:
                 from app.source_quality import compute_and_store_quality_score
 
-                compute_and_store_quality_score(
+                await compute_and_store_quality_score(
                     self.db,
                     source_id,
                     analysis=(
@@ -1128,7 +1129,7 @@ class ResearchService:
             slug=slug,
             summary=analysis.summary,
             horizon=analysis.horizon,
-            stage_id=f"{analysis.suggested_stage}_stage",  # Adjust to your schema
+            stage_id=STAGE_NUMBER_TO_ID.get(analysis.suggested_stage, "4_proof"),
             pillar_id=analysis.pillars[0] if analysis.pillars else None,
             goal_id=analysis.goals[0] if analysis.goals else None,
             # Scoring (convert AI scale to 0-100 and clamp)

@@ -533,6 +533,7 @@ const WorkstreamKanban: React.FC = () => {
     Map<string, WorkstreamResearchStatus>
   >(new Map());
   const researchPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const hasCardsRef = useRef(false);
 
   // ============================================================================
   // Toast Helper Functions
@@ -813,11 +814,17 @@ const WorkstreamKanban: React.FC = () => {
     startResearchPollingRef.current = startResearchPolling;
   }, [startResearchPolling]);
 
+  // Track whether cards have been loaded (avoids putting `cards` in polling deps)
+  useEffect(() => {
+    hasCardsRef.current = Object.values(cards).flat().length > 0;
+  }, [cards]);
+
   /**
    * Fetch research status after cards are loaded.
+   * Uses hasCardsRef instead of cards in deps to avoid restarting polling on every card change.
    */
   useEffect(() => {
-    if (workstream && id && Object.values(cards).flat().length > 0) {
+    if (workstream && id && hasCardsRef.current) {
       startResearchPolling();
     }
 
@@ -826,7 +833,8 @@ const WorkstreamKanban: React.FC = () => {
         clearInterval(researchPollRef.current);
       }
     };
-  }, [workstream, id, cards, startResearchPolling]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workstream, id, startResearchPolling]);
 
   /**
    * Merge research statuses into cards for rendering.
@@ -904,8 +912,10 @@ const WorkstreamKanban: React.FC = () => {
 
       if (!sourceStatus || !sourceCard) return;
 
-      // Optimistic update
-      const previousCards = { ...cards };
+      // Optimistic update — deep copy so rollback snapshot is independent
+      const previousCards = Object.fromEntries(
+        Object.entries(cards).map(([k, v]) => [k, [...v]]),
+      ) as typeof cards;
 
       setCards((prev) => {
         const updated = { ...prev };
@@ -1029,8 +1039,10 @@ const WorkstreamKanban: React.FC = () => {
         return;
       }
 
-      // Optimistic update
-      const previousCards = { ...cards };
+      // Optimistic update — deep copy so rollback snapshot is independent
+      const previousCards = Object.fromEntries(
+        Object.entries(cards).map(([k, v]) => [k, [...v]]),
+      ) as typeof cards;
 
       setCards((prev) => {
         const updated = { ...prev };
@@ -1082,9 +1094,11 @@ const WorkstreamKanban: React.FC = () => {
 
       if (!sourceCard || !sourceStatus || sourceStatus === status) return;
 
-      // Optimistic update
-      const previousCards = { ...cards };
-      const targetPosition = cards[status].length;
+      // Optimistic update — deep copy so rollback snapshot is independent
+      const previousCards = Object.fromEntries(
+        Object.entries(cards).map(([k, v]) => [k, [...v]]),
+      ) as typeof cards;
+      let targetPosition = 0;
 
       setCards((prev) => {
         const updated = { ...prev };
@@ -1093,6 +1107,9 @@ const WorkstreamKanban: React.FC = () => {
         updated[sourceStatus!] = updated[sourceStatus!].filter(
           (c) => c.id !== cardId,
         );
+
+        // Compute position from latest state, not stale closure
+        targetPosition = updated[status].length;
 
         // Add to target column at the end
         const movedCard = { ...sourceCard!, status, position: targetPosition };

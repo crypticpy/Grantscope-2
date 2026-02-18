@@ -48,7 +48,7 @@ def _row_to_dict(obj, skip_cols=None) -> dict:
     for col in obj.__table__.columns:
         if col.name in skip:
             continue
-        value = getattr(obj, col.name, None)
+        value = getattr(obj, col.key, None)
         if isinstance(value, uuid.UUID):
             result[col.name] = str(value)
         elif isinstance(value, (datetime, date)):
@@ -275,7 +275,7 @@ async def add_card_to_workstream(
             updated_at=now,
         )
         db.add(new_wsc)
-        await db.commit()
+        await db.flush()
         await db.refresh(new_wsc)
 
     except HTTPException:
@@ -389,7 +389,7 @@ async def update_workstream_card(
         if update_data.reminder_at is not None:
             wsc.reminder_at = update_data.reminder_at
 
-        await db.commit()
+        await db.flush()
         await db.refresh(wsc)
 
     except HTTPException:
@@ -461,7 +461,7 @@ async def remove_card_from_workstream(
             )
 
         await db.delete(wsc)
-        await db.commit()
+        await db.flush()
 
     except HTTPException:
         raise
@@ -573,7 +573,7 @@ async def trigger_card_deep_dive(
             status="queued",
         )
         db.add(new_task)
-        await db.commit()
+        await db.flush()
         await db.refresh(new_task)
 
     except HTTPException:
@@ -656,7 +656,7 @@ async def trigger_card_quick_update(
             status="queued",
         )
         db.add(new_task)
-        await db.commit()
+        await db.flush()
         await db.refresh(new_task)
 
     except HTTPException:
