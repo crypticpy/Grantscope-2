@@ -31,7 +31,11 @@ logger = logging.getLogger(__name__)
 _blob_available = False
 try:
     from azure.storage.blob.aio import BlobServiceClient, ContainerClient
-    from azure.storage.blob import generate_blob_sas, BlobSasPermissions
+    from azure.storage.blob import (
+        generate_blob_sas,
+        BlobSasPermissions,
+        ContentSettings,
+    )
 
     _blob_available = True
 except ImportError:
@@ -100,7 +104,7 @@ class AttachmentStorage:
             )
             await blob_client.upload_blob(
                 data,
-                content_settings={"content_type": content_type},
+                content_settings=ContentSettings(content_type=content_type),
                 overwrite=True,
             )
         logger.info("Uploaded %s (%d bytes) to %s", filename, len(data), blob_path)
@@ -167,7 +171,7 @@ class AttachmentStorage:
             )
             await blob_client.upload_blob(
                 data,
-                content_settings={"content_type": content_type},
+                content_settings=ContentSettings(content_type=content_type),
                 overwrite=True,
             )
         logger.info(

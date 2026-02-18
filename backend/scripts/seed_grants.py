@@ -16,7 +16,9 @@ import logging
 import os
 import subprocess
 import sys
+import time
 import uuid
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -33,7 +35,7 @@ from app.models.db.card import Card
 from app.models.db.source import Source, DiscoveredSource
 from app.models.db.card_extras import CardTimeline
 from app.models.db.discovery import DiscoveryRun
-from app.helpers.db_utils import vector_search_cards
+from app.helpers.db_utils import vector_search_cards, store_card_embedding
 from app.openai_provider import get_embedding_deployment, azure_openai_embedding_client
 from app.discovery_service import convert_pillar_id, convert_goal_id, STAGE_NUMBER_TO_ID
 
@@ -108,6 +110,24 @@ RELEVANCE_KEYWORDS = {
     "equity",
     "health",
 }
+
+
+# ── Configuration ─────────────────────────────────────────────────────────
+
+
+@dataclass
+class SeedConfig:
+    """Configuration for the seed pipeline."""
+
+    cache_file: str = "/tmp/grants_health.json"
+    keywords: list[str] = field(
+        default_factory=lambda: ["health", "community", "public safety"]
+    )
+    rows_per_keyword: int = 200
+    delay_seconds: int = 5
+
+
+# ── Low-level helpers ─────────────────────────────────────────────────────
 
 
 def fetch_grants_curl(keyword: str, rows: int = 25) -> list:
@@ -236,42 +256,207 @@ async def get_embedding(text: str) -> Optional[list]:
         return None
 
 
-async def run_seed(max_cards: int, dry_run: bool) -> None:
-    if async_session_factory is None:
-        logger.error("DATABASE_URL not set.")
-        sys.exit(1)
+# ── Extracted pipeline stages ─────────────────────────────────────────────
 
-    ai = AIService(openai_client)
 
-    # Step 1: Fetch grants from Grants.gov
-    # Strategy: one broad keyword fetch (avoids rate limiting), then filter.
-    # If a pre-fetched file exists at /tmp/grants_health.json, use it.
-    import time
+def fetch_and_cache_opportunities(config: SeedConfig) -> dict[str, dict]:
+    """Fetch opportunities from Grants.gov, applying cache and relevance filter.
 
-    cache_file = "/tmp/grants_health.json"
-    all_hits = []
+    Returns a dict mapping opportunity ID to opportunity data, de-duplicated
+    and filtered for municipal relevance.
+    """
+    all_hits: list[dict] = []
 
-    if os.path.exists(cache_file):
-        logger.info(f"Loading cached grants from {cache_file}")
-        with open(cache_file) as f:
+    if os.path.exists(config.cache_file):
+        logger.info(f"Loading cached grants from {config.cache_file}")
+        with open(config.cache_file) as f:
             data = json.load(f)
         all_hits = data.get("data", {}).get("oppHits", [])
     else:
         logger.info("Fetching grants from Grants.gov (broad keyword search)...")
-        for keyword in ["health", "community", "public safety"]:
-            hits = fetch_grants_curl(keyword, rows=200)
+        for keyword in config.keywords:
+            hits = fetch_grants_curl(keyword, rows=config.rows_per_keyword)
             all_hits.extend(hits)
             logger.info(f"  '{keyword}': {len(hits)} hits")
-            time.sleep(5)  # Generous delay to avoid rate limits
+            time.sleep(config.delay_seconds)
 
     # Deduplicate and filter for relevance
-    all_opps = {}
+    all_opps: dict[str, dict] = {}
     for opp in all_hits:
         opp_id = str(opp.get("id", ""))
         if opp_id and opp_id not in all_opps and is_relevant(opp):
             all_opps[opp_id] = opp
 
     logger.info(f"Total unique relevant opportunities: {len(all_opps)}")
+    return all_opps
+
+
+async def ai_triage_and_analyze(
+    ai: AIService,
+    opp_id: str,
+    opp: dict,
+    url: str,
+) -> Optional[tuple]:
+    """Run AI triage and analysis on a single opportunity.
+
+    Returns ``(title, content, triage, analysis)`` on success, or ``None``
+    if the opportunity is filtered out or analysis fails.
+    """
+    title = opp.get("title", "Untitled")
+    content = build_content(opp)
+
+    # AI triage
+    try:
+        triage = await ai.triage_source(title, content)
+        if not triage or not triage.is_relevant:
+            return None
+    except Exception as e:
+        logger.warning(f"Triage failed for '{title[:50]}': {e}")
+        return None
+
+    # AI classification
+    open_date = parse_date(opp.get("openDate"))
+    published_str = open_date.strftime("%Y-%m-%d") if open_date else ""
+    try:
+        analysis = await ai.analyze_source(title, content, url, published_str)
+        if not analysis:
+            logger.warning(f"Analysis returned None for '{title[:50]}'")
+            return None
+    except Exception as e:
+        logger.warning(f"Analysis failed for '{title[:50]}': {e}")
+        return None
+
+    return (title, content, triage, analysis)
+
+
+def build_card_from_opp(
+    opp_id: str,
+    opp: dict,
+    url: str,
+    title: str,
+    content: str,
+    analysis,
+    triage,
+    run_id: str,
+    slug: str,
+) -> Card:
+    """Construct a Card object from an opportunity and its AI analysis."""
+    close_date = parse_date(opp.get("closeDate"))
+    open_date = parse_date(opp.get("openDate"))
+    agency = opp.get("agency", opp.get("agencyName", ""))
+    cfda_list = opp.get("cfdaList", [])
+    if isinstance(cfda_list, str):
+        cfda_list = cfda_list
+    elif isinstance(cfda_list, list):
+        cfda_list = ", ".join(str(c) for c in cfda_list)
+    else:
+        cfda_list = ""
+
+    funding_max = None
+    funding_min = None
+    try:
+        if opp.get("awardCeiling"):
+            funding_max = int(opp["awardCeiling"])
+        if opp.get("awardFloor"):
+            funding_min = int(opp["awardFloor"])
+    except (ValueError, TypeError):
+        pass
+
+    stage_id = STAGE_NUMBER_TO_ID.get(analysis.suggested_stage, "4_proof")
+    pillar_id = convert_pillar_id(analysis.pillars[0]) if analysis.pillars else None
+    goal_id = convert_goal_id(analysis.goals[0]) if analysis.goals else None
+    now = datetime.now(timezone.utc)
+
+    card = Card(
+        id=str(uuid.uuid4()),
+        name=analysis.suggested_card_name or title,
+        slug=slug,
+        summary=analysis.summary,
+        description=content[:2000],
+        pillar_id=pillar_id,
+        goal_id=goal_id,
+        stage_id=stage_id,
+        horizon=analysis.horizon or "H1",
+        # DB columns are NUMERIC(3,2) -- max 9.99; raw AI values fit
+        novelty_score=round(analysis.novelty, 2),
+        maturity_score=round(analysis.credibility, 2),
+        impact_score=round(analysis.impact, 2),
+        relevance_score=round(analysis.relevance, 2),
+        velocity_score=round(analysis.velocity, 2),
+        risk_score=round(analysis.risk, 2),
+        status="active",
+        review_status="pending_review",
+        ai_confidence=(
+            round(float(triage.confidence), 2)
+            if triage and hasattr(triage, "confidence")
+            else 0.8
+        ),
+        discovery_run_id=uuid.UUID(run_id),
+        discovered_at=now,
+        created_at=now,
+        updated_at=now,
+        # embedding stored via store_card_embedding after flush
+        # Grant-specific fields
+        grant_type="federal",
+        grantor=agency,
+        deadline=close_date,
+        cfda_number=cfda_list,
+        grants_gov_id=opp_id,
+        source_url=url,
+        funding_amount_min=funding_min,
+        funding_amount_max=funding_max,
+    )
+    return card
+
+
+def create_source_and_timeline(
+    card: Card,
+    opp: dict,
+    content: str,
+    analysis,
+) -> tuple[Source, CardTimeline]:
+    """Create the Source and CardTimeline records for a newly created card."""
+    open_date = parse_date(opp.get("openDate"))
+    agency = opp.get("agency", opp.get("agencyName", ""))
+    opp_id = str(opp.get("id", ""))
+    url = OPP_URL_TEMPLATE.format(id=opp_id)
+
+    source = Source(
+        id=str(uuid.uuid4()),
+        card_id=card.id,
+        url=url,
+        title=opp.get("title", "Untitled"),
+        content=content[:5000],
+        source_type="grants_gov",
+        publisher=agency,
+        relevance_score=round(analysis.relevance, 2),
+        published_date=open_date,
+    )
+
+    timeline = CardTimeline(
+        id=str(uuid.uuid4()),
+        card_id=card.id,
+        event_type="created",
+        title="Discovered from Grants.gov",
+        description=f"Imported from Grants.gov opportunity {opp.get('number', opp_id)}",
+    )
+
+    return (source, timeline)
+
+
+# ── Main orchestrator ─────────────────────────────────────────────────────
+
+
+async def run_seed(max_cards: int, dry_run: bool) -> None:
+    if async_session_factory is None:
+        logger.error("DATABASE_URL not set.")
+        sys.exit(1)
+
+    ai = AIService(openai_client)
+    config = SeedConfig()
+
+    # Step 1: Fetch grants from Grants.gov
+    all_opps = fetch_and_cache_opportunities(config)
 
     if not all_opps:
         logger.error(
@@ -279,7 +464,7 @@ async def run_seed(max_cards: int, dry_run: bool) -> None:
             "'https://api.grants.gov/v1/api/search2' "
             "-H 'Content-Type: application/json' "
             '-d \'{"keyword":"health","rows":200}\' '
-            f"> {cache_file}"
+            f"> {config.cache_file}"
         )
         return
 
@@ -316,32 +501,15 @@ async def run_seed(max_cards: int, dry_run: bool) -> None:
                 skipped += 1
                 continue
 
-            title = opp.get("title", "Untitled")
-            content = build_content(opp)
             url = OPP_URL_TEMPLATE.format(id=opp_id)
 
-            # AI triage
-            try:
-                triage = await ai.triage_source(title, content)
-                if not triage or not triage.is_relevant:
-                    triage_failed += 1
-                    continue
-            except Exception as e:
-                logger.warning(f"Triage failed for '{title[:50]}': {e}")
+            # AI triage and analysis
+            result = await ai_triage_and_analyze(ai, opp_id, opp, url)
+            if result is None:
                 triage_failed += 1
                 continue
 
-            # AI classification
-            open_date = parse_date(opp.get("openDate"))
-            published_str = open_date.strftime("%Y-%m-%d") if open_date else ""
-            try:
-                analysis = await ai.analyze_source(title, content, url, published_str)
-                if not analysis:
-                    logger.warning(f"Analysis returned None for '{title[:50]}'")
-                    continue
-            except Exception as e:
-                logger.warning(f"Analysis failed for '{title[:50]}': {e}")
-                continue
+            title, content, triage, analysis = result
 
             # Check for duplicate by name similarity
             slug = make_slug(analysis.suggested_card_name or title)
@@ -353,118 +521,31 @@ async def run_seed(max_cards: int, dry_run: bool) -> None:
             embed_text = f"{analysis.suggested_card_name or title}. {analysis.summary or content[:500]}"
             embedding = await get_embedding(embed_text)
 
-            # Parse grant-specific fields
-            close_date = parse_date(opp.get("closeDate"))
-            open_date = parse_date(opp.get("openDate"))
-            agency = opp.get("agency", opp.get("agencyName", ""))
-            cfda_list = opp.get("cfdaList", [])
-            if isinstance(cfda_list, str):
-                cfda_list = cfda_list
-            elif isinstance(cfda_list, list):
-                cfda_list = ", ".join(str(c) for c in cfda_list)
-            else:
-                cfda_list = ""
-
-            funding_max = None
-            funding_min = None
-            try:
-                if opp.get("awardCeiling"):
-                    funding_max = int(opp["awardCeiling"])
-                if opp.get("awardFloor"):
-                    funding_min = int(opp["awardFloor"])
-            except (ValueError, TypeError):
-                pass
-
-            # Create card (match discovery_service.py patterns)
-            stage_id = STAGE_NUMBER_TO_ID.get(analysis.suggested_stage, "4_proof")
-            pillar_id = (
-                convert_pillar_id(analysis.pillars[0]) if analysis.pillars else None
-            )
-            goal_id = convert_goal_id(analysis.goals[0]) if analysis.goals else None
-            now = datetime.now(timezone.utc)
-
-            card = Card(
-                id=str(uuid.uuid4()),
-                name=analysis.suggested_card_name or title,
-                slug=slug,
-                summary=analysis.summary,
-                description=content[:2000],
-                pillar_id=pillar_id,
-                goal_id=goal_id,
-                stage_id=stage_id,
-                horizon=analysis.horizon or "H1",
-                # DB columns are NUMERIC(3,2) — max 9.99; raw AI values fit
-                novelty_score=round(analysis.novelty, 2),
-                maturity_score=round(analysis.credibility, 2),
-                impact_score=round(analysis.impact, 2),
-                relevance_score=round(analysis.relevance, 2),
-                velocity_score=round(analysis.velocity, 2),
-                risk_score=round(analysis.risk, 2),
-                status="active",
-                review_status="pending_review",
-                ai_confidence=(
-                    round(float(triage.confidence), 2)
-                    if triage and hasattr(triage, "confidence")
-                    else 0.8
-                ),
-                discovery_run_id=uuid.UUID(run_id),
-                discovered_at=now,
-                created_at=now,
-                updated_at=now,
-                # embedding stored via UPDATE after flush (pgvector needs raw SQL)
-                # Grant-specific fields
-                grant_type="federal",
-                grantor=agency,
-                deadline=close_date,
-                cfda_number=cfda_list,
-                grants_gov_id=opp_id,
-                source_url=url,
-                funding_amount_min=funding_min,
-                funding_amount_max=funding_max,
+            # Build card
+            card = build_card_from_opp(
+                opp_id, opp, url, title, content, analysis, triage, run_id, slug
             )
 
             if not dry_run:
                 db.add(card)
                 await db.flush()
 
-                # Store embedding via raw SQL (pgvector needs ::vector cast)
+                # Store embedding via helper (pgvector needs raw SQL CAST)
                 if embedding:
                     try:
-                        vec_str = "[" + ",".join(str(v) for v in embedding) + "]"
-                        await db.execute(
-                            text(
-                                "UPDATE cards SET embedding = CAST(:vec AS vector) WHERE id = CAST(:cid AS uuid)"
-                            ),
-                            {"vec": vec_str, "cid": str(card.id)},
-                        )
+                        await store_card_embedding(db, str(card.id), embedding)
                     except Exception as emb_err:
                         logger.warning(f"Failed to store embedding: {emb_err}")
 
-                # Add source record
-                source = Source(
-                    id=str(uuid.uuid4()),
-                    card_id=card.id,
-                    url=url,
-                    title=title,
-                    content=content[:5000],
-                    source_type="grants_gov",
-                    publisher=agency,
-                    relevance_score=round(analysis.relevance, 2),
-                    published_date=open_date,
+                # Add source and timeline records
+                source, timeline = create_source_and_timeline(
+                    card, opp, content, analysis
                 )
                 db.add(source)
-
-                # Add timeline event
-                timeline = CardTimeline(
-                    id=str(uuid.uuid4()),
-                    card_id=card.id,
-                    event_type="created",
-                    title="Discovered from Grants.gov",
-                    description=f"Imported from Grants.gov opportunity {opp.get('number', opp_id)}",
-                )
                 db.add(timeline)
 
             created += 1
+            close_date = parse_date(opp.get("closeDate"))
             logger.info(
                 f"[{created}/{max_cards}] Created: {card.name[:60]} "
                 f"| Pillar: {card.pillar_id} | Deadline: {close_date}"

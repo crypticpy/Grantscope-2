@@ -1510,6 +1510,13 @@ async def delete_card_document(
                 detail="Document not found",
             )
 
+        # Only the uploader may delete a document
+        if str(doc.uploaded_by) != current_user["id"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only delete documents you uploaded",
+            )
+
         blob_path = doc.blob_path
 
         # Delete DB record first
