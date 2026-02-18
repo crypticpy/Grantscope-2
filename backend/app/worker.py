@@ -443,6 +443,11 @@ class GrantScopeWorker:
             logger.error("Database not configured — cannot process workstream scans")
             return False
 
+        scan = None
+        scan_id = None
+        scan_config = None
+        scan_workstream_id = None
+        scan_user_id = None
         try:
             async with async_session_factory() as db:
                 result = await db.execute(
@@ -454,14 +459,16 @@ class GrantScopeWorker:
                 scan = result.scalar_one_or_none()
                 if scan:
                     logger.info(f"Found queued workstream scan: {scan.id}")
+                    scan_id = str(scan.id)
+                    scan_config = scan.config
+                    scan_workstream_id = str(scan.workstream_id)
+                    scan_user_id = str(scan.user_id)
         except Exception as e:
             logger.error(f"Error querying workstream_scans: {e}")
             return False
 
         if not scan:
             return False
-
-        scan_id = str(scan.id)
 
         # Claim the scan by setting status to running
         async with async_session_factory() as db:
@@ -478,7 +485,7 @@ class GrantScopeWorker:
         if not claimed:
             return False
 
-        config = scan.config or {}
+        config = scan_config or {}
         # Parse config if it's a JSON string (Supabase behavior)
         if isinstance(config, str):
             import json
@@ -493,8 +500,8 @@ class GrantScopeWorker:
             extra={
                 "worker_id": self.worker_id,
                 "scan_id": scan_id,
-                "workstream_id": str(scan.workstream_id),
-                "user_id": str(scan.user_id),
+                "workstream_id": scan_workstream_id,
+                "user_id": scan_user_id,
             },
         )
 

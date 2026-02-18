@@ -49,7 +49,7 @@ def _row_to_dict(obj, skip_cols=None) -> dict:
     for col in obj.__table__.columns:
         if col.name in skip:
             continue
-        value = getattr(obj, col.name, None)
+        value = getattr(obj, col.key, None)
         if isinstance(value, _uuid.UUID):
             result[col.name] = str(value)
         elif isinstance(value, (datetime, date)):
@@ -644,11 +644,18 @@ async def trigger_velocity_calculation(
         )
 
     from app.velocity_service import calculate_velocity_trends
+    from app.database import async_session_factory
 
     async def _run_velocity():
         try:
-            result = await calculate_velocity_trends(db)
-            logger.info("On-demand velocity calculation completed: %s", result)
+            async with async_session_factory() as bg_session:
+                try:
+                    result = await calculate_velocity_trends(bg_session)
+                    await bg_session.commit()
+                    logger.info("On-demand velocity calculation completed: %s", result)
+                except Exception:
+                    await bg_session.rollback()
+                    raise
         except Exception as exc:
             logger.exception("On-demand velocity calculation failed: %s", exc)
 

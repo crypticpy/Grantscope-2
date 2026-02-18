@@ -1,5 +1,6 @@
 """AI helper and card creation router."""
 
+import asyncio
 import json
 import logging
 import uuid
@@ -209,7 +210,8 @@ async def suggest_keywords(
     """Suggest municipal-relevant keywords for a topic."""
     try:
         client = azure_openai_client
-        response = client.chat.completions.create(
+        response = await asyncio.to_thread(
+            client.chat.completions.create,
             model=get_chat_deployment(),
             messages=[
                 {
@@ -269,7 +271,8 @@ async def suggest_description(
         user_prompt = "\n".join(parts)
 
         client = azure_openai_client
-        response = client.chat.completions.create(
+        response = await asyncio.to_thread(
+            client.chat.completions.create,
             model=get_chat_mini_deployment(),
             messages=[
                 {
@@ -472,7 +475,8 @@ async def assess_grant_readiness(
         user_prompt = _build_readiness_prompt(body)
 
         client = azure_openai_client
-        response = client.chat.completions.create(
+        response = await asyncio.to_thread(
+            client.chat.completions.create,
             model=get_chat_mini_deployment(),
             messages=[
                 {"role": "system", "content": _READINESS_SYSTEM_PROMPT},
