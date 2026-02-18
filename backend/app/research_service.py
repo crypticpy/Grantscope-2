@@ -42,7 +42,6 @@ from app.models.db.card_extras import CardSnapshot, CardTimeline, Entity
 from app.models.db.source import Source
 from app.models.db.research import ResearchTask
 from app.models.db.workstream import Workstream
-from app.discovery_service import STAGE_NUMBER_TO_ID
 from app.helpers.db_utils import (
     vector_search_cards,
     increment_deep_research_count,
@@ -50,6 +49,13 @@ from app.helpers.db_utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _stage_number_to_id(stage: int | str | None) -> str:
+    """Resolve a stage number to its ID via discovery_service (lazy import)."""
+    from app.discovery_service import STAGE_NUMBER_TO_ID
+
+    return STAGE_NUMBER_TO_ID.get(stage, "4_proof")
 
 
 # ============================================================================
@@ -1129,7 +1135,7 @@ class ResearchService:
             slug=slug,
             summary=analysis.summary,
             horizon=analysis.horizon,
-            stage_id=STAGE_NUMBER_TO_ID.get(analysis.suggested_stage, "4_proof"),
+            stage_id=_stage_number_to_id(analysis.suggested_stage),
             pillar_id=analysis.pillars[0] if analysis.pillars else None,
             goal_id=analysis.goals[0] if analysis.goals else None,
             # Scoring (convert AI scale to 0-100 and clamp)
