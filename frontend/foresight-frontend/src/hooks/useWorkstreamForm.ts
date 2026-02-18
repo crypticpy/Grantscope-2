@@ -355,6 +355,7 @@ export function useWorkstreamForm({
       } else {
         // CREATE mode: use backend API so auto-populate and auto-scan queueing runs
         const token = localStorage.getItem("gs2_token");
+        if (!token) throw new Error("Authentication required");
 
         const response = await fetch(`${API_BASE_URL}/api/v1/me/workstreams`, {
           method: "POST",

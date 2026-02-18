@@ -31,6 +31,7 @@ import { cn } from "../lib/utils";
 import { PillarBadge, PillarBadgeGroup } from "../components/PillarBadge";
 import { HorizonBadge } from "../components/HorizonBadge";
 import { StageBadge } from "../components/StageBadge";
+import { parseStageNumber } from "../lib/stage-utils";
 import { Top25Badge } from "../components/Top25Badge";
 import { WorkstreamForm } from "../components/WorkstreamForm";
 import { WorkstreamChatPanel } from "../components/WorkstreamChatPanel";
@@ -60,7 +61,7 @@ interface Card {
   slug: string;
   summary: string;
   pillar_id: string;
-  stage_id: number;
+  stage_id: string;
   horizon: "H1" | "H2" | "H3";
   novelty_score: number;
   maturity_score: number;
@@ -69,7 +70,7 @@ interface Card {
   velocity_score: number;
   risk_score: number;
   opportunity_score: number;
-  top25_priorities?: string[];
+  top25_relevance?: string[];
   created_at: string;
 }
 
@@ -205,14 +206,14 @@ function CardItem({
             <PillarBadge pillarId={card.pillar_id} size="sm" />
             <HorizonBadge horizon={card.horizon} size="sm" />
             <StageBadge
-              stage={card.stage_id}
+              stage={parseStageNumber(card.stage_id) ?? 1}
               size="sm"
               showName={false}
               variant="minimal"
             />
-            {card.top25_priorities && card.top25_priorities.length > 0 && (
+            {card.top25_relevance && card.top25_relevance.length > 0 && (
               <Top25Badge
-                priorities={card.top25_priorities}
+                priorities={card.top25_relevance}
                 size="sm"
                 showCount
               />
@@ -472,9 +473,11 @@ const WorkstreamFeed: React.FC = () => {
         if (Array.isArray(data)) {
           setFollowedCardIds(
             new Set(
-              data.map(
-                (f: { card_id?: string; id?: string }) => f.card_id || f.id,
-              ),
+              data
+                .map(
+                  (f: { card_id?: string; id?: string }) => f.card_id || f.id,
+                )
+                .filter((id): id is string => !!id),
             ),
           );
         }

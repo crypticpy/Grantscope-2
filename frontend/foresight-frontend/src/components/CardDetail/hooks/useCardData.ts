@@ -178,7 +178,7 @@ export function useCardData(
           fetch(`${API_BASE_URL}/api/v1/cards/${cardData.id}/notes`, {
             headers: { Authorization: `Bearer ${token}` },
           }),
-          fetch(`${API_BASE_URL}/api/v1/cards/${cardData.id}/research`, {
+          fetch(`${API_BASE_URL}/api/v1/me/research-tasks?limit=50`, {
             headers: { Authorization: `Bearer ${token}` },
           }),
         ]);
@@ -186,7 +186,13 @@ export function useCardData(
       const sourcesData = sourcesRes.ok ? await sourcesRes.json() : [];
       const timelineData = timelineRes.ok ? await timelineRes.json() : [];
       const notesData = notesRes.ok ? await notesRes.json() : [];
-      const researchData = researchRes.ok ? await researchRes.json() : [];
+      const allResearchTasks = researchRes.ok ? await researchRes.json() : [];
+      const researchData = Array.isArray(allResearchTasks)
+        ? allResearchTasks.filter(
+            (t: { card_id?: string; status?: string }) =>
+              t.card_id === cardData.id && t.status === "completed",
+          )
+        : [];
 
       setSources(
         Array.isArray(sourcesData) ? sourcesData : sourcesData.sources || [],
@@ -197,9 +203,7 @@ export function useCardData(
           : timelineData.timeline || [],
       );
       setNotes(Array.isArray(notesData) ? notesData : notesData.notes || []);
-      setResearchHistory(
-        Array.isArray(researchData) ? researchData : researchData.tasks || [],
-      );
+      setResearchHistory(researchData);
     } finally {
       setLoading(false);
     }
