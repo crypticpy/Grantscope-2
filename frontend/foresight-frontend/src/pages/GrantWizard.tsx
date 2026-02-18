@@ -271,7 +271,8 @@ const GrantWizard: React.FC = () => {
         const nextStep =
           newSession.current_step > 0 ? newSession.current_step : 1;
         setCurrentStep(nextStep);
-        prevStep.current = nextStep;
+        // Do NOT set prevStep.current here — let the auto-save effect
+        // detect the change (0 → nextStep) and persist it to the backend.
       } catch (err) {
         setError(
           err instanceof Error
@@ -340,7 +341,9 @@ const GrantWizard: React.FC = () => {
 
   /**
    * Called when GrantMatching attaches a grant to the session.
-   * Reloads session data to pick up the new grant_context, then advances.
+   * Reloads session data to pick up the new grant_context and card_id.
+   * Stays on step 4 so renderStep4 re-renders as ProposalPreview
+   * (since card_id is now set).
    */
   const handleGrantAttached = useCallback(async () => {
     if (!sessionId) return;
@@ -352,8 +355,9 @@ const GrantWizard: React.FC = () => {
     } catch {
       // Non-critical — grant was attached server-side, proceed anyway
     }
-    goNext();
-  }, [sessionId, goNext]);
+    // Do NOT call goNext() — stay on step 4 so the user sees
+    // ProposalPreview now that card_id is attached.
+  }, [sessionId]);
 
   // ---------------------------------------------------------------------------
   // Render: Loading
