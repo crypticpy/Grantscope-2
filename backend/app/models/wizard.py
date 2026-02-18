@@ -1,9 +1,10 @@
 """Wizard models for the Guided Grant Application Wizard.
 
 Pydantic models for wizard sessions that walk users through grant
-applications via AI-powered interviews. Supports two entry paths:
+applications via AI-powered interviews. Supports three entry paths:
 - have_grant: User already has a specific grant opportunity
 - find_grant: User wants to discover matching grants
+- build_program: User wants to develop a program idea first (no grant needed)
 
 The wizard collects grant context, conducts an AI interview, and
 produces a structured plan (staffing, budget, timeline, metrics).
@@ -174,6 +175,21 @@ class PlanData(BaseModel):
     )
 
 
+class ProgramSummary(BaseModel):
+    """AI-generated program summary from interview conversation."""
+
+    program_name: str = ""
+    department: str = ""
+    problem_statement: str = ""
+    program_description: str = ""
+    target_population: str = ""
+    key_needs: list[str] = Field(default_factory=list)
+    estimated_budget: str = ""
+    team_overview: str = ""
+    timeline_overview: str = ""
+    strategic_alignment: str = ""
+
+
 # ---------------------------------------------------------------------------
 # Wizard Session CRUD models
 # ---------------------------------------------------------------------------
@@ -182,7 +198,7 @@ class PlanData(BaseModel):
 class WizardSessionCreate(BaseModel):
     """Request model for creating a new wizard session."""
 
-    entry_path: Literal["have_grant", "find_grant"] = Field(
+    entry_path: Literal["have_grant", "find_grant", "build_program"] = Field(
         ..., description="How the user is entering the wizard"
     )
     card_id: Optional[str] = Field(
@@ -205,6 +221,9 @@ class WizardSessionUpdate(BaseModel):
         None, description="Updated interview Q&A data"
     )
     plan_data: Optional[PlanData] = Field(None, description="Updated plan data")
+    program_summary: Optional[ProgramSummary] = Field(
+        None, description="AI-synthesized program summary"
+    )
 
 
 class WizardSession(BaseModel):
@@ -221,6 +240,8 @@ class WizardSession(BaseModel):
     grant_context: Optional[GrantContext] = Field(default_factory=GrantContext)
     interview_data: Dict[str, Any] = Field(default_factory=dict)
     plan_data: Optional[PlanData] = Field(default_factory=PlanData)
+    program_summary: Optional[ProgramSummary] = None
+    profile_context: Optional[Dict[str, Any]] = Field(default_factory=dict)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

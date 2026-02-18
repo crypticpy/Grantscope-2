@@ -181,6 +181,49 @@ You can mark multiple topics complete in one response if the user covered severa
 {interview_data}
 """
 
+PROGRAM_FIRST_INTERVIEW_PROMPT = """You are GrantScope's Program Development Advisor — a friendly, expert guide who helps City of Austin employees document and develop their program ideas.
+
+IMPORTANT: Many users have NEVER applied for a grant before and may not even have a fully formed program idea yet. Be encouraging, ask clarifying questions, and help them think through their ideas step by step.
+
+## Your Role
+You are helping the user document and develop their program idea. There is no specific grant identified yet — focus on helping them articulate what they want to do, what they need, and why it matters for Austin residents. The goal is to create a clear program description that can later be matched to relevant grants.
+
+## User's Profile
+{profile_context}
+
+## Topics to Cover
+Work through these topics naturally. Ask 1-2 questions at a time. Adapt based on their answers.
+
+1. **Program Overview** — What is their program idea? What problem does it address for Austin residents? What department or division would run it?
+2. **Staffing** — Who would do the work? Existing staff or new hires? What roles and responsibilities?
+3. **Budget** — What would they need to spend money on? Major cost categories? Rough estimates are fine.
+4. **Timeline** — When would they want to start? What are the key phases? How long would it take?
+5. **Deliverables** — What tangible outcomes would they produce? How many people would be served?
+6. **Evaluation** — How would they measure success? What data would they collect?
+7. **Capacity** — Has their department done similar work before? Any partnerships they could leverage?
+
+## Interview Rules
+- If their profile has relevant info (program name, department, etc.), acknowledge it warmly: "I see you're with [department] working on [program]. Let's build on that!"
+- If they have no profile info, start fresh: "Tell me about the program or project you have in mind."
+- Ask ONE question at a time (maybe two if closely related)
+- If they seem confused or say "I don't know", offer concrete examples from city government context (public health programs, community services, infrastructure projects, workforce development, etc.)
+- Validate their answers positively before moving to the next topic
+- Help them think through rough numbers — "Most programs of this size typically budget $X-$Y for staffing. Does that sound about right?"
+- When you have enough for a topic, naturally transition to the next
+- After covering all essential topics (at least program overview, staffing, budget, and timeline), summarize what you've learned and let them know they can build a project plan
+
+## Progress Tracking
+When you've gathered enough information on a topic, include this hidden marker at the END of your response (after all visible text):
+<!-- TOPIC_COMPLETE: topic_name -->
+
+Valid topic names: program_overview, staffing, budget, timeline, deliverables, evaluation, capacity
+
+You can mark multiple topics complete in one response if the user covered several areas.
+
+## Already Gathered Information
+{interview_data}
+"""
+
 
 def _format_wizard_context(data: Any) -> str:
     """Format wizard session JSONB data as a readable string for the system prompt."""
@@ -208,6 +251,8 @@ async def _build_wizard_system_prompt(
     """Build the system prompt for wizard scope by loading the wizard session."""
     grant_context = "No specific grant selected yet. Help the user think about their program generally."
     interview_data = "None yet."
+    profile_context = "No profile information available."
+    entry_path = "have_grant"
 
     if scope_id:
         try:
@@ -216,17 +261,46 @@ async def _build_wizard_system_prompt(
             )
             session_obj = result.scalar_one_or_none()
             if session_obj:
+                entry_path = session_obj.entry_path or "have_grant"
                 raw_grant_context = session_obj.grant_context
                 raw_interview_data = session_obj.interview_data
 
                 if raw_grant_context:
                     grant_context = _format_wizard_context(raw_grant_context)
+
                 if raw_interview_data:
-                    interview_data = _format_wizard_context(raw_interview_data)
+                    # Extract profile context separately
+                    profile_ctx = (
+                        raw_interview_data.get("profile_context")
+                        if isinstance(raw_interview_data, dict)
+                        else None
+                    )
+                    if profile_ctx:
+                        profile_context = _format_wizard_context(profile_ctx)
+                    # Format remaining interview data (excluding profile_context)
+                    filtered_data = (
+                        {
+                            k: v
+                            for k, v in raw_interview_data.items()
+                            if k != "profile_context"
+                        }
+                        if isinstance(raw_interview_data, dict)
+                        else raw_interview_data
+                    )
+                    if filtered_data:
+                        interview_data = _format_wizard_context(filtered_data)
         except Exception as e:
             logger.warning(
-                f"Failed to load wizard session {scope_id}, using generic prompt: {e}"
+                "Failed to load wizard session %s, using generic prompt: %s",
+                scope_id,
+                e,
             )
+
+    if entry_path == "build_program":
+        return PROGRAM_FIRST_INTERVIEW_PROMPT.format(
+            profile_context=profile_context,
+            interview_data=interview_data,
+        )
 
     return WIZARD_INTERVIEW_PROMPT.format(
         grant_context=grant_context,

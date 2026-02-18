@@ -115,6 +115,32 @@ and realistic. Ensure budget amounts are reasonable for City of Austin municipal
 operations. Do not fabricate information not supported by the conversation.\
 """
 
+PROGRAM_SUMMARY_SYNTHESIS_PROMPT = """\
+You are an expert program development advisor for the City of Austin, Texas. \
+Based on the interview conversation and any profile context provided, synthesize \
+a concise program summary.
+
+You MUST return a valid JSON object with this structure:
+
+{
+  "program_name": "Name of the program (from conversation or profile)",
+  "department": "Department name (from profile or conversation)",
+  "problem_statement": "1-2 paragraphs describing the problem this program addresses",
+  "program_description": "2-3 paragraphs describing what the program will do",
+  "target_population": "Who this program serves",
+  "key_needs": ["Need 1", "Need 2", "Need 3"],
+  "estimated_budget": "Budget range or description",
+  "team_overview": "Description of team/staffing needs",
+  "timeline_overview": "High-level timeline for the program",
+  "strategic_alignment": "How this aligns with Austin's strategic framework and priorities"
+}
+
+Draw all details from the interview conversation and profile data. Be specific \
+and realistic. Use what the user actually said — do not fabricate details they \
+did not mention. If they didn't discuss a topic, use a brief placeholder like \
+"To be determined" rather than making up specifics.\
+"""
+
 
 # ---------------------------------------------------------------------------
 # WizardService
@@ -232,6 +258,8 @@ class WizardService:
         self,
         grant_context: Dict[str, Any],
         messages: List[Dict[str, Any]],
+        *,
+        profile_context: Optional[Dict[str, Any]] = None,
     ) -> PlanData:
         """Synthesize a structured project plan from grant context and interview.
 
@@ -253,12 +281,26 @@ class WizardService:
             transcript_lines.append(f"**{role.title()}**: {content}")
         transcript = "\n\n".join(transcript_lines)
 
+        profile_section = ""
+        if profile_context:
+            profile_section = (
+                "## User Profile Context\n"
+                f"```json\n{json.dumps(profile_context, indent=2, default=str)}\n```\n\n"
+            )
+
+        grant_section = ""
+        if grant_context:
+            grant_section = (
+                "## Grant Opportunity Context\n"
+                f"```json\n{json.dumps(grant_context, indent=2, default=str)}\n```\n\n"
+            )
+
         user_prompt = (
-            "## Grant Opportunity Context\n"
-            f"```json\n{json.dumps(grant_context, indent=2, default=str)}\n```\n\n"
+            f"{profile_section}"
+            f"{grant_section}"
             "## Interview Transcript\n"
             f"{transcript}\n\n"
-            "Based on the grant context and interview above, synthesize a "
+            "Based on the context and interview above, synthesize a "
             "comprehensive project plan as a JSON object."
         )
 
@@ -297,6 +339,145 @@ class WizardService:
 
         logger.info("Successfully synthesized project plan")
         return plan_data
+
+    # -- Program summary synthesis ------------------------------------------
+
+    async def synthesize_program_summary(
+        self,
+        messages: List[Dict[str, Any]],
+        profile_context: Optional[Dict[str, Any]] = None,
+    ) -> "ProgramSummary":
+        """Synthesize a program summary from interview conversation and profile.
+
+        Args:
+            messages: List of conversation message dicts (the interview transcript).
+            profile_context: Optional dict of user profile data.
+
+        Returns:
+            Parsed ProgramSummary model.
+
+        Raises:
+            ValueError: If the AI response cannot be parsed.
+        """
+        from app.models.wizard import ProgramSummary
+
+        # Build the conversation transcript
+        transcript_lines: list[str] = []
+        for msg in messages:
+            role = msg.get("role", "unknown")
+            content = msg.get("content", "")
+            transcript_lines.append(f"**{role.title()}**: {content}")
+        transcript = "\n\n".join(transcript_lines)
+
+        # Build profile context section
+        profile_section = ""
+        if profile_context:
+            profile_section = (
+                "## User Profile Context\n"
+                f"```json\n{json.dumps(profile_context, indent=2, default=str)}\n```\n\n"
+            )
+
+        user_prompt = (
+            f"{profile_section}"
+            "## Interview Transcript\n"
+            f"{transcript}\n\n"
+            "Based on the interview and any profile context above, synthesize a "
+            "comprehensive program summary as a JSON object."
+        )
+
+        logger.info(
+            "Synthesizing program summary from %d messages using %s",
+            len(messages),
+            self.model,
+        )
+
+        response = await self.async_client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": PROGRAM_SUMMARY_SYNTHESIS_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.3,
+            max_tokens=4000,
+            response_format={"type": "json_object"},
+        )
+
+        raw_content = response.choices[0].message.content or "{}"
+
+        try:
+            parsed = json.loads(raw_content)
+        except json.JSONDecodeError as e:
+            logger.error("Failed to parse program summary JSON: %s", e)
+            raise ValueError(
+                f"AI returned invalid JSON for program summary: {e}"
+            ) from e
+
+        try:
+            summary = ProgramSummary(**parsed)
+        except Exception as e:
+            logger.error("Failed to validate program summary: %s", e)
+            raise ValueError(
+                f"AI response did not match expected program summary schema: {e}"
+            ) from e
+
+        logger.info(
+            "Successfully synthesized program summary: %s", summary.program_name
+        )
+        return summary
+
+    # -- Grant search query builder -----------------------------------------
+
+    def build_grant_search_query(
+        self,
+        interview_data: Dict[str, Any],
+        profile_context: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Build a search query string for finding matching grants.
+
+        Combines program description, needs, and categories from interview
+        data and profile context into a text string suitable for embedding-based
+        vector search.
+
+        Args:
+            interview_data: Interview data dict from the wizard session.
+            profile_context: Optional dict of user profile data.
+
+        Returns:
+            A search query string, or empty string if insufficient data.
+        """
+        parts: list[str] = []
+
+        # From program summary (if synthesized)
+        summary = interview_data.get("program_summary", {})
+        if summary:
+            if summary.get("program_description"):
+                parts.append(summary["program_description"])
+            if summary.get("problem_statement"):
+                parts.append(summary["problem_statement"])
+            if summary.get("target_population"):
+                parts.append(f"Target population: {summary['target_population']}")
+            if summary.get("key_needs"):
+                parts.append("Needs: " + ", ".join(summary["key_needs"]))
+
+        # From profile context
+        if profile_context:
+            if profile_context.get("program_name"):
+                parts.append(f"Program: {profile_context['program_name']}")
+            if profile_context.get("program_mission"):
+                parts.append(profile_context["program_mission"])
+            if profile_context.get("grant_categories"):
+                cats = profile_context["grant_categories"]
+                if isinstance(cats, list):
+                    parts.append("Grant categories: " + ", ".join(cats))
+            if profile_context.get("strategic_pillars"):
+                pillars = profile_context["strategic_pillars"]
+                if isinstance(pillars, list):
+                    parts.append("Strategic pillars: " + ", ".join(pillars))
+
+        # Combine and truncate
+        query = " ".join(parts)
+        # Truncate to reasonable length for embedding
+        return query[:2000]
 
     # -- Card creation ------------------------------------------------------
 

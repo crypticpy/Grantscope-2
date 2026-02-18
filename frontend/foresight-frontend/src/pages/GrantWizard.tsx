@@ -25,6 +25,7 @@ import React, {
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { Loader2, XCircle } from "lucide-react";
 import { WizardStepProgress } from "../components/wizard/WizardStepProgress";
+import { WizardSaveExit } from "../components/wizard/WizardSaveExit";
 import {
   getWizardSession,
   createWizardSession,
@@ -49,6 +50,7 @@ const ProposalPreview = lazy(
 const ExportComplete = lazy(
   () => import("../components/wizard/ExportComplete"),
 );
+const GrantMatching = lazy(() => import("../components/wizard/GrantMatching"));
 
 // =============================================================================
 // Constants
@@ -90,6 +92,7 @@ const GrantWizard: React.FC = () => {
     routeSessionId || null,
   );
   const [sessionData, setSessionData] = useState<WizardSession | null>(null);
+  const [entryPath, setEntryPath] = useState<EntryPath | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -120,6 +123,7 @@ const GrantWizard: React.FC = () => {
       setSessionData(data);
       setSessionId(data.id);
       setCurrentStep(data.current_step);
+      setEntryPath(data.entry_path);
       prevStep.current = data.current_step;
     } catch (err) {
       setError(
@@ -256,9 +260,14 @@ const GrantWizard: React.FC = () => {
         const newSession = await createWizardSession(token, path);
         setSessionId(newSession.id);
         setSessionData(newSession);
+        setEntryPath(path);
         // Update URL to include session ID for bookmarking/resume
         navigate(`/apply/${newSession.id}`, { replace: true });
-        goNext();
+        // For build_program, backend sets current_step=2 (skip grant details)
+        const nextStep =
+          newSession.current_step > 0 ? newSession.current_step : 1;
+        setCurrentStep(nextStep);
+        prevStep.current = nextStep;
       } catch (err) {
         setError(
           err instanceof Error
@@ -267,7 +276,7 @@ const GrantWizard: React.FC = () => {
         );
       }
     },
-    [navigate, goNext],
+    [navigate],
   );
 
   /**
@@ -324,6 +333,23 @@ const GrantWizard: React.FC = () => {
   const handlePlanUpdated = useCallback((plan: PlanData) => {
     setSessionData((prev) => (prev ? { ...prev, plan_data: plan } : prev));
   }, []);
+
+  /**
+   * Called when GrantMatching attaches a grant to the session.
+   * Reloads session data to pick up the new grant_context, then advances.
+   */
+  const handleGrantAttached = useCallback(async () => {
+    if (!sessionId) return;
+    const token = await getToken();
+    if (!token) return;
+    try {
+      const updated = await getWizardSession(token, sessionId);
+      setSessionData(updated);
+    } catch {
+      // Non-critical — grant was attached server-side, proceed anyway
+    }
+    goNext();
+  }, [sessionId, goNext]);
 
   // ---------------------------------------------------------------------------
   // Render: Loading
@@ -423,6 +449,7 @@ const GrantWizard: React.FC = () => {
               sessionId={sessionId!}
               conversationId={sessionData?.conversation_id ?? null}
               grantContext={sessionData?.grant_context ?? undefined}
+              entryPath={entryPath ?? undefined}
               onComplete={goNext}
               onBack={goBack}
             />
@@ -436,6 +463,7 @@ const GrantWizard: React.FC = () => {
               sessionId={sessionId!}
               planData={sessionData?.plan_data ?? null}
               grantContext={sessionData?.grant_context ?? null}
+              entryPath={entryPath ?? undefined}
               onComplete={goNext}
               onBack={goBack}
               onPlanUpdated={handlePlanUpdated}
@@ -443,7 +471,21 @@ const GrantWizard: React.FC = () => {
           </Suspense>
         );
 
-      case 4:
+      case 4: {
+        // For build_program path without a grant attached, show grant matching
+        if (entryPath === "build_program" && !sessionData?.card_id) {
+          return (
+            <Suspense fallback={suspenseFallback}>
+              <GrantMatching
+                sessionId={sessionId!}
+                onGrantAttached={handleGrantAttached}
+                onSkip={goNext}
+                onBack={goBack}
+              />
+            </Suspense>
+          );
+        }
+        // Default: show proposal preview
         return (
           <Suspense fallback={suspenseFallback}>
             <ProposalPreview
@@ -455,6 +497,7 @@ const GrantWizard: React.FC = () => {
             />
           </Suspense>
         );
+      }
 
       case 5:
         return (
@@ -463,6 +506,8 @@ const GrantWizard: React.FC = () => {
               sessionId={sessionId!}
               proposalId={sessionData?.proposal_id ?? null}
               grantContext={sessionData?.grant_context ?? null}
+              entryPath={entryPath ?? undefined}
+              hasPlan={!!sessionData?.plan_data}
             />
           </Suspense>
         );
@@ -479,11 +524,19 @@ const GrantWizard: React.FC = () => {
   return (
     <div className="min-h-screen bg-brand-faded-white dark:bg-brand-dark-blue">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Step progress - hidden on welcome step */}
+        {/* Step progress + save bar - hidden on welcome step */}
         {currentStep > 0 && (
-          <div className="bg-white dark:bg-dark-surface rounded-lg border border-gray-200 dark:border-gray-700 mb-6">
-            <WizardStepProgress currentStep={currentStep} />
-          </div>
+          <>
+            <div className="bg-white dark:bg-dark-surface rounded-lg border border-gray-200 dark:border-gray-700 mb-4">
+              <WizardStepProgress currentStep={currentStep} />
+            </div>
+            <div className="mb-6 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
+              <WizardSaveExit
+                saving={false}
+                lastSaved={sessionData?.updated_at ?? null}
+              />
+            </div>
+          </>
         )}
 
         {/* Step content */}

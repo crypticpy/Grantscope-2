@@ -7,15 +7,20 @@ scheduled background jobs live in ``app.scheduler``.
 import asyncio
 import logging
 import os
+import uuid as _uuid
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.middleware.gzip import GZipMiddleware
 
 from app.auth import authenticate_user, create_access_token, get_current_user
+from app.database import get_db
+from app.models.db.user import User
 from app.security import setup_security
 from app.scheduler import start_scheduler, shutdown_scheduler
 
@@ -196,7 +201,38 @@ def _register_auth_routes(application: FastAPI) -> None:
         }
 
     @application.get("/api/v1/auth/me")
-    async def auth_me(request: Request, user=Depends(get_current_user)):
+    async def auth_me(
+        request: Request,
+        user=Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ):
+        """Return current user profile, enriched with DB-stored fields."""
+        try:
+            user_uuid = _uuid.UUID(user["id"])
+            result = await db.execute(
+                select(
+                    User.profile_completed_at,
+                    User.profile_step,
+                    User.department_id,
+                    User.title,
+                ).where(User.id == user_uuid)
+            )
+            row = result.one_or_none()
+            if row:
+                enriched = {**user}
+                if row.profile_completed_at:
+                    enriched["profile_completed_at"] = (
+                        row.profile_completed_at.isoformat()
+                    )
+                if row.profile_step is not None:
+                    enriched["profile_step"] = row.profile_step
+                if row.department_id:
+                    enriched["department_id"] = row.department_id
+                if row.title:
+                    enriched["title"] = row.title
+                return enriched
+        except Exception as e:
+            logger.warning("Failed to enrich auth/me from DB: %s", e)
         return user
 
 

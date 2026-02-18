@@ -40,9 +40,12 @@ import { cn } from "../../lib/utils";
 import {
   synthesizePlan,
   updateWizardSession,
+  exportWizardPlan,
   type PlanData,
   type GrantContext,
+  type ExportFormat,
 } from "../../lib/wizard-api";
+import { DownloadButton } from "./DownloadButton";
 
 // ============================================================================
 // Constants
@@ -67,6 +70,8 @@ export interface PlanReviewProps {
   sessionId: string;
   planData: PlanData | null;
   grantContext?: GrantContext | null;
+  /** Entry path for the wizard session (e.g. "have_grant", "build_program") */
+  entryPath?: string;
   onComplete: () => void;
   onBack: () => void;
   onPlanUpdated: (plan: PlanData) => void;
@@ -165,6 +170,7 @@ const PlanReview: React.FC<PlanReviewProps> = ({
   sessionId,
   planData: initialPlanData,
   grantContext,
+  entryPath,
   onComplete,
   onBack,
   onPlanUpdated,
@@ -312,6 +318,33 @@ const PlanReview: React.FC<PlanReviewProps> = ({
       setLoading(false);
     }
   }, [sessionId, onPlanUpdated]);
+
+  // ---------------------------------------------------------------------------
+  // Download plan handler
+  // ---------------------------------------------------------------------------
+
+  const handleDownloadPlan = useCallback(
+    async (format: ExportFormat) => {
+      const token = await getToken();
+      if (!token) return;
+
+      try {
+        const blob = await exportWizardPlan(token, sessionId, format);
+        const ext = format === "pdf" ? "pdf" : "docx";
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `project-plan-${sessionId.slice(0, 8)}.${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        console.error("Failed to download plan:", err);
+      }
+    },
+    [sessionId],
+  );
 
   // ---------------------------------------------------------------------------
   // Render: Loading
@@ -1219,16 +1252,39 @@ const PlanReview: React.FC<PlanReviewProps> = ({
           <ArrowLeft className="h-4 w-4" />
           Back to Interview
         </button>
-        <button
-          onClick={onComplete}
-          className={cn(
-            "inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white rounded-md transition-colors",
-            "bg-brand-blue hover:bg-brand-dark-blue",
+
+        <div className="flex items-center gap-3">
+          <DownloadButton
+            label="Download Plan"
+            onDownload={handleDownloadPlan}
+            disabled={!plan.program_overview}
+            size="sm"
+          />
+
+          {entryPath === "build_program" ? (
+            <button
+              onClick={onComplete}
+              className={cn(
+                "inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white rounded-md transition-colors",
+                "bg-brand-blue hover:bg-brand-dark-blue",
+              )}
+            >
+              Find Matching Grants
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          ) : (
+            <button
+              onClick={onComplete}
+              className={cn(
+                "inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white rounded-md transition-colors",
+                "bg-brand-blue hover:bg-brand-dark-blue",
+              )}
+            >
+              Generate Full Proposal
+              <ArrowRight className="h-4 w-4" />
+            </button>
           )}
-        >
-          Generate Full Proposal
-          <ArrowRight className="h-4 w-4" />
-        </button>
+        </div>
       </div>
     </div>
   );

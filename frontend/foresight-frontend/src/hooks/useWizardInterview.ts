@@ -154,6 +154,12 @@ export function useWizardInterview(
     const timer = setTimeout(() => {
       initialLoadCheckedRef.current = true;
 
+      // If we have an existing conversation (resuming), skip greeting
+      if (conversationId) {
+        greetingSentRef.current = true;
+        return;
+      }
+
       if (
         !greetingSentRef.current &&
         chat.messages.length === 0 &&
@@ -168,7 +174,13 @@ export function useWizardInterview(
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [chat.messages.length, chat.isStreaming, chat.sendMessage, grantName]);
+  }, [
+    chat.messages.length,
+    chat.isStreaming,
+    chat.sendMessage,
+    grantName,
+    conversationId,
+  ]);
 
   // ---------------------------------------------------------------------------
   // Strip topic markers from messages for display

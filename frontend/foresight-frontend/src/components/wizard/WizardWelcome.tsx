@@ -1,8 +1,8 @@
 import React from "react";
-import { Search, Lightbulb } from "lucide-react";
+import { Search, Lightbulb, FileEdit } from "lucide-react";
 
 interface WizardWelcomeProps {
-  onSelectPath: (path: "have_grant" | "find_grant") => void;
+  onSelectPath: (path: "have_grant" | "find_grant" | "build_program") => void;
 }
 
 interface PathCardProps {
@@ -51,7 +51,7 @@ export const WizardWelcome: React.FC<WizardWelcomeProps> = ({
 }) => {
   return (
     <div className="flex flex-col items-center justify-center px-4 py-8 sm:py-12">
-      <div className="w-full max-w-2xl">
+      <div className="w-full max-w-4xl">
         {/* Heading */}
         <div className="text-center mb-8 sm:mb-10">
           <h1 className="text-3xl sm:text-4xl font-bold text-brand-dark-blue dark:text-white mb-3">
@@ -65,7 +65,7 @@ export const WizardWelcome: React.FC<WizardWelcomeProps> = ({
         </div>
 
         {/* Path Selection Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-8">
           <PathCard
             icon={
               <Search className="w-10 h-10 text-brand-blue" strokeWidth={1.5} />
@@ -84,6 +84,17 @@ export const WizardWelcome: React.FC<WizardWelcomeProps> = ({
             title="Help me find a grant"
             description="I need funding for my program and want to explore what's available"
             onClick={() => onSelectPath("find_grant")}
+          />
+          <PathCard
+            icon={
+              <FileEdit
+                className="w-10 h-10 text-brand-green"
+                strokeWidth={1.5}
+              />
+            }
+            title="I just have an idea"
+            description="No grant yet? Let's document your program, build a plan, and find matching grants"
+            onClick={() => onSelectPath("build_program")}
           />
         </div>
 

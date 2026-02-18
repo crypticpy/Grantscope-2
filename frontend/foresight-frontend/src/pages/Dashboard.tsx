@@ -41,6 +41,7 @@ import {
 } from "../lib/onboarding-state";
 import { STAT_EXPLANATIONS } from "../lib/onboarding-content";
 import { API_BASE_URL } from "../lib/config";
+import { MyApplications } from "../components/dashboard/MyApplications";
 import type { BaseCard } from "../types/card";
 
 type Card = BaseCard;
@@ -471,6 +472,9 @@ const Dashboard: React.FC = () => {
           </div>
         </Link>
       </div>
+
+      {/* My Applications */}
+      <MyApplications token={localStorage.getItem("gs2_token") || ""} />
 
       {/* Stats Cards - Clickable KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-8">

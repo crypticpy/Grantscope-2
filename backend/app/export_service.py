@@ -4418,6 +4418,607 @@ class ExportService:
             logger.error(f"Error generating proposal PDF: {e}")
             raise
 
+    # ====================================================================
+    # Program Summary PDF
+    # ====================================================================
+
+    def generate_program_summary_pdf(
+        self,
+        summary_data: Dict[str, Any],
+        profile_data: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Generate a PDF program summary.
+
+        Args:
+            summary_data: ProgramSummary fields (program_name, department,
+                problem_statement, program_description, target_population,
+                key_needs, estimated_budget, team_overview, timeline_overview,
+                strategic_alignment)
+            profile_data: Optional user profile context for author info
+
+        Returns:
+            Path to the generated temporary PDF file.
+        """
+        try:
+            pdf_file = tempfile.NamedTemporaryFile(
+                suffix=".pdf", delete=False, prefix="grantscope_program_summary_"
+            )
+            pdf_path = pdf_file.name
+            pdf_file.close()
+
+            styles = get_professional_pdf_styles()
+            md_parser = MarkdownToPDFParser(styles)
+
+            elements: List[Any] = []
+
+            # --- Cover area ---
+            program_name = summary_data.get("program_name", "Program Summary")
+            elements.append(Paragraph("Program Summary", styles["DocTitle"]))
+            elements.append(
+                Paragraph(md_parser.escape_xml(program_name), styles["DocSubtitle"])
+            )
+
+            # Author line
+            if profile_data:
+                display_name = profile_data.get("display_name", "")
+                prof_dept = profile_data.get("department", "")
+                if display_name:
+                    author_parts = [display_name]
+                    if prof_dept:
+                        author_parts.append(prof_dept)
+                    elements.append(
+                        Paragraph(
+                            f"Prepared by {', '.join(author_parts)}",
+                            styles["MetadataText"],
+                        )
+                    )
+
+            # Date
+            date_str = datetime.now(timezone.utc).strftime("%B %d, %Y")
+            elements.append(Paragraph(date_str, styles["MetadataText"]))
+            elements.append(Spacer(1, 8))
+
+            # Horizontal rule
+            elements.append(
+                HRFlowable(
+                    width="100%",
+                    thickness=2,
+                    color=PDF_COLORS["secondary"],
+                    spaceBefore=4,
+                    spaceAfter=16,
+                )
+            )
+
+            # --- Sections ---
+            _summary_sections = [
+                ("Problem Statement", "problem_statement"),
+                ("Program Description", "program_description"),
+                ("Target Population", "target_population"),
+                ("Key Needs", "key_needs"),
+                ("Budget Overview", "estimated_budget"),
+                ("Team Overview", "team_overview"),
+                ("Timeline", "timeline_overview"),
+                ("Strategic Alignment", "strategic_alignment"),
+            ]
+
+            for heading, key in _summary_sections:
+                value = summary_data.get(key)
+                if not value:
+                    continue
+
+                # Key Needs rendered as bullet list
+                if key == "key_needs":
+                    if isinstance(value, list) and len(value) > 0:
+                        elements.append(
+                            Paragraph(
+                                md_parser.escape_xml(heading),
+                                styles["SectionHeading"],
+                            )
+                        )
+                        elements.append(Spacer(1, 6))
+                        for item in value:
+                            item_text = str(item).strip()
+                            if item_text:
+                                elements.append(
+                                    Paragraph(
+                                        f"\u2022 {md_parser.escape_xml(item_text)}",
+                                        styles["BulletText"],
+                                    )
+                                )
+                        elements.append(Spacer(1, 8))
+                    continue
+
+                text = str(value).strip()
+                if not text:
+                    continue
+
+                elements.append(
+                    Paragraph(md_parser.escape_xml(heading), styles["SectionHeading"])
+                )
+                elements.append(Spacer(1, 6))
+
+                # Parse markdown content into elements
+                content_elements = md_parser.parse_to_elements(text)
+                elements.extend(content_elements)
+                elements.append(Spacer(1, 8))
+
+            # Build with professional header/footer
+            title_display = program_name if program_name else "Program Summary"
+            builder = ProfessionalPDFBuilder(
+                filename=pdf_path,
+                title=title_display,
+                include_logo=True,
+                include_ai_disclosure=True,
+            )
+            builder.build(elements)
+
+            logger.info(f"Generated program summary PDF: {title_display}")
+            return pdf_path
+
+        except Exception as e:
+            logger.error(f"Error generating program summary PDF: {e}")
+            raise
+
+    # ====================================================================
+    # Project Plan PDF
+    # ====================================================================
+
+    def generate_project_plan_pdf(
+        self,
+        plan_data: Dict[str, Any],
+        grant_context: Optional[Dict[str, Any]] = None,
+        profile_data: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Generate a PDF project plan.
+
+        Args:
+            plan_data: PlanData fields (program_overview, staffing_plan, budget,
+                timeline, deliverables, metrics, partnerships)
+            grant_context: Optional grant context for header info
+            profile_data: Optional user profile context
+
+        Returns:
+            Path to the generated temporary PDF file.
+        """
+        try:
+            pdf_file = tempfile.NamedTemporaryFile(
+                suffix=".pdf", delete=False, prefix="grantscope_project_plan_"
+            )
+            pdf_path = pdf_file.name
+            pdf_file.close()
+
+            styles = get_professional_pdf_styles()
+            md_parser = MarkdownToPDFParser(styles)
+
+            elements: List[Any] = []
+
+            # --- Cover area ---
+            elements.append(Paragraph("Project Plan", styles["DocTitle"]))
+
+            # Subtitle: first line of program_overview or profile_data program_name
+            subtitle_text = ""
+            overview = plan_data.get("program_overview", "")
+            if overview:
+                subtitle_text = str(overview).split("\n")[0].strip()
+            if not subtitle_text and profile_data:
+                subtitle_text = profile_data.get("program_name", "")
+
+            if subtitle_text:
+                if len(subtitle_text) > 120:
+                    subtitle_text = subtitle_text[:117] + "..."
+                elements.append(
+                    Paragraph(
+                        md_parser.escape_xml(subtitle_text), styles["DocSubtitle"]
+                    )
+                )
+
+            # Author line
+            if profile_data:
+                display_name = profile_data.get("display_name", "")
+                prof_dept = profile_data.get("department", "")
+                if display_name:
+                    author_parts = [display_name]
+                    if prof_dept:
+                        author_parts.append(prof_dept)
+                    elements.append(
+                        Paragraph(
+                            f"Prepared by {', '.join(author_parts)}",
+                            styles["MetadataText"],
+                        )
+                    )
+
+            # Date
+            date_str = datetime.now(timezone.utc).strftime("%B %d, %Y")
+            elements.append(Paragraph(date_str, styles["MetadataText"]))
+            elements.append(Spacer(1, 8))
+
+            # Horizontal rule
+            elements.append(
+                HRFlowable(
+                    width="100%",
+                    thickness=2,
+                    color=PDF_COLORS["secondary"],
+                    spaceBefore=4,
+                    spaceAfter=16,
+                )
+            )
+
+            # --- Grant Overview (if grant_context provided) ---
+            if grant_context:
+                elements.append(Paragraph("Grant Overview", styles["SectionHeading"]))
+                elements.append(Spacer(1, 6))
+
+                gc_items = []
+
+                grant_name = grant_context.get("grant_name") or grant_context.get(
+                    "name"
+                )
+                if grant_name:
+                    gc_items.append(
+                        f"<b>Grant Name:</b> {md_parser.escape_xml(str(grant_name))}"
+                    )
+
+                grantor = grant_context.get("grantor")
+                if grantor:
+                    gc_items.append(
+                        f"<b>Grantor:</b> {md_parser.escape_xml(str(grantor))}"
+                    )
+
+                deadline = grant_context.get("deadline")
+                if deadline:
+                    gc_items.append(
+                        f"<b>Deadline:</b> {md_parser.escape_xml(str(deadline))}"
+                    )
+
+                funding_min = grant_context.get("funding_amount_min")
+                funding_max = grant_context.get("funding_amount_max")
+                if funding_min and funding_max:
+                    gc_items.append(
+                        f"<b>Funding Range:</b> ${float(funding_min):,.0f} - ${float(funding_max):,.0f}"
+                    )
+                elif funding_max:
+                    gc_items.append(
+                        f"<b>Funding Amount:</b> Up to ${float(funding_max):,.0f}"
+                    )
+                elif funding_min:
+                    gc_items.append(
+                        f"<b>Funding Amount:</b> From ${float(funding_min):,.0f}"
+                    )
+
+                for item in gc_items:
+                    elements.append(Paragraph(item, styles["BodyText"]))
+
+                elements.append(Spacer(1, 12))
+
+            # --- Program Narrative ---
+            narrative = plan_data.get("program_overview", "")
+            if narrative and str(narrative).strip():
+                elements.append(
+                    Paragraph("Program Narrative", styles["SectionHeading"])
+                )
+                elements.append(Spacer(1, 6))
+                content_elements = md_parser.parse_to_elements(str(narrative))
+                elements.extend(content_elements)
+                elements.append(Spacer(1, 8))
+
+            # --- Staffing Plan Table ---
+            staffing = plan_data.get("staffing_plan")
+            if staffing and isinstance(staffing, list) and len(staffing) > 0:
+                elements.append(Paragraph("Staffing Plan", styles["SectionHeading"]))
+                elements.append(Spacer(1, 6))
+
+                table_data = [["Role", "FTE", "Salary Estimate", "Responsibilities"]]
+
+                for entry in staffing:
+                    if not isinstance(entry, dict):
+                        continue
+                    role = md_parser.escape_xml(str(entry.get("role", "")))
+                    fte = str(entry.get("fte", ""))
+                    salary = entry.get("salary") or entry.get("salary_estimate")
+                    salary_str = f"${float(salary):,.0f}" if salary else ""
+                    responsibilities = md_parser.escape_xml(
+                        str(entry.get("responsibilities", ""))
+                    )
+                    if len(responsibilities) > 80:
+                        responsibilities = responsibilities[:77] + "..."
+
+                    table_data.append(
+                        [
+                            Paragraph(role, styles["SmallText"]),
+                            Paragraph(fte, styles["SmallText"]),
+                            Paragraph(salary_str, styles["SmallText"]),
+                            Paragraph(responsibilities, styles["SmallText"]),
+                        ]
+                    )
+
+                col_widths = [1.5 * inch, 0.6 * inch, 1.2 * inch, 3.7 * inch]
+                staffing_table = Table(table_data, colWidths=col_widths)
+                staffing_table.setStyle(
+                    TableStyle(
+                        [
+                            ("BACKGROUND", (0, 0), (-1, 0), PDF_COLORS["primary"]),
+                            ("TEXTCOLOR", (0, 0), (-1, 0), rl_colors.white),
+                            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                            ("FONTSIZE", (0, 0), (-1, 0), 9),
+                            ("FONTSIZE", (0, 1), (-1, -1), 9),
+                            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                            ("GRID", (0, 0), (-1, -1), 0.5, PDF_COLORS["light"]),
+                            *[
+                                (
+                                    "BACKGROUND",
+                                    (0, i),
+                                    (-1, i),
+                                    hex_to_rl_color("#F8F9FA"),
+                                )
+                                for i in range(2, len(table_data), 2)
+                            ],
+                            ("TOPPADDING", (0, 0), (-1, -1), 6),
+                            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                        ]
+                    )
+                )
+                elements.append(staffing_table)
+                elements.append(Spacer(1, 12))
+
+            # --- Budget Table ---
+            budget = plan_data.get("budget")
+            if budget and isinstance(budget, list) and len(budget) > 0:
+                elements.append(Paragraph("Budget Breakdown", styles["SectionHeading"]))
+                elements.append(Spacer(1, 6))
+
+                table_data = [["Category", "Amount", "Justification"]]
+                total_amount = 0.0
+
+                for entry in budget:
+                    if not isinstance(entry, dict):
+                        continue
+                    category = md_parser.escape_xml(str(entry.get("category", "")))
+                    amount = entry.get("amount", 0)
+                    amount_val = float(amount) if amount else 0
+                    total_amount += amount_val
+                    justification = md_parser.escape_xml(
+                        str(entry.get("justification", ""))
+                    )
+                    if len(justification) > 80:
+                        justification = justification[:77] + "..."
+
+                    table_data.append(
+                        [
+                            Paragraph(category, styles["SmallText"]),
+                            Paragraph(f"${amount_val:,.0f}", styles["SmallText"]),
+                            Paragraph(justification, styles["SmallText"]),
+                        ]
+                    )
+
+                # Total row
+                table_data.append(
+                    [
+                        Paragraph("<b>Total</b>", styles["SmallText"]),
+                        Paragraph(f"<b>${total_amount:,.0f}</b>", styles["SmallText"]),
+                        Paragraph("", styles["SmallText"]),
+                    ]
+                )
+
+                col_widths = [1.8 * inch, 1.2 * inch, 4.0 * inch]
+                budget_table = Table(table_data, colWidths=col_widths)
+                budget_table.setStyle(
+                    TableStyle(
+                        [
+                            ("BACKGROUND", (0, 0), (-1, 0), PDF_COLORS["primary"]),
+                            ("TEXTCOLOR", (0, 0), (-1, 0), rl_colors.white),
+                            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                            ("FONTSIZE", (0, 0), (-1, 0), 9),
+                            ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+                            ("FONTSIZE", (0, 1), (-1, -1), 9),
+                            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                            ("GRID", (0, 0), (-1, -1), 0.5, PDF_COLORS["light"]),
+                            *[
+                                (
+                                    "BACKGROUND",
+                                    (0, i),
+                                    (-1, i),
+                                    hex_to_rl_color("#F8F9FA"),
+                                )
+                                for i in range(2, len(table_data), 2)
+                            ],
+                            (
+                                "BACKGROUND",
+                                (0, -1),
+                                (-1, -1),
+                                hex_to_rl_color("#E8EEF4"),
+                            ),
+                            ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+                            ("TOPPADDING", (0, 0), (-1, -1), 6),
+                            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                        ]
+                    )
+                )
+                elements.append(budget_table)
+                elements.append(Spacer(1, 12))
+
+            # --- Timeline ---
+            timeline = plan_data.get("timeline")
+            if timeline and isinstance(timeline, list) and len(timeline) > 0:
+                elements.append(Paragraph("Timeline", styles["SectionHeading"]))
+                elements.append(Spacer(1, 6))
+
+                for phase in timeline:
+                    if not isinstance(phase, dict):
+                        continue
+
+                    phase_name = phase.get("phase") or phase.get("name", "Phase")
+                    start = phase.get("start", "")
+                    end = phase.get("end", "")
+                    date_range = ""
+                    if start and end:
+                        date_range = f" ({start} \u2013 {end})"
+                    elif start:
+                        date_range = f" (from {start})"
+                    elif end:
+                        date_range = f" (until {end})"
+
+                    elements.append(
+                        Paragraph(
+                            md_parser.escape_xml(f"{phase_name}{date_range}"),
+                            styles["SubsectionHeading"],
+                        )
+                    )
+
+                    milestones = phase.get("milestones", [])
+                    if isinstance(milestones, list):
+                        for ms in milestones:
+                            ms_text = str(ms).strip()
+                            if ms_text:
+                                elements.append(
+                                    Paragraph(
+                                        f"\u2022 {md_parser.escape_xml(ms_text)}",
+                                        styles["BulletText"],
+                                    )
+                                )
+
+                    desc = phase.get("description", "")
+                    if desc and str(desc).strip():
+                        elements.append(
+                            Paragraph(
+                                md_parser.escape_xml(str(desc).strip()),
+                                styles["BodyText"],
+                            )
+                        )
+
+                elements.append(Spacer(1, 8))
+
+            # --- Deliverables ---
+            deliverables = plan_data.get("deliverables")
+            if (
+                deliverables
+                and isinstance(deliverables, list)
+                and len(deliverables) > 0
+            ):
+                elements.append(Paragraph("Deliverables", styles["SectionHeading"]))
+                elements.append(Spacer(1, 6))
+
+                for item in deliverables:
+                    item_text = str(item).strip()
+                    if item_text:
+                        elements.append(
+                            Paragraph(
+                                f"\u2022 {md_parser.escape_xml(item_text)}",
+                                styles["BulletText"],
+                            )
+                        )
+
+                elements.append(Spacer(1, 8))
+
+            # --- Success Metrics Table ---
+            metrics = plan_data.get("metrics")
+            if metrics and isinstance(metrics, list) and len(metrics) > 0:
+                elements.append(Paragraph("Success Metrics", styles["SectionHeading"]))
+                elements.append(Spacer(1, 6))
+
+                table_data = [["Metric", "Target", "How Measured"]]
+
+                for entry in metrics:
+                    if not isinstance(entry, dict):
+                        continue
+                    metric = md_parser.escape_xml(str(entry.get("metric", "")))
+                    target = md_parser.escape_xml(str(entry.get("target", "")))
+                    how = md_parser.escape_xml(
+                        str(entry.get("how_measured") or entry.get("measurement", ""))
+                    )
+                    if len(how) > 80:
+                        how = how[:77] + "..."
+
+                    table_data.append(
+                        [
+                            Paragraph(metric, styles["SmallText"]),
+                            Paragraph(target, styles["SmallText"]),
+                            Paragraph(how, styles["SmallText"]),
+                        ]
+                    )
+
+                col_widths = [2.2 * inch, 1.5 * inch, 3.3 * inch]
+                metrics_table = Table(table_data, colWidths=col_widths)
+                metrics_table.setStyle(
+                    TableStyle(
+                        [
+                            ("BACKGROUND", (0, 0), (-1, 0), PDF_COLORS["primary"]),
+                            ("TEXTCOLOR", (0, 0), (-1, 0), rl_colors.white),
+                            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                            ("FONTSIZE", (0, 0), (-1, 0), 9),
+                            ("FONTSIZE", (0, 1), (-1, -1), 9),
+                            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                            ("GRID", (0, 0), (-1, -1), 0.5, PDF_COLORS["light"]),
+                            *[
+                                (
+                                    "BACKGROUND",
+                                    (0, i),
+                                    (-1, i),
+                                    hex_to_rl_color("#F8F9FA"),
+                                )
+                                for i in range(2, len(table_data), 2)
+                            ],
+                            ("TOPPADDING", (0, 0), (-1, -1), 6),
+                            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                        ]
+                    )
+                )
+                elements.append(metrics_table)
+                elements.append(Spacer(1, 12))
+
+            # --- Partnerships ---
+            partnerships = plan_data.get("partnerships")
+            if partnerships:
+                has_content = False
+                if isinstance(partnerships, list) and len(partnerships) > 0:
+                    has_content = True
+                elif isinstance(partnerships, str) and partnerships.strip():
+                    has_content = True
+
+                if has_content:
+                    elements.append(Paragraph("Partnerships", styles["SectionHeading"]))
+                    elements.append(Spacer(1, 6))
+
+                    if isinstance(partnerships, list):
+                        for item in partnerships:
+                            item_text = str(item).strip()
+                            if item_text:
+                                elements.append(
+                                    Paragraph(
+                                        f"\u2022 {md_parser.escape_xml(item_text)}",
+                                        styles["BulletText"],
+                                    )
+                                )
+                    else:
+                        content_elements = md_parser.parse_to_elements(
+                            str(partnerships)
+                        )
+                        elements.extend(content_elements)
+
+                    elements.append(Spacer(1, 8))
+
+            # Build with professional header/footer
+            title_display = subtitle_text if subtitle_text else "Project Plan"
+            builder = ProfessionalPDFBuilder(
+                filename=pdf_path,
+                title=title_display,
+                include_logo=True,
+                include_ai_disclosure=True,
+            )
+            builder.build(elements)
+
+            logger.info(f"Generated project plan PDF: {title_display}")
+            return pdf_path
+
+        except Exception as e:
+            logger.error(f"Error generating project plan PDF: {e}")
+            raise
+
     async def generate_brief_pptx(
         self,
         brief_title: str,
