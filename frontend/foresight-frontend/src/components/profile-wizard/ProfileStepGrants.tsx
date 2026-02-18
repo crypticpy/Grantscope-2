@@ -119,8 +119,12 @@ export default function ProfileStepGrants({
         selectedCategories.length > 0 ? selectedCategories : undefined,
       strategic_pillars:
         selectedPillars.length > 0 ? selectedPillars : undefined,
-      funding_range_min: fundingMin ? parseInt(fundingMin, 10) : undefined,
-      funding_range_max: fundingMax ? parseInt(fundingMax, 10) : undefined,
+      funding_range_min: fundingMin
+        ? Number(fundingMin) || undefined
+        : undefined,
+      funding_range_max: fundingMax
+        ? Number(fundingMax) || undefined
+        : undefined,
     });
     onNext();
   };

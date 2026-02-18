@@ -2,7 +2,7 @@
 
 import logging
 import uuid as _uuid
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
@@ -71,8 +71,9 @@ async def get_current_user_profile(
     try:
         user = await _get_or_create_user(db, current_user)
         return UserProfile(**_row_to_dict(user))
-    except Exception:
+    except Exception as e:
         # Fallback to hardcoded user data if DB is unreachable
+        logger.warning("Failed to fetch user profile from DB, using fallback: %s", e)
         return UserProfile(**current_user)
 
 
@@ -117,6 +118,10 @@ async def update_user_profile(
         for key, value in update_data.items():
             if key in PROFILE_FIELDS and hasattr(user, key):
                 setattr(user, key, value)
+
+        # Auto-set profile_completed_at when final wizard step is reached
+        if update_data.get("profile_step", 0) >= 4 and not user.profile_completed_at:
+            user.profile_completed_at = datetime.now(timezone.utc)
 
         await db.flush()
         await db.refresh(user)
@@ -181,7 +186,7 @@ async def get_profile_completion(
             "percentage": percentage,
             "completed_steps": completed_steps,
             "missing": missing,
-            "is_complete": user.profile_completed_at is not None,
+            "is_complete": user.profile_completed_at is not None or percentage == 100,
         }
     except Exception as e:
         logger.error(f"Failed to get profile completion: {str(e)}")

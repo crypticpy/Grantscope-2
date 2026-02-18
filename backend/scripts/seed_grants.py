@@ -36,7 +36,11 @@ from app.models.db.source import Source, DiscoveredSource
 from app.models.db.card_extras import CardTimeline
 from app.models.db.discovery import DiscoveryRun
 from app.helpers.db_utils import vector_search_cards, store_card_embedding
-from app.openai_provider import get_embedding_deployment, azure_openai_embedding_client
+from app.openai_provider import (
+    get_embedding_deployment,
+    azure_openai_async_embedding_client,
+    azure_openai_embedding_client,
+)
 from app.discovery_service import convert_pillar_id, convert_goal_id, STAGE_NUMBER_TO_ID
 
 from sqlalchemy import select, func, text
@@ -157,6 +161,12 @@ def fetch_grants_curl(keyword: str, rows: int = 25) -> list:
             text=True,
             timeout=30,
         )
+        if result.returncode != 0:
+            logger.warning(
+                f"curl failed for '{keyword}': exit {result.returncode}, "
+                f"stderr={result.stderr[:200]}"
+            )
+            return []
         data = json.loads(result.stdout)
         return data.get("data", {}).get("oppHits", [])
     except Exception as e:
@@ -243,13 +253,22 @@ def make_slug(name: str) -> str:
 
 
 async def get_embedding(text: str) -> Optional[list]:
-    """Generate embedding for text using Azure OpenAI."""
+    """Generate embedding for text using Azure OpenAI (async)."""
     try:
-        client = azure_openai_embedding_client or openai_client
-        response = client.embeddings.create(
-            input=text[:8000],
-            model=get_embedding_deployment(),
-        )
+        async_client = azure_openai_async_embedding_client
+        if async_client:
+            response = await async_client.embeddings.create(
+                input=text[:8000],
+                model=get_embedding_deployment(),
+            )
+        else:
+            # Fallback: run sync client in thread to avoid blocking event loop
+            client = azure_openai_embedding_client or openai_client
+            response = await asyncio.to_thread(
+                client.embeddings.create,
+                input=text[:8000],
+                model=get_embedding_deployment(),
+            )
         return response.data[0].embedding
     except Exception as e:
         logger.warning(f"Embedding failed: {e}")
@@ -377,13 +396,13 @@ def build_card_from_opp(
         goal_id=goal_id,
         stage_id=stage_id,
         horizon=analysis.horizon or "H1",
-        # DB columns are NUMERIC(3,2) -- max 9.99; raw AI values fit
+        # novelty/impact/relevance are NUMERIC(3,2); maturity/risk are Integer
         novelty_score=round(analysis.novelty, 2),
-        maturity_score=round(analysis.credibility, 2),
+        maturity_score=round(analysis.credibility),
         impact_score=round(analysis.impact, 2),
         relevance_score=round(analysis.relevance, 2),
         velocity_score=round(analysis.velocity, 2),
-        risk_score=round(analysis.risk, 2),
+        risk_score=round(analysis.risk),
         status="active",
         review_status="pending_review",
         ai_confidence=(

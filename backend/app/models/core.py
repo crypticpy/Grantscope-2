@@ -60,7 +60,7 @@ class ProfileSetupUpdate(BaseModel):
     help_wanted: Optional[List[str]] = None
     update_frequency: Optional[str] = None
     profile_step: Optional[int] = None
-    profile_completed_at: Optional[str] = None
+    # profile_completed_at is computed server-side, not client-settable
 
 
 class Card(BaseModel):

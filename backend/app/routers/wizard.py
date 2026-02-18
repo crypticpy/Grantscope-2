@@ -240,7 +240,7 @@ async def _build_grant_context_from_card(db: AsyncSession, card_id: str) -> dict
                     f"[{doc.document_type.upper()}] {doc.original_filename}:\n{doc.extracted_text[:10000]}"
                 )
     except Exception as e:
-        logger.warning("Failed to fetch card documents for wizard: %s", card_id, e)
+        logger.warning("Failed to fetch card documents for wizard: %s: %s", card_id, e)
 
     # Load latest deep research report
     try:
@@ -311,12 +311,14 @@ async def create_wizard_session(
             )
 
     # 1. Create the wizard session first (without conversation_id)
+    card_uuid = _uuid.UUID(body.card_id) if grant_context and body.card_id else None
     session_obj = WizardSessionDB(
         user_id=_uuid.UUID(user_id),
         entry_path=body.entry_path,
         current_step=2 if grant_context else 0,
         status="in_progress",
         grant_context=grant_context,
+        card_id=card_uuid,
         interview_data={},
         plan_data={},
         created_at=now,

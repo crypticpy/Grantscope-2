@@ -50,7 +50,10 @@ export default function ProfileSetup() {
   // Load existing profile on mount
   useEffect(() => {
     const token = getStoredToken();
-    if (!token) return;
+    if (!token) {
+      setLoading(false);
+      return;
+    }
     getProfile(token)
       .then((data) => {
         setProfileData(data);
@@ -123,8 +126,8 @@ export default function ProfileSetup() {
     if (!token) return;
     setSaving(true);
     try {
+      // profile_completed_at is auto-set server-side when profile_step >= 4
       const updated = await updateProfile(token, {
-        profile_completed_at: new Date().toISOString(),
         profile_step: STEP_LABELS.length - 1,
       });
       // Update cached user in localStorage
