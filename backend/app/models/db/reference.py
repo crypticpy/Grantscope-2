@@ -16,8 +16,10 @@ Tables
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import ARRAY
+import uuid
+
+from sqlalchemy import Boolean, DateTime, Integer, String, Text, func, text
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.db.base import Base
@@ -63,7 +65,9 @@ class Goal(Base):
 class Anchor(Base):
     __tablename__ = "anchors"
 
-    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
     name: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     color: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -75,7 +79,7 @@ class Anchor(Base):
 class Stage(Base):
     __tablename__ = "stages"
 
-    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     sort_order: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
