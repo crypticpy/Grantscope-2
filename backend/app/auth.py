@@ -76,6 +76,33 @@ HARDCODED_USERS: dict[str, dict[str, Any]] = {
         "hashed_password": _hash_password("GS2Test2026!"),
         "created_at": "2026-01-01T00:00:00+00:00",
     },
+    "phillip@grantscope.gov": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "email": "phillip@grantscope.gov",
+        "display_name": "Phillip",
+        "department": "APH",
+        "role": "user",
+        "hashed_password": _hash_password("Granite$cope4P!"),
+        "created_at": "2026-02-18T00:00:00+00:00",
+    },
+    "brian@grantscope.gov": {
+        "id": "00000000-0000-0000-0000-000000000005",
+        "email": "brian@grantscope.gov",
+        "display_name": "Brian",
+        "department": "APH",
+        "role": "user",
+        "hashed_password": _hash_password("Granite$cope5B!"),
+        "created_at": "2026-02-18T00:00:00+00:00",
+    },
+    "tracy@grantscope.gov": {
+        "id": "00000000-0000-0000-0000-000000000006",
+        "email": "tracy@grantscope.gov",
+        "display_name": "Tracy",
+        "department": "APH",
+        "role": "user",
+        "hashed_password": _hash_password("Granite$cope6T!"),
+        "created_at": "2026-02-18T00:00:00+00:00",
+    },
 }
 
 # ---------------------------------------------------------------------------
