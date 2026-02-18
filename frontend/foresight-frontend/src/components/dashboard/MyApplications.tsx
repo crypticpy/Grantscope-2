@@ -39,6 +39,8 @@ export function MyApplications({ token }: MyApplicationsProps) {
     }
     let cancelled = false;
     (async () => {
+      setLoading(true);
+      setError(null);
       try {
         const data = await listWizardSessions(token);
         if (!cancelled) {

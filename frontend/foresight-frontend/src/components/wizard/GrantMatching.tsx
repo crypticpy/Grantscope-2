@@ -163,12 +163,14 @@ const GrantMatching: React.FC<GrantMatchingProps> = ({
                     {grant.deadline}
                   </span>
                 )}
-                {(grant.funding_amount_min || grant.funding_amount_max) && (
+                {(grant.funding_amount_min != null ||
+                  grant.funding_amount_max != null) && (
                   <span className="flex items-center gap-1">
                     <DollarSign className="h-3.5 w-3.5" />
-                    {grant.funding_amount_min && grant.funding_amount_max
+                    {grant.funding_amount_min != null &&
+                    grant.funding_amount_max != null
                       ? `${formatCurrency(grant.funding_amount_min)} - ${formatCurrency(grant.funding_amount_max)}`
-                      : grant.funding_amount_max
+                      : grant.funding_amount_max != null
                         ? `Up to ${formatCurrency(grant.funding_amount_max)}`
                         : `From ${formatCurrency(grant.funding_amount_min!)}`}
                   </span>

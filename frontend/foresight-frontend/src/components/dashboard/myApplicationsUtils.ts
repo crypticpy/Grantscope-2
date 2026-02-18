@@ -116,7 +116,9 @@ export function relativeTime(dateStr: string | null): string {
   if (!dateStr) return "";
   const now = Date.now();
   const then = new Date(dateStr).getTime();
+  if (isNaN(then)) return "";
   const diffMs = now - then;
+  if (diffMs < 0) return "Just now";
   const diffMin = Math.floor(diffMs / 60_000);
   if (diffMin < 1) return "Just now";
   if (diffMin < 60) return `${diffMin}m ago`;

@@ -88,6 +88,36 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
+# Utility helpers
+# ============================================================================
+
+
+def _parse_float_safe(value: Any, default: float = 0.0) -> float:
+    """Safely parse a value to float, stripping common currency chars.
+
+    Handles values like "$50k", "TBD", "$1,000,000", etc.
+    Returns default on failure.
+    """
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return float(value)
+    s = str(value).strip().replace(",", "").replace("$", "")
+    # Handle k/m suffixes
+    multiplier = 1.0
+    if s.lower().endswith("k"):
+        s = s[:-1]
+        multiplier = 1000.0
+    elif s.lower().endswith("m"):
+        s = s[:-1]
+        multiplier = 1_000_000.0
+    try:
+        return float(s) * multiplier
+    except (ValueError, TypeError):
+        return default
+
+
+# ============================================================================
 # Constants
 # ============================================================================
 
@@ -4450,8 +4480,8 @@ class ExportService:
             )
 
         if profile_data:
-            display_name = profile_data.get("display_name", "")
-            prof_dept = profile_data.get("department", "")
+            display_name = md_parser.escape_xml(profile_data.get("display_name", ""))
+            prof_dept = md_parser.escape_xml(profile_data.get("department", ""))
             if display_name:
                 author_parts = [display_name]
                 if prof_dept:
@@ -4658,7 +4688,8 @@ class ExportService:
                         self._add_bullet_section(
                             elements, styles, md_parser, heading, value
                         )
-                    continue
+                        continue
+                    # Fall through to render as paragraph if it's a string
 
                 text = str(value).strip()
                 if not text:
@@ -4680,7 +4711,7 @@ class ExportService:
             return pdf_path
 
         except Exception as e:
-            logger.error(f"Error generating program summary PDF: {e}")
+            logger.exception("Error generating program summary PDF")
             raise
 
     # ====================================================================
@@ -4765,17 +4796,23 @@ class ExportService:
 
                 funding_min = grant_context.get("funding_amount_min")
                 funding_max = grant_context.get("funding_amount_max")
-                if funding_min and funding_max:
+                funding_min_val = (
+                    _parse_float_safe(funding_min) if funding_min is not None else None
+                )
+                funding_max_val = (
+                    _parse_float_safe(funding_max) if funding_max is not None else None
+                )
+                if funding_min_val is not None and funding_max_val is not None:
                     gc_items.append(
-                        f"<b>Funding Range:</b> ${float(funding_min):,.0f} - ${float(funding_max):,.0f}"
+                        f"<b>Funding Range:</b> ${funding_min_val:,.0f} - ${funding_max_val:,.0f}"
                     )
-                elif funding_max:
+                elif funding_max_val is not None:
                     gc_items.append(
-                        f"<b>Funding Amount:</b> Up to ${float(funding_max):,.0f}"
+                        f"<b>Funding Amount:</b> Up to ${funding_max_val:,.0f}"
                     )
-                elif funding_min:
+                elif funding_min_val is not None:
                     gc_items.append(
-                        f"<b>Funding Amount:</b> From ${float(funding_min):,.0f}"
+                        f"<b>Funding Amount:</b> From ${funding_min_val:,.0f}"
                     )
 
                 for item in gc_items:
@@ -4803,7 +4840,7 @@ class ExportService:
                     role = md_parser.escape_xml(str(entry.get("role", "")))
                     fte = str(entry.get("fte", ""))
                     salary = entry.get("salary") or entry.get("salary_estimate")
-                    salary_str = f"${float(salary):,.0f}" if salary else ""
+                    salary_str = f"${_parse_float_safe(salary):,.0f}" if salary else ""
                     responsibilities = md_parser.escape_xml(
                         str(entry.get("responsibilities", ""))
                     )
@@ -4838,7 +4875,7 @@ class ExportService:
                         continue
                     category = md_parser.escape_xml(str(entry.get("category", "")))
                     amount = entry.get("amount", 0)
-                    amount_val = float(amount) if amount else 0
+                    amount_val = _parse_float_safe(amount)
                     total_amount += amount_val
                     justification = md_parser.escape_xml(
                         str(entry.get("justification", ""))
@@ -4992,7 +5029,7 @@ class ExportService:
             return pdf_path
 
         except Exception as e:
-            logger.error(f"Error generating project plan PDF: {e}")
+            logger.exception("Error generating project plan PDF")
             raise
 
     async def generate_brief_pptx(

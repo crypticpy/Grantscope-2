@@ -182,6 +182,7 @@ const PlanReview: React.FC<PlanReviewProps> = ({
   const [plan, setPlan] = useState<PlanData>(initialPlanData || emptyPlan());
   const [loading, setLoading] = useState(!initialPlanData);
   const [error, setError] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const [editingSections, setEditingSections] = useState<
     Record<SectionKey, boolean>
   >({
@@ -325,8 +326,12 @@ const PlanReview: React.FC<PlanReviewProps> = ({
 
   const handleDownloadPlan = useCallback(
     async (format: ExportFormat) => {
+      setDownloadError(null);
       const token = await getToken();
-      if (!token) return;
+      if (!token) {
+        setDownloadError("Not authenticated. Please sign in and try again.");
+        return;
+      }
 
       try {
         const blob = await exportWizardPlan(token, sessionId, format);
@@ -340,7 +345,9 @@ const PlanReview: React.FC<PlanReviewProps> = ({
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
       } catch (err) {
-        console.error("Failed to download plan:", err);
+        setDownloadError(
+          err instanceof Error ? err.message : "Failed to download plan",
+        );
       }
     },
     [sessionId],
@@ -1254,12 +1261,17 @@ const PlanReview: React.FC<PlanReviewProps> = ({
         </button>
 
         <div className="flex items-center gap-3">
-          <DownloadButton
-            label="Download Plan"
-            onDownload={handleDownloadPlan}
-            disabled={!plan.program_overview}
-            size="sm"
-          />
+          <div>
+            <DownloadButton
+              label="Download Plan"
+              onDownload={handleDownloadPlan}
+              disabled={!plan.program_overview}
+              size="sm"
+            />
+            {downloadError && (
+              <p className="mt-2 text-sm text-red-500">{downloadError}</p>
+            )}
+          </div>
 
           {entryPath === "build_program" ? (
             <button

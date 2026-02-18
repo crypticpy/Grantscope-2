@@ -13,6 +13,7 @@ import uuid as _uuid
 from datetime import datetime, date, timezone
 from decimal import Decimal
 from typing import Any, Callable, Literal, Optional, Union
+from uuid import UUID
 
 try:
     import fitz  # PyMuPDF -- for PDF text extraction from uploaded files
@@ -27,6 +28,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Request,
     UploadFile,
     status,
 )
@@ -34,8 +36,9 @@ from fastapi.responses import FileResponse, StreamingResponse
 from starlette.background import BackgroundTask
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
-from app.deps import get_db, get_current_user_hardcoded, _safe_error
+from app.deps import get_db, get_current_user_hardcoded, _safe_error, limiter
 from app.export_service import ExportService
 from app.models.db.card import Card
 from app.models.db.chat import ChatConversation, ChatMessage
@@ -65,7 +68,24 @@ router = APIRouter(prefix="/api/v1", tags=["wizard"])
 class AttachGrantRequest(_BaseModel):
     """Request body for attaching a grant (card) to a wizard session."""
 
+    card_id: UUID
+
+
+class GrantItem(_BaseModel):
     card_id: str
+    grant_name: str | None = None
+    grantor: str | None = None
+    summary: str | None = None
+    deadline: str | None = None
+    funding_amount_min: float | None = None
+    funding_amount_max: float | None = None
+    grant_type: str | None = None
+    similarity: float = 0.0
+
+
+class MatchGrantsResponse(_BaseModel):
+    grants: list[GrantItem]
+    query_used: str
 
 
 # ---------------------------------------------------------------------------
@@ -848,7 +868,9 @@ async def synthesize_plan(
 
 
 @router.post("/me/wizard/sessions/{session_id}/synthesize-summary")
+@limiter.limit("5/minute")
 async def synthesize_summary(
+    request: Request,
     session_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user_hardcoded),
@@ -913,6 +935,7 @@ async def synthesize_summary(
         existing_data = session_obj.interview_data or {}
         existing_data["program_summary"] = summary.model_dump()
         session_obj.interview_data = existing_data
+        flag_modified(session_obj, "interview_data")
         session_obj.updated_at = datetime.now(timezone.utc)
         await db.flush()
     except Exception as e:
@@ -928,8 +951,12 @@ async def synthesize_summary(
 # ---------------------------------------------------------------------------
 
 
-@router.post("/me/wizard/sessions/{session_id}/match-grants")
+@router.post(
+    "/me/wizard/sessions/{session_id}/match-grants", response_model=MatchGrantsResponse
+)
+@limiter.limit("5/minute")
 async def match_grants(
+    request: Request,
     session_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user_hardcoded),
@@ -951,8 +978,12 @@ async def match_grants(
         ) from e
 
 
-@router.post("/me/wizard/sessions/{session_id}/attach-grant")
+@router.post(
+    "/me/wizard/sessions/{session_id}/attach-grant", response_model=WizardSession
+)
+@limiter.limit("5/minute")
 async def attach_grant(
+    request: Request,
     session_id: str,
     body: AttachGrantRequest,
     db: AsyncSession = Depends(get_db),
@@ -965,7 +996,7 @@ async def attach_grant(
     card_id = body.card_id
 
     # Build grant context from the card
-    grant_context = await _build_grant_context_from_card(db, card_id)
+    grant_context = await _build_grant_context_from_card(db, str(card_id))
     if not grant_context:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -978,7 +1009,7 @@ async def attach_grant(
             select(WizardSessionDB).where(WizardSessionDB.id == session_id)
         )
         session_obj = result.scalar_one()
-        session_obj.card_id = _uuid.UUID(card_id)
+        session_obj.card_id = body.card_id
         session_obj.grant_context = grant_context
         session_obj.updated_at = datetime.now(timezone.utc)
         await db.flush()

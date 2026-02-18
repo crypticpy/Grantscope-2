@@ -19,6 +19,36 @@ from docx.shared import Cm, Inches, Pt, RGBColor
 
 logger = logging.getLogger(__name__)
 
+
+# ---------------------------------------------------------------------------
+# Utility helpers
+# ---------------------------------------------------------------------------
+
+
+def _safe_float(val: Any, default: float = 0.0) -> float:
+    """Safely parse a value to float, stripping common currency chars.
+
+    Handles values like "$50k", "TBD", "$1,000,000", etc.
+    Returns default on failure.
+    """
+    if val is None:
+        return default
+    if isinstance(val, (int, float)):
+        return float(val)
+    s = str(val).strip().replace(",", "").replace("$", "")
+    multiplier = 1.0
+    if s.lower().endswith("k"):
+        s = s[:-1]
+        multiplier = 1000.0
+    elif s.lower().endswith("m"):
+        s = s[:-1]
+        multiplier = 1_000_000.0
+    try:
+        return float(s) * multiplier
+    except (ValueError, TypeError):
+        return default
+
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -1048,7 +1078,7 @@ class DocxExportService:
     def generate_program_summary_docx(
         summary_data: dict,
         profile_data: dict | None = None,
-    ) -> io.BytesIO:
+    ) -> bytes:
         """Generate a DOCX program summary document.
 
         Args:
@@ -1059,7 +1089,7 @@ class DocxExportService:
             profile_data: Optional user profile context for author info
 
         Returns:
-            BytesIO buffer containing the DOCX file
+            bytes containing the DOCX file
         """
         doc = Document()
         svc = DocxExportService
@@ -1114,16 +1144,16 @@ class DocxExportService:
             if key == "key_needs":
                 if isinstance(value, list) and len(value) > 0:
                     svc._render_bullet_section(doc, heading, value)
-                continue
+                    continue
+                # Fall through to render as paragraph if it's a string
 
             # Everything else is paragraph text
             svc._render_paragraph_section(doc, heading, str(value))
 
-        # ---- Save to BytesIO ----
+        # ---- Save to bytes ----
         buffer = io.BytesIO()
         doc.save(buffer)
-        buffer.seek(0)
-        return buffer
+        return buffer.getvalue()
 
     # ------------------------------------------------------------------
     # Project Plan DOCX
@@ -1134,7 +1164,7 @@ class DocxExportService:
         plan_data: dict,
         grant_context: dict | None = None,
         profile_data: dict | None = None,
-    ) -> io.BytesIO:
+    ) -> bytes:
         """Generate a DOCX project plan document.
 
         Args:
@@ -1144,7 +1174,7 @@ class DocxExportService:
             profile_data: Optional user profile context
 
         Returns:
-            BytesIO buffer containing the DOCX file
+            bytes containing the DOCX file
         """
         doc = Document()
         svc = DocxExportService
@@ -1206,19 +1236,23 @@ class DocxExportService:
             # Funding range
             funding_min = grant_context.get("funding_amount_min")
             funding_max = grant_context.get("funding_amount_max")
-            if funding_min and funding_max:
+            funding_min_val = (
+                _safe_float(funding_min) if funding_min is not None else None
+            )
+            funding_max_val = (
+                _safe_float(funding_max) if funding_max is not None else None
+            )
+            if funding_min_val is not None and funding_max_val is not None:
                 gc_fields.append(
                     (
                         "Funding Range",
-                        f"${float(funding_min):,.0f} \u2013 ${float(funding_max):,.0f}",
+                        f"${funding_min_val:,.0f} \u2013 ${funding_max_val:,.0f}",
                     )
                 )
-            elif funding_max:
-                gc_fields.append(
-                    ("Funding Amount", f"Up to ${float(funding_max):,.0f}")
-                )
-            elif funding_min:
-                gc_fields.append(("Funding Amount", f"From ${float(funding_min):,.0f}"))
+            elif funding_max_val is not None:
+                gc_fields.append(("Funding Amount", f"Up to ${funding_max_val:,.0f}"))
+            elif funding_min_val is not None:
+                gc_fields.append(("Funding Amount", f"From ${funding_min_val:,.0f}"))
 
             for label, value in gc_fields:
                 if value:
@@ -1269,7 +1303,7 @@ class DocxExportService:
                 row = table.add_row()
                 row.cells[0].text = str(entry.get("category", ""))
                 amount = entry.get("amount", 0)
-                amount_val = float(amount) if amount else 0
+                amount_val = _safe_float(amount)
                 total_amount += amount_val
                 row.cells[1].text = svc._format_currency(amount_val)
                 row.cells[2].text = str(entry.get("justification", ""))
@@ -1353,8 +1387,7 @@ class DocxExportService:
             elif isinstance(partnerships, str) and partnerships.strip():
                 svc._render_paragraph_section(doc, "Partnerships", partnerships)
 
-        # ---- Save to BytesIO ----
+        # ---- Save to bytes ----
         buffer = io.BytesIO()
         doc.save(buffer)
-        buffer.seek(0)
-        return buffer
+        return buffer.getvalue()

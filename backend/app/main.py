@@ -11,7 +11,7 @@ import uuid as _uuid
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -202,7 +202,6 @@ def _register_auth_routes(application: FastAPI) -> None:
 
     @application.get("/api/v1/auth/me")
     async def auth_me(
-        request: Request,
         user=Depends(get_current_user),
         db: AsyncSession = Depends(get_db),
     ):

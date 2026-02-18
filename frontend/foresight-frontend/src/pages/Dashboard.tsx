@@ -127,6 +127,7 @@ const getPriorityGradient = (priority: string) => {
 const Dashboard: React.FC = () => {
   const { user } = useAuthContext();
   const navigate = useNavigate();
+  const token = localStorage.getItem("gs2_token") || "";
   const [showOnboarding, setShowOnboarding] = useState(
     () => !hasCompletedOnboarding(),
   );
@@ -474,7 +475,7 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* My Applications */}
-      <MyApplications token={localStorage.getItem("gs2_token") || ""} />
+      <MyApplications token={token} />
 
       {/* Stats Cards - Clickable KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-8">

@@ -95,6 +95,7 @@ const GrantWizard: React.FC = () => {
   const [entryPath, setEntryPath] = useState<EntryPath | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Track if initial load has completed to avoid double-saves
   const initialLoadDone = useRef(false);
@@ -218,6 +219,7 @@ const GrantWizard: React.FC = () => {
       const token = await getToken();
       if (!token) return;
 
+      setIsSaving(true);
       try {
         const updated = await updateWizardSession(token, sessionId, {
           current_step: currentStep,
@@ -226,6 +228,8 @@ const GrantWizard: React.FC = () => {
       } catch {
         // Auto-save failures are non-critical; don't disrupt the user
         console.warn("Auto-save failed for wizard step", currentStep);
+      } finally {
+        setIsSaving(false);
       }
     };
 
@@ -537,7 +541,7 @@ const GrantWizard: React.FC = () => {
             </div>
             <div className="mb-6 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
               <WizardSaveExit
-                saving={false}
+                saving={isSaving}
                 lastSaved={sessionData?.updated_at ?? null}
               />
             </div>

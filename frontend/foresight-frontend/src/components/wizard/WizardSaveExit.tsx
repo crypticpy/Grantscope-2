@@ -5,7 +5,7 @@
  * Renders as a slim bar between the step progress indicator and the step content.
  */
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Save, Check, Loader2, X } from "lucide-react";
 
@@ -22,6 +22,16 @@ export const WizardSaveExit: React.FC<WizardSaveExitProps> = ({
 }) => {
   const navigate = useNavigate();
   const [showModal, setShowModal] = useState(false);
+
+  // Close modal on Escape key
+  useEffect(() => {
+    if (!showModal) return;
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowModal(false);
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [showModal]);
 
   const handleSaveAndExit = useCallback(() => {
     setShowModal(true);
@@ -64,14 +74,23 @@ export const WizardSaveExit: React.FC<WizardSaveExitProps> = ({
 
       {/* Confirmation modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="save-exit-title"
+        >
           <div className="bg-white dark:bg-dark-surface rounded-xl shadow-xl max-w-md w-full p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              <h3
+                id="save-exit-title"
+                className="text-lg font-semibold text-gray-900 dark:text-white"
+              >
                 Your progress is saved
               </h3>
               <button
                 onClick={() => setShowModal(false)}
+                aria-label="Close"
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
               >
                 <X className="h-5 w-5" />

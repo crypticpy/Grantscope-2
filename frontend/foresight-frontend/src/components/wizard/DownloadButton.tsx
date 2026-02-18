@@ -98,13 +98,18 @@ export const DownloadButton: React.FC<DownloadButtonProps> = ({
         ) : (
           <Download className={cn(size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4")} />
         )}
-        {isLoading ? `Preparing ${activeFormat?.toUpperCase()}...` : label}
+        {isLoading
+          ? `Preparing ${activeFormat?.toUpperCase() ?? "file"}...`
+          : label}
       </button>
 
       {/* Dropdown toggle */}
       <button
         onClick={() => setOpen(!open)}
         disabled={disabled || isLoading}
+        aria-label="Download format options"
+        aria-haspopup="menu"
+        aria-expanded={open}
         className={cn(
           "inline-flex items-center px-2 font-medium rounded-r-lg border transition-colors",
           sizeClasses,

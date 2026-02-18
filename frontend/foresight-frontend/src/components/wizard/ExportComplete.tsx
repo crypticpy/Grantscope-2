@@ -83,7 +83,9 @@ export const ExportComplete: React.FC<ExportCompleteProps> = ({
 }) => {
   const navigate = useNavigate();
   const [downloading, setDownloading] = useState(false);
-  const [downloadingDocx, setDownloadingDocx] = useState(false);
+  const [downloadFormat, setDownloadFormat] = useState<"pdf" | "docx" | null>(
+    null,
+  );
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
   // ---- Determine what artifact to export ----
@@ -99,8 +101,8 @@ export const ExportComplete: React.FC<ExportCompleteProps> = ({
         return;
       }
 
-      if (format === "pdf") setDownloading(true);
-      else setDownloadingDocx(true);
+      setDownloading(true);
+      setDownloadFormat(format === "pdf" ? "pdf" : "docx");
       setDownloadError(null);
 
       // Determine which export function and filename to use
@@ -143,7 +145,7 @@ export const ExportComplete: React.FC<ExportCompleteProps> = ({
         );
       } finally {
         setDownloading(false);
-        setDownloadingDocx(false);
+        setDownloadFormat(null);
       }
     },
     [sessionId, hasProposal, hasPlan],
@@ -161,6 +163,7 @@ export const ExportComplete: React.FC<ExportCompleteProps> = ({
       }
 
       setDownloading(true);
+      setDownloadFormat("pdf");
       setDownloadError(null);
 
       try {
@@ -179,6 +182,7 @@ export const ExportComplete: React.FC<ExportCompleteProps> = ({
         );
       } finally {
         setDownloading(false);
+        setDownloadFormat(null);
       }
       return;
     }
@@ -245,28 +249,32 @@ export const ExportComplete: React.FC<ExportCompleteProps> = ({
               "bg-brand-blue hover:bg-brand-dark-blue disabled:opacity-60",
             )}
           >
-            {downloading ? (
+            {downloading && downloadFormat === "pdf" ? (
               <Loader2 className="h-5 w-5 animate-spin" />
             ) : (
               <Download className="h-5 w-5" />
             )}
-            {downloading ? "Preparing PDF..." : "Download PDF"}
+            {downloading && downloadFormat === "pdf"
+              ? "Preparing PDF..."
+              : "Download PDF"}
           </button>
           <button
             onClick={() => handleDownload("docx")}
-            disabled={downloadingDocx}
+            disabled={downloading}
             className={cn(
               "inline-flex items-center gap-2 px-6 py-3 text-base font-medium rounded-lg transition-colors",
               "text-brand-blue border border-brand-blue/30 dark:border-brand-blue/40",
               "hover:bg-brand-blue/5 dark:hover:bg-brand-blue/10 disabled:opacity-60",
             )}
           >
-            {downloadingDocx ? (
+            {downloading && downloadFormat === "docx" ? (
               <Loader2 className="h-5 w-5 animate-spin" />
             ) : (
               <FileText className="h-5 w-5" />
             )}
-            {downloadingDocx ? "Preparing Word..." : "Download Word"}
+            {downloading && downloadFormat === "docx"
+              ? "Preparing Word..."
+              : "Download Word"}
           </button>
         </div>
         {downloadError && (

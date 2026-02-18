@@ -11,9 +11,13 @@ import json
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
+
+if TYPE_CHECKING:
+    from app.models.wizard import ProgramSummary
 
 from app.crawler import crawl_url
 from app.openai_provider import azure_openai_async_client, get_chat_deployment
@@ -154,6 +158,26 @@ class WizardService:
         self.async_client = azure_openai_async_client
         self.model = get_chat_deployment()
 
+    # -- Shared helpers -----------------------------------------------------
+
+    @staticmethod
+    def _build_transcript(messages: list[dict]) -> str:
+        lines = []
+        for msg in messages:
+            role = msg.get("role", "unknown")
+            content = msg.get("content", "")
+            lines.append(f"**{role.title()}**: {content}")
+        return "\n\n".join(lines)
+
+    @staticmethod
+    def _build_profile_section(profile_context: dict | None) -> str:
+        if not profile_context:
+            return ""
+        return (
+            "## User Profile Context\n"
+            f"```json\n{json.dumps(profile_context, indent=2, default=str)}\n```\n\n"
+        )
+
     # -- Grant extraction ---------------------------------------------------
 
     async def extract_grant_from_text(self, text: str) -> GrantContext:
@@ -274,19 +298,9 @@ class WizardService:
             ValueError: If the AI response cannot be parsed into PlanData.
         """
         # Build the conversation transcript
-        transcript_lines: list[str] = []
-        for msg in messages:
-            role = msg.get("role", "unknown")
-            content = msg.get("content", "")
-            transcript_lines.append(f"**{role.title()}**: {content}")
-        transcript = "\n\n".join(transcript_lines)
+        transcript = self._build_transcript(messages)
 
-        profile_section = ""
-        if profile_context:
-            profile_section = (
-                "## User Profile Context\n"
-                f"```json\n{json.dumps(profile_context, indent=2, default=str)}\n```\n\n"
-            )
+        profile_section = self._build_profile_section(profile_context)
 
         grant_section = ""
         if grant_context:
@@ -362,20 +376,10 @@ class WizardService:
         from app.models.wizard import ProgramSummary
 
         # Build the conversation transcript
-        transcript_lines: list[str] = []
-        for msg in messages:
-            role = msg.get("role", "unknown")
-            content = msg.get("content", "")
-            transcript_lines.append(f"**{role.title()}**: {content}")
-        transcript = "\n\n".join(transcript_lines)
+        transcript = self._build_transcript(messages)
 
         # Build profile context section
-        profile_section = ""
-        if profile_context:
-            profile_section = (
-                "## User Profile Context\n"
-                f"```json\n{json.dumps(profile_context, indent=2, default=str)}\n```\n\n"
-            )
+        profile_section = self._build_profile_section(profile_context)
 
         user_prompt = (
             f"{profile_section}"
@@ -407,7 +411,7 @@ class WizardService:
         try:
             parsed = json.loads(raw_content)
         except json.JSONDecodeError as e:
-            logger.error("Failed to parse program summary JSON: %s", e)
+            logger.exception("Failed to parse program summary JSON: %s", e)
             raise ValueError(
                 f"AI returned invalid JSON for program summary: {e}"
             ) from e
@@ -415,7 +419,7 @@ class WizardService:
         try:
             summary = ProgramSummary(**parsed)
         except Exception as e:
-            logger.error("Failed to validate program summary: %s", e)
+            logger.exception("Failed to validate program summary: %s", e)
             raise ValueError(
                 f"AI response did not match expected program summary schema: {e}"
             ) from e
@@ -534,6 +538,7 @@ class WizardService:
                 existing_interview = session_obj.interview_data or {}
                 existing_interview["profile_context"] = profile_context
                 session_obj.interview_data = existing_interview
+                flag_modified(session_obj, "interview_data")
                 await db.flush()
                 await db.refresh(session_obj)
         except Exception as e:
