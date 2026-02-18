@@ -533,7 +533,10 @@ const WorkstreamKanban: React.FC = () => {
     Map<string, WorkstreamResearchStatus>
   >(new Map());
   const researchPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const hasCardsRef = useRef(false);
+  const hasCards = useMemo(
+    () => Object.values(cards).flat().length > 0,
+    [cards],
+  );
 
   // ============================================================================
   // Toast Helper Functions
@@ -814,17 +817,13 @@ const WorkstreamKanban: React.FC = () => {
     startResearchPollingRef.current = startResearchPolling;
   }, [startResearchPolling]);
 
-  // Track whether cards have been loaded (avoids putting `cards` in polling deps)
-  useEffect(() => {
-    hasCardsRef.current = Object.values(cards).flat().length > 0;
-  }, [cards]);
-
   /**
-   * Fetch research status after cards are loaded.
-   * Uses hasCardsRef instead of cards in deps to avoid restarting polling on every card change.
+   * Start research polling once cards are loaded.
+   * Uses `hasCards` (a memoized boolean) so polling starts when cards first
+   * arrive but does NOT restart on every card mutation (drag/drop/move).
    */
   useEffect(() => {
-    if (workstream && id && hasCardsRef.current) {
+    if (workstream && id && hasCards) {
       startResearchPolling();
     }
 
@@ -833,8 +832,7 @@ const WorkstreamKanban: React.FC = () => {
         clearInterval(researchPollRef.current);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workstream, id, startResearchPolling]);
+  }, [workstream, id, hasCards, startResearchPolling]);
 
   /**
    * Merge research statuses into cards for rendering.
