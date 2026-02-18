@@ -39,8 +39,9 @@ import { DownloadButton } from "./DownloadButton";
 /**
  * Retrieves the current session access token from localStorage.
  */
-function getToken(): string | null {
-  return localStorage.getItem("gs2_token") || null;
+async function getToken(): Promise<string | null> {
+  const token = localStorage.getItem("gs2_token");
+  return token || null;
 }
 
 // ============================================================================
@@ -386,7 +387,7 @@ const WizardInterview: React.FC<WizardInterviewProps> = ({
     async (format: ExportFormat) => {
       setSummaryError(null);
 
-      const token = getToken();
+      const token = await getToken();
       if (!token) {
         setSummaryError("Not authenticated. Please sign in and try again.");
         return;

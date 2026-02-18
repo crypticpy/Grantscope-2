@@ -141,8 +141,6 @@ export interface WizardSession {
   grant_context: GrantContext | null;
   interview_data: Record<string, unknown> | null;
   plan_data: PlanData | null;
-  program_summary: ProgramSummary | null;
-  profile_context: Record<string, unknown> | null;
   created_at: string | null;
   updated_at: string | null;
 }
