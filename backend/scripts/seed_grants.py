@@ -396,13 +396,13 @@ def build_card_from_opp(
         goal_id=goal_id,
         stage_id=stage_id,
         horizon=analysis.horizon or "H1",
-        # DB columns are NUMERIC(3,2) -- max 9.99; raw AI values fit
+        # novelty/impact/relevance are NUMERIC(3,2); maturity/risk are Integer
         novelty_score=round(analysis.novelty, 2),
-        maturity_score=round(analysis.credibility, 2),
+        maturity_score=round(analysis.credibility),
         impact_score=round(analysis.impact, 2),
         relevance_score=round(analysis.relevance, 2),
         velocity_score=round(analysis.velocity, 2),
-        risk_score=round(analysis.risk, 2),
+        risk_score=round(analysis.risk),
         status="active",
         review_status="pending_review",
         ai_confidence=(

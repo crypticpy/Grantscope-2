@@ -103,7 +103,7 @@ export default function ProfileStepReview({
           {data.department_id && (
             <p>
               <span className="text-gray-500">Department:</span>{" "}
-              {data.department_id}
+              {data.department || data.department_id}
             </p>
           )}
           {data.title && (
@@ -173,7 +173,8 @@ export default function ProfileStepReview({
               {data.strategic_pillars.join(", ")}
             </p>
           )}
-          {(data.funding_range_min || data.funding_range_max) && (
+          {(data.funding_range_min != null ||
+            data.funding_range_max != null) && (
             <p>
               <span className="text-gray-500">Funding:</span>{" "}
               {data.funding_range_min
