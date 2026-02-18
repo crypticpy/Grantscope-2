@@ -36,7 +36,7 @@ def _row_to_dict(obj, skip_cols=None) -> dict:
     for col in obj.__table__.columns:
         if col.name in skip:
             continue
-        value = getattr(obj, col.name, None)
+        value = getattr(obj, col.key, None)
         if isinstance(value, uuid.UUID):
             result[col.name] = str(value)
         elif isinstance(value, (datetime, date)):
@@ -105,11 +105,12 @@ async def submit_validation_label(
             )
 
         # Create validation record
-        # Note: is_correct is a computed column, do not set it manually
+        pred = predicted_pillar or ""
         validation = ClassificationValidation(
             card_id=submission.card_id,
             ground_truth_pillar=submission.ground_truth_pillar,
-            predicted_pillar=predicted_pillar or "",
+            predicted_pillar=pred,
+            is_correct=(pred == submission.ground_truth_pillar),
             reviewer_id=submission.reviewer_id,
             notes=submission.notes,
         )

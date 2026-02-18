@@ -40,8 +40,8 @@ class CardDocument(Base):
         Text, server_default="other", nullable=False
     )
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    metadata: Mapped[Optional[dict[str, Any]]] = mapped_column(
-        JSONB, server_default=text("'{}'::jsonb")
+    extra_metadata: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        "metadata", JSONB, server_default=text("'{}'::jsonb")
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

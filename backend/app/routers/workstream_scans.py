@@ -44,7 +44,7 @@ def _row_to_dict(obj, skip_cols=None) -> dict:
     for col in obj.__table__.columns:
         if col.name in skip:
             continue
-        value = getattr(obj, col.name, None)
+        value = getattr(obj, col.key, None)
         if isinstance(value, uuid.UUID):
             result[col.name] = str(value)
         elif isinstance(value, (datetime, date)):
@@ -163,13 +163,12 @@ async def start_workstream_scan(
             db.add(new_scan)
             await db.flush()
             scan_id = str(new_scan.id)
-            await db.commit()
         else:
             # Use atomic database function for rate limit + concurrency check
             scan_id = await create_workstream_scan_atomic(
                 db, workstream_id, user_id, config
             )
-            await db.commit()
+            await db.flush()
 
         if not scan_id:
             # Determine which check failed for better error message

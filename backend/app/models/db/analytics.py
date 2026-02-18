@@ -14,7 +14,6 @@ from typing import Optional
 
 from sqlalchemy import (
     Boolean,
-    Computed,
     Date,
     DateTime,
     Float,
@@ -213,7 +212,7 @@ class ClassificationValidation(Base):
     ground_truth_pillar: Mapped[str] = mapped_column(Text, nullable=False)
     is_correct: Mapped[Optional[bool]] = mapped_column(
         Boolean,
-        Computed("predicted_pillar = ground_truth_pillar", persisted=True),
+        nullable=True,
     )
     reviewer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

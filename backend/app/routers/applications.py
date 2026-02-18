@@ -363,7 +363,7 @@ async def create_application_from_wizard(
             wizard_session_id=wizard_session_id,
             user_id=user_id,
         )
-        await db.commit()
+        await db.flush()
         await db.refresh(application)
     except ValueError as e:
         raise HTTPException(
