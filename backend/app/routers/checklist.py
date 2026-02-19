@@ -225,28 +225,48 @@ async def update_checklist_item(
             detail="Checklist item not found",
         )
 
+    update_data = body.model_dump(exclude_unset=True)
+
     # Apply updates for provided fields
-    if body.description is not None:
-        item.description = body.description
-    if body.category is not None:
-        item.category = body.category
-    if body.notes is not None:
-        item.notes = body.notes
-    if body.sub_deadline is not None:
-        item.sub_deadline = body.sub_deadline
-    if body.attachment_id is not None:
-        attachment = await db.get(ApplicationAttachment, body.attachment_id)
-        if attachment is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Attachment not found",
-            )
-        if attachment.application_id != application_id:
+    if "description" in update_data:
+        if update_data["description"] is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="attachment_id must belong to the same application",
+                detail="description cannot be null",
             )
-        item.attachment_id = body.attachment_id
+        item.description = update_data["description"]
+
+    if "category" in update_data:
+        if update_data["category"] is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="category cannot be null",
+            )
+        item.category = update_data["category"]
+
+    if "notes" in update_data:
+        item.notes = update_data["notes"]
+
+    if "sub_deadline" in update_data:
+        item.sub_deadline = update_data["sub_deadline"]
+
+    if "attachment_id" in update_data:
+        attachment_id = update_data["attachment_id"]
+        if attachment_id is None:
+            item.attachment_id = None
+        else:
+            attachment = await db.get(ApplicationAttachment, attachment_id)
+            if attachment is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Attachment not found",
+                )
+            if attachment.application_id != application_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="attachment_id must belong to the same application",
+                )
+            item.attachment_id = attachment_id
 
     # Handle completion toggling
     if body.is_completed is not None:
