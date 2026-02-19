@@ -30,3 +30,14 @@ router.include_router(jobs_router)
 from .content import router as content_router
 
 router.include_router(content_router)
+
+# Phase 3: Search, sources, AI, discovery, RSS
+from .sources_config import router as sources_config_router
+from .rss_admin import router as rss_admin_router
+from .ai_config import router as ai_config_router
+from .discovery_admin import router as discovery_admin_router
+
+router.include_router(sources_config_router)
+router.include_router(rss_admin_router)
+router.include_router(ai_config_router)
+router.include_router(discovery_admin_router)
