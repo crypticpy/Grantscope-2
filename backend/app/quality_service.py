@@ -527,6 +527,7 @@ def _compute_composite_sqi(
     corroboration: int,
     recency: int,
     municipal_specificity: int,
+    weights: dict[str, float] | None = None,
 ) -> int:
     """
     Combine the five sub-scores into a single SQI composite.
@@ -543,18 +544,34 @@ def _compute_composite_sqi(
         Recency sub-score (0-100).
     municipal_specificity : int
         Municipal Specificity sub-score (0-100).
+    weights : dict[str, float] | None
+        Optional custom weights from admin settings.  When ``None``,
+        the module-level ``WEIGHT_*`` constants are used.
 
     Returns
     -------
     int
         Composite SQI in [0, 100].
     """
+    if weights:
+        w_auth = weights.get("source_authority", WEIGHT_SOURCE_AUTHORITY)
+        w_div = weights.get("source_diversity", WEIGHT_SOURCE_DIVERSITY)
+        w_corr = weights.get("corroboration", WEIGHT_CORROBORATION)
+        w_rec = weights.get("recency", WEIGHT_RECENCY)
+        w_muni = weights.get("municipal_specificity", WEIGHT_MUNICIPAL_SPECIFICITY)
+    else:
+        w_auth = WEIGHT_SOURCE_AUTHORITY
+        w_div = WEIGHT_SOURCE_DIVERSITY
+        w_corr = WEIGHT_CORROBORATION
+        w_rec = WEIGHT_RECENCY
+        w_muni = WEIGHT_MUNICIPAL_SPECIFICITY
+
     raw = (
-        authority * WEIGHT_SOURCE_AUTHORITY
-        + diversity * WEIGHT_SOURCE_DIVERSITY
-        + corroboration * WEIGHT_CORROBORATION
-        + recency * WEIGHT_RECENCY
-        + municipal_specificity * WEIGHT_MUNICIPAL_SPECIFICITY
+        authority * w_auth
+        + diversity * w_div
+        + corroboration * w_corr
+        + recency * w_rec
+        + municipal_specificity * w_muni
     )
     return max(0, min(100, round(raw)))
 
@@ -564,7 +581,31 @@ def _compute_composite_sqi(
 # ============================================================================
 
 
-async def calculate_sqi(db: AsyncSession, card_id: str) -> dict:
+async def _load_custom_weights(db: AsyncSession) -> dict[str, float] | None:
+    """Load admin-configured SQI weights from system_settings.
+
+    Returns the persisted weight dict if valid, otherwise ``None``
+    (which causes the caller to fall back to default constants).
+    """
+    try:
+        from app.helpers.settings_reader import get_setting
+
+        persisted = await get_setting(db, "signal_quality_weights", None)
+        if isinstance(persisted, dict) and len(persisted) == 5:
+            # Basic sanity: all values numeric and roughly sum to 1.0
+            total = sum(float(v) for v in persisted.values())
+            if abs(total - 1.0) <= 0.02:
+                return {k: float(v) for k, v in persisted.items()}
+    except Exception as exc:
+        logger.debug("Could not load custom SQI weights: %s", exc)
+    return None
+
+
+async def calculate_sqi(
+    db: AsyncSession,
+    card_id: str,
+    weights: dict[str, float] | None = None,
+) -> dict:
     """
     Calculate the Source Quality Index for a card and persist the result.
 
@@ -581,6 +622,10 @@ async def calculate_sqi(db: AsyncSession, card_id: str) -> dict:
         SQLAlchemy async session (service_role for write access).
     card_id : str
         UUID of the card to score.
+    weights : dict[str, float] | None
+        Optional pre-loaded custom weights.  When ``None``, weights are
+        loaded from ``system_settings`` (with 60 s cache).  Pass
+        explicitly in batch paths to avoid repeated DB lookups.
 
     Returns
     -------
@@ -601,6 +646,10 @@ async def calculate_sqi(db: AsyncSession, card_id: str) -> dict:
     """
     logger.info("Calculating SQI for card %s", card_id)
 
+    # 0. Load custom weights if not provided
+    if weights is None:
+        weights = await _load_custom_weights(db)
+
     # 1. Fetch sources
     sources = await _fetch_card_sources(db, card_id)
     source_count = len(sources)
@@ -615,13 +664,14 @@ async def calculate_sqi(db: AsyncSession, card_id: str) -> dict:
     recency = _calculate_recency(sources)
     municipal_specificity = _calculate_municipal_specificity(sources)
 
-    # 3. Compute composite
+    # 3. Compute composite (uses custom admin weights when available)
     composite = _compute_composite_sqi(
         authority=authority,
         diversity=diversity,
         corroboration=corroboration,
         recency=recency,
         municipal_specificity=municipal_specificity,
+        weights=weights,
     )
 
     # 4. Build breakdown
@@ -718,6 +768,10 @@ async def recalculate_all_cards(db: AsyncSession) -> dict:
 
     logger.info("Starting batch SQI recalculation for %d cards", len(card_rows))
 
+    # Load custom weights once for the entire batch (avoids repeated
+    # DB lookups via the 60s-cached settings_reader).
+    custom_weights = await _load_custom_weights(db)
+
     # Clear the domain reputation batch cache before the run so we get
     # fresh data, then let it build up during the run for efficiency.
     domain_reputation_service.clear_batch_cache()
@@ -727,7 +781,7 @@ async def recalculate_all_cards(db: AsyncSession) -> dict:
         summary["cards_processed"] += 1
 
         try:
-            await calculate_sqi(db, card_id)
+            await calculate_sqi(db, card_id, weights=custom_weights)
             summary["cards_succeeded"] += 1
         except Exception as e:
             msg = f"Failed to calculate SQI for card {card_id}: {e}"

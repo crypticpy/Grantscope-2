@@ -414,9 +414,9 @@ export interface QualityDistribution {
 export interface QualityWeights {
   source_authority: number;
   source_diversity: number;
-  content_depth: number;
-  recency: number;
   corroboration: number;
+  recency: number;
+  municipal_specificity: number;
 }
 
 // ============================================================================
