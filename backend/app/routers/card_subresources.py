@@ -63,13 +63,21 @@ _SKIP_COLS = {"embedding", "search_vector", "content_embedding"}
 
 
 def _row_to_dict(obj, skip_cols: set | None = None) -> dict:
-    """Convert an ORM object to a plain dict, serialising special types."""
+    """Convert an ORM object to a plain dict, serialising special types.
+
+    Uses SQLAlchemy's mapper to correctly resolve Python attribute names
+    that differ from DB column names (e.g. ``metadata_`` mapped to ``metadata``).
+    """
+    from sqlalchemy import inspect as sa_inspect
+
     skip = skip_cols or _SKIP_COLS
     result: dict[str, Any] = {}
-    for col in obj.__table__.columns:
+    mapper = sa_inspect(obj.__class__)
+    for prop in mapper.column_attrs:
+        col = prop.columns[0]
         if col.name in skip:
             continue
-        value = getattr(obj, col.key, None)
+        value = getattr(obj, prop.key, None)  # prop.key = Python attribute name
         if isinstance(value, _uuid.UUID):
             result[col.name] = str(value)
         elif isinstance(value, (datetime, date)):
