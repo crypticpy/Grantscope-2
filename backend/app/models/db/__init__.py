@@ -92,6 +92,7 @@ from app.models.db.milestone import (  # noqa: F401
     ApplicationStatusHistory,
 )
 from app.models.db.card_document import CardDocument  # noqa: F401
+from app.models.db.system_settings import SystemSetting  # noqa: F401
 
 __all__ = [
     "Base",
@@ -160,4 +161,5 @@ __all__ = [
     "ClassificationValidation",
     "SavedSearch",
     "SearchHistory",
+    "SystemSetting",
 ]

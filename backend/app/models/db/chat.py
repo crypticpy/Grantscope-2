@@ -37,6 +37,15 @@ class ChatConversation(Base):
     )
     title: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    tool_usage: Mapped[Optional[dict]] = mapped_column(
+        JSONB, server_default=text("'{}'::jsonb"), nullable=True
+    )
+    # "metadata" is reserved by SQLAlchemy's Declarative API, so we use
+    # metadata_ as the Python attribute and map it to the DB column "metadata".
+    metadata_: Mapped[Optional[dict]] = mapped_column(
+        "metadata", JSONB, server_default=text("'{}'::jsonb"), nullable=True
+    )
+
     created_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=True
     )
@@ -65,6 +74,9 @@ class ChatMessage(Base):
     )
     tokens_used: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     model: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    tool_calls: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    # "metadata" is reserved by SQLAlchemy's Declarative API.
+    metadata_: Mapped[Optional[dict]] = mapped_column("metadata", JSONB, nullable=True)
 
     created_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=True

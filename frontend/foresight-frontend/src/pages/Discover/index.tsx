@@ -2260,6 +2260,20 @@ const Discover: React.FC = () => {
                 </button>
               )}
             </div>
+
+            {/* Ask GrantScope CTA */}
+            <div className="mt-4 pt-4 border-t border-gray-100 dark:border-dark-border">
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+                Need help finding the right opportunity?
+              </p>
+              <Link
+                to="/ask?scope=grant_assistant"
+                className="inline-flex items-center gap-2 text-brand-blue hover:text-brand-blue/80 text-sm font-medium"
+              >
+                <Search className="w-4 h-4" />
+                Ask GrantScope to find grants for you
+              </Link>
+            </div>
           </div>
         ) : filteredCards.length > 0 ? (
           viewMode === "list" ? (
@@ -2291,6 +2305,20 @@ const Discover: React.FC = () => {
             </div>
           )
         ) : null}
+
+        {/* Low results suggestion */}
+        {filteredCards.length > 0 && filteredCards.length < 5 && (
+          <div className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">
+            Looking for more options?{" "}
+            <Link
+              to="/ask?scope=grant_assistant"
+              className="text-brand-blue hover:underline"
+            >
+              Ask GrantScope
+            </Link>{" "}
+            can help search beyond the database.
+          </div>
+        )}
 
         {/* Load More */}
         {hasMore && !loading && filteredCards.length > 0 && (

@@ -13,7 +13,8 @@ import { Copy, Check, Sparkles, ExternalLink, FileText } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { ChatCitation } from "./ChatCitation";
 import { ChatMessageActions } from "./ChatMessageActions";
-import type { Citation } from "../../lib/chat-api";
+import GrantResultCard from "./GrantResultCard";
+import type { Citation, ToolResult } from "../../lib/chat-api";
 
 // ============================================================================
 // Types
@@ -35,6 +36,8 @@ export interface ChatMessageProps {
       matched_cards?: number;
       card_count?: number;
     };
+    /** Structured tool results from grant search tools */
+    tool_results?: ToolResult[];
   };
   /** Whether this message is currently being streamed */
   isStreaming?: boolean;
@@ -544,6 +547,89 @@ function detectToneBorder(content: string): string {
 }
 
 // ============================================================================
+// Grant Card Extraction
+// ============================================================================
+
+/** Tool names whose results can be rendered as grant cards */
+const GRANT_SEARCH_TOOLS = new Set([
+  "search_internal_grants",
+  "search_grants_gov",
+  "search_sam_gov",
+]);
+
+/**
+ * Normalized grant data suitable for GrantResultCard props.
+ * Extracted from the varied schemas returned by different search tools.
+ */
+interface NormalizedGrant {
+  grantName: string;
+  grantor?: string;
+  fundingMin?: number | null;
+  fundingMax?: number | null;
+  deadline?: string | null;
+  grantType?: string | null;
+  cardSlug?: string | null;
+  sourceUrl?: string | null;
+}
+
+/**
+ * Extracts and normalizes grant results from tool_result payloads.
+ * Each search tool returns slightly different field names; this function
+ * maps them all into a common shape for GrantResultCard.
+ */
+function extractGrantCards(toolResults: ToolResult[]): NormalizedGrant[] {
+  const grants: NormalizedGrant[] = [];
+
+  for (const tr of toolResults) {
+    if (!GRANT_SEARCH_TOOLS.has(tr.tool_name)) continue;
+
+    const results = tr.result?.results;
+    if (!Array.isArray(results)) continue;
+
+    for (const item of results) {
+      const raw = item as Record<string, unknown>;
+
+      if (tr.tool_name === "search_internal_grants") {
+        grants.push({
+          grantName: (raw.name as string) || "Untitled Grant",
+          grantor: raw.grantor as string | undefined,
+          fundingMin: raw.funding_amount_min as number | null | undefined,
+          fundingMax: raw.funding_amount_max as number | null | undefined,
+          deadline: raw.deadline as string | null | undefined,
+          grantType: raw.grant_type as string | null | undefined,
+          cardSlug: raw.slug as string | null | undefined,
+          sourceUrl: null,
+        });
+      } else if (tr.tool_name === "search_grants_gov") {
+        grants.push({
+          grantName: (raw.title as string) || "Untitled Grant",
+          grantor: raw.agency as string | undefined,
+          fundingMin: raw.award_floor as number | null | undefined,
+          fundingMax: raw.award_ceiling as number | null | undefined,
+          deadline: raw.close_date as string | null | undefined,
+          grantType: "Federal",
+          cardSlug: null,
+          sourceUrl: raw.opportunity_url as string | null | undefined,
+        });
+      } else if (tr.tool_name === "search_sam_gov") {
+        grants.push({
+          grantName: (raw.title as string) || "Untitled Opportunity",
+          grantor: raw.department as string | undefined,
+          fundingMin: null,
+          fundingMax: null,
+          deadline: raw.response_deadline as string | null | undefined,
+          grantType: (raw.is_grant as boolean) ? "Federal Grant" : "Federal",
+          cardSlug: null,
+          sourceUrl: raw.opportunity_url as string | null | undefined,
+        });
+      }
+    }
+  }
+
+  return grants;
+}
+
+// ============================================================================
 // Component
 // ============================================================================
 
@@ -590,6 +676,15 @@ export function ChatMessage({
   const toneBorder = useMemo(
     () => (!isUser && !isStreaming ? detectToneBorder(message.content) : ""),
     [message.content, isUser, isStreaming],
+  );
+
+  // Extract grant cards from tool results (if any)
+  const grantCards = useMemo(
+    () =>
+      !isUser && message.tool_results?.length
+        ? extractGrantCards(message.tool_results)
+        : [],
+    [isUser, message.tool_results],
   );
 
   return (
@@ -650,6 +745,32 @@ export function ChatMessage({
             />
           )}
         </div>
+
+        {/* Grant result cards from search tool calls */}
+        {!isUser && grantCards.length > 0 && !isStreaming && (
+          <div
+            className="mt-2 space-y-1"
+            role="list"
+            aria-label="Grant search results"
+          >
+            <p className="text-[10px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+              Grant Opportunities
+            </p>
+            {grantCards.map((grant, idx) => (
+              <GrantResultCard
+                key={`grant-${idx}-${grant.grantName.slice(0, 20)}`}
+                grantName={grant.grantName}
+                grantor={grant.grantor}
+                fundingMin={grant.fundingMin}
+                fundingMax={grant.fundingMax}
+                deadline={grant.deadline}
+                grantType={grant.grantType}
+                cardSlug={grant.cardSlug}
+                sourceUrl={grant.sourceUrl}
+              />
+            ))}
+          </div>
+        )}
 
         {/* Citations section for assistant messages */}
         {!isUser && message.citations.length > 0 && !isStreaming && (

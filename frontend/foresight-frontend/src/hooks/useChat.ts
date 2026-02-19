@@ -3,7 +3,7 @@
  *
  * Manages chat state including messages, streaming responses, conversation
  * lifecycle, and suggested questions. Designed for use with the ChatPanel
- * component across global, signal, and workstream scopes.
+ * component across global, signal, workstream, wizard, and grant_assistant scopes.
  *
  * @module hooks/useChat
  */
@@ -19,6 +19,7 @@ import {
   type ChatMessage,
   type ChatMention,
   type Citation,
+  type ToolResult,
 } from "../lib/chat-api";
 
 // ============================================================================
@@ -27,7 +28,7 @@ import {
 
 export interface UseChatOptions {
   /** The scope context for this chat session */
-  scope: "signal" | "workstream" | "global" | "wizard";
+  scope: "signal" | "workstream" | "global" | "wizard" | "grant_assistant";
   /** ID of the scoped entity (card_id or workstream_id), if not global */
   scopeId?: string;
   /** Resume an existing conversation by ID */
@@ -256,6 +257,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
         // Accumulate tokens using a local variable for performance
         let accumulatedContent = "";
         const accumulatedCitations: Citation[] = [];
+        const accumulatedToolResults: ToolResult[] = [];
 
         await parseSSEStream(response, {
           onToken: (content) => {
@@ -285,6 +287,11 @@ export function useChat(options: UseChatOptions): UseChatReturn {
             setResponseMetadata(data);
           },
 
+          onToolResult: (data) => {
+            if (!isMountedRef.current) return;
+            accumulatedToolResults.push(data);
+          },
+
           onDone: (data) => {
             if (!isMountedRef.current) return;
 
@@ -304,6 +311,9 @@ export function useChat(options: UseChatOptions): UseChatReturn {
               content: accumulatedContent,
               citations: accumulatedCitations,
               created_at: new Date().toISOString(),
+              ...(accumulatedToolResults.length > 0
+                ? { tool_results: accumulatedToolResults }
+                : {}),
             };
 
             setMessages((prev) => [...prev, assistantMessage]);
