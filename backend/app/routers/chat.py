@@ -26,7 +26,9 @@ from app.chat_service import (
     chat as chat_service_chat,
     generate_suggestions as chat_generate_suggestions,
 )
-from app.openai_provider import azure_openai_async_client, get_chat_mini_deployment
+from app.chat.suggestions import generate_smart_suggestions
+
+# azure_openai_async_client and get_chat_mini_deployment moved to app.chat.suggestions
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["chat"])
@@ -178,13 +180,15 @@ async def chat_endpoint(
     user_id = current_user["id"]
 
     # Validate scope
-    if request.scope not in ("signal", "workstream", "global", "wizard"):
+    valid_scopes = ("signal", "workstream", "global", "wizard", "grant_assistant")
+    if request.scope not in valid_scopes:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid scope. Must be 'signal', 'workstream', 'global', or 'wizard'.",
+            detail=f"Invalid scope. Must be one of: {', '.join(valid_scopes)}.",
         )
 
-    # Validate scope_id is provided for non-global scopes
+    # Validate scope_id is provided for scopes that require it
+    # (global and grant_assistant do NOT require scope_id)
     if request.scope in ("signal", "workstream", "wizard") and not request.scope_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -196,6 +200,24 @@ async def chat_endpoint(
     if request.mentions:
         mention_dicts = [m.model_dump() for m in request.mentions]
 
+    # Query online_search setting for grant_assistant scope
+    online_search_enabled = False
+    if request.scope == "grant_assistant":
+        try:
+            from app.models.db.system_settings import SystemSetting
+
+            setting_result = await db.execute(
+                select(SystemSetting.value).where(
+                    SystemSetting.key == "online_search_enabled"
+                )
+            )
+            setting_row = setting_result.scalar_one_or_none()
+            if setting_row is not None:
+                # value is JSONB — could be True/False/"true"/"false"
+                online_search_enabled = setting_row in (True, "true", 1)
+        except Exception as e:
+            logger.warning(f"Failed to query online_search_enabled setting: {e}")
+
     async def event_generator():
         async for event in chat_service_chat(
             request.scope,
@@ -205,6 +227,7 @@ async def chat_endpoint(
             user_id,
             db,
             mentions=mention_dicts,
+            online_search_enabled=online_search_enabled,
         ):
             yield event
 
@@ -581,7 +604,8 @@ async def delete_chat_conversation(
 @router.get("/chat/suggestions")
 async def chat_suggestions(
     scope: str = Query(
-        ..., description="Chat scope: signal, workstream, global, or wizard"
+        ...,
+        description="Chat scope: signal, workstream, global, wizard, or grant_assistant",
     ),
     scope_id: Optional[str] = Query(None, description="ID of the scoped entity"),
     db: AsyncSession = Depends(get_db),
@@ -591,14 +615,16 @@ async def chat_suggestions(
     Get AI-generated suggested questions for a given scope.
 
     Returns context-aware starter questions to help users begin
-    exploring a signal, workstream, global strategic intelligence, or wizard interview.
+    exploring a signal, workstream, global strategic intelligence,
+    wizard interview, or grant assistant conversation.
     """
     user_id = current_user["id"]
 
-    if scope not in ("signal", "workstream", "global", "wizard"):
+    valid_scopes = ("signal", "workstream", "global", "wizard", "grant_assistant")
+    if scope not in valid_scopes:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid scope. Must be 'signal', 'workstream', 'global', or 'wizard'.",
+            detail=f"Invalid scope. Must be one of: {', '.join(valid_scopes)}.",
         )
 
     try:
@@ -624,7 +650,8 @@ async def chat_suggestions(
 @router.get("/chat/suggestions/smart")
 async def smart_chat_suggestions(
     scope: str = Query(
-        ..., description="Chat scope: signal, workstream, global, or wizard"
+        ...,
+        description="Chat scope: signal, workstream, global, wizard, or grant_assistant",
     ),
     scope_id: Optional[str] = Query(None, description="ID of the scoped entity"),
     conversation_id: Optional[str] = Query(
@@ -644,10 +671,11 @@ async def smart_chat_suggestions(
     """
     user_id = current_user["id"]
 
-    if scope not in ("signal", "workstream", "global", "wizard"):
+    valid_scopes = ("signal", "workstream", "global", "wizard", "grant_assistant")
+    if scope not in valid_scopes:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid scope. Must be 'signal', 'workstream', 'global', or 'wizard'.",
+            detail=f"Invalid scope. Must be one of: {', '.join(valid_scopes)}.",
         )
 
     try:
@@ -718,7 +746,7 @@ async def smart_chat_suggestions(
             logger.warning(f"Failed to fetch scope context for smart suggestions: {e}")
 
         # Generate categorized suggestions via LLM
-        suggestions = await _generate_smart_suggestions(
+        suggestions = await generate_smart_suggestions(
             scope=scope,
             scope_context=scope_context,
             conversation_summary=conversation_summary,
@@ -732,159 +760,6 @@ async def smart_chat_suggestions(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("generating smart suggestions", e),
         ) from e
-
-
-async def _generate_smart_suggestions(
-    scope: str,
-    scope_context: str,
-    conversation_summary: str,
-) -> List[Dict[str, str]]:
-    """
-    Generate categorized follow-up suggestions using the mini model.
-
-    Returns a list of dicts with 'text' and 'category' keys.
-    Categories: deeper, compare, action, explore
-    """
-    context_block = ""
-    if conversation_summary:
-        context_block = f"""
-Recent conversation:
-{conversation_summary}
-"""
-
-    prompt = f"""Generate exactly 4 follow-up question suggestions for a city analyst using a strategic intelligence system.
-
-Scope: {scope}
-{scope_context}
-{context_block}
-Each suggestion must belong to one of these categories:
-- "deeper": Dig deeper into causes, drivers, or details
-- "compare": Compare with other cities, trends, or benchmarks
-- "action": Identify specific actions, next steps, or recommendations
-- "explore": Discover related signals, patterns, or connections
-
-Return a JSON object with a "suggestions" array of exactly 4 objects, one per category.
-Each object has "text" (the question, max 80 chars) and "category" (one of: deeper, compare, action, explore).
-
-Example:
-{{"suggestions": [
-  {{"text": "What are the underlying drivers of this trend?", "category": "deeper"}},
-  {{"text": "How does this compare to Denver and Portland?", "category": "compare"}},
-  {{"text": "What specific actions should Austin take next?", "category": "action"}},
-  {{"text": "What related signals should we watch?", "category": "explore"}}
-]}}"""
-
-    try:
-        response = await azure_openai_async_client.chat.completions.create(
-            model=get_chat_mini_deployment(),
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You generate categorized follow-up questions for a strategic "
-                        "intelligence chat system. Respond with valid JSON only."
-                    ),
-                },
-                {"role": "user", "content": prompt},
-            ],
-            response_format={"type": "json_object"},
-            max_tokens=400,
-            temperature=0.8,
-        )
-
-        content = response.choices[0].message.content.strip()
-        result = json.loads(content)
-
-        # Parse the result
-        suggestions_raw: list = []
-        if isinstance(result, dict):
-            suggestions_raw = result.get("suggestions") or result.get("questions") or []
-        elif isinstance(result, list):
-            suggestions_raw = result
-
-        valid_categories = {"deeper", "compare", "action", "explore"}
-        suggestions: List[Dict[str, str]] = []
-        for item in suggestions_raw[:4]:
-            if isinstance(item, dict) and "text" in item and "category" in item:
-                category = (
-                    item["category"]
-                    if item["category"] in valid_categories
-                    else "deeper"
-                )
-                suggestions.append(
-                    {
-                        "text": str(item["text"])[:100],
-                        "category": category,
-                    }
-                )
-
-        if suggestions:
-            return suggestions
-
-    except Exception as e:
-        logger.warning(f"Smart suggestion generation failed: {e}")
-
-    # Fallback categorized suggestions
-    fallbacks = {
-        "signal": [
-            {
-                "text": "What are the underlying drivers of this signal?",
-                "category": "deeper",
-            },
-            {"text": "How does this compare to other cities?", "category": "compare"},
-            {"text": "What should Austin do to prepare?", "category": "action"},
-            {"text": "What related signals should we track?", "category": "explore"},
-        ],
-        "workstream": [
-            {"text": "What are the cross-cutting themes here?", "category": "deeper"},
-            {
-                "text": "How do these signals compare to national trends?",
-                "category": "compare",
-            },
-            {
-                "text": "Which signals require the most urgent action?",
-                "category": "action",
-            },
-            {
-                "text": "What emerging patterns connect these signals?",
-                "category": "explore",
-            },
-        ],
-        "global": [
-            {
-                "text": "What are the fastest-moving trends right now?",
-                "category": "deeper",
-            },
-            {"text": "How does Austin compare to peer cities?", "category": "compare"},
-            {
-                "text": "What should Austin prioritize in the next 12 months?",
-                "category": "action",
-            },
-            {
-                "text": "Are there any new cross-cutting patterns emerging?",
-                "category": "explore",
-            },
-        ],
-        "wizard": [
-            {
-                "text": "Tell me more about what my program does",
-                "category": "deeper",
-            },
-            {
-                "text": "What do similar grant applications usually include?",
-                "category": "compare",
-            },
-            {
-                "text": "Help me outline a budget for this grant",
-                "category": "action",
-            },
-            {
-                "text": "What other funding sources should I consider?",
-                "category": "explore",
-            },
-        ],
-    }
-    return fallbacks.get(scope, fallbacks["global"])
 
 
 # ---------------------------------------------------------------------------

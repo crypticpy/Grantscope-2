@@ -23,7 +23,6 @@ import {
   Radar,
   Loader2,
 } from "lucide-react";
-import { useAuthContext } from "../hooks/useAuthContext";
 import { API_BASE_URL } from "../lib/config";
 import { WorkstreamForm, type Workstream } from "../components/WorkstreamForm";
 import { WorkstreamWizard } from "../components/workstream/WorkstreamWizard";
@@ -638,7 +637,6 @@ function WorkstreamCard({
 // ============================================================================
 
 const Workstreams: React.FC = () => {
-  const { user } = useAuthContext();
   const navigate = useNavigate();
   const [workstreams, setWorkstreams] = useState<Workstream[]>([]);
   const [loading, setLoading] = useState(true);
@@ -974,6 +972,16 @@ const Workstreams: React.FC = () => {
               Learn more about programs
             </Link>
           </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-4">
+            Not sure where to start?{" "}
+            <Link
+              to="/ask?scope=grant_assistant"
+              className="text-brand-blue hover:underline"
+            >
+              Ask GrantScope
+            </Link>{" "}
+            can help you identify grants and set up a program.
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

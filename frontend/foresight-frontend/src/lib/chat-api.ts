@@ -60,7 +60,7 @@ export interface Conversation {
   /** Unique conversation identifier (UUID) */
   id: string;
   /** The scope context of this conversation */
-  scope: "signal" | "workstream" | "global" | "wizard";
+  scope: "signal" | "workstream" | "global" | "wizard" | "grant_assistant";
   /** ID of the scoped entity (card_id or workstream_id), if not global */
   scope_id?: string;
   /** Auto-generated or user-set title for the conversation */
@@ -602,6 +602,36 @@ export async function exportChatMessagePDF(messageId: string): Promise<Blob> {
   }
 
   return response.blob();
+}
+
+// ============================================================================
+// Admin Settings
+// ============================================================================
+
+/**
+ * Fetch a system setting value from the admin API.
+ * Public read access — any authenticated user can read settings.
+ *
+ * @param key - The setting key to fetch (e.g. "online_search_enabled")
+ * @param token - The current user's auth token
+ * @returns The setting record, or null if unavailable
+ */
+export async function fetchAdminSetting(
+  key: string,
+  token: string,
+): Promise<{ key: string; value: any; description: string } | null> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/admin/settings/${key}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+    if (!response.ok) return null;
+    return response.json();
+  } catch {
+    return null;
+  }
 }
 
 // ============================================================================

@@ -22,6 +22,7 @@ import {
   PanelLeftOpen,
   Search,
   Loader2,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import { API_BASE_URL } from "../lib/config";
@@ -30,6 +31,7 @@ import {
   fetchConversations,
   deleteConversation,
   searchConversations,
+  fetchAdminSetting,
 } from "../lib/chat-api";
 import type { Conversation } from "../lib/chat-api";
 import { FeatureIntroBanner } from "../components/onboarding/FeatureIntroBanner";
@@ -45,7 +47,7 @@ interface Workstream {
 
 interface ScopeOption {
   label: string;
-  scope: "global" | "workstream";
+  scope: "global" | "workstream" | "grant_assistant";
   scopeId?: string;
 }
 
@@ -99,12 +101,16 @@ function relativeTime(dateStr: string): string {
 }
 
 /** Returns the pill color classes for a scope type. */
-function scopeBadgeClasses(scope: Conversation["scope"]): string {
+function scopeBadgeClasses(
+  scope: Conversation["scope"] | "grant_assistant",
+): string {
   switch (scope) {
     case "signal":
       return "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300";
     case "workstream":
       return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300";
+    case "grant_assistant":
+      return "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300";
     case "global":
     default:
       return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300";
@@ -112,12 +118,14 @@ function scopeBadgeClasses(scope: Conversation["scope"]): string {
 }
 
 /** Label for scope badge pill. */
-function scopeLabel(scope: Conversation["scope"]): string {
+function scopeLabel(scope: Conversation["scope"] | "grant_assistant"): string {
   switch (scope) {
     case "signal":
       return "Opportunity";
     case "workstream":
       return "Workstream";
+    case "grant_assistant":
+      return "Grant Search";
     case "global":
     default:
       return "Global";
@@ -152,7 +160,7 @@ export default function AskGrantScope() {
     }
   });
   const [activeConversationScope, setActiveConversationScope] = useState<
-    "global" | "signal" | "workstream" | "wizard"
+    "global" | "signal" | "workstream" | "wizard" | "grant_assistant"
   >(() => {
     try {
       return (
@@ -160,7 +168,8 @@ export default function AskGrantScope() {
           | "global"
           | "signal"
           | "workstream"
-          | "wizard") || "global"
+          | "wizard"
+          | "grant_assistant") || "global"
       );
     } catch {
       return "global";
@@ -199,8 +208,12 @@ export default function AskGrantScope() {
   );
   const [isSearching, setIsSearching] = useState(false);
 
-  // Initial query from URL
-  const initialQuery = searchParams.get("q") || undefined;
+  // Initial query from URL — supports both ?q= and ?query= for flexibility
+  const initialQuery =
+    searchParams.get("q") || searchParams.get("query") || undefined;
+
+  // Online search capability indicator
+  const [onlineSearchEnabled, setOnlineSearchEnabled] = useState(false);
 
   // ChatPanel remount key — uses a stable session counter instead of
   // activeConversationId so that the null→UUID transition from the streaming
@@ -256,6 +269,34 @@ export default function AskGrantScope() {
     loadConversations();
     loadWorkstreams();
   }, [loadConversations, loadWorkstreams]);
+
+  // Initialize scope from URL params (e.g. ?scope=grant_assistant)
+  useEffect(() => {
+    const urlScope = searchParams.get("scope");
+    if (urlScope === "grant_assistant") {
+      setSelectedScope({
+        label: "Grant Search",
+        scope: "grant_assistant",
+      });
+      setActiveConversationScope("grant_assistant");
+    }
+    // Only run on mount — intentionally excludes searchParams from deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Fetch online_search_enabled admin setting
+  useEffect(() => {
+    const token = localStorage.getItem("gs2_token");
+    if (token) {
+      fetchAdminSetting("online_search_enabled", token).then((setting) => {
+        if (setting) {
+          setOnlineSearchEnabled(
+            setting.value === true || setting.value === "true",
+          );
+        }
+      });
+    }
+  }, []);
 
   // Persist active conversation to sessionStorage
   useEffect(() => {
@@ -415,12 +456,42 @@ export default function AskGrantScope() {
   // Build scope options
   const scopeOptions: ScopeOption[] = [
     { label: "All Opportunities", scope: "global" },
+    { label: "Grant Search", scope: "grant_assistant" },
     ...workstreams.map((ws) => ({
       label: ws.name,
       scope: "workstream" as const,
       scopeId: ws.id,
     })),
   ];
+
+  // Scope-aware suggested questions
+  const suggestedQuestions =
+    effectiveScope === "grant_assistant"
+      ? [
+          "What grants are available for housing programs?",
+          "Find federal funding for public health initiatives",
+          "Search for grants related to our program priorities",
+          "What upcoming grant deadlines should we prepare for?",
+          "Compare environmental sustainability funding sources",
+        ]
+      : [
+          "What grants are open for environmental sustainability?",
+          "Which deadlines should I prioritize this month?",
+          "Summarize eligibility for the latest federal grants",
+          "What's the total value of my grant pipeline?",
+          "Compare funding opportunities for community health programs",
+        ];
+
+  // Scope-aware descriptions
+  const scopeDescription =
+    effectiveScope === "grant_assistant"
+      ? `Search and discover grant opportunities using AI-powered analysis.${onlineSearchEnabled ? " Online search is enabled for live results." : ""}`
+      : "Ask questions about grants, funding opportunities, eligibility requirements, and more. GrantScope uses AI to synthesize intelligence from your data.";
+
+  const scopeTitle =
+    effectiveScope === "grant_assistant"
+      ? "Search for Grant Opportunities"
+      : "What would you like to explore?";
 
   // ============================================================================
   // Render
@@ -472,7 +543,12 @@ export default function AskGrantScope() {
                 "transition-colors duration-200",
               )}
             >
-              {selectedScope.scope === "global" ? (
+              {selectedScope.scope === "grant_assistant" ? (
+                <Sparkles
+                  className="h-4 w-4 text-indigo-500"
+                  aria-hidden="true"
+                />
+              ) : selectedScope.scope === "global" ? (
                 <Globe className="h-4 w-4 text-brand-blue" aria-hidden="true" />
               ) : (
                 <FolderOpen
@@ -517,7 +593,12 @@ export default function AskGrantScope() {
                           : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-surface-hover",
                       )}
                     >
-                      {option.scope === "global" ? (
+                      {option.scope === "grant_assistant" ? (
+                        <Sparkles
+                          className="h-4 w-4 shrink-0"
+                          aria-hidden="true"
+                        />
+                      ) : option.scope === "global" ? (
                         <Globe
                           className="h-4 w-4 shrink-0"
                           aria-hidden="true"
@@ -764,16 +845,14 @@ export default function AskGrantScope() {
             onConversationChange={handleConversationChange}
             forceNew={forceNewChat}
             className="flex-1"
-            placeholder="Ask GrantScope about grants, funding opportunities, and deadlines..."
-            emptyStateTitle="What would you like to explore?"
-            emptyStateDescription="Ask questions about grants, funding opportunities, eligibility requirements, and more. GrantScope uses AI to synthesize intelligence from your data."
-            defaultSuggestedQuestions={[
-              "What grants are open for environmental sustainability?",
-              "Which deadlines should I prioritize this month?",
-              "Summarize eligibility for the latest federal grants",
-              "What's the total value of my grant pipeline?",
-              "Compare funding opportunities for community health programs",
-            ]}
+            placeholder={
+              effectiveScope === "grant_assistant"
+                ? "Search for grants, funding programs, and opportunities..."
+                : "Ask GrantScope about grants, funding opportunities, and deadlines..."
+            }
+            emptyStateTitle={scopeTitle}
+            emptyStateDescription={scopeDescription}
+            defaultSuggestedQuestions={suggestedQuestions}
           />
         </div>
       </div>

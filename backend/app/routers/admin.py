@@ -32,6 +32,8 @@ from app.models.db.card import Card
 from app.models.db.research import ResearchTask
 from app.models.db.source import SourceRating, SignalSource
 from app.models.db.analytics import DomainReputation
+from app.models.db.system_settings import SystemSetting
+from app.chat.admin_deps import require_admin
 from app import quality_service, domain_reputation_service
 
 logger = logging.getLogger(__name__)
@@ -663,4 +665,75 @@ async def trigger_velocity_calculation(
     return {
         "status": "started",
         "message": "Velocity calculation is running in the background.",
+    }
+
+
+# ============================================================================
+# System Settings CRUD
+# ============================================================================
+
+
+@router.get("/admin/settings")
+async def list_settings(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_admin),
+):
+    """List all system settings. Admin only."""
+    result = await db.execute(select(SystemSetting).order_by(SystemSetting.key))
+    settings = result.scalars().all()
+    return [
+        {
+            "key": s.key,
+            "value": s.value,
+            "description": s.description,
+            "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+        }
+        for s in settings
+    ]
+
+
+@router.get("/admin/settings/{key}")
+async def get_setting(
+    key: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
+):
+    """Get a single setting value. Public read access (frontend needs this)."""
+    result = await db.execute(select(SystemSetting).where(SystemSetting.key == key))
+    setting = result.scalar_one_or_none()
+    if not setting:
+        raise HTTPException(status_code=404, detail=f"Setting '{key}' not found")
+    return {
+        "key": setting.key,
+        "value": setting.value,
+        "description": setting.description,
+    }
+
+
+@router.put("/admin/settings/{key}")
+async def update_setting(
+    key: str,
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_admin),
+):
+    """Update a system setting value. Admin only."""
+    result = await db.execute(select(SystemSetting).where(SystemSetting.key == key))
+    setting = result.scalar_one_or_none()
+    if not setting:
+        raise HTTPException(status_code=404, detail=f"Setting '{key}' not found")
+
+    if "value" not in body:
+        raise HTTPException(status_code=400, detail="Request body must include 'value'")
+
+    setting.value = body["value"]
+    setting.updated_by = current_user["id"]
+    setting.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(setting)
+
+    return {
+        "key": setting.key,
+        "value": setting.value,
+        "description": setting.description,
     }

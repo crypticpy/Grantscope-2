@@ -9,6 +9,7 @@ import {
   UserCog,
   CheckCircle,
   ArrowRight,
+  Settings2,
 } from "lucide-react";
 import { useAuthContext } from "../hooks/useAuthContext";
 import { LoadingButton } from "../components/ui/LoadingButton";
@@ -41,10 +42,71 @@ const Settings: React.FC = () => {
   const [notifMessage, setNotifMessage] = useState("");
   const [useAccountEmail, setUseAccountEmail] = useState(true);
 
+  // Admin settings state
+  const [onlineSearchEnabled, setOnlineSearchEnabled] = useState(false);
+  const [settingsLoading, setSettingsLoading] = useState(false);
+
+  // Determine if user is admin
+  const isAdmin = user?.role === "admin" || user?.role === "service_role";
+
   useEffect(() => {
     loadProfile();
     loadNotificationPreferences();
   }, []);
+
+  // Fetch admin setting on mount
+  useEffect(() => {
+    if (isAdmin) {
+      const fetchSetting = async () => {
+        try {
+          const token = localStorage.getItem("gs2_token");
+          if (!token) return;
+          const res = await fetch(
+            `${API_BASE_URL}/api/v1/admin/settings/online_search_enabled`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            },
+          );
+          if (res.ok) {
+            const data = await res.json();
+            setOnlineSearchEnabled(
+              data.value === true || data.value === "true",
+            );
+          }
+        } catch (e) {
+          console.error("Failed to fetch admin setting:", e);
+        }
+      };
+      fetchSetting();
+    }
+  }, [isAdmin]);
+
+  // Toggle handler for online search setting
+  const toggleOnlineSearch = async (checked: boolean) => {
+    setSettingsLoading(true);
+    try {
+      const token = localStorage.getItem("gs2_token");
+      if (!token) return;
+      const res = await fetch(
+        `${API_BASE_URL}/api/v1/admin/settings/online_search_enabled`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ value: checked }),
+        },
+      );
+      if (res.ok) {
+        setOnlineSearchEnabled(checked);
+      }
+    } catch (e) {
+      console.error("Failed to update setting:", e);
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
 
   const loadProfile = async () => {
     try {
@@ -704,6 +766,46 @@ const Settings: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Administration (admin only) */}
+        {isAdmin && (
+          <div className="bg-white dark:bg-dark-card rounded-lg shadow-sm border border-gray-200 dark:border-dark-border p-6">
+            <div className="flex items-center mb-4">
+              <Settings2 className="h-5 w-5 text-gray-400 mr-2" />
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Administration
+              </h3>
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-sm font-medium text-gray-900 dark:text-white">
+                  Online Search
+                </label>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                  Allow the AI assistant to search Grants.gov, SAM.gov, and the
+                  web for grant opportunities
+                </p>
+              </div>
+              <button
+                onClick={() => toggleOnlineSearch(!onlineSearchEnabled)}
+                disabled={settingsLoading}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 ${
+                  onlineSearchEnabled
+                    ? "bg-brand-blue"
+                    : "bg-gray-200 dark:bg-gray-600"
+                } ${settingsLoading ? "opacity-50" : ""}`}
+                role="switch"
+                aria-checked={onlineSearchEnabled}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    onlineSearchEnabled ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

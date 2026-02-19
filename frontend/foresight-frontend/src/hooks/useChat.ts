@@ -27,7 +27,7 @@ import {
 
 export interface UseChatOptions {
   /** The scope context for this chat session */
-  scope: "signal" | "workstream" | "global" | "wizard";
+  scope: "signal" | "workstream" | "global" | "wizard" | "grant_assistant";
   /** ID of the scoped entity (card_id or workstream_id), if not global */
   scopeId?: string;
   /** Resume an existing conversation by ID */
