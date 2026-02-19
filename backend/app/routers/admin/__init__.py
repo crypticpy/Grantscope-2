@@ -16,3 +16,12 @@ router.include_router(source_ratings_router)
 router.include_router(domain_reputation_router)
 router.include_router(velocity_router)
 router.include_router(settings_router)
+
+# Phase 1: Core backend APIs
+from .users import router as users_router
+from .monitoring import router as monitoring_router
+from .jobs import router as jobs_router
+
+router.include_router(users_router)
+router.include_router(monitoring_router)
+router.include_router(jobs_router)
