@@ -58,8 +58,8 @@ function getDeadlineUrgency(
     (d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
   );
   if (daysUntil < 0) return "past";
-  if (daysUntil <= 14) return "urgent";
-  if (daysUntil <= 45) return "soon";
+  if (daysUntil <= 7) return "urgent";
+  if (daysUntil <= 30) return "soon";
   return "normal";
 }
 

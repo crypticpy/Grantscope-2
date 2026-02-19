@@ -213,8 +213,10 @@ async def chat_endpoint(
             )
             setting_row = setting_result.scalar_one_or_none()
             if setting_row is not None:
-                # value is JSONB — could be True/False/"true"/"false"
-                online_search_enabled = setting_row in (True, "true", 1)
+                # value is JSONB — could be True/False/"true"/"false"/1
+                online_search_enabled = (
+                    setting_row is True or str(setting_row).lower() == "true"
+                )
         except Exception as e:
             logger.warning(f"Failed to query online_search_enabled setting: {e}")
 

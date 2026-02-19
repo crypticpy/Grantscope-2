@@ -14,8 +14,8 @@ from typing import Any, Dict, List
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.chat.profile_utils import compute_profile_completion, load_user_profile
 from app.chat.tools import ToolDefinition, registry
-from app.models.db.user import User
 from app.models.db.workstream import Workstream, WorkstreamCard
 
 logger = logging.getLogger(__name__)
@@ -137,80 +137,23 @@ async def _handle_check_user_profile(
         except ValueError:
             return {"error": "Invalid user ID format."}
 
-        user_result = await db.execute(select(User).where(User.id == user_uuid))
-        user_obj = user_result.scalar_one_or_none()
+        profile = await load_user_profile(db, user_uuid)
 
-        if user_obj is None:
+        if profile is None:
             return {
                 "error": "User profile not found. Please set up your profile first.",
             }
 
-        # Compute profile completion (same logic as routers/users.py)
-        completed_steps: List[int] = []
-        missing: List[str] = []
+        percentage, missing = compute_profile_completion(profile)
 
-        # Step 1 (25%): Identity -- department_id + display_name
-        if user_obj.department_id and user_obj.display_name:
-            completed_steps.append(1)
-        else:
-            if not user_obj.department_id:
-                missing.append("department_id")
-            if not user_obj.display_name:
-                missing.append("display_name")
-
-        # Step 2 (25%): Program -- program_name
-        if user_obj.program_name:
-            completed_steps.append(2)
-        else:
-            missing.append("program_name")
-
-        # Step 3 (25%): Grant interests -- grant_experience + grant_categories
-        if user_obj.grant_experience and user_obj.grant_categories:
-            completed_steps.append(3)
-        else:
-            if not user_obj.grant_experience:
-                missing.append("grant_experience")
-            if not user_obj.grant_categories:
-                missing.append("grant_categories")
-
-        # Step 4 (25%): Priorities -- priorities or custom_priorities
-        if (
-            user_obj.priorities and len(user_obj.priorities) > 0
-        ) or user_obj.custom_priorities:
-            completed_steps.append(4)
-        else:
-            missing.append("priorities")
-
-        percentage = len(completed_steps) * 25
-
-        # Build profile data dict
-        profile_data: Dict[str, Any] = {}
-        for field_name in [
-            "department",
-            "department_id",
-            "program_name",
-            "program_mission",
-            "grant_categories",
-            "strategic_pillars",
-            "priorities",
-            "funding_range_min",
-            "funding_range_max",
-            "grant_experience",
-            "team_size",
-            "budget_range",
-        ]:
-            val = getattr(user_obj, field_name, None)
-            if val is not None:
-                if isinstance(val, list):
-                    profile_data[field_name] = list(val)
-                else:
-                    profile_data[field_name] = val
+        # Strip internal keys before returning profile data
+        profile_data = {k: v for k, v in profile.items() if not k.startswith("_")}
 
         return {
             "completion_percentage": percentage,
             "missing_fields": missing,
             "is_complete": (
-                user_obj.profile_completed_at is not None or percentage == 100
+                profile.get("_profile_completed_at") is not None or percentage == 100
             ),
             "profile_data": profile_data,
         }

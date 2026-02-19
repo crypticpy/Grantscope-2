@@ -9,13 +9,12 @@ from __future__ import annotations
 import json
 import logging
 import uuid as _uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.chat.profile_utils import load_user_profile
 from app.chat.tools import ToolDefinition, registry
-from app.models.db.user import User
 
 logger = logging.getLogger(__name__)
 
@@ -83,30 +82,12 @@ async def _handle_assess_fit(db: AsyncSession, user_id: str, **kwargs: Any) -> d
         # Load user profile
         profile_data: Dict[str, Any] = {}
         try:
-            user_result = await db.execute(
-                select(User).where(User.id == _uuid.UUID(user_id))
-            )
-            user_obj = user_result.scalar_one_or_none()
-            if user_obj:
-                for field_name in [
-                    "department",
-                    "program_name",
-                    "program_mission",
-                    "grant_categories",
-                    "strategic_pillars",
-                    "priorities",
-                    "funding_range_min",
-                    "funding_range_max",
-                    "grant_experience",
-                    "team_size",
-                    "budget_range",
-                ]:
-                    val = getattr(user_obj, field_name, None)
-                    if val is not None:
-                        if isinstance(val, list):
-                            profile_data[field_name] = list(val)
-                        else:
-                            profile_data[field_name] = val
+            profile = await load_user_profile(db, _uuid.UUID(user_id))
+            if profile is not None:
+                # Strip internal keys (e.g. _profile_completed_at)
+                profile_data = {
+                    k: v for k, v in profile.items() if not k.startswith("_")
+                }
         except Exception as e:
             logger.warning("Could not load user profile for fit assessment: %s", e)
 
@@ -311,6 +292,6 @@ registry.register(
             "required": ["url"],
         },
         handler=_handle_analyze_url,
-        requires_online=True,
+        requires_online=False,
     )
 )

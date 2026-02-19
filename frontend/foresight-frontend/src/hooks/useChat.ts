@@ -19,6 +19,7 @@ import {
   type ChatMessage,
   type ChatMention,
   type Citation,
+  type ToolResult,
 } from "../lib/chat-api";
 
 // ============================================================================
@@ -256,6 +257,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
         // Accumulate tokens using a local variable for performance
         let accumulatedContent = "";
         const accumulatedCitations: Citation[] = [];
+        const accumulatedToolResults: ToolResult[] = [];
 
         await parseSSEStream(response, {
           onToken: (content) => {
@@ -285,6 +287,11 @@ export function useChat(options: UseChatOptions): UseChatReturn {
             setResponseMetadata(data);
           },
 
+          onToolResult: (data) => {
+            if (!isMountedRef.current) return;
+            accumulatedToolResults.push(data);
+          },
+
           onDone: (data) => {
             if (!isMountedRef.current) return;
 
@@ -304,6 +311,9 @@ export function useChat(options: UseChatOptions): UseChatReturn {
               content: accumulatedContent,
               citations: accumulatedCitations,
               created_at: new Date().toISOString(),
+              ...(accumulatedToolResults.length > 0
+                ? { tool_results: accumulatedToolResults }
+                : {}),
             };
 
             setMessages((prev) => [...prev, assistantMessage]);

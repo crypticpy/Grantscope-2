@@ -17,6 +17,16 @@ import { API_BASE_URL } from "./config";
 /**
  * A single chat message in a conversation.
  */
+/**
+ * A structured tool result from a backend tool call (e.g. grant search).
+ */
+export interface ToolResult {
+  /** Name of the tool that produced the result */
+  tool_name: string;
+  /** The tool's return value (typically contains a `results` list) */
+  result: Record<string, unknown>;
+}
+
 export interface ChatMessage {
   /** Unique message identifier (UUID) */
   id: string;
@@ -28,6 +38,8 @@ export interface ChatMessage {
   citations: Citation[];
   /** ISO 8601 timestamp when the message was created */
   created_at: string;
+  /** Structured tool results received during this response (grant searches, etc.) */
+  tool_results?: ToolResult[];
 }
 
 /**
@@ -83,7 +95,8 @@ export interface SSEEvent {
     | "done"
     | "error"
     | "progress"
-    | "metadata";
+    | "metadata"
+    | "tool_result";
   /** Text content for token events */
   content?: string;
   /** Structured data for citation, suggestions, done, and error events */
@@ -201,6 +214,8 @@ export async function parseSSEStream(
     onProgress?: (data: { step: string; detail: string }) => void;
     /** Called when the backend sends response metadata (source counts, etc.) */
     onMetadata?: (data: Record<string, unknown>) => void;
+    /** Called when the backend sends a tool call result (e.g. grant search results) */
+    onToolResult?: (data: ToolResult) => void;
   },
 ): Promise<void> {
   const reader = response.body?.getReader();
@@ -268,6 +283,7 @@ function processSSELine(
     onError: (error: string) => void;
     onProgress?: (data: { step: string; detail: string }) => void;
     onMetadata?: (data: Record<string, unknown>) => void;
+    onToolResult?: (data: ToolResult) => void;
   },
 ): void {
   // SSE lines have the format: "data: {json}"
@@ -323,6 +339,12 @@ function processSSELine(
       case "metadata":
         if (callbacks.onMetadata && event.data) {
           callbacks.onMetadata(event.data as Record<string, unknown>);
+        }
+        break;
+
+      case "tool_result":
+        if (callbacks.onToolResult && event.data) {
+          callbacks.onToolResult(event.data as ToolResult);
         }
         break;
 

@@ -35,6 +35,7 @@ from app.chat.sse import (
     sse_citation,
     sse_metadata,
     sse_suggestions,
+    sse_tool_result,
 )
 from app.chat.prompts import build_system_prompt, build_wizard_system_prompt
 from app.chat.conversations import (
@@ -387,6 +388,20 @@ async def chat(
                     yield sse_progress("tool_call", label)
 
                 elif isinstance(event, ToolCallResultEvent):
+                    # Emit structured tool results for grant search tools
+                    # so the frontend can render rich GrantResultCards
+                    _GRANT_SEARCH_TOOLS = {
+                        "search_internal_grants",
+                        "search_grants_gov",
+                        "search_sam_gov",
+                    }
+                    if (
+                        event.tool_name in _GRANT_SEARCH_TOOLS
+                        and isinstance(event.result, dict)
+                        and event.result.get("results")
+                    ):
+                        yield sse_tool_result(event.tool_name, event.result)
+
                     # Enrich source_map with web search results
                     if event.tool_name == "web_search" and isinstance(
                         event.result, dict

@@ -72,3 +72,16 @@ def sse_suggestions(suggestions: list[str]) -> str:
     can click to continue the conversation.
     """
     return f"data: {json.dumps({'type': 'suggestions', 'data': suggestions})}\n\n"
+
+
+def sse_tool_result(tool_name: str, result: dict) -> str:
+    """Format a tool result event.
+
+    Sends structured tool call results to the frontend so it can render
+    rich UI components (e.g. GrantResultCard) for search results.
+
+    Args:
+        tool_name: The name of the tool that produced the result.
+        result: The tool's return value (typically contains a ``results`` list).
+    """
+    return f"data: {json.dumps({'type': 'tool_result', 'data': {'tool_name': tool_name, 'result': result}})}\n\n"

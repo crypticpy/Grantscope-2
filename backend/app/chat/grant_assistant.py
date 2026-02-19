@@ -21,9 +21,9 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.chat.profile_utils import compute_profile_completion, load_user_profile
 from app.chat.tools import registry
 from app.models.db.card import Card
-from app.models.db.user import User
 
 logger = logging.getLogger(__name__)
 
@@ -154,25 +154,16 @@ def _build_user_profile_section(profile: Dict[str, Any]) -> str:
 def _calculate_profile_completion(profile: Dict[str, Any]) -> int:
     """Calculate profile completion percentage.
 
+    Delegates to the canonical 4-step model in profile_utils.
+
     Args:
         profile: Dict of user profile fields.
 
     Returns:
         Integer percentage (0-100).
     """
-    key_fields = [
-        "department",
-        "program_name",
-        "program_mission",
-        "strategic_pillars",
-        "grant_categories",
-        "priorities",
-        "funding_range_min",
-        "funding_range_max",
-        "grant_experience",
-    ]
-    filled = sum(1 for f in key_fields if profile.get(f))
-    return int((filled / len(key_fields)) * 100)
+    percentage, _ = compute_profile_completion(profile)
+    return percentage
 
 
 @dataclass
@@ -218,30 +209,10 @@ async def build_grant_assistant_context(
     # 1. Load user profile
     user_profile: Dict[str, Any] = {}
     try:
-        result = await db.execute(select(User).where(User.id == _uuid.UUID(user_id)))
-        user_obj = result.scalar_one_or_none()
-        if user_obj:
-            profile_fields = [
-                "department",
-                "program_name",
-                "program_mission",
-                "grant_categories",
-                "strategic_pillars",
-                "priorities",
-                "custom_priorities",
-                "funding_range_min",
-                "funding_range_max",
-                "grant_experience",
-                "team_size",
-                "budget_range",
-                "help_wanted",
-            ]
-            for field_name in profile_fields:
-                val = getattr(user_obj, field_name, None)
-                if val is not None:
-                    user_profile[field_name] = (
-                        list(val) if isinstance(val, list) else val
-                    )
+        profile = await load_user_profile(db, _uuid.UUID(user_id))
+        if profile is not None:
+            # Strip internal keys (e.g. _profile_completed_at)
+            user_profile = {k: v for k, v in profile.items() if not k.startswith("_")}
     except Exception as e:
         logger.warning("Failed to load user profile for grant assistant: %s", e)
 

@@ -5,7 +5,9 @@ import logging
 import uuid as _uuid
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Optional
+from typing import Any, Optional
+
+from pydantic import BaseModel
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import delete, func, select, update
@@ -38,6 +40,16 @@ from app import quality_service, domain_reputation_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["admin"])
+
+# Setting keys that non-admin users are allowed to read
+PUBLIC_SETTING_KEYS = {"online_search_enabled"}
+
+
+class SettingUpdate(BaseModel):
+    """Request body for updating a system setting."""
+
+    value: Any
+    description: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -698,7 +710,16 @@ async def get_setting(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user_hardcoded),
 ):
-    """Get a single setting value. Public read access (frontend needs this)."""
+    """Get a single setting value.
+
+    Non-admin users may only read keys listed in PUBLIC_SETTING_KEYS.
+    """
+    user_role = current_user.get("role", "")
+    if user_role not in ("admin", "service_role") and key not in PUBLIC_SETTING_KEYS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to read this setting",
+        )
     result = await db.execute(select(SystemSetting).where(SystemSetting.key == key))
     setting = result.scalar_one_or_none()
     if not setting:
@@ -713,7 +734,7 @@ async def get_setting(
 @router.put("/admin/settings/{key}")
 async def update_setting(
     key: str,
-    body: dict,
+    body: SettingUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(require_admin),
 ):
@@ -723,10 +744,9 @@ async def update_setting(
     if not setting:
         raise HTTPException(status_code=404, detail=f"Setting '{key}' not found")
 
-    if "value" not in body:
-        raise HTTPException(status_code=400, detail="Request body must include 'value'")
-
-    setting.value = body["value"]
+    setting.value = body.value
+    if body.description is not None:
+        setting.description = body.description
     setting.updated_by = current_user["id"]
     setting.updated_at = datetime.now(timezone.utc)
     await db.commit()
