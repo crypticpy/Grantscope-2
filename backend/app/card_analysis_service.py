@@ -383,21 +383,32 @@ async def execute_card_analysis(
         "updated_at": datetime.now(timezone.utc),
     }
 
-    # Add parsed score values (clamped to 0-100)
-    score_fields = [
+    # Add parsed score values
+    # Some score columns are INTEGER (0-100), others are NUMERIC(3,2) (0.00-9.99)
+    integer_score_fields = [
         "alignment_score",
         "readiness_score",
         "competition_score",
         "urgency_score",
         "probability_score",
+    ]
+    # These columns are NUMERIC(3,2) — store as 0.00-9.99 (divide AI's 0-100 by 10)
+    decimal_score_fields = [
         "impact_score",
         "relevance_score",
     ]
-    for sf in score_fields:
+    for sf in integer_score_fields:
         val = scores.get(sf)
         if val is not None:
             try:
                 update_values[sf] = max(0, min(100, int(val)))
+            except (ValueError, TypeError):
+                pass
+    for sf in decimal_score_fields:
+        val = scores.get(sf)
+        if val is not None:
+            try:
+                update_values[sf] = round(max(0.0, min(9.99, int(val) / 10.0)), 2)
             except (ValueError, TypeError):
                 pass
 
