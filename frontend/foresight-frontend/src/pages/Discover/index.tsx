@@ -1143,10 +1143,10 @@ const Discover: React.FC = () => {
               {/* Search bar */}
               <div>
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 dark:text-gray-300 h-4 w-4" />
                   <input
                     type="text"
-                    className="pl-10 block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                    className="pl-10 block w-full rounded-md border border-gray-300 bg-gray-50 text-gray-900 shadow-sm dark:border-gray-500 dark:bg-dark-surface dark:text-gray-100 dark:shadow-none placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
                     placeholder="Search opportunities..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
@@ -1326,11 +1326,11 @@ const Discover: React.FC = () => {
                     Search
                   </label>
                   <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 dark:text-gray-300 h-4 w-4" />
                     <input
                       type="text"
                       id="search"
-                      className="pl-10 block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
+                      className="pl-10 block w-full rounded-md border border-gray-300 bg-gray-50 text-gray-900 shadow-sm dark:border-gray-500 dark:bg-dark-surface dark:text-gray-100 dark:shadow-none placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
                       placeholder={
                         useSemanticSearch
                           ? "Semantic search (finds related concepts)..."
