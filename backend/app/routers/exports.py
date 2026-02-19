@@ -18,6 +18,11 @@ from app.models.db.budget import BudgetLineItem, BudgetSettings
 from app.models.db.checklist import ChecklistItem
 from app.models.db.grant_application import GrantApplication
 from app.models.db.proposal import Proposal
+from app.services.access_control import (
+    ROLE_VIEWER,
+    require_application_access,
+    require_proposal_access,
+)
 from app.services.docx_export_service import DocxExportService
 
 logger = logging.getLogger(__name__)
@@ -171,6 +176,13 @@ async def export_application_docx(
         HTTPException 404: Application or proposal not found.
         HTTPException 500: Document generation failed.
     """
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_VIEWER,
+    )
+
     # Fetch the application
     result = await db.execute(
         select(GrantApplication).where(GrantApplication.id == application_id)
@@ -251,6 +263,13 @@ async def export_budget_docx(
         HTTPException 404: Application not found.
         HTTPException 500: Document generation failed.
     """
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_VIEWER,
+    )
+
     # Verify application exists
     result = await db.execute(
         select(GrantApplication).where(GrantApplication.id == application_id)
@@ -320,13 +339,12 @@ async def export_proposal_docx(
         HTTPException 404: Proposal not found.
         HTTPException 500: Document generation failed.
     """
-    result = await db.execute(select(Proposal).where(Proposal.id == proposal_id))
-    proposal = result.scalars().first()
-    if not proposal:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Proposal not found",
-        )
+    proposal = await require_proposal_access(
+        db,
+        proposal_id=proposal_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_VIEWER,
+    )
 
     proposal_dict = _row_to_dict(proposal)
 

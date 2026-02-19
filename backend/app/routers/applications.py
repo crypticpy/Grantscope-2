@@ -27,6 +27,11 @@ from app.models.application_models import (
 )
 from app.models.db.grant_application import GrantApplication
 from app.models.db.milestone import ApplicationMilestone, ApplicationStatusHistory
+from app.services.access_control import (
+    ROLE_EDITOR,
+    ROLE_VIEWER,
+    require_application_access,
+)
 from app.services.application_service import ApplicationService
 
 logger = logging.getLogger(__name__)
@@ -165,6 +170,13 @@ async def get_application(
     Raises:
         HTTPException 404: Application not found.
     """
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_VIEWER,
+    )
+
     try:
         details = await ApplicationService.get_application_with_details(
             db, application_id
@@ -215,6 +227,19 @@ async def update_application(
     Raises:
         HTTPException 404: Application not found.
     """
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_EDITOR,
+    )
+
+    if body.status is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Use /applications/{application_id}/status to change status",
+        )
+
     try:
         result = await db.execute(
             select(GrantApplication).where(GrantApplication.id == application_id)
@@ -234,8 +259,6 @@ async def update_application(
         )
 
     # Apply provided fields
-    if body.status is not None:
-        application.status = body.status
     if body.notes is not None:
         application.notes = body.notes
     if body.awarded_amount is not None:
@@ -294,6 +317,13 @@ async def update_application_status(
         HTTPException 404: Application not found.
         HTTPException 400: Invalid status transition.
     """
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_EDITOR,
+    )
+
     try:
         changed_by = uuid.UUID(current_user["id"])
         application = await ApplicationService.update_status(
@@ -366,9 +396,21 @@ async def create_application_from_wizard(
         await db.flush()
         await db.refresh(application)
     except ValueError as e:
+        message = str(e)
+        lowered = message.lower()
+        if "not authorized" in lowered:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=message,
+            )
+        if "not found" in lowered:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=message,
+            )
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=message,
         )
     except Exception as e:
         logger.error(
@@ -410,6 +452,13 @@ async def list_milestones(
     Returns:
         List of MilestoneResponse objects.
     """
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_VIEWER,
+    )
+
     try:
         result = await db.execute(
             select(ApplicationMilestone)
@@ -458,6 +507,13 @@ async def create_milestone(
     Returns:
         The created MilestoneResponse.
     """
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_EDITOR,
+    )
+
     # Determine next sort_order
     try:
         max_order_result = await db.execute(
@@ -527,6 +583,13 @@ async def update_milestone(
     Raises:
         HTTPException 404: Milestone not found.
     """
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_EDITOR,
+    )
+
     try:
         result = await db.execute(
             select(ApplicationMilestone).where(
@@ -603,6 +666,13 @@ async def list_status_history(
     Returns:
         List of StatusHistoryResponse objects.
     """
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_VIEWER,
+    )
+
     try:
         result = await db.execute(
             select(ApplicationStatusHistory)

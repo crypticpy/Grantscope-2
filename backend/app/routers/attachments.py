@@ -18,6 +18,13 @@ from app.models.attachment_models import (
     AttachmentUploadResponse,
     DownloadUrlResponse,
 )
+from app.models.db.checklist import ChecklistItem
+from app.services.access_control import (
+    ROLE_EDITOR,
+    ROLE_VIEWER,
+    require_application_access,
+    require_attachment_access,
+)
 from app.services.attachment_service import AttachmentService
 
 logger = logging.getLogger(__name__)
@@ -81,6 +88,13 @@ async def list_attachments(
     Returns:
         AttachmentListResponse with attachment list and total count.
     """
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_VIEWER,
+    )
+
     try:
         attachments = await _service.list_for_application(
             db=db,
@@ -142,6 +156,26 @@ async def upload_attachment(
             detail="Invalid checklist_item_id format. Must be a valid UUID.",
         )
 
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_EDITOR,
+    )
+
+    if parsed_checklist_id is not None:
+        checklist = await db.get(ChecklistItem, parsed_checklist_id)
+        if checklist is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Checklist item not found",
+            )
+        if checklist.application_id != application_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="checklist_item_id must belong to the same application",
+            )
+
     try:
         attachment = await _service.upload(
             db=db,
@@ -188,6 +222,13 @@ async def get_download_url(
     Raises:
         HTTPException 404: Attachment not found.
     """
+    await require_attachment_access(
+        db,
+        attachment_id=attachment_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_VIEWER,
+    )
+
     try:
         url = await _service.download_url(db=db, attachment_id=attachment_id)
         return DownloadUrlResponse(url=url, expires_in_hours=1)
@@ -219,6 +260,13 @@ async def delete_attachment(
     Raises:
         HTTPException 404: Attachment not found.
     """
+    await require_attachment_access(
+        db,
+        attachment_id=attachment_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_EDITOR,
+    )
+
     try:
         await _service.delete(
             db=db,
@@ -263,6 +311,13 @@ async def replace_attachment(
         HTTPException 404: Attachment not found.
         HTTPException 413: File exceeds 25 MB limit.
     """
+    await require_attachment_access(
+        db,
+        attachment_id=attachment_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_EDITOR,
+    )
+
     try:
         attachment = await _service.replace(
             db=db,

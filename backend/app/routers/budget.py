@@ -26,6 +26,11 @@ from app.models.budget_models import (
     BudgetValidationResponse,
 )
 from app.models.db.budget import BudgetLineItem, BudgetSettings
+from app.services.access_control import (
+    ROLE_EDITOR,
+    ROLE_VIEWER,
+    require_application_access,
+)
 from app.services.budget_service import BudgetService
 
 logger = logging.getLogger(__name__)
@@ -130,6 +135,13 @@ async def get_full_budget(
     Returns:
         BudgetFullResponse with items, settings, and calculations.
     """
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_VIEWER,
+    )
+
     try:
         # Fetch items
         stmt = (
@@ -188,6 +200,13 @@ async def create_line_item(
     Returns:
         The created BudgetLineItemResponse.
     """
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_EDITOR,
+    )
+
     try:
         from decimal import Decimal
 
@@ -268,6 +287,13 @@ async def update_line_item(
     Returns:
         The updated BudgetLineItemResponse.
     """
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_EDITOR,
+    )
+
     try:
         item = await _get_item_or_404(db, item_id, application_id)
 
@@ -340,6 +366,13 @@ async def delete_line_item(
         db: Async database session (injected).
         current_user: Authenticated user (injected).
     """
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_EDITOR,
+    )
+
     try:
         item = await _get_item_or_404(db, item_id, application_id)
         await db.delete(item)
@@ -379,6 +412,13 @@ async def update_budget_settings(
     Returns:
         The updated BudgetSettingsResponse.
     """
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_EDITOR,
+    )
+
     try:
         settings = await BudgetService.get_or_create_settings(db, application_id)
 
@@ -445,6 +485,13 @@ async def prefill_budget(
     Returns:
         List of created BudgetLineItemResponse objects.
     """
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_EDITOR,
+    )
+
     try:
         items = await BudgetService.create_from_plan_data(
             db, application_id, body.plan_data
@@ -481,6 +528,13 @@ async def export_budget_csv(
     Returns:
         StreamingResponse with CSV content.
     """
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_VIEWER,
+    )
+
     try:
         csv_content = await BudgetService.export_csv(db, application_id)
     except HTTPException:
@@ -528,6 +582,13 @@ async def validate_budget(
     Returns:
         BudgetValidationResponse with valid flag and list of issues.
     """
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_VIEWER,
+    )
+
     try:
         result = await BudgetService.validate_budget(db, application_id, grant_context)
     except HTTPException:

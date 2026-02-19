@@ -44,6 +44,18 @@ class CollaborationService:
         Raises:
             ValueError: If the target user does not exist or is already a collaborator.
         """
+        if role == "owner":
+            raise ValueError(
+                "Role 'owner' cannot be assigned via collaborators. "
+                "Application owner is managed on the application record."
+            )
+
+        app_check = await db.execute(
+            select(GrantApplication.id).where(GrantApplication.id == application_id)
+        )
+        if app_check.scalar_one_or_none() is None:
+            raise ValueError("Application not found")
+
         # Verify target user exists
         user_check = await db.execute(
             text("SELECT id FROM users WHERE id = :uid"),
@@ -91,6 +103,15 @@ class CollaborationService:
         Raises:
             ValueError: If the user is the owner or is not a collaborator.
         """
+        app_result = await db.execute(
+            select(GrantApplication.user_id).where(GrantApplication.id == application_id)
+        )
+        owner_id = app_result.scalar_one_or_none()
+        if owner_id is None:
+            raise ValueError("Application not found")
+        if owner_id == user_id:
+            raise ValueError("Cannot remove the application owner")
+
         result = await db.execute(
             select(ApplicationCollaborator).where(
                 ApplicationCollaborator.application_id == application_id,

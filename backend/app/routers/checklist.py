@@ -19,7 +19,13 @@ from app.models.checklist_models import (
     ChecklistItemUpdate,
     ChecklistListResponse,
 )
+from app.models.db.attachment import ApplicationAttachment
 from app.models.db.checklist import ChecklistItem
+from app.services.access_control import (
+    ROLE_EDITOR,
+    ROLE_VIEWER,
+    require_application_access,
+)
 from app.services.checklist_service import ChecklistService
 
 logger = logging.getLogger(__name__)
@@ -52,6 +58,13 @@ async def list_checklist_items(
     Returns:
         ChecklistListResponse with items, total, completed count, and progress %.
     """
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_VIEWER,
+    )
+
     try:
         result = await db.execute(
             select(ChecklistItem)
@@ -107,6 +120,13 @@ async def create_checklist_item(
     Returns:
         The created ChecklistItemResponse.
     """
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_EDITOR,
+    )
+
     # Determine next sort_order
     try:
         max_order_result = await db.execute(
@@ -177,6 +197,13 @@ async def update_checklist_item(
     Raises:
         HTTPException 404: Checklist item not found.
     """
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_EDITOR,
+    )
+
     try:
         result = await db.execute(
             select(ChecklistItem).where(
@@ -208,6 +235,17 @@ async def update_checklist_item(
     if body.sub_deadline is not None:
         item.sub_deadline = body.sub_deadline
     if body.attachment_id is not None:
+        attachment = await db.get(ApplicationAttachment, body.attachment_id)
+        if attachment is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Attachment not found",
+            )
+        if attachment.application_id != application_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="attachment_id must belong to the same application",
+            )
         item.attachment_id = body.attachment_id
 
     # Handle completion toggling
@@ -263,6 +301,13 @@ async def delete_checklist_item(
         HTTPException 404: Checklist item not found.
         HTTPException 400: Item is not user-added and cannot be deleted.
     """
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_EDITOR,
+    )
+
     try:
         result = await db.execute(
             select(ChecklistItem).where(
@@ -332,6 +377,13 @@ async def ai_suggest_checklist_items(
     Returns:
         AISuggestResponse with newly created suggestions and a summary message.
     """
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_EDITOR,
+    )
+
     try:
         new_items = await ChecklistService.ai_suggest_items(
             db=db,

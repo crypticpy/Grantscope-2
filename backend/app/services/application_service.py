@@ -10,7 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.db.card import Card
 from app.models.db.grant_application import GrantApplication
 from app.models.db.milestone import ApplicationMilestone, ApplicationStatusHistory
+from app.models.db.proposal import Proposal
 from app.models.db.wizard_session import WizardSession
+from app.models.db.workstream import Workstream
 
 logger = logging.getLogger(__name__)
 
@@ -68,10 +70,33 @@ class ApplicationService:
         session = result.scalar_one_or_none()
         if session is None:
             raise ValueError("Wizard session not found")
+        if session.user_id != user_id:
+            raise ValueError("Not authorized to access this wizard session")
+        if session.card_id is None:
+            raise ValueError("Wizard session has no linked grant card")
+
+        workstream_id = None
+        if session.proposal_id is not None:
+            proposal_result = await db.execute(
+                select(Proposal.workstream_id).where(Proposal.id == session.proposal_id)
+            )
+            workstream_id = proposal_result.scalar_one_or_none()
+
+        if workstream_id is None:
+            ws_result = await db.execute(
+                select(Workstream.id)
+                .where(Workstream.user_id == user_id)
+                .order_by(Workstream.updated_at.desc().nullslast())
+                .limit(1)
+            )
+            workstream_id = ws_result.scalar_one_or_none()
+
+        if workstream_id is None:
+            raise ValueError("No workstream available for this user")
 
         application = GrantApplication(
             card_id=session.card_id,
-            workstream_id=session.workstream_id,
+            workstream_id=workstream_id,
             user_id=user_id,
             status="in_progress",
             proposal_content=session.plan_data or {},

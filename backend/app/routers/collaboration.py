@@ -25,10 +25,22 @@ from app.models.collaboration_models import (
     SectionApprovalResponse,
 )
 from app.models.db.collaboration import ApplicationComment
+from app.models.db.proposal import Proposal
+from app.services.access_control import (
+    ROLE_EDITOR,
+    ROLE_OWNER,
+    ROLE_REVIEWER,
+    ROLE_VIEWER,
+    require_application_access,
+    require_proposal_access,
+)
 from app.services.collaboration_service import CollaborationService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["collaboration"])
+
+_EDITOR_ROLES = {ROLE_EDITOR, ROLE_OWNER}
+_REVIEWER_ROLES = {ROLE_REVIEWER, ROLE_EDITOR, ROLE_OWNER}
 
 
 # ---------------------------------------------------------------------------
@@ -91,6 +103,13 @@ async def list_collaborators(
     Returns:
         CollaboratorListResponse with collaborators and total count.
     """
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_VIEWER,
+    )
+
     try:
         collaborators = await CollaborationService.list_collaborators(
             db=db, application_id=application_id
@@ -136,6 +155,13 @@ async def add_collaborator(
         HTTPException 409: User is already a collaborator.
         HTTPException 400: Target user not found or invalid role.
     """
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_OWNER,
+    )
+
     try:
         collaborator = await CollaborationService.add_collaborator(
             db=db,
@@ -146,6 +172,11 @@ async def add_collaborator(
         )
     except ValueError as e:
         error_msg = str(e)
+        if "application not found" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg,
+            ) from e
         if "already a collaborator" in error_msg:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -197,11 +228,23 @@ async def remove_collaborator(
     Raises:
         HTTPException 400: Cannot remove owner, or collaborator not found.
     """
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_OWNER,
+    )
+
     try:
         await CollaborationService.remove_collaborator(
             db=db, application_id=application_id, user_id=user_id
         )
     except ValueError as e:
+        if "application not found" in str(e).lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(e),
+            ) from e
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
@@ -239,6 +282,13 @@ async def submit_for_review(
     Returns:
         ReviewSubmitResponse with success message and new status.
     """
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_EDITOR,
+    )
+
     try:
         new_status = await CollaborationService.submit_for_review(
             db=db,
@@ -290,6 +340,13 @@ async def approve_section(
     Returns:
         SectionApprovalResponse with approval details.
     """
+    await require_proposal_access(
+        db,
+        proposal_id=proposal_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_REVIEWER,
+    )
+
     try:
         result = await CollaborationService.approve_section(
             db=db,
@@ -346,6 +403,13 @@ async def request_revision(
     Returns:
         SectionApprovalResponse with revision details.
     """
+    await require_proposal_access(
+        db,
+        proposal_id=proposal_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_REVIEWER,
+    )
+
     try:
         result = await CollaborationService.request_revision(
             db=db,
@@ -401,14 +465,40 @@ async def list_comments(
     Returns:
         CommentListResponse with comments, total, and unresolved_count.
     """
+    await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_VIEWER,
+    )
+
     try:
         pid = uuid.UUID(proposal_id) if proposal_id else None
+        if pid is not None:
+            proposal = await db.get(Proposal, pid)
+            if proposal is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Proposal not found",
+                )
+            if proposal.application_id != application_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="proposal_id does not belong to this application",
+                )
         comments = await CollaborationService.list_comments(
             db=db,
             application_id=application_id,
             proposal_id=pid,
             section_name=section_name,
         )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -454,13 +544,69 @@ async def create_comment(
     Returns:
         The created CommentResponse.
     """
+    role = await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_VIEWER,
+    )
+    if role not in _REVIEWER_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Reviewer, editor, or owner role is required to create comments",
+        )
+
+    proposal_uuid: uuid.UUID | None = None
+    if body.proposal_id:
+        try:
+            proposal_uuid = uuid.UUID(body.proposal_id)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid proposal_id format. Must be a valid UUID.",
+            ) from e
+
+        proposal = await db.get(Proposal, proposal_uuid)
+        if proposal is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Proposal not found",
+            )
+        if proposal.application_id != application_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="proposal_id does not belong to this application",
+            )
+
+    parent_uuid: uuid.UUID | None = None
+    if body.parent_id:
+        try:
+            parent_uuid = uuid.UUID(body.parent_id)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid parent_id format. Must be a valid UUID.",
+            ) from e
+
+        parent_comment = await db.get(ApplicationComment, parent_uuid)
+        if parent_comment is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Parent comment not found",
+            )
+        if parent_comment.application_id != application_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="parent_id does not belong to this application",
+            )
+
     comment = ApplicationComment(
         application_id=application_id,
         author_id=uuid.UUID(current_user["id"]),
         content=body.content,
-        proposal_id=uuid.UUID(body.proposal_id) if body.proposal_id else None,
+        proposal_id=proposal_uuid,
         section_name=body.section_name,
-        parent_id=uuid.UUID(body.parent_id) if body.parent_id else None,
+        parent_id=parent_uuid,
     )
 
     try:
@@ -513,6 +659,13 @@ async def update_comment(
     Raises:
         HTTPException 404: Comment not found.
     """
+    role = await require_application_access(
+        db,
+        application_id=application_id,
+        user_id=current_user["id"],
+        minimum_role=ROLE_VIEWER,
+    )
+
     try:
         result = await db.execute(
             select(ApplicationComment).where(
@@ -534,15 +687,27 @@ async def update_comment(
             detail="Comment not found",
         )
 
+    current_user_id = uuid.UUID(current_user["id"])
+
     # Apply content update
     if body.content is not None:
+        if comment.author_id != current_user_id and role not in _EDITOR_ROLES:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only the comment author or an editor/owner can edit content",
+            )
         comment.content = body.content
 
     # Handle resolution toggling
     if body.is_resolved is not None:
+        if role not in _REVIEWER_ROLES:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Reviewer, editor, or owner role is required to resolve comments",
+            )
         comment.is_resolved = body.is_resolved
         if body.is_resolved:
-            comment.resolved_by = uuid.UUID(current_user["id"])
+            comment.resolved_by = current_user_id
             comment.resolved_at = func.now()
         else:
             comment.resolved_by = None

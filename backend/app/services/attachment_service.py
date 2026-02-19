@@ -189,8 +189,19 @@ class AttachmentService:
             uploaded_by=uuid.UUID(uploaded_by),
         )
         db.add(attachment)
-        await db.flush()
-        await db.refresh(attachment)
+        try:
+            await db.flush()
+            await db.refresh(attachment)
+        except Exception:
+            try:
+                await attachment_storage.delete(blob_path)
+            except Exception as cleanup_error:
+                logger.warning(
+                    "Failed to cleanup uploaded blob after DB error (%s): %s",
+                    blob_path,
+                    cleanup_error,
+                )
+            raise
 
         logger.info(
             "Uploaded attachment %s (%s, %d bytes) for application %s",
@@ -319,8 +330,19 @@ class AttachmentService:
         attachment.file_size_bytes = file_size_bytes
         attachment.version = attachment.version + 1
 
-        await db.flush()
-        await db.refresh(attachment)
+        try:
+            await db.flush()
+            await db.refresh(attachment)
+        except Exception:
+            try:
+                await attachment_storage.delete(new_blob_path)
+            except Exception as cleanup_error:
+                logger.warning(
+                    "Failed to cleanup replacement blob after DB error (%s): %s",
+                    new_blob_path,
+                    cleanup_error,
+                )
+            raise
 
         logger.info(
             "Replaced attachment %s with v%d (%s, %d bytes) by user %s",
