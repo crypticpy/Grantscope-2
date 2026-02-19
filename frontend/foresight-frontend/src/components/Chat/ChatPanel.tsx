@@ -519,11 +519,15 @@ export function ChatPanel({
 
   const handleEditResend = useCallback(
     ({
+      originalMessageId,
       editedContent,
     }: {
       originalMessageId?: string;
       editedContent: string;
     }): boolean => {
+      // Intentional behavior: edited text is sent as a new correction message.
+      // We do not mutate or truncate prior conversation history from originalMessageId.
+      void originalMessageId;
       const trimmed = editedContent.trim();
       if (!trimmed || isStreaming) return false;
       sendMessage(trimmed);

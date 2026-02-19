@@ -57,11 +57,11 @@ export function UserMessageEditor({
             "disabled:opacity-60 disabled:cursor-not-allowed",
             "focus:outline-none focus:ring-2 focus:ring-white/70",
           )}
-          title="Resend edited message"
-          aria-label="Resend edited message"
+          title="Send correction"
+          aria-label="Send correction"
         >
           <Send className="h-3 w-3" />
-          Resend
+          Send correction
         </button>
       </div>
     </div>
@@ -69,4 +69,3 @@ export function UserMessageEditor({
 }
 
 export default UserMessageEditor;
-
