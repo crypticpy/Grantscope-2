@@ -27,8 +27,22 @@ from app.models.db.source import Source, DiscoveredSource
 from app.models.db.research import ResearchTask
 from app.models.db.card_extras import Entity, CardFollow
 from app.models.db.workstream import WorkstreamCard
+from app.helpers.settings_reader import get_setting
 
 logger = logging.getLogger(__name__)
+
+# Default SQI component weights
+DEFAULT_SQI_WEIGHTS: dict[str, float] = {
+    "source_count": 0.15,
+    "source_diversity": 0.10,
+    "avg_credibility": 0.15,
+    "avg_triage_confidence": 0.10,
+    "deep_research": 0.15,
+    "research_tasks": 0.10,
+    "entity_count": 0.05,
+    "human_review": 0.10,
+    "engagement": 0.10,
+}
 
 
 def _score_source_count(count: int) -> int:
@@ -121,9 +135,20 @@ async def compute_signal_quality_score(db: AsyncSession, card_id: str) -> dict:
     Returns:
         dict with "score" (int 0-100) and "breakdown" (dict of component details)
     """
+    # Read admin-configurable SQI weights (cached, 60s TTL)
+    admin_weights = await get_setting(db, "signal_quality_weights", None)
+    weights: dict[str, float] = dict(DEFAULT_SQI_WEIGHTS)
+    if isinstance(admin_weights, dict):
+        for key in weights:
+            if key in admin_weights:
+                try:
+                    weights[key] = float(admin_weights[key])
+                except (ValueError, TypeError):
+                    pass
+
     breakdown = {}
 
-    # 1. Source Count (15%) - from sources table
+    # 1. Source Count - from sources table
     try:
         sources_result = await db.execute(
             select(func.count(Source.id)).where(Source.card_id == card_id)
@@ -136,7 +161,7 @@ async def compute_signal_quality_score(db: AsyncSession, card_id: str) -> dict:
     source_count_score = _score_source_count(source_count)
     breakdown["source_count"] = {
         "score": source_count_score,
-        "weight": 0.15,
+        "weight": weights["source_count"],
         "raw_value": source_count,
     }
 
@@ -161,7 +186,7 @@ async def compute_signal_quality_score(db: AsyncSession, card_id: str) -> dict:
     diversity_score = _score_source_diversity(unique_types, unique_domains)
     breakdown["source_diversity"] = {
         "score": diversity_score,
-        "weight": 0.10,
+        "weight": weights["source_diversity"],
         "raw_value": {"unique_types": unique_types, "unique_domains": unique_domains},
     }
 
@@ -185,7 +210,7 @@ async def compute_signal_quality_score(db: AsyncSession, card_id: str) -> dict:
     credibility_score = _score_avg_credibility(avg_credibility)
     breakdown["avg_credibility"] = {
         "score": credibility_score,
-        "weight": 0.15,
+        "weight": weights["avg_credibility"],
         "raw_value": round(avg_credibility, 2) if avg_credibility is not None else None,
     }
 
@@ -209,7 +234,7 @@ async def compute_signal_quality_score(db: AsyncSession, card_id: str) -> dict:
     triage_score = _score_avg_triage_confidence(avg_triage)
     breakdown["avg_triage_confidence"] = {
         "score": triage_score,
-        "weight": 0.10,
+        "weight": weights["avg_triage_confidence"],
         "raw_value": round(avg_triage, 3) if avg_triage is not None else None,
     }
 
@@ -231,7 +256,7 @@ async def compute_signal_quality_score(db: AsyncSession, card_id: str) -> dict:
     deep_research_score = _score_deep_research(has_deep_research)
     breakdown["deep_research"] = {
         "score": deep_research_score,
-        "weight": 0.15,
+        "weight": weights["deep_research"],
         "raw_value": has_deep_research,
     }
 
@@ -251,7 +276,7 @@ async def compute_signal_quality_score(db: AsyncSession, card_id: str) -> dict:
     research_tasks_score = _score_research_tasks(research_task_count)
     breakdown["research_tasks"] = {
         "score": research_tasks_score,
-        "weight": 0.10,
+        "weight": weights["research_tasks"],
         "raw_value": research_task_count,
     }
 
@@ -268,7 +293,7 @@ async def compute_signal_quality_score(db: AsyncSession, card_id: str) -> dict:
     entity_count_score = _score_entity_count(entity_count)
     breakdown["entity_count"] = {
         "score": entity_count_score,
-        "weight": 0.05,
+        "weight": weights["entity_count"],
         "raw_value": entity_count,
     }
 
@@ -276,7 +301,7 @@ async def compute_signal_quality_score(db: AsyncSession, card_id: str) -> dict:
     human_review_score = _score_human_review(has_review)
     breakdown["human_review"] = {
         "score": human_review_score,
-        "weight": 0.10,
+        "weight": weights["human_review"],
         "raw_value": has_review,
     }
 
@@ -307,7 +332,7 @@ async def compute_signal_quality_score(db: AsyncSession, card_id: str) -> dict:
     engagement_score = _score_engagement(total_engagement)
     breakdown["engagement"] = {
         "score": engagement_score,
-        "weight": 0.10,
+        "weight": weights["engagement"],
         "raw_value": {
             "follows": follows_count,
             "workstream_memberships": workstream_count,

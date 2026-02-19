@@ -58,11 +58,12 @@ from app.chat.tool_executor import (
     execute_streaming_with_tools,
 )
 from app.openai_provider import get_chat_deployment
+from app.helpers.settings_reader import get_setting
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Configuration
+# Configuration (defaults — overridable via admin system_settings)
 # ---------------------------------------------------------------------------
 
 RATE_LIMIT_PER_MINUTE = 20
@@ -104,6 +105,9 @@ async def _check_rate_limit(db: AsyncSession, user_id: str) -> bool:
     Returns True if the request should be allowed, False if rate limited.
     """
     try:
+        rate_limit = await get_setting(
+            db, "chat_rate_limit_per_minute", RATE_LIMIT_PER_MINUTE
+        )
         one_minute_ago = datetime.now(timezone.utc) - timedelta(minutes=1)
 
         conv_result = await db.execute(
@@ -127,7 +131,7 @@ async def _check_rate_limit(db: AsyncSession, user_id: str) -> bool:
             )
             count += msg_result.scalar() or 0
 
-        return count < RATE_LIMIT_PER_MINUTE
+        return count < rate_limit
 
     except Exception as e:
         logger.warning(f"Rate limit check failed (allowing request): {e}")
@@ -434,15 +438,20 @@ async def chat(
         total_tokens = 0
         tool_calls_made: list = []
 
+        # Read admin-configurable chat parameters (cached, 60s TTL)
+        chat_temperature = await get_setting(db, "chat_temperature", 0.7)
+        chat_max_tokens = await get_setting(db, "chat_max_tokens", 8192)
+        chat_max_tool_rounds = await get_setting(db, "chat_max_tool_rounds", 3)
+
         try:
             async for event in execute_streaming_with_tools(
                 messages=messages,
                 tools=tools_list,
                 tool_handlers=handlers,
                 model=model_used,
-                temperature=0.7,
-                max_tokens=8192,
-                max_tool_rounds=3,
+                temperature=chat_temperature,
+                max_tokens=chat_max_tokens,
+                max_tool_rounds=chat_max_tool_rounds,
                 max_online_searches=max_online_searches,
                 online_tool_names=online_tool_names,
                 db=db,

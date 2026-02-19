@@ -14,6 +14,7 @@ from sqlalchemy import select, update as sa_update
 
 from app.database import async_session_factory
 from app.deps import openai_client
+from app.helpers.settings_reader import get_setting
 from app.helpers.workstream_utils import (
     _build_workstream_scan_config,
     _auto_queue_workstream_scan,
@@ -32,6 +33,27 @@ logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
 
 
+async def _is_job_enabled(job_id: str) -> bool:
+    """Check if a scheduler job is enabled via admin settings.
+
+    Reads ``scheduler_jobs`` from ``system_settings`` (cached 60s).
+    Returns True when the setting is absent (all jobs enabled by default).
+    """
+    if async_session_factory is None:
+        return True
+    try:
+        async with async_session_factory() as db:
+            scheduler_jobs = await get_setting(db, "scheduler_jobs", {})
+            if not isinstance(scheduler_jobs, dict):
+                return True
+            return bool(scheduler_jobs.get(job_id, True))
+    except Exception as exc:
+        logger.warning(
+            "scheduler: failed to check job enabled status for %s: %s", job_id, exc
+        )
+        return True  # Fail open
+
+
 # ---------------------------------------------------------------------------
 # Scheduled job functions
 # ---------------------------------------------------------------------------
@@ -46,6 +68,10 @@ async def run_scheduled_workstream_scans():
     This bypasses the per-user 2-scans-per-day rate limit since it's
     system-initiated.
     """
+    if not await _is_job_enabled("scheduled_workstream_scans"):
+        logger.info("Scheduled workstream scans disabled via admin settings")
+        return
+
     if async_session_factory is None:
         logger.error("Database not configured — cannot run scheduled workstream scans")
         return
@@ -143,6 +169,10 @@ async def run_nightly_scan():
     Automatically queues update research tasks for cards that
     haven't been updated recently.  Runs at 6 AM UTC daily.
     """
+    if not await _is_job_enabled("nightly_scan"):
+        logger.info("Nightly scan disabled via admin settings")
+        return
+
     from app.research_service import ResearchService
 
     if async_session_factory is None:
@@ -211,6 +241,10 @@ async def run_weekly_discovery():
     Scheduled every Sunday at 2:00 AM UTC.  Executes a full discovery
     run with default configuration across all pillars.
     """
+    if not await _is_job_enabled("weekly_discovery"):
+        logger.info("Weekly discovery disabled via admin settings")
+        return
+
     from app.models.discovery_models import DiscoveryConfigRequest
 
     if async_session_factory is None:
@@ -260,6 +294,10 @@ async def run_nightly_reputation_aggregation():
     Runs at 5:30 AM UTC daily, before the 6:00 AM nightly content scan,
     so that reputation scores are fresh when the scanner evaluates new sources.
     """
+    if not await _is_job_enabled("nightly_reputation_aggregation"):
+        logger.info("Nightly reputation aggregation disabled via admin settings")
+        return
+
     from app import domain_reputation_service
 
     if async_session_factory is None:
@@ -293,6 +331,10 @@ async def run_nightly_sqi_recalculation():
     Runs at 6:30 AM UTC daily, after the nightly scan and reputation
     aggregation so fresh sources and domain reputations are reflected.
     """
+    if not await _is_job_enabled("nightly_sqi_recalculation"):
+        logger.info("Nightly SQI recalculation disabled via admin settings")
+        return
+
     from app import quality_service
 
     if async_session_factory is None:
@@ -328,6 +370,10 @@ async def run_nightly_pattern_detection():
     Runs at 7:00 AM UTC daily, after SQI recalculation so that embeddings
     and quality scores are fresh.
     """
+    if not await _is_job_enabled("nightly_pattern_detection"):
+        logger.info("Nightly pattern detection disabled via admin settings")
+        return
+
     from app.pattern_detection_service import PatternDetectionService
 
     if async_session_factory is None:
@@ -356,6 +402,10 @@ async def run_nightly_velocity_calculation():
     Runs at 7:30 AM UTC daily, after pattern detection so all source
     data is up to date.
     """
+    if not await _is_job_enabled("nightly_velocity_calculation"):
+        logger.info("Nightly velocity calculation disabled via admin settings")
+        return
+
     from app.velocity_service import calculate_velocity_trends
 
     if async_session_factory is None:
@@ -384,6 +434,10 @@ async def run_digest_batch():
     each user's configured digest_day.  For daily digests, it runs
     every day.
     """
+    if not await _is_job_enabled("daily_digest_batch"):
+        logger.info("Daily digest batch disabled via admin settings")
+        return
+
     from app.digest_service import DigestService
 
     if async_session_factory is None:
@@ -409,6 +463,10 @@ async def run_nightly_description_enrichment():
     Queues up to 20 card_analysis tasks for cards whose description is
     missing or shorter than 1600 characters.
     """
+    if not await _is_job_enabled("enrich_thin_descriptions"):
+        logger.info("Nightly description enrichment disabled via admin settings")
+        return
+
     from app.enrichment_service import enrich_thin_descriptions
 
     if async_session_factory is None:
@@ -433,6 +491,10 @@ async def scan_grants():
     config hints which source categories to prioritise via
     ``source_categories``.
     """
+    if not await _is_job_enabled("scan_grants"):
+        logger.info("Grant scan disabled via admin settings")
+        return
+
     if async_session_factory is None:
         logger.error("Database not configured — cannot run grant scan")
         return

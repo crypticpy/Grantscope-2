@@ -15,11 +15,16 @@ Used by:
 - Enrichment service (finding sources for thin descriptions)
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Any, List
+from typing import Any, List, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -418,6 +423,7 @@ async def search_all_sources(
     max_results_per_source: int = 5,
     rrf_k: int = 60,
     source_weights: dict[str, float] | None = None,
+    db: AsyncSession | None = None,
 ) -> List[MultiSourceResult]:
     """Search across multiple source types in parallel and return merged results.
 
@@ -446,6 +452,9 @@ async def search_all_sources(
             search implementation).  Higher values smooth rank differences.
         source_weights: Per-source weight multipliers.  Defaults to
             :data:`DEFAULT_SOURCE_WEIGHTS` which favours grant sources.
+        db: Optional async DB session.  When provided, admin-configured
+            ``source_toggles`` and ``rrf_weights`` are read from
+            ``system_settings`` (cached 60s).
 
     Returns:
         A flat list of :class:`MultiSourceResult` objects, deduplicated by URL
@@ -459,6 +468,34 @@ async def search_all_sources(
 
     query = query.strip()[:1000]  # Cap query length to prevent oversized API calls
     max_results_per_source = max(1, min(max_results_per_source, 50))
+
+    # Apply admin-configured source toggles and RRF weights when a DB
+    # session is available.  Falls back to caller-supplied or default values.
+    if db is not None:
+        try:
+            from app.helpers.settings_reader import get_settings_batch
+
+            settings = await get_settings_batch(
+                db,
+                ["source_toggles", "rrf_weights"],
+                defaults={"source_toggles": None, "rrf_weights": None},
+            )
+            toggles = settings.get("source_toggles")
+            if isinstance(toggles, dict):
+                include_grants_gov = toggles.get("grants_gov", include_grants_gov)
+                include_sam_gov = toggles.get("sam_gov", include_sam_gov)
+                include_web = toggles.get("web", include_web)
+                include_news = toggles.get("news", include_news)
+                include_government = toggles.get("government", include_government)
+                include_academic = toggles.get("academic", include_academic)
+
+            rrf_override = settings.get("rrf_weights")
+            if isinstance(rrf_override, dict) and source_weights is None:
+                source_weights = rrf_override
+        except Exception as exc:
+            logger.warning(
+                "multi_source_search: failed to read admin settings: %s", exc
+            )
 
     # Build the list of coroutines for enabled sources.
     tasks: List[Any] = []

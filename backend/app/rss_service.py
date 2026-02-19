@@ -32,11 +32,12 @@ from app.models.db.source import Source
 from .ai_service import AIService
 from .crawler import crawl_url
 from .source_fetchers.rss_fetcher import fetch_single_feed
+from app.helpers.settings_reader import get_setting
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Constants
+# Constants (defaults — overridable via admin system_settings)
 # ---------------------------------------------------------------------------
 
 SIMILARITY_MATCH_THRESHOLD = 0.85  # Strong match — attach source to card
@@ -215,7 +216,10 @@ class RSSService:
 
         # Update feed metadata
         now = datetime.now(timezone.utc)
-        interval_hours = feed.check_interval_hours or 6
+        default_interval = await get_setting(
+            self.db, "rss_default_check_interval_hours", 6
+        )
+        interval_hours = feed.check_interval_hours or default_interval
         next_check = now + timedelta(hours=interval_hours)
 
         update_values: Dict[str, Any] = {
@@ -714,11 +718,10 @@ class RSSService:
 
     async def _record_feed_error(self, feed, error_msg: str) -> None:
         """Increment error count and optionally disable the feed."""
+        max_errors = await get_setting(self.db, "rss_max_error_count", MAX_ERROR_COUNT)
         feed_id = feed.id
         error_count = (feed.error_count or 0) + 1
-        new_status = (
-            "error" if error_count > MAX_ERROR_COUNT else (feed.status or "active")
-        )
+        new_status = "error" if error_count > max_errors else (feed.status or "active")
 
         # Even on error, schedule the next check so it can recover
         interval_hours = feed.check_interval_hours or 6
@@ -741,7 +744,7 @@ class RSSService:
         except Exception as e:
             logger.warning(f"Failed to record error for feed {feed_id}: {e}")
 
-        if error_count > MAX_ERROR_COUNT:
+        if error_count > max_errors:
             logger.warning(
                 f"Feed '{feed.name or feed_id}' disabled after "
                 f"{error_count} consecutive errors"

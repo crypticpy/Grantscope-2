@@ -246,6 +246,40 @@ class DiscoveryConfig:
             self.search_topics = DEFAULT_SEARCH_TOPICS.copy()
 
 
+async def apply_admin_settings(
+    config: DiscoveryConfig, db: AsyncSession
+) -> DiscoveryConfig:
+    """Apply admin-configured discovery settings from ``system_settings``.
+
+    Reads ``discovery_config`` from the database (cached 60s) and overrides
+    matching fields on the provided config.  Falls back gracefully when no
+    settings exist.
+    """
+    try:
+        from app.helpers.settings_reader import get_setting
+
+        admin_cfg = await get_setting(db, "discovery_config", None)
+        if not isinstance(admin_cfg, dict):
+            return config
+
+        if "auto_approve_threshold" in admin_cfg:
+            config.auto_approve_threshold = float(admin_cfg["auto_approve_threshold"])
+        if "similarity_threshold" in admin_cfg:
+            config.similarity_threshold = float(admin_cfg["similarity_threshold"])
+        if "weak_match_threshold" in admin_cfg:
+            config.weak_match_threshold = float(admin_cfg["weak_match_threshold"])
+        if "max_new_cards_per_run" in admin_cfg:
+            config.max_new_cards_per_run = int(admin_cfg["max_new_cards_per_run"])
+        if "max_queries_per_run" in admin_cfg:
+            config.max_queries_per_run = int(admin_cfg["max_queries_per_run"])
+        if "max_sources_total" in admin_cfg:
+            config.max_sources_total = int(admin_cfg["max_sources_total"])
+    except Exception as exc:
+        logger.warning("discovery: failed to read admin settings: %s", exc)
+
+    return config
+
+
 def apply_source_preferences(
     config: DiscoveryConfig, source_prefs: dict
 ) -> DiscoveryConfig:
@@ -863,6 +897,9 @@ class DiscoveryService:
         Returns:
             DiscoveryResult with complete statistics
         """
+        # Apply admin-configurable settings (cached, 60s TTL)
+        config = await apply_admin_settings(config, self.db)
+
         start_time = datetime.now(timezone.utc)
 
         # Use existing run_id if provided, otherwise create new record
