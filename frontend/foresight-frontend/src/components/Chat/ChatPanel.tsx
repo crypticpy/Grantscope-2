@@ -17,6 +17,9 @@ import {
   X,
   Sparkles,
   Loader2,
+  Download,
+  Check,
+  GitFork,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useChat } from "../../hooks/useChat";
@@ -127,6 +130,24 @@ function formatRelativeTime(isoString: string): string {
   }
 }
 
+function scopeDisplayLabel(
+  scope: "signal" | "workstream" | "global" | "wizard" | "grant_assistant",
+): string {
+  switch (scope) {
+    case "signal":
+      return "Signal";
+    case "workstream":
+      return "Workstream";
+    case "wizard":
+      return "Wizard";
+    case "grant_assistant":
+      return "Grant Search";
+    case "global":
+    default:
+      return "Global";
+  }
+}
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -200,6 +221,10 @@ export function ChatPanel({
   const userHasSentMessage = useRef(false);
   const [showContinueBanner, setShowContinueBanner] = useState(false);
   const bannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showForkNotice, setShowForkNotice] = useState(false);
+  const forkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [exported, setExported] = useState(false);
+  const exportTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ============================================================================
   // Auto-scroll
@@ -344,6 +369,7 @@ export function ChatPanel({
     setInputValue("");
     setActiveMentions([]);
     setMentionActive(false);
+    setShowForkNotice(false);
 
     // Mark that user has sent a message and dismiss the banner
     userHasSentMessage.current = true;
@@ -486,9 +512,138 @@ export function ChatPanel({
   const handleSuggestionSelect = useCallback(
     (question: string) => {
       sendMessage(question);
+      setShowForkNotice(false);
     },
     [sendMessage],
   );
+
+  const handleEditResend = useCallback(
+    ({
+      originalMessageId,
+      editedContent,
+    }: {
+      originalMessageId?: string;
+      editedContent: string;
+    }): boolean => {
+      // Intentional behavior: edited text is sent as a new correction message.
+      // We do not mutate or truncate prior conversation history from originalMessageId.
+      void originalMessageId;
+      const trimmed = editedContent.trim();
+      if (!trimmed || isStreaming) return false;
+      sendMessage(trimmed);
+      setShowForkNotice(false);
+      userHasSentMessage.current = true;
+      setShowContinueBanner(false);
+      if (bannerTimerRef.current) {
+        clearTimeout(bannerTimerRef.current);
+        bannerTimerRef.current = null;
+      }
+      return true;
+    },
+    [isStreaming, sendMessage],
+  );
+
+  const handleForkConversation = useCallback(
+    (assistantContent: string) => {
+      const trimmed = assistantContent.trim();
+      if (!trimmed) return;
+
+      const prefix = "Branch context from previous reply:\n\n";
+      const maxContentLength = 3600;
+      const truncated = trimmed.slice(0, maxContentLength);
+
+      startNewConversation();
+      setActiveMentions([]);
+      setMentionActive(false);
+      setInputValue(`${prefix}${truncated}\n\n`);
+      setShowForkNotice(true);
+
+      if (forkTimerRef.current) {
+        clearTimeout(forkTimerRef.current);
+      }
+      forkTimerRef.current = setTimeout(() => {
+        setShowForkNotice(false);
+      }, 5000);
+
+      requestAnimationFrame(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          const end = textareaRef.current.value.length;
+          textareaRef.current.setSelectionRange(end, end);
+        }
+      });
+    },
+    [startNewConversation],
+  );
+
+  const handleExportConversation = useCallback(() => {
+    if (messages.length === 0) return;
+
+    const title = conversationTitle?.trim() || "GrantScope Chat Transcript";
+    const timestamp = new Date().toLocaleString();
+    const lines: string[] = [
+      `# ${title}`,
+      "",
+      `- Exported: ${timestamp}`,
+      `- Scope: ${scopeDisplayLabel(scope)}`,
+    ];
+
+    if (scopeId) {
+      lines.push(`- Scope ID: ${scopeId}`);
+    }
+
+    lines.push("");
+
+    messages.forEach((message) => {
+      const role = message.role === "assistant" ? "Assistant" : "User";
+      const createdAt = message.created_at
+        ? new Date(message.created_at).toLocaleString()
+        : null;
+      lines.push(
+        `## ${role}${createdAt ? ` (${createdAt})` : ""}`,
+        "",
+        message.content || "_(empty message)_",
+      );
+
+      if (message.role === "assistant" && message.citations.length > 0) {
+        lines.push("", "Sources:");
+        message.citations.forEach((citation) => {
+          const suffix = citation.url ? ` - ${citation.url}` : "";
+          lines.push(`- [${citation.index}] ${citation.title}${suffix}`);
+        });
+      }
+
+      lines.push("", "---", "");
+    });
+
+    const safeTitle = title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 48);
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    const filename = `${safeTitle || "chat-transcript"}-${dateStamp}.md`;
+
+    const blob = new Blob([lines.join("\n")], {
+      type: "text/markdown;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    setExported(true);
+    if (exportTimerRef.current) {
+      clearTimeout(exportTimerRef.current);
+    }
+    exportTimerRef.current = setTimeout(() => {
+      setExported(false);
+    }, 2000);
+  }, [messages, conversationTitle, scope, scopeId]);
 
   // ============================================================================
   // Keyboard Shortcuts
@@ -570,6 +725,17 @@ export function ChatPanel({
     return undefined;
   }, [conversationId]);
 
+  useEffect(() => {
+    return () => {
+      if (forkTimerRef.current) {
+        clearTimeout(forkTimerRef.current);
+      }
+      if (exportTimerRef.current) {
+        clearTimeout(exportTimerRef.current);
+      }
+    };
+  }, []);
+
   // ============================================================================
   // Render
   // ============================================================================
@@ -586,7 +752,7 @@ export function ChatPanel({
       {messages.length > 0 && (
         <div
           className={cn(
-            "flex items-center justify-between px-4 py-2",
+            "relative z-40 flex items-center justify-between px-4 py-2",
             "border-b border-gray-200 dark:border-gray-700",
             "bg-white/80 dark:bg-dark-surface-deep/80 backdrop-blur-sm",
           )}
@@ -604,6 +770,28 @@ export function ChatPanel({
             />
             <button
               type="button"
+              onClick={handleExportConversation}
+              className={cn(
+                "inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md",
+                "text-gray-600 dark:text-gray-400",
+                "hover:bg-gray-100 dark:hover:bg-dark-surface-hover",
+                "focus:outline-none focus:ring-2 focus:ring-brand-blue",
+                "transition-colors duration-200",
+              )}
+              aria-label={
+                exported ? "Conversation exported" : "Export conversation"
+              }
+              title="Export full chat"
+            >
+              {exported ? (
+                <Check className="h-3.5 w-3.5 text-brand-green" />
+              ) : (
+                <Download className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              Export
+            </button>
+            <button
+              type="button"
               onClick={startNewConversation}
               className={cn(
                 "inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md",
@@ -618,6 +806,24 @@ export function ChatPanel({
               New Chat
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Forked conversation notice */}
+      {showForkNotice && (
+        <div
+          className={cn(
+            "flex items-center gap-1.5 px-4 py-1.5",
+            "bg-emerald-50/80 dark:bg-emerald-900/20",
+            "border-b border-emerald-100 dark:border-emerald-800/30",
+            "text-xs text-emerald-700 dark:text-emerald-300",
+            "animate-in fade-in-0 slide-in-from-top-1 duration-200",
+          )}
+        >
+          <GitFork className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span>
+            Forked from the selected reply. Edit the branch context and send.
+          </span>
         </div>
       )}
 
@@ -747,6 +953,9 @@ export function ChatPanel({
             <ChatMessageComponent
               message={message}
               onCitationClick={onCitationClick}
+              onEditResend={handleEditResend}
+              onForkConversation={handleForkConversation}
+              isConversationStreaming={isStreaming}
             />
           </div>
         ))}
@@ -829,7 +1038,8 @@ export function ChatPanel({
             </div>
           )}
 
-        {/* Post-response suggestions: smart categorized chips or fallback */}
+        {/* Post-response suggestions: smart categorized chips or inline fallback.
+            Priority: smart suggestions (if loaded) > inline SSE suggestions > skeleton (only if no inline available) */}
         {!isStreaming && messages.length > 0 && (
           <div className="mt-4">
             {smartSuggestions.length > 0 ? (
@@ -884,7 +1094,14 @@ export function ChatPanel({
                   );
                 })}
               </div>
+            ) : suggestedQuestions.length > 0 ? (
+              /* Show inline SSE suggestions immediately — don't wait for smart suggestions */
+              <ChatSuggestionChips
+                suggestions={suggestedQuestions}
+                onSelect={handleSuggestionSelect}
+              />
             ) : smartSuggestionsLoading ? (
+              /* Only show skeleton when NO inline suggestions are available */
               <div
                 className="flex flex-wrap gap-2"
                 aria-label="Loading suggestions"
@@ -901,11 +1118,6 @@ export function ChatPanel({
                   />
                 ))}
               </div>
-            ) : suggestedQuestions.length > 0 ? (
-              <ChatSuggestionChips
-                suggestions={suggestedQuestions}
-                onSelect={handleSuggestionSelect}
-              />
             ) : null}
           </div>
         )}
