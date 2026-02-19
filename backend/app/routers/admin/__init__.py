@@ -25,3 +25,8 @@ from .jobs import router as jobs_router
 router.include_router(users_router)
 router.include_router(monitoring_router)
 router.include_router(jobs_router)
+
+# Phase 2: Content management
+from .content import router as content_router
+
+router.include_router(content_router)
