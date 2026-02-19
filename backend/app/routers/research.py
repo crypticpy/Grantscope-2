@@ -188,6 +188,12 @@ async def execute_research_task_background(
                     )
                 else:
                     raise ValueError(f"Unknown task type: {task_data.task_type}")
+
+                # Commit changes made by the task (card updates, embeddings, etc.)
+                await svc_db.commit()
+            except Exception:
+                await svc_db.rollback()
+                raise
             finally:
                 heartbeat_task.cancel()
 
