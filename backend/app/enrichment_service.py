@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.db.card import Card
 from app.models.db.source import Source, SignalSource
 from app.models.db.card_extras import CardTimeline
+from app.helpers.settings_reader import get_setting
 
 logger = logging.getLogger(__name__)
 
@@ -490,6 +491,18 @@ async def enrich_thin_descriptions(
     """
     from sqlalchemy import text as sa_text
     from app.card_analysis_service import queue_card_analysis
+
+    # Apply admin-configurable overrides (cached, 60s TTL)
+    thr_raw = await get_setting(db, "enrichment_threshold_chars", threshold_chars)
+    max_raw = await get_setting(db, "enrichment_max_cards_per_run", max_cards)
+    try:
+        threshold_chars = int(thr_raw)
+    except (TypeError, ValueError):
+        pass
+    try:
+        max_cards = int(max_raw)
+    except (TypeError, ValueError):
+        pass
 
     # Find thin cards
     result = await db.execute(

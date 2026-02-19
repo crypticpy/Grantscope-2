@@ -46,11 +46,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.db.source import Source
 from app.helpers.db_utils import vector_search_sources
+from app.helpers.settings_reader import get_setting
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Thresholds
+# Thresholds (defaults — overridable via admin system_settings)
 # ---------------------------------------------------------------------------
 DUPLICATE_THRESHOLD = 0.95  # similarity above this -> skip (duplicate)
 RELATED_THRESHOLD = 0.85  # similarity above this -> store as related
@@ -155,6 +156,23 @@ async def _check_duplicate_inner(
 ) -> DedupResult:
     """Inner implementation that may raise; wrapped by check_duplicate."""
 
+    # Read admin-configurable thresholds (cached, 60s TTL)
+    dedup_thresholds = await get_setting(db, "dedup_thresholds", None)
+    if isinstance(dedup_thresholds, dict):
+        try:
+            dup_threshold = float(
+                dedup_thresholds.get("duplicate", DUPLICATE_THRESHOLD)
+            )
+        except (TypeError, ValueError):
+            dup_threshold = DUPLICATE_THRESHOLD
+        try:
+            rel_threshold = float(dedup_thresholds.get("related", RELATED_THRESHOLD))
+        except (TypeError, ValueError):
+            rel_threshold = RELATED_THRESHOLD
+    else:
+        dup_threshold = DUPLICATE_THRESHOLD
+        rel_threshold = RELATED_THRESHOLD
+
     # ------------------------------------------------------------------
     # 1. URL dedup (fast path)
     # ------------------------------------------------------------------
@@ -205,7 +223,7 @@ async def _check_duplicate_inner(
             db,
             resolved_embedding,
             target_card_id=card_id,
-            match_threshold=RELATED_THRESHOLD,
+            match_threshold=rel_threshold,
             match_count=5,
         )
     except Exception as exc:
@@ -224,7 +242,7 @@ async def _check_duplicate_inner(
     match_id = str(top_match.get("id", ""))
     match_title = top_match.get("title", "")
 
-    if similarity > DUPLICATE_THRESHOLD:
+    if similarity > dup_threshold:
         logger.info(
             f"Dedup: DUPLICATE detected (sim={similarity:.4f}) -- "
             f"source '{match_title[:50]}' (id={match_id}) on card {card_id}"
@@ -237,7 +255,7 @@ async def _check_duplicate_inner(
             action="skip",
         )
 
-    if similarity >= RELATED_THRESHOLD:
+    if similarity >= rel_threshold:
         logger.info(
             f"Dedup: RELATED source detected (sim={similarity:.4f}) -- "
             f"source '{match_title[:50]}' (id={match_id}) on card {card_id}"
