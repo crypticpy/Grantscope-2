@@ -478,130 +478,99 @@ const Dashboard: React.FC = () => {
       <MyApplications token={token} />
 
       {/* Stats Cards - Clickable KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
         <Link
           to="/discover"
           aria-label={`Total Opportunities: ${stats.totalCards}`}
-          className="bg-white dark:bg-dark-surface rounded-xl shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg active:scale-95 active:shadow-inner cursor-pointer group"
+          className="bg-white dark:bg-dark-surface rounded-xl shadow px-4 py-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg active:scale-95 active:shadow-inner cursor-pointer group text-center"
         >
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <Eye className="h-8 w-8 text-brand-blue group-hover:scale-110 transition-transform" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                Total Opportunities
-                <InfoTooltip content={STAT_EXPLANATIONS.totalOpportunities} />
-              </p>
-              <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                {animatedTotalCards}
-              </p>
-            </div>
-          </div>
+          <Eye className="h-6 w-6 text-brand-blue mx-auto mb-2 group-hover:scale-110 transition-transform" />
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center justify-center gap-0.5 mb-1">
+            Opportunities
+            <InfoTooltip content={STAT_EXPLANATIONS.totalOpportunities} />
+          </p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-white tabular-nums">
+            {animatedTotalCards.toLocaleString()}
+          </p>
         </Link>
 
         <Link
           to="/discover?filter=new"
           aria-label={`New This Week: ${stats.newThisWeek}`}
-          className="bg-white dark:bg-dark-surface rounded-xl shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg active:scale-95 active:shadow-inner cursor-pointer group"
+          className="bg-white dark:bg-dark-surface rounded-xl shadow px-4 py-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg active:scale-95 active:shadow-inner cursor-pointer group text-center"
         >
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <TrendingUp className="h-8 w-8 text-brand-green group-hover:scale-110 transition-transform" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                New This Week
-                <InfoTooltip content={STAT_EXPLANATIONS.newThisWeek} />
-              </p>
-              <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                {animatedNewThisWeek}
-              </p>
-            </div>
-          </div>
+          <TrendingUp className="h-6 w-6 text-brand-green mx-auto mb-2 group-hover:scale-110 transition-transform" />
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center justify-center gap-0.5 mb-1">
+            New This Week
+            <InfoTooltip content={STAT_EXPLANATIONS.newThisWeek} />
+          </p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-white tabular-nums">
+            {animatedNewThisWeek.toLocaleString()}
+          </p>
         </Link>
 
         <Link
           to="/discover?filter=following"
           aria-label={`Following: ${stats.following}`}
-          className="bg-white dark:bg-dark-surface rounded-xl shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg active:scale-95 active:shadow-inner cursor-pointer group"
+          className="bg-white dark:bg-dark-surface rounded-xl shadow px-4 py-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg active:scale-95 active:shadow-inner cursor-pointer group text-center"
         >
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <Heart className="h-8 w-8 text-extended-purple group-hover:scale-110 transition-transform" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                Following
-                <InfoTooltip content={STAT_EXPLANATIONS.following} />
-              </p>
-              <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                {animatedFollowing}
-              </p>
-            </div>
-          </div>
+          <Heart className="h-6 w-6 text-extended-purple mx-auto mb-2 group-hover:scale-110 transition-transform" />
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center justify-center gap-0.5 mb-1">
+            Following
+            <InfoTooltip content={STAT_EXPLANATIONS.following} />
+          </p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-white tabular-nums">
+            {animatedFollowing.toLocaleString()}
+          </p>
         </Link>
 
         <Link
           to="/workstreams"
           aria-label={`Programs: ${stats.workstreams}`}
-          className="bg-white dark:bg-dark-surface rounded-xl shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg active:scale-95 active:shadow-inner cursor-pointer group"
+          className="bg-white dark:bg-dark-surface rounded-xl shadow px-4 py-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg active:scale-95 active:shadow-inner cursor-pointer group text-center"
         >
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <Filter className="h-8 w-8 text-extended-orange group-hover:scale-110 transition-transform" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                Programs
-                <InfoTooltip content={STAT_EXPLANATIONS.programs} />
-              </p>
-              <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                {animatedWorkstreams}
-              </p>
-            </div>
-          </div>
+          <Filter className="h-6 w-6 text-extended-orange mx-auto mb-2 group-hover:scale-110 transition-transform" />
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center justify-center gap-0.5 mb-1">
+            Programs
+            <InfoTooltip content={STAT_EXPLANATIONS.programs} />
+          </p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-white tabular-nums">
+            {animatedWorkstreams.toLocaleString()}
+          </p>
         </Link>
 
         <Link
           to="/discover?filter=deadline"
           aria-label={`Deadlines This Week: ${stats.deadlinesThisWeek}`}
-          className="bg-white dark:bg-dark-surface rounded-xl shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg active:scale-95 active:shadow-inner cursor-pointer group"
+          className="bg-white dark:bg-dark-surface rounded-xl shadow px-4 py-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg active:scale-95 active:shadow-inner cursor-pointer group text-center"
         >
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <Clock className="h-8 w-8 text-red-500 group-hover:scale-110 transition-transform" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                Deadlines This Week
-                <InfoTooltip content={STAT_EXPLANATIONS.deadlinesThisWeek} />
-              </p>
-              <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                {animatedDeadlinesThisWeek}
-              </p>
-            </div>
-          </div>
+          <Clock className="h-6 w-6 text-red-500 mx-auto mb-2 group-hover:scale-110 transition-transform" />
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center justify-center gap-0.5 mb-1">
+            Deadlines
+            <InfoTooltip content={STAT_EXPLANATIONS.deadlinesThisWeek} />
+          </p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-white tabular-nums">
+            {animatedDeadlinesThisWeek.toLocaleString()}
+          </p>
         </Link>
 
         <div
           aria-label={`Pipeline Value: $${stats.pipelineValue.toLocaleString()}`}
-          className="bg-white dark:bg-dark-surface rounded-xl shadow p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg group"
+          className="bg-white dark:bg-dark-surface rounded-xl shadow px-4 py-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg group text-center"
+          title={`$${stats.pipelineValue.toLocaleString()}`}
         >
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <DollarSign className="h-8 w-8 text-emerald-500 group-hover:scale-110 transition-transform" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                Pipeline Value
-                <InfoTooltip content={STAT_EXPLANATIONS.pipelineValue} />
-              </p>
-              <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                ${animatedPipelineValue.toLocaleString()}
-              </p>
-            </div>
-          </div>
+          <DollarSign className="h-6 w-6 text-emerald-500 mx-auto mb-2 group-hover:scale-110 transition-transform" />
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center justify-center gap-0.5 mb-1">
+            Pipeline
+            <InfoTooltip content={STAT_EXPLANATIONS.pipelineValue} />
+          </p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-white tabular-nums">
+            {animatedPipelineValue >= 1_000_000
+              ? `$${(animatedPipelineValue / 1_000_000).toFixed(1)}M`
+              : animatedPipelineValue >= 1_000
+                ? `$${(animatedPipelineValue / 1_000).toFixed(0)}K`
+                : `$${animatedPipelineValue.toLocaleString()}`}
+          </p>
         </div>
       </div>
 

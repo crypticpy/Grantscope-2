@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field, validator
 
 
-VALID_TASK_TYPES = {"update", "deep_research", "workstream_analysis"}
+VALID_TASK_TYPES = {"update", "deep_research", "workstream_analysis", "card_analysis"}
 
 
 class ResearchTaskCreate(BaseModel):
@@ -21,7 +21,8 @@ class ResearchTaskCreate(BaseModel):
         None, description="Workstream ID for workstream analysis"
     )
     task_type: str = Field(
-        ..., description="One of: update, deep_research, workstream_analysis"
+        ...,
+        description="One of: update, deep_research, workstream_analysis, card_analysis",
     )
 
     @validator("task_type")

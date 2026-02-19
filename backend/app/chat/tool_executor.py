@@ -341,7 +341,9 @@ async def execute_streaming_with_tools(
                         else str(result)
                     )
                     if not result_content and isinstance(result, dict):
-                        result_content = json.dumps(result)
+                        from app.chat.sse import _SSEEncoder
+
+                        result_content = json.dumps(result, cls=_SSEEncoder)
 
                     tool_messages.append(
                         {

@@ -22,6 +22,7 @@ from app.deps import (
     azure_openai_embedding_client,
     get_embedding_deployment,
 )
+from app.card_analysis_service import queue_card_analysis
 from app.models.core import Card as CardSchema, CardCreate, SimilarCard, BlockedTopic
 from app.models.search import (
     AdvancedSearchRequest,
@@ -449,6 +450,12 @@ async def create_card(
         db.add(new_card)
         await db.flush()
         await db.refresh(new_card)
+
+        # Queue background AI analysis for the new card
+        try:
+            await queue_card_analysis(db, str(new_card.id), current_user["id"])
+        except Exception:
+            logger.warning("Failed to queue card analysis for %s", new_card.id)
 
         return CardSchema(**_card_to_dict(new_card))
     except HTTPException:

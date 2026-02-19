@@ -18,6 +18,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 from datetime import datetime, timezone, timedelta
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
@@ -178,6 +179,83 @@ async def _web_search_handler(
         result_text += f"{(wr.get('content', ''))[:800]}\n\n"
 
     return {"content": result_text, "raw_results": web_results}
+
+
+# ---------------------------------------------------------------------------
+# Grant Assistant Citation Mapping
+# ---------------------------------------------------------------------------
+
+
+def _build_source_map_from_tool_calls(
+    response_text: str,
+    tool_calls_made: list,
+) -> Dict[int, Dict[str, Any]]:
+    """Build a citation source_map for the grant_assistant scope.
+
+    The grant assistant has no RAG-based source_map — instead, the LLM
+    generates ``[N]: Title`` citation references at the end of its response
+    based on tool results.  This function parses those references and
+    matches them against known search results to produce a source_map
+    that :func:`parse_citations` can resolve into clickable links.
+
+    Args:
+        response_text: The LLM's full response (may contain ``[N]: Title`` lines).
+        tool_calls_made: List of tool call log dicts with ``name``, ``result``.
+
+    Returns:
+        Dict mapping citation index N to source metadata.
+    """
+    # 1. Collect all search results from tool calls into a title→metadata map
+    results_by_title: Dict[str, Dict[str, Any]] = {}
+    for tc in tool_calls_made:
+        result = tc.get("result", {})
+        if not isinstance(result, dict):
+            continue
+        items = result.get("results", [])
+        if not isinstance(items, list):
+            continue
+
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            # Internal grants have 'name' + 'slug'; external have 'title' + 'opportunity_url'
+            title = item.get("name") or item.get("title") or ""
+            if not title:
+                continue
+            entry: Dict[str, Any] = {"title": title}
+            if item.get("card_id"):
+                entry["card_id"] = str(item["card_id"])
+            if item.get("slug"):
+                entry["card_slug"] = item["slug"]
+            if item.get("source_url"):
+                entry["url"] = item["source_url"]
+            elif item.get("opportunity_url"):
+                entry["url"] = item["opportunity_url"]
+            results_by_title[title.lower().strip()] = entry
+
+    if not results_by_title:
+        return {}
+
+    # 2. Parse [N]: Title lines from the LLM's response
+    source_map: Dict[int, Dict[str, Any]] = {}
+    # Match patterns like "[1]: Title", "[2] Title", "[1]: **Title**"
+    citation_line_re = re.compile(r"\[(\d+)\][:\s]+\**([^*\n]+?)\**\s*$", re.MULTILINE)
+    for m in citation_line_re.finditer(response_text):
+        ref_num = int(m.group(1))
+        ref_title = m.group(2).strip()
+
+        # Try exact match first, then fuzzy (title contains)
+        ref_key = ref_title.lower().strip()
+        if ref_key in results_by_title:
+            source_map[ref_num] = results_by_title[ref_key]
+        else:
+            # Fuzzy: find a result whose title contains the reference title or vice versa
+            for known_title, entry in results_by_title.items():
+                if ref_key in known_title or known_title in ref_key:
+                    source_map[ref_num] = entry
+                    break
+
+    return source_map
 
 
 # ---------------------------------------------------------------------------
@@ -461,7 +539,12 @@ async def chat(
 
         yield sse_progress("citing", "Resolving citations...")
 
-        # 7. Post-processing: parse citations
+        # 7. Post-processing: build source_map for grant_assistant from tool results
+        if scope == "grant_assistant" and tool_calls_made:
+            source_map = _build_source_map_from_tool_calls(
+                full_response, tool_calls_made
+            )
+
         citations = parse_citations(full_response, source_map)
         for citation in citations:
             yield sse_citation(citation)

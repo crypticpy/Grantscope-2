@@ -465,3 +465,102 @@ async def enrich_signal_profiles(
         "errors": errors,
         "remaining": remaining - enriched,
     }
+
+
+async def enrich_thin_descriptions(
+    db: AsyncSession,
+    threshold_chars: int = 1600,
+    max_cards: int = 10,
+    triggered_by_user_id: str | None = None,
+) -> dict:
+    """Enrich cards with thin descriptions (< threshold_chars).
+
+    For each qualifying card, queues a ``card_analysis`` background task
+    (via :func:`app.card_analysis_service.queue_card_analysis`) which will:
+
+    1. Fetch linked sources
+    2. If grants_gov_id exists, try to fetch grant details
+    3. If total context < 2000 chars, run web search for more context
+    4. Call AI with COMPREHENSIVE_ANALYSIS_PROMPT for rich description
+    5. Update card description + scores
+    6. Generate and store embedding
+    7. Create timeline event
+
+    Returns stats dict with counts.
+    """
+    from sqlalchemy import text as sa_text
+    from app.card_analysis_service import queue_card_analysis
+
+    # Find thin cards
+    result = await db.execute(
+        sa_text(
+            "SELECT id, name, length(COALESCE(description, '')) AS desc_len "
+            "FROM cards "
+            "WHERE status = 'active' "
+            "AND (description IS NULL OR length(description) < :threshold) "
+            "ORDER BY created_at DESC "
+            "LIMIT :max_cards"
+        ),
+        {"threshold": threshold_chars, "max_cards": max_cards},
+    )
+    thin_cards = result.all()
+
+    # Count total needing enrichment (without limit)
+    total_result = await db.execute(
+        sa_text(
+            "SELECT COUNT(*) FROM cards "
+            "WHERE status = 'active' "
+            "AND (description IS NULL OR length(description) < :threshold)"
+        ),
+        {"threshold": threshold_chars},
+    )
+    total_needing = total_result.scalar() or 0
+
+    queued = 0
+    errors = 0
+    already_queued = 0
+
+    # Use the provided user ID, or fall back to any admin user
+    user_id = triggered_by_user_id
+    if not user_id:
+        admin_result = await db.execute(
+            sa_text("SELECT id FROM users WHERE role = 'admin' LIMIT 1")
+        )
+        admin_row = admin_result.scalar_one_or_none()
+        user_id = str(admin_row) if admin_row else None
+
+    if not user_id:
+        logger.warning("enrich_thin_descriptions: no user_id available, skipping")
+        return {
+            "total_needing_enrichment": total_needing,
+            "checked": len(thin_cards),
+            "queued": 0,
+            "already_queued": 0,
+            "errors": 0,
+            "remaining": total_needing,
+        }
+
+    for row in thin_cards:
+        card_id = str(row.id)
+        try:
+            task_id = await queue_card_analysis(db, card_id, user_id)
+            if task_id:
+                queued += 1
+            else:
+                already_queued += 1
+        except Exception as e:
+            logger.warning("Failed to queue enrichment for card %s: %s", card_id, e)
+            errors += 1
+
+    await db.flush()
+
+    stats = {
+        "total_needing_enrichment": total_needing,
+        "checked": len(thin_cards),
+        "queued": queued,
+        "already_queued": already_queued,
+        "errors": errors,
+        "remaining": max(0, total_needing - queued - already_queued),
+    }
+    logger.info("enrich_thin_descriptions: %s", stats)
+    return stats

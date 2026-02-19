@@ -43,6 +43,7 @@ from app.models.db.source import Source
 from app.models.db.research import ResearchTask
 from app.models.db.workstream import Workstream
 from app.helpers.db_utils import (
+    compose_embedding_text,
     vector_search_cards,
     increment_deep_research_count,
     store_card_embedding,
@@ -393,7 +394,9 @@ class ResearchService:
             if not card_row:
                 return
 
-            embed_text = f"{card_row.name or ''} {card_row.summary or ''} {card_row.description or ''}"
+            embed_text = compose_embedding_text(
+                card_row.name, card_row.summary, card_row.description
+            )
 
             if len(embed_text.strip()) < 10:
                 return

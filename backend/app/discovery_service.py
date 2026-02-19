@@ -69,7 +69,7 @@ from app.models.db.source import Source, DiscoveredSource
 from app.models.db.card_extras import CardTimeline
 from app.models.db.discovery import DiscoveryRun, DiscoveryBlock
 from app.models.db.workstream import Workstream, WorkstreamCard
-from app.helpers.db_utils import vector_search_cards
+from app.helpers.db_utils import compose_embedding_text, vector_search_cards
 
 # Import multi-source content fetchers (7 categories)
 from .source_fetchers import (
@@ -3454,7 +3454,9 @@ class DiscoveryService:
             try:
                 emb_data = source.embedding
                 if not emb_data:
-                    embed_text = f"{analysis.suggested_card_name} {analysis.summary}"
+                    embed_text = compose_embedding_text(
+                        analysis.suggested_card_name, analysis.summary
+                    )
                     emb_data = await self.ai_service.generate_embedding(embed_text)
                 if emb_data:
                     vec_str = "[" + ",".join(str(v) for v in emb_data) + "]"

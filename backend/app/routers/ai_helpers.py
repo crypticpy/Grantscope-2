@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.card_analysis_service import queue_card_analysis
 from app.deps import get_db, get_current_user_hardcoded, _safe_error, limiter
 from app.taxonomy import PILLAR_NAMES, GRANT_CATEGORIES, DEPARTMENT_LIST
 from app.openai_provider import (
@@ -69,6 +70,12 @@ async def create_card_from_topic(
 
         db.add(card)
         await db.flush()
+
+        # Queue background AI analysis
+        try:
+            await queue_card_analysis(db, card_id, user["id"])
+        except Exception:
+            logger.warning("Failed to queue card analysis for %s", card_id)
 
         # If workstream specified, add to workstream
         if body.workstream_id:
@@ -159,6 +166,12 @@ async def create_manual_card(
 
         db.add(card)
         await db.flush()
+
+        # Queue background AI analysis
+        try:
+            await queue_card_analysis(db, card_id, user["id"])
+        except Exception:
+            logger.warning("Failed to queue card analysis for %s", card_id)
 
         # Store seed URLs as sources if provided
         if body.seed_urls and len(body.seed_urls) > 0:

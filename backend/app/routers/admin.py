@@ -9,8 +9,8 @@ from typing import Any, Optional
 
 from pydantic import BaseModel
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import delete, func, select, update
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import (
@@ -678,6 +678,78 @@ async def trigger_velocity_calculation(
         "status": "started",
         "message": "Velocity calculation is running in the background.",
     }
+
+
+# ============================================================================
+# Description Quality / Enrichment endpoints
+# ============================================================================
+
+
+@router.get("/admin/description-quality")
+async def get_description_quality(
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
+):
+    """Card description quality stats bucketed by length."""
+    try:
+        result = await db.execute(
+            text(
+                """
+            SELECT
+                COUNT(*) FILTER (WHERE description IS NULL OR description = '') AS missing,
+                COUNT(*) FILTER (WHERE length(description) > 0 AND length(description) < 400) AS thin,
+                COUNT(*) FILTER (WHERE length(description) >= 400 AND length(description) < 1600) AS short,
+                COUNT(*) FILTER (WHERE length(description) >= 1600 AND length(description) < 3200) AS adequate,
+                COUNT(*) FILTER (WHERE length(description) >= 3200) AS comprehensive,
+                COUNT(*) AS total
+            FROM cards
+            WHERE status = 'active'
+        """
+            )
+        )
+        row = result.one()
+        return {
+            "missing": row.missing,
+            "thin": row.thin,
+            "short": row.short,
+            "adequate": row.adequate,
+            "comprehensive": row.comprehensive,
+            "total": row.total,
+        }
+    except Exception as e:
+        logger.error(f"Failed to get description quality stats: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("description quality stats", e),
+        ) from e
+
+
+@router.post("/admin/enrich-descriptions")
+@limiter.limit("2/minute")
+async def trigger_enrich_descriptions(
+    request: Request,
+    max_cards: int = Query(10, ge=1, le=50),
+    threshold_chars: int = Query(1600, ge=100, le=5000),
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
+):
+    """Trigger enrichment of cards with thin descriptions."""
+    try:
+        from app.enrichment_service import enrich_thin_descriptions
+
+        stats = await enrich_thin_descriptions(
+            db,
+            threshold_chars=threshold_chars,
+            max_cards=max_cards,
+            triggered_by_user_id=current_user["id"],
+        )
+        return stats
+    except Exception as e:
+        logger.error(f"Failed to trigger description enrichment: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("description enrichment", e),
+        ) from e
 
 
 # ============================================================================

@@ -138,6 +138,14 @@ async def _handle_create_opportunity_card(
         await db.flush()
         await db.refresh(card)
 
+        # Queue background AI analysis
+        try:
+            from app.card_analysis_service import queue_card_analysis
+
+            await queue_card_analysis(db, str(card.id), user_id)
+        except Exception:
+            logger.warning("Failed to queue card analysis for %s", card.id)
+
         return {
             "card_id": str(card.id),
             "slug": card.slug,

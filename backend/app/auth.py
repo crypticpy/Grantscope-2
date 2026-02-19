@@ -13,7 +13,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 import bcrypt
 from jose import JWTError, jwt
@@ -147,9 +147,12 @@ def create_access_token(user_data: dict[str, Any]) -> str:
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
+_http_bearer = HTTPBearer(auto_error=False)
+
+
 async def get_current_user(
     request: Request,
-    credentials: HTTPAuthorizationCredentials | None = None,
+    credentials: HTTPAuthorizationCredentials | None = Security(_http_bearer),
 ) -> dict[str, Any]:
     """FastAPI dependency -- extract and validate the Bearer JWT.
 
@@ -159,8 +162,10 @@ async def get_current_user(
     """
     token: str | None = None
 
-    # Prefer credentials injected by HTTPBearer
-    if credentials is not None:
+    # Prefer credentials injected by HTTPBearer (via FastAPI DI).
+    # When called directly (not via DI), credentials may be a
+    # Security/Depends sentinel — fall through to manual extraction.
+    if isinstance(credentials, HTTPAuthorizationCredentials):
         token = credentials.credentials
     else:
         # Manual fallback

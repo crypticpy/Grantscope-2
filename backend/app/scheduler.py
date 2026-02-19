@@ -402,6 +402,29 @@ async def run_digest_batch():
         logger.error(f"Digest batch processing failed: {e}")
 
 
+async def run_nightly_description_enrichment():
+    """Enrich cards with thin descriptions via AI analysis.
+
+    Runs at 3:00 AM UTC daily, before the workstream auto-scan at 4:00 AM.
+    Queues up to 20 card_analysis tasks for cards whose description is
+    missing or shorter than 1600 characters.
+    """
+    from app.enrichment_service import enrich_thin_descriptions
+
+    if async_session_factory is None:
+        logger.warning("No DB session factory — skipping description enrichment")
+        return
+
+    logger.info("Starting nightly description enrichment...")
+    try:
+        async with async_session_factory() as db:
+            stats = await enrich_thin_descriptions(db, max_cards=500)
+            await db.commit()
+            logger.info("Scheduled description enrichment complete: %s", stats)
+    except Exception:
+        logger.exception("Scheduled description enrichment failed")
+
+
 async def scan_grants():
     """Scan Grants.gov and SAM.gov for new grant opportunities.
 
@@ -469,6 +492,18 @@ def start_scheduler():
             return
     except Exception:
         pass
+
+    # Daily description enrichment at 3:00 AM UTC
+    scheduler.add_job(
+        run_nightly_description_enrichment,
+        "cron",
+        hour=3,
+        minute=0,
+        id="enrich_thin_descriptions",
+        name="Enrich thin card descriptions",
+        max_instances=1,
+        replace_existing=True,
+    )
 
     # Daily auto-scan for workstreams with auto_scan=true at 4:00 AM UTC
     scheduler.add_job(
@@ -562,7 +597,8 @@ def start_scheduler():
 
     scheduler.start()
     logger.info(
-        "Scheduler started - workstream auto-scans at 4:00 AM UTC, "
+        "Scheduler started - description enrichment at 3:00 AM UTC, "
+        "workstream auto-scans at 4:00 AM UTC, "
         "reputation aggregation at 5:30 AM UTC, "
         "nightly scan at 6:00 AM UTC, SQI recalculation at 6:30 AM UTC, "
         "pattern detection at 7:00 AM UTC, "

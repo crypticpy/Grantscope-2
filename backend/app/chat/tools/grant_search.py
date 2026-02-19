@@ -29,10 +29,11 @@ async def _handle_search_internal_grants(
 ) -> dict:
     """Search the internal grant/card database using hybrid search.
 
-    Generates an embedding for the query text, then runs hybrid
-    (full-text + vector) search over the cards table.  Results
-    are optionally post-filtered by pillar, category, funding range,
-    and deadline.
+    Generates an embedding for the query text enriched with the user's
+    profile context (department, program, priorities), then runs hybrid
+    (full-text + vector) search over the cards table.  Results are
+    optionally post-filtered by pillar, category, funding range, and
+    deadline.
 
     Args:
         db: Async database session.
@@ -53,7 +54,81 @@ async def _handle_search_internal_grants(
         funding_max: Optional[float] = kwargs.get("funding_max")
         deadline_after: Optional[str] = kwargs.get("deadline_after")
 
-        # Generate embedding for the query
+        logger.info(
+            "search_internal_grants called: query=%r user_id=%s filters(pillar=%s cat=%s fmin=%s fmax=%s deadline=%s)",
+            query,
+            user_id,
+            pillar_filter,
+            category_filter,
+            funding_min,
+            funding_max,
+            deadline_after,
+        )
+
+        # Enrich query with user profile context for better search recall.
+        # The LLM's query may be generic (e.g. "grants for my division") so we
+        # append department, program, and priority keywords.  The enriched text
+        # is used for embedding generation (semantic match) while an OR-enhanced
+        # variant is used for full-text search (FTS) so that profile terms like
+        # "Information Technology" can match cards even when the LLM's phrasing
+        # doesn't share exact stems with the card's search_vector.
+        enriched_query = query
+        fts_query = query  # OR-enhanced version for full-text search
+        profile: Optional[dict] = None
+        fts_parts: List[str] = []
+        try:
+            import uuid as _uuid
+
+            from app.chat.profile_utils import load_user_profile
+
+            profile = await load_user_profile(db, _uuid.UUID(user_id))
+            if profile:
+                # --- Build embedding enrichment (AND-concatenated) ---
+                context_parts: List[str] = []
+                if profile.get("department"):
+                    context_parts.append(str(profile["department"]))
+                if profile.get("program_name"):
+                    context_parts.append(str(profile["program_name"]))
+                if profile.get("program_mission"):
+                    context_parts.append(str(profile["program_mission"])[:200])
+                if profile.get("priorities") and isinstance(
+                    profile["priorities"], list
+                ):
+                    context_parts.append(" ".join(profile["priorities"][:5]))
+                if profile.get("custom_priorities"):
+                    context_parts.append(str(profile["custom_priorities"])[:200])
+                if context_parts:
+                    enriched_query = f"{query} {' '.join(context_parts)}"
+
+                # --- Build FTS query with OR semantics ---
+                # websearch_to_tsquery treats unquoted "or" as the OR operator,
+                # so "grants for programs or APH" yields
+                # ('grant' & 'program') | 'aph'.
+                #
+                # We only include department and program_name as OR branches.
+                # Mission and priorities are intentionally excluded from FTS
+                # because they add too many generic terms (e.g. "training",
+                # "equipment") that match hundreds of cards and drown out
+                # specific matches.  The enriched embedding (which includes
+                # mission + priorities) handles semantic matching instead.
+                fts_parts: List[str] = []
+                if profile.get("department"):
+                    fts_parts.append(str(profile["department"]))
+                if profile.get("program_name"):
+                    fts_parts.append(str(profile["program_name"]))
+                if fts_parts:
+                    fts_query = f"{query} or {' or '.join(fts_parts)}"
+        except Exception as e:
+            logger.debug("Could not enrich query with user profile: %s", e)
+
+        # LLMs often generate comma-separated lists (e.g. "health IT,
+        # software, training, equipment") which websearch_to_tsquery treats
+        # as AND — requiring ALL terms to match.  Replace commas with "or"
+        # so each phrase becomes a separate OR branch, matching cards that
+        # contain ANY of the listed terms.
+        fts_query = fts_query.replace(",", " or ")
+
+        # Generate embedding for the enriched query
         from app.openai_provider import (
             azure_openai_async_embedding_client,
             get_embedding_deployment,
@@ -61,20 +136,111 @@ async def _handle_search_internal_grants(
 
         embed_response = await azure_openai_async_embedding_client.embeddings.create(
             model=get_embedding_deployment(),
-            input=query[:8000],
+            input=enriched_query[:8000],
         )
         embedding: List[float] = embed_response.data[0].embedding
 
-        # Run hybrid search
-        from app.helpers.db_utils import hybrid_search_cards
+        # Run hybrid search (OR-enhanced FTS query + enriched embedding)
+        from app.helpers.db_utils import hybrid_search_cards, vector_search_cards
+
+        # Determine vector pool size dynamically.  For small corpora
+        # (< 1000 cards) we scan all cards so every row receives a
+        # vector rank in the RRF fusion.  For larger corpora the default
+        # match_count * 2 window is more performant; at that scale a
+        # pgvector HNSW index should be added for sub-linear search.
+        from sqlalchemy import text as sa_text
+
+        pool_result = await db.execute(
+            sa_text(
+                "SELECT count(*) FROM cards "
+                "WHERE status = 'active' AND embedding IS NOT NULL"
+            )
+        )
+        total_cards = pool_result.scalar() or 0
+        # Cover the full corpus up to 1000; beyond that use a fixed cap
+        # that balances recall vs. query latency.
+        vector_pool = max(total_cards, 120) if total_cards <= 1000 else 1000
 
         raw_results = await hybrid_search_cards(
             db,
-            query,
+            fts_query,
             embedding,
-            match_count=15,
+            match_count=60,
             status_filter="active",
+            # Weight vector similarity 2x over FTS to favour semantic
+            # matches from the enriched embedding.  The embedding carries
+            # the full user profile context (mission, priorities) while
+            # FTS only has query + department/program abbreviations.
+            vector_weight=2.0,
+            # Expand the vector candidate pool to cover the entire corpus.
+            # The default pool (match_count * 2) can exclude cards with
+            # strong FTS signal from getting any vector contribution in
+            # the RRF fusion.
+            vector_pool_size=vector_pool,
         )
+
+        logger.info(
+            "hybrid_search returned %d results for fts=%r",
+            len(raw_results),
+            fts_query[:80],
+        )
+
+        # ---- Supplemental profile-focused search ----
+        # The LLM's queries may use terms that don't match cards directly
+        # relevant to the user's department (e.g. "health IT infrastructure"
+        # misses LEAP grants because 'infrastructure' isn't in their tsvector).
+        # Run a second search using ONLY the user's profile keywords as the
+        # FTS query with the same enriched embedding.  This guarantees cards
+        # tagged with the user's department/program always surface.
+        if profile and fts_parts:
+            profile_fts = " or ".join(fts_parts)
+            try:
+                profile_results = await hybrid_search_cards(
+                    db,
+                    profile_fts,
+                    embedding,
+                    match_count=15,
+                    status_filter="active",
+                    vector_weight=2.0,
+                    vector_pool_size=vector_pool,
+                )
+                existing_ids = {str(r.get("id", "")) for r in raw_results}
+                added = 0
+                for pr in profile_results:
+                    pid = str(pr.get("id", ""))
+                    if pid not in existing_ids:
+                        raw_results.append(pr)
+                        existing_ids.add(pid)
+                        added += 1
+                if added:
+                    logger.info(
+                        "Profile supplemental search added %d new results (profile_fts=%r)",
+                        added,
+                        profile_fts,
+                    )
+            except Exception as e:
+                logger.debug("Profile supplemental search failed: %s", e)
+
+        # Fallback: if hybrid search returned very few results, supplement
+        # with vector-only search at a lower similarity threshold.  This
+        # handles cases where FTS terms don't match any card but the
+        # semantic embedding is still close.
+        if len(raw_results) < 3:
+            logger.info(
+                "Hybrid search returned %d results; supplementing with vector-only fallback",
+                len(raw_results),
+            )
+            vec_results = await vector_search_cards(
+                db,
+                embedding,
+                match_threshold=0.4,
+                match_count=25,
+                require_active=True,
+            )
+            existing_ids = {str(r.get("id", "")) for r in raw_results}
+            for vr in vec_results:
+                if str(vr.get("id", "")) not in existing_ids:
+                    raw_results.append({**vr, "rrf_score": vr.get("similarity", 0)})
 
         # Batch-fetch full cards to avoid N+1 queries
         card_ids = [row.get("id") for row in raw_results if row.get("id")]
@@ -143,9 +309,65 @@ async def _handle_search_internal_grants(
                     "grant_type": card.grant_type,
                     "summary": card.summary,
                     "pillar_id": card.pillar_id,
+                    "source_url": card.source_url,
                     "similarity": float(row.get("rrf_score", 0)),
                 }
             )
+
+        logger.info(
+            "search_internal_grants post-filter: %d → %d results",
+            len(raw_results),
+            len(filtered),
+        )
+
+        # Safety net: if post-filtering removed ALL results, return
+        # unfiltered results.  The LLM often over-applies filters from the
+        # user profile (pillar, funding range, deadline) even when the user
+        # didn't explicitly request them, causing 0 results.  Returning
+        # the full set lets the model evaluate relevance itself.
+        if len(filtered) == 0 and len(raw_results) > 0:
+            logger.warning(
+                "Post-filter reduced %d results to 0; returning unfiltered results",
+                len(raw_results),
+            )
+            # Build result dicts for ALL cards (no filters applied)
+            unfiltered: List[Dict[str, Any]] = []
+            for row in raw_results:
+                card_id = str(row.get("id", ""))
+                card = cards_by_id.get(card_id)
+                if card is None:
+                    continue
+                unfiltered.append(
+                    {
+                        "card_id": card_id,
+                        "name": card.name,
+                        "slug": card.slug,
+                        "grantor": card.grantor,
+                        "funding_amount_min": (
+                            float(card.funding_amount_min)
+                            if card.funding_amount_min is not None
+                            else None
+                        ),
+                        "funding_amount_max": (
+                            float(card.funding_amount_max)
+                            if card.funding_amount_max is not None
+                            else None
+                        ),
+                        "deadline": (
+                            card.deadline.isoformat() if card.deadline else None
+                        ),
+                        "grant_type": card.grant_type,
+                        "summary": card.summary,
+                        "pillar_id": card.pillar_id,
+                        "source_url": card.source_url,
+                        "similarity": float(row.get("rrf_score", 0)),
+                    }
+                )
+            return {
+                "results": unfiltered,
+                "count": len(unfiltered),
+                "note": "No results matched the exact filters. Showing all search results — please evaluate relevance.",
+            }
 
         return {"results": filtered, "count": len(filtered)}
 
@@ -161,8 +383,10 @@ registry.register(
         name="search_internal_grants",
         description=(
             "Search the internal GrantScope database for grant opportunities "
-            "matching a text query. Supports optional filters for strategic "
-            "pillar, grant category, funding range, and application deadline."
+            "matching a text query. The search automatically incorporates the "
+            "user's profile (department, program, priorities) for better results. "
+            "Supports optional filters for strategic pillar, grant category, "
+            "funding range, and application deadline."
         ),
         parameters={
             "type": "object",
@@ -170,34 +394,50 @@ registry.register(
                 "query": {
                     "type": "string",
                     "description": (
-                        "Free-text search query describing the grant "
-                        "opportunity or topic of interest."
+                        "Short, focused search query (3-7 words) for the grant "
+                        "topic or area. Use specific domain terms, not laundry "
+                        "lists. Example: 'health information technology grants' "
+                        "not 'health IT, equipment, software, training, EMR'. "
+                        "The user's profile context is automatically added. "
+                        "Call this tool multiple times with different queries "
+                        "to cover different aspects."
                     ),
                 },
                 "pillar_filter": {
                     "type": "string",
                     "description": (
-                        "Strategic pillar ID to filter by "
-                        "(e.g. 'CH', 'MC', 'HS', 'EC', 'ES', 'CE')."
+                        "ONLY use if the user explicitly asks to filter by pillar. "
+                        "Do NOT infer from the user's profile. "
+                        "Values: 'CH', 'MC', 'HS', 'EC', 'ES', 'CE'."
                     ),
                 },
                 "category_filter": {
                     "type": "string",
-                    "description": "Grant category ID to filter by.",
+                    "description": (
+                        "ONLY use if the user explicitly asks to filter by category. "
+                        "Do NOT infer from the user's profile."
+                    ),
                 },
                 "funding_min": {
                     "type": "number",
-                    "description": "Minimum funding amount in USD.",
+                    "description": (
+                        "ONLY use if the user explicitly specifies a minimum "
+                        "funding amount. Do NOT infer from the user's profile."
+                    ),
                 },
                 "funding_max": {
                     "type": "number",
-                    "description": "Maximum funding amount in USD.",
+                    "description": (
+                        "ONLY use if the user explicitly specifies a maximum "
+                        "funding amount. Do NOT infer from the user's profile."
+                    ),
                 },
                 "deadline_after": {
                     "type": "string",
                     "description": (
-                        "ISO 8601 date string; only return grants with "
-                        "deadlines after this date."
+                        "ONLY use if the user explicitly asks for grants with "
+                        "deadlines after a specific date. Do NOT automatically "
+                        "filter by today's date."
                     ),
                 },
             },
@@ -593,6 +833,129 @@ registry.register(
             "required": ["query"],
         },
         handler=_handle_web_search,
+        requires_online=True,
+    )
+)
+
+
+# ---------------------------------------------------------------------------
+# Tool 6: search_all_sources (online)
+# ---------------------------------------------------------------------------
+
+
+async def _handle_search_all_sources(
+    db: AsyncSession, user_id: str, **kwargs: Any
+) -> dict:
+    """Search across all configured source types for grant opportunities.
+
+    Uses the multi-source search module which queries Grants.gov, SAM.gov,
+    web (SearXNG/Serper/Tavily), news, government documents, and optionally
+    academic papers in parallel. Results are merged using Reciprocal Rank
+    Fusion for optimal ranking.
+    """
+    try:
+        from app.multi_source_search import search_all_sources
+
+        query = kwargs.get("query", "")
+        if not query:
+            return {"error": "A 'query' parameter is required."}
+
+        # Parse source_types filter if provided
+        source_types = kwargs.get("source_types")
+        include_flags: Dict[str, bool] = {}
+        if source_types and isinstance(source_types, list):
+            all_sources = {
+                "grants_gov",
+                "sam_gov",
+                "web",
+                "news",
+                "government",
+                "academic",
+            }
+            requested = set(source_types)
+            for src in all_sources:
+                include_flags[f"include_{src}"] = src in requested
+
+        max_per_source = kwargs.get("max_per_source", 5)
+        if not isinstance(max_per_source, int):
+            try:
+                max_per_source = int(max_per_source)
+            except (ValueError, TypeError):
+                max_per_source = 5
+        max_per_source = max(1, min(max_per_source, 20))
+
+        results = await search_all_sources(
+            query,
+            max_results_per_source=max_per_source,
+            **include_flags,
+        )
+
+        # Format results for the chat assistant
+        formatted: List[Dict[str, Any]] = []
+        for r in results:
+            item: Dict[str, Any] = {
+                "title": r.title,
+                "url": r.url,
+                "snippet": r.snippet,
+                "source_type": r.source_type,
+                "rrf_score": r.rrf_score,
+            }
+            # Include selected metadata
+            if r.metadata.get("agency"):
+                item["agency"] = r.metadata["agency"]
+            if r.metadata.get("close_date"):
+                item["deadline"] = r.metadata["close_date"]
+            if r.metadata.get("response_deadline"):
+                item["deadline"] = r.metadata["response_deadline"]
+            if r.metadata.get("source_types"):
+                item["found_in_sources"] = r.metadata["source_types"]
+            formatted.append(item)
+
+        return {
+            "results": formatted,
+            "count": len(formatted),
+            "query": query,
+        }
+
+    except Exception as exc:
+        logger.exception("search_all_sources tool failed: %s", exc)
+        return {"error": "Search failed. Please try again."}
+
+
+registry.register(
+    ToolDefinition(
+        name="search_all_sources",
+        description=(
+            "Search across all available source types (Grants.gov, SAM.gov, web, "
+            "news, government publications, academic papers) for grant opportunities "
+            "and related information. Results are ranked using Reciprocal Rank Fusion. "
+            "Use this for broad searches when the user wants to explore opportunities "
+            "beyond the internal database."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query text.",
+                },
+                "source_types": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Optional filter: only search these source types. "
+                        "Values: grants_gov, sam_gov, web, news, government, academic. "
+                        "If omitted, searches all available sources."
+                    ),
+                },
+                "max_per_source": {
+                    "type": "integer",
+                    "description": "Maximum results per source (1-20, default 5).",
+                },
+            },
+            "required": ["query"],
+        },
+        handler=_handle_search_all_sources,
         requires_online=True,
     )
 )

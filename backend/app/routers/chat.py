@@ -40,21 +40,28 @@ router = APIRouter(prefix="/api/v1", tags=["chat"])
 
 
 def _row_to_dict(obj, skip_cols=None) -> dict:
-    """Convert an ORM row to a plain dict, serialising UUID/datetime/Decimal."""
+    """Convert an ORM row to a plain dict, serialising UUID/datetime/Decimal.
+
+    Uses the ORM mapper's column_attrs (not __table__.columns) so that
+    renamed attributes like ``metadata_`` (mapped to DB column "metadata")
+    are looked up by their correct Python attribute name, avoiding
+    accidental collisions with SQLAlchemy's DeclarativeBase.metadata.
+    """
     skip = skip_cols or set()
     result = {}
-    for col in obj.__table__.columns:
-        if col.name in skip:
+    for attr in type(obj).__mapper__.column_attrs:
+        col_name = attr.columns[0].name
+        if col_name in skip:
             continue
-        value = getattr(obj, col.key, None)
+        value = getattr(obj, attr.key, None)
         if isinstance(value, uuid.UUID):
-            result[col.name] = str(value)
+            result[col_name] = str(value)
         elif isinstance(value, (datetime, date)):
-            result[col.name] = value.isoformat()
+            result[col_name] = value.isoformat()
         elif isinstance(value, Decimal):
-            result[col.name] = float(value)
+            result[col_name] = float(value)
         else:
-            result[col.name] = value
+            result[col_name] = value
     return result
 
 

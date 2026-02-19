@@ -7,10 +7,13 @@ return types).
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, TYPE_CHECKING
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+if TYPE_CHECKING:
+    from app.ai_service import AIService
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +36,111 @@ async def store_card_embedding(
         ),
         {"vec": vec_str, "cid": card_id},
     )
+
+
+def compose_embedding_text(
+    name: str,
+    summary: Optional[str] = None,
+    description: Optional[str] = None,
+) -> str:
+    """Build the canonical text used to generate card embeddings.
+
+    This is the single source of truth for how card text is composed before
+    being sent to the embedding model.  **All** code that produces a card
+    embedding MUST use this function so that embeddings remain comparable
+    across creation, update, and re-indexing flows.
+
+    Parameters
+    ----------
+    name:
+        The card's title / name (required).
+    summary:
+        Optional short summary of the card.
+    description:
+        Optional long-form description.
+
+    Returns
+    -------
+    str
+        Concatenation of non-empty fields separated by a single space,
+        with leading/trailing whitespace stripped.
+    """
+    parts = [p for p in (name, summary, description) if p]
+    return " ".join(parts).strip()
+
+
+async def generate_and_store_embedding(
+    db: AsyncSession,
+    card_id: str,
+    *,
+    ai_service: Optional["AIService"] = None,
+) -> bool:
+    """Generate an embedding for a card and persist it in one step.
+
+    Reads the card's ``name``, ``summary``, and ``description`` from the
+    database, composes embedding text via :func:`compose_embedding_text`,
+    generates the vector through the AI service, and stores it.
+
+    Parameters
+    ----------
+    db:
+        Active async database session.
+    card_id:
+        UUID (as string) of the card to embed.
+    ai_service:
+        Optional pre-existing ``AIService`` instance.  When *None* a
+        fresh instance is created using the global ``openai_client``.
+
+    Returns
+    -------
+    bool
+        ``True`` if the embedding was generated and stored successfully,
+        ``False`` on any failure (logged as a warning).
+    """
+    try:
+        result = await db.execute(
+            text(
+                "SELECT name, summary, description FROM cards "
+                "WHERE id = CAST(:cid AS uuid)"
+            ),
+            {"cid": card_id},
+        )
+        row = result.one_or_none()
+        if row is None:
+            logger.warning("generate_and_store_embedding: card %s not found", card_id)
+            return False
+
+        embed_text = compose_embedding_text(row.name, row.summary, row.description)
+
+        if len(embed_text) < 10:
+            logger.info(
+                "generate_and_store_embedding: card %s text too short (%d chars), skipping",
+                card_id,
+                len(embed_text),
+            )
+            return False
+
+        if ai_service is None:
+            from app.ai_service import AIService
+            from app.deps import openai_client
+
+            ai_service = AIService(openai_client)
+
+        embedding = await ai_service.generate_embedding(embed_text)
+        await store_card_embedding(db, card_id, embedding)
+        await db.flush()
+
+        logger.info(
+            "generate_and_store_embedding: card %s embedded (%d chars)",
+            card_id,
+            len(embed_text),
+        )
+        return True
+    except Exception as e:
+        logger.warning(
+            "generate_and_store_embedding failed for card %s: %s", card_id, e
+        )
+        return False
 
 
 async def vector_search_cards(
@@ -175,17 +283,33 @@ async def hybrid_search_cards(
     rrf_k: int = 60,
     scope_card_ids: Optional[list[str]] = None,
     status_filter: str = "active",
+    vector_pool_size: Optional[int] = None,
 ) -> list[dict[str, Any]]:
     """Hybrid full-text + vector search over cards using RRF fusion.
 
     Replaces the ``hybrid_search_cards`` Supabase RPC function.
+
+    Parameters
+    ----------
+    vector_pool_size:
+        Number of nearest-neighbour candidates to consider in the vector
+        CTE before RRF fusion.  Defaults to ``match_count * 2``.  Set to a
+        larger value (e.g. 500) when the total corpus is small enough that
+        every card should receive a vector rank — this prevents cards with
+        strong FTS signal from being excluded simply because they fell
+        outside the vector candidate window.
     """
     embedding_str = "[" + ",".join(str(v) for v in query_embedding) + "]"
+
+    effective_pool = (
+        vector_pool_size if vector_pool_size is not None else match_count * 2
+    )
 
     params: dict[str, Any] = {
         "query_text": query_text,
         "embedding": embedding_str,
         "match_count": match_count,
+        "vector_pool": effective_pool,
         "fts_weight": fts_weight,
         "vector_weight": vector_weight,
         "rrf_k": rrf_k,
@@ -223,7 +347,7 @@ async def hybrid_search_cards(
                 AND c.status = :status_filter
                 {scope_clause_vec}
             ORDER BY c.embedding <=> CAST(:embedding AS vector)
-            LIMIT :match_count * 2
+            LIMIT :vector_pool
         ),
         rrf AS (
             SELECT
@@ -270,10 +394,13 @@ async def hybrid_search_sources(
     """
     embedding_str = "[" + ",".join(str(v) for v in query_embedding) + "]"
 
+    vector_pool = match_count * 2
+
     params: dict[str, Any] = {
         "query_text": query_text,
         "embedding": embedding_str,
         "match_count": match_count,
+        "vector_pool": vector_pool,
         "fts_weight": fts_weight,
         "vector_weight": vector_weight,
         "rrf_k": rrf_k,
@@ -308,7 +435,7 @@ async def hybrid_search_sources(
                 s.embedding IS NOT NULL
                 {scope_clause_vec}
             ORDER BY s.embedding <=> CAST(:embedding AS vector)
-            LIMIT :match_count * 2
+            LIMIT :vector_pool
         ),
         rrf AS (
             SELECT

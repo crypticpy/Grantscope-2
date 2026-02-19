@@ -141,8 +141,8 @@ export default function AskGrantScope() {
 
   // Scope state
   const [selectedScope, setSelectedScope] = useState<ScopeOption>({
-    label: "All Opportunities",
-    scope: "global",
+    label: "Grant Search",
+    scope: "grant_assistant",
   });
   const [workstreams, setWorkstreams] = useState<Workstream[]>([]);
   const [scopeDropdownOpen, setScopeDropdownOpen] = useState(false);
@@ -169,10 +169,10 @@ export default function AskGrantScope() {
           | "signal"
           | "workstream"
           | "wizard"
-          | "grant_assistant") || "global"
+          | "grant_assistant") || "grant_assistant"
       );
     } catch {
-      return "global";
+      return "grant_assistant";
     }
   });
   const [activeConversationScopeId, setActiveConversationScopeId] = useState<
@@ -458,8 +458,8 @@ export default function AskGrantScope() {
 
   // Build scope options
   const scopeOptions: ScopeOption[] = [
-    { label: "All Opportunities", scope: "global" },
     { label: "Grant Search", scope: "grant_assistant" },
+    { label: "All Opportunities", scope: "global" },
     ...workstreams.map((ws) => ({
       label: ws.name,
       scope: "workstream" as const,
@@ -488,13 +488,13 @@ export default function AskGrantScope() {
   // Scope-aware descriptions
   const scopeDescription =
     effectiveScope === "grant_assistant"
-      ? `Search and discover grant opportunities using AI-powered analysis.${onlineSearchEnabled ? " Online search is enabled for live results." : ""}`
-      : "Ask questions about grants, funding opportunities, eligibility requirements, and more. GrantScope uses AI to synthesize intelligence from your data.";
+      ? `GrantScope's AI assistant searches your grant database, analyzes opportunities against your profile, and can help you track and organize findings.${onlineSearchEnabled ? " Online search is enabled — I can also search Grants.gov, SAM.gov, and the web." : ""}`
+      : "Ask questions about any tracked opportunity. GrantScope searches your intelligence database and synthesizes answers with source citations.";
 
   const scopeTitle =
     effectiveScope === "grant_assistant"
-      ? "Search for Grant Opportunities"
-      : "What would you like to explore?";
+      ? "Grant Discovery Assistant"
+      : "Explore Your Opportunities";
 
   // ============================================================================
   // Render
@@ -538,9 +538,9 @@ export default function AskGrantScope() {
               onClick={() => setScopeDropdownOpen(!scopeDropdownOpen)}
               className={cn(
                 "inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg",
-                "border border-gray-200 dark:border-gray-600",
-                "bg-white dark:bg-dark-surface",
-                "text-gray-700 dark:text-gray-300",
+                selectedScope.scope === "grant_assistant"
+                  ? "border border-indigo-200 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300"
+                  : "border border-gray-200 dark:border-gray-600 bg-white dark:bg-dark-surface text-gray-700 dark:text-gray-300",
                 "hover:bg-gray-50 dark:hover:bg-dark-surface-hover",
                 "focus:outline-none focus:ring-2 focus:ring-brand-blue",
                 "transition-colors duration-200",
@@ -582,39 +582,56 @@ export default function AskGrantScope() {
                     "animate-in fade-in-0 zoom-in-95 duration-200",
                   )}
                 >
-                  {scopeOptions.map((option) => (
-                    <button
-                      key={`${option.scope}-${option.scopeId || "global"}`}
-                      type="button"
-                      onClick={() => handleScopeChange(option)}
-                      className={cn(
-                        "w-full flex items-center gap-2 px-4 py-2 text-sm text-left",
-                        "transition-colors duration-150",
-                        selectedScope.scope === option.scope &&
-                          selectedScope.scopeId === option.scopeId
-                          ? "bg-brand-blue/10 text-brand-blue"
-                          : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-surface-hover",
-                      )}
-                    >
-                      {option.scope === "grant_assistant" ? (
-                        <Sparkles
-                          className="h-4 w-4 shrink-0"
-                          aria-hidden="true"
-                        />
-                      ) : option.scope === "global" ? (
-                        <Globe
-                          className="h-4 w-4 shrink-0"
-                          aria-hidden="true"
-                        />
-                      ) : (
-                        <FolderOpen
-                          className="h-4 w-4 shrink-0"
-                          aria-hidden="true"
-                        />
-                      )}
-                      <span className="truncate">{option.label}</span>
-                    </button>
-                  ))}
+                  {scopeOptions.map((option) => {
+                    const isSelected =
+                      selectedScope.scope === option.scope &&
+                      selectedScope.scopeId === option.scopeId;
+                    const description =
+                      option.scope === "grant_assistant"
+                        ? "AI-powered search across your grants database"
+                        : option.scope === "global"
+                          ? "Ask questions about all tracked opportunities"
+                          : undefined;
+                    return (
+                      <button
+                        key={`${option.scope}-${option.scopeId || "global"}`}
+                        type="button"
+                        onClick={() => handleScopeChange(option)}
+                        className={cn(
+                          "w-full flex items-start gap-2 px-4 py-2 text-sm text-left",
+                          "transition-colors duration-150",
+                          isSelected
+                            ? "bg-brand-blue/10 text-brand-blue"
+                            : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-surface-hover",
+                        )}
+                      >
+                        {option.scope === "grant_assistant" ? (
+                          <Sparkles
+                            className="h-4 w-4 shrink-0 mt-0.5"
+                            aria-hidden="true"
+                          />
+                        ) : option.scope === "global" ? (
+                          <Globe
+                            className="h-4 w-4 shrink-0 mt-0.5"
+                            aria-hidden="true"
+                          />
+                        ) : (
+                          <FolderOpen
+                            className="h-4 w-4 shrink-0 mt-0.5"
+                            aria-hidden="true"
+                          />
+                        )}
+                        <div className="min-w-0">
+                          <span className="truncate block">{option.label}</span>
+                          {description && (
+                            <span className="text-xs text-gray-400 dark:text-gray-500 block mt-0.5">
+                              {description}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </>
             )}

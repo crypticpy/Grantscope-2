@@ -742,5 +742,14 @@ class WizardService:
         await db.refresh(card_obj)
 
         card_id = str(card_obj.id)
+
+        # Queue background AI analysis
+        try:
+            from app.card_analysis_service import queue_card_analysis
+
+            await queue_card_analysis(db, card_id, str(user_id))
+        except Exception:
+            logger.warning("Failed to queue card analysis for %s", card_id)
+
         logger.info("Created card %s from grant context", card_id)
         return card_id

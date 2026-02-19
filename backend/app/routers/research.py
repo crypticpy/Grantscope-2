@@ -88,11 +88,13 @@ async def execute_research_task_background(
                 "update": 15 * 60,
                 "deep_research": 45 * 60,
                 "workstream_analysis": 45 * 60,
+                "card_analysis": 10 * 60,
             }
             env_keys = {
                 "update": "RESEARCH_TASK_TIMEOUT_UPDATE_SECONDS",
                 "deep_research": "RESEARCH_TASK_TIMEOUT_DEEP_RESEARCH_SECONDS",
                 "workstream_analysis": "RESEARCH_TASK_TIMEOUT_WORKSTREAM_ANALYSIS_SECONDS",
+                "card_analysis": "RESEARCH_TASK_TIMEOUT_CARD_ANALYSIS_SECONDS",
             }
             env_key = env_keys.get(task_type)
             if env_key:
@@ -175,6 +177,13 @@ async def execute_research_task_background(
                         service.execute_workstream_analysis(
                             task_data.workstream_id, task_id, user_id
                         ),
+                        timeout=timeout_seconds,
+                    )
+                elif task_data.task_type == "card_analysis":
+                    from app.card_analysis_service import execute_card_analysis
+
+                    result = await asyncio.wait_for(
+                        execute_card_analysis(svc_db, task_data.card_id, task_id),
                         timeout=timeout_seconds,
                     )
                 else:
@@ -291,10 +300,15 @@ async def create_research_task(
             status_code=400, detail="Either card_id or workstream_id required"
         )
 
-    if task_data.task_type not in ["update", "deep_research", "workstream_analysis"]:
+    if task_data.task_type not in [
+        "update",
+        "deep_research",
+        "workstream_analysis",
+        "card_analysis",
+    ]:
         raise HTTPException(
             status_code=400,
-            detail="Invalid task_type. Use: update, deep_research, workstream_analysis",
+            detail="Invalid task_type. Use: update, deep_research, workstream_analysis, card_analysis",
         )
 
     # Check rate limit for deep research
@@ -394,11 +408,13 @@ async def get_research_task(
             "update": 15 * 60,
             "deep_research": 45 * 60,
             "workstream_analysis": 45 * 60,
+            "card_analysis": 10 * 60,
         }
         env_keys = {
             "update": "RESEARCH_TASK_TIMEOUT_UPDATE_SECONDS",
             "deep_research": "RESEARCH_TASK_TIMEOUT_DEEP_RESEARCH_SECONDS",
             "workstream_analysis": "RESEARCH_TASK_TIMEOUT_WORKSTREAM_ANALYSIS_SECONDS",
+            "card_analysis": "RESEARCH_TASK_TIMEOUT_CARD_ANALYSIS_SECONDS",
         }
         env_key = env_keys.get(task_type)
         if env_key:
