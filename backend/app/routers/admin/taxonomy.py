@@ -37,7 +37,7 @@ router = APIRouter()
 
 
 class PillarCreate(BaseModel):
-    id: str
+    id: Optional[str] = None
     name: str
     description: Optional[str] = None
     color: Optional[str] = None
@@ -55,7 +55,7 @@ class PillarUpdate(BaseModel):
 
 
 class GoalCreate(BaseModel):
-    id: str
+    id: Optional[str] = None
     pillar_id: str
     name: str
     description: Optional[str] = None
@@ -207,13 +207,21 @@ async def create_pillar(
 ):
     """Create a new strategic pillar."""
     try:
-        existing = await db.get(Pillar, body.id)
+        # Auto-generate ID from code or name if not provided
+        if not body.id:
+            body_id = (body.code or body.name).lower().replace(" ", "_")[:50]
+        else:
+            body_id = body.id
+
+        existing = await db.get(Pillar, body_id)
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Pillar '{body.id}' already exists",
+                detail=f"Pillar '{body_id}' already exists",
             )
-        pillar = Pillar(**body.model_dump())
+        data = body.model_dump()
+        data["id"] = body_id
+        pillar = Pillar(**data)
         db.add(pillar)
         await db.flush()
         await db.refresh(pillar)
@@ -310,13 +318,21 @@ async def create_goal(
 ):
     """Create a new goal."""
     try:
-        existing = await db.get(Goal, body.id)
+        # Auto-generate ID from name if not provided
+        if not body.id:
+            body_id = body.name.lower().replace(" ", "_")[:50]
+        else:
+            body_id = body.id
+
+        existing = await db.get(Goal, body_id)
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Goal '{body.id}' already exists",
+                detail=f"Goal '{body_id}' already exists",
             )
-        goal = Goal(**body.model_dump())
+        data = body.model_dump()
+        data["id"] = body_id
+        goal = Goal(**data)
         db.add(goal)
         await db.flush()
         await db.refresh(goal)

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, lazy } from "react";
+import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -11,6 +11,8 @@ import { TooltipProvider } from "@radix-ui/react-tooltip";
 import Header from "./components/Header";
 import { AuthContextProvider } from "./hooks/useAuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { AdminRoute } from "./components/AdminRoute";
+import { PageLoadingSpinner } from "./components/PageLoadingSpinner";
 import { API_BASE_URL } from "./lib/config";
 
 // Synchronous imports for critical path components (login + landing page)
@@ -53,6 +55,37 @@ const Feeds = lazy(() => import("./pages/Feeds"));
 const GuideSignals = lazy(() => import("./pages/GuideSignals"));
 const GuideDiscover = lazy(() => import("./pages/GuideDiscover"));
 const GuideWorkstreams = lazy(() => import("./pages/GuideWorkstreams"));
+
+// Admin pages - lazy-loaded, admin-only
+const AdminLayout = lazy(() => import("./pages/Admin"));
+const AdminDashboard = lazy(() => import("./pages/Admin/AdminDashboard"));
+const AdminUsers = lazy(() => import("./pages/Admin/AdminUsers"));
+const AdminTaxonomy = lazy(() => import("./pages/Admin/AdminTaxonomy"));
+const AdminContent = lazy(() => import("./pages/Admin/AdminContent"));
+const AdminDiscovery = lazy(() => import("./pages/Admin/AdminDiscovery"));
+const AdminSources = lazy(() => import("./pages/Admin/AdminSources"));
+const AdminAI = lazy(() => import("./pages/Admin/AdminAI"));
+const AdminJobs = lazy(() => import("./pages/Admin/AdminJobs"));
+const AdminScheduler = lazy(() => import("./pages/Admin/AdminScheduler"));
+const AdminQuality = lazy(() => import("./pages/Admin/AdminQuality"));
+const AdminNotifications = lazy(
+  () => import("./pages/Admin/AdminNotifications"),
+);
+const AdminSettings = lazy(() => import("./pages/Admin/AdminSettings"));
+
+function AdminLazyRoute({
+  children,
+  message,
+}: {
+  children: React.ReactNode;
+  message: string;
+}) {
+  return (
+    <Suspense fallback={<PageLoadingSpinner message={message} size="md" />}>
+      {children}
+    </Suspense>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Custom user type
@@ -518,6 +551,114 @@ function App() {
                     />
                   }
                 />
+
+                {/* Admin panel - lazy-loaded, admin-only */}
+                <Route
+                  path="/admin"
+                  element={
+                    <AdminRoute
+                      element={<AdminLayout />}
+                      loadingMessage="Loading admin panel..."
+                    />
+                  }
+                >
+                  <Route
+                    index
+                    element={
+                      <AdminLazyRoute message="Loading dashboard...">
+                        <AdminDashboard />
+                      </AdminLazyRoute>
+                    }
+                  />
+                  <Route
+                    path="users"
+                    element={
+                      <AdminLazyRoute message="Loading users...">
+                        <AdminUsers />
+                      </AdminLazyRoute>
+                    }
+                  />
+                  <Route
+                    path="taxonomy"
+                    element={
+                      <AdminLazyRoute message="Loading taxonomy...">
+                        <AdminTaxonomy />
+                      </AdminLazyRoute>
+                    }
+                  />
+                  <Route
+                    path="content"
+                    element={
+                      <AdminLazyRoute message="Loading content...">
+                        <AdminContent />
+                      </AdminLazyRoute>
+                    }
+                  />
+                  <Route
+                    path="discovery"
+                    element={
+                      <AdminLazyRoute message="Loading discovery...">
+                        <AdminDiscovery />
+                      </AdminLazyRoute>
+                    }
+                  />
+                  <Route
+                    path="sources"
+                    element={
+                      <AdminLazyRoute message="Loading sources...">
+                        <AdminSources />
+                      </AdminLazyRoute>
+                    }
+                  />
+                  <Route
+                    path="ai"
+                    element={
+                      <AdminLazyRoute message="Loading AI settings...">
+                        <AdminAI />
+                      </AdminLazyRoute>
+                    }
+                  />
+                  <Route
+                    path="jobs"
+                    element={
+                      <AdminLazyRoute message="Loading jobs...">
+                        <AdminJobs />
+                      </AdminLazyRoute>
+                    }
+                  />
+                  <Route
+                    path="scheduler"
+                    element={
+                      <AdminLazyRoute message="Loading scheduler...">
+                        <AdminScheduler />
+                      </AdminLazyRoute>
+                    }
+                  />
+                  <Route
+                    path="quality"
+                    element={
+                      <AdminLazyRoute message="Loading quality...">
+                        <AdminQuality />
+                      </AdminLazyRoute>
+                    }
+                  />
+                  <Route
+                    path="notifications"
+                    element={
+                      <AdminLazyRoute message="Loading notifications...">
+                        <AdminNotifications />
+                      </AdminLazyRoute>
+                    }
+                  />
+                  <Route
+                    path="settings"
+                    element={
+                      <AdminLazyRoute message="Loading settings...">
+                        <AdminSettings />
+                      </AdminLazyRoute>
+                    }
+                  />
+                </Route>
 
                 {/* 404 catch-all - redirect to home */}
                 <Route path="*" element={<Navigate to="/" replace />} />
