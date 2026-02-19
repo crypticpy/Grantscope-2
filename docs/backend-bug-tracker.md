@@ -34,6 +34,9 @@ Commits:
 
 | Priority | Status | Bug | File(s) |
 |---|---|---|---|
+| P0 | Open | Grant application status domain mismatch: service transitions use `under_review`, `pending_decision`, `expired`, but DB CHECK constraint does not allow these values. This can cause write failures on valid app flows. | `/Users/aiml/Projects/grantscope-2/backend/app/services/application_service.py:22`, `/Users/aiml/Projects/grantscope-2/backend/app/services/collaboration_service.py:201`, `/Users/aiml/Projects/grantscope-2/supabase/migrations/20260216000002_grant_schema.sql:49` |
+| P0 | Open | `submit_for_review` bypasses canonical status transition service/history logging and writes status directly, creating inconsistent state/audit trail behavior. | `/Users/aiml/Projects/grantscope-2/backend/app/services/collaboration_service.py:201`, `/Users/aiml/Projects/grantscope-2/backend/app/services/application_service.py:160` |
+| P0 | Open | Collaboration section-approval endpoints write to `proposals.section_approvals`, but schema migration does not create that column. Runtime updates likely fail. | `/Users/aiml/Projects/grantscope-2/backend/app/services/collaboration_service.py:247`, `/Users/aiml/Projects/grantscope-2/backend/app/services/collaboration_service.py:309`, `/Users/aiml/Projects/grantscope-2/supabase/migrations/20260216000003_proposals.sql:11` |
 | P1 | Open | Dual migration systems are present (Supabase SQL + Alembic) without a single source-of-truth process documented for runtime use. | `/Users/aiml/Projects/grantscope-2/README.md:86`, `/Users/aiml/Projects/grantscope-2/backend/alembic/env.py:1` |
 | P2 | Open | Delete-path consistency still has transactional edge case potential (blob delete and DB commit are not atomic). | `/Users/aiml/Projects/grantscope-2/backend/app/services/attachment_service.py:265`, `/Users/aiml/Projects/grantscope-2/backend/app/services/attachment_service.py:269` |
 
