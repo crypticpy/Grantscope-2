@@ -134,6 +134,10 @@ class ToolRegistry:
         """
         return name in self._tools
 
+    def get_online_tool_names(self) -> set[str]:
+        """Return the set of tool names that require online access."""
+        return {name for name, tool in self._tools.items() if tool.requires_online}
+
     def get_all_names(self, online_enabled: bool = False) -> List[str]:
         """Return the names of all registered tools.
 

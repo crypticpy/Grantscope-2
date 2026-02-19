@@ -38,12 +38,12 @@ class ChatConversation(Base):
     title: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     tool_usage: Mapped[Optional[dict]] = mapped_column(
-        JSONB, server_default="'{}'", nullable=True
+        JSONB, server_default=text("'{}'::jsonb"), nullable=True
     )
     # "metadata" is reserved by SQLAlchemy's Declarative API, so we use
     # metadata_ as the Python attribute and map it to the DB column "metadata".
     metadata_: Mapped[Optional[dict]] = mapped_column(
-        "metadata", JSONB, server_default="'{}'", nullable=True
+        "metadata", JSONB, server_default=text("'{}'::jsonb"), nullable=True
     )
 
     created_at: Mapped[Optional[datetime]] = mapped_column(

@@ -2,7 +2,7 @@
 
 **Status:** Draft
 **Date:** 2026-02-18
-**Author:** GrantScope2 Team
+**Author:** GrantScope Team
 
 ---
 

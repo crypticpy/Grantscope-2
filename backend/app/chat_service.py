@@ -199,6 +199,7 @@ async def chat(
     db: AsyncSession,
     mentions: Optional[List[Dict[str, Any]]] = None,
     online_search_enabled: bool = False,
+    max_online_searches: int | None = None,
 ) -> AsyncGenerator[str, None]:
     """Main chat function that returns an async generator of SSE events.
 
@@ -267,6 +268,7 @@ async def chat(
                 system_prompt = ga_ctx.system_prompt
                 tools_list = ga_ctx.tools
                 handlers = ga_ctx.tool_handlers
+                online_tool_names = ga_ctx.online_tool_names
                 scope_metadata = {
                     "scope": "grant_assistant",
                     "online_enabled": ga_ctx.online_enabled,
@@ -332,18 +334,21 @@ async def chat(
 
         # 5. Determine tools (grant_assistant sets these in step 3 above)
         if scope == "grant_assistant":
-            # tools_list and handlers already set by build_grant_assistant_context
+            # tools_list, handlers, online_tool_names already set above
             pass
         elif scope == "wizard":
             # Wizard scope: no tools
             tools_list = None
             handlers = {}
+            online_tool_names: set[str] = set()
         else:
             tools_list = None
             handlers = {}
+            online_tool_names = set()
             if os.getenv("TAVILY_API_KEY"):
                 tools_list = [_WEB_SEARCH_TOOL]
                 handlers["web_search"] = _web_search_handler
+                online_tool_names = {"web_search"}
 
         # 6. Stream via tool_executor
         model_used = get_chat_deployment()
@@ -360,6 +365,8 @@ async def chat(
                 temperature=0.7,
                 max_tokens=8192,
                 max_tool_rounds=2,
+                max_online_searches=max_online_searches,
+                online_tool_names=online_tool_names,
                 db=db,
                 user_id=user_id,
             ):

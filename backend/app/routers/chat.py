@@ -200,25 +200,36 @@ async def chat_endpoint(
     if request.mentions:
         mention_dicts = [m.model_dump() for m in request.mentions]
 
-    # Query online_search setting for grant_assistant scope
+    # Query admin settings for grant_assistant scope
     online_search_enabled = False
+    max_online_searches: int | None = None
     if request.scope == "grant_assistant":
         try:
             from app.models.db.system_settings import SystemSetting
 
-            setting_result = await db.execute(
-                select(SystemSetting.value).where(
-                    SystemSetting.key == "online_search_enabled"
+            settings_result = await db.execute(
+                select(SystemSetting.key, SystemSetting.value).where(
+                    SystemSetting.key.in_(
+                        ["online_search_enabled", "max_online_searches_per_turn"]
+                    )
                 )
             )
-            setting_row = setting_result.scalar_one_or_none()
-            if setting_row is not None:
-                # value is JSONB — could be True/False/"true"/"false"/1
+            settings_map = {row[0]: row[1] for row in settings_result.all()}
+
+            raw_online = settings_map.get("online_search_enabled")
+            if raw_online is not None:
                 online_search_enabled = (
-                    setting_row is True or str(setting_row).lower() == "true"
+                    raw_online is True or str(raw_online).lower() == "true"
                 )
+
+            raw_max = settings_map.get("max_online_searches_per_turn")
+            if raw_max is not None:
+                try:
+                    max_online_searches = int(raw_max)
+                except (ValueError, TypeError):
+                    pass
         except Exception as e:
-            logger.warning(f"Failed to query online_search_enabled setting: {e}")
+            logger.warning(f"Failed to query grant assistant settings: {e}")
 
     async def event_generator():
         async for event in chat_service_chat(
@@ -230,6 +241,7 @@ async def chat_endpoint(
             db,
             mentions=mention_dicts,
             online_search_enabled=online_search_enabled,
+            max_online_searches=max_online_searches,
         ):
             yield event
 

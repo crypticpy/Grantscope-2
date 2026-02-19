@@ -81,6 +81,8 @@ async def execute_streaming_with_tools(
     temperature: float = 0.7,
     max_tokens: int = 8192,
     max_tool_rounds: int = 5,
+    max_online_searches: int | None = None,
+    online_tool_names: set[str] | None = None,
     on_progress: ProgressCallback | None = None,
     db=None,
     user_id: str | None = None,
@@ -104,6 +106,10 @@ async def execute_streaming_with_tools(
         temperature: Sampling temperature for the LLM.
         max_tokens: Maximum tokens for the LLM response.
         max_tool_rounds: Safety cap on the number of tool-calling rounds.
+        max_online_searches: Maximum number of online/external search tool
+                            calls per message.  ``None`` means no limit.
+        online_tool_names: Set of tool names that count toward the
+                          *max_online_searches* limit.
         on_progress: Optional async callback ``(step, detail)`` invoked
                      before/after tool execution for SSE progress events.
         db: Optional database session passed through to tool handlers.
@@ -122,11 +128,13 @@ async def execute_streaming_with_tools(
         model = get_chat_deployment()
 
     tool_handlers = tool_handlers or {}
+    online_tool_names = online_tool_names or set()
     messages = list(messages)  # Work on a copy to avoid mutating caller's list
     full_response = ""
     total_tokens = 0
     tool_calls_log: List[dict] = []
     tool_round = 0
+    online_search_count = 0
 
     # Build kwargs for the API call
     api_kwargs: Dict[str, Any] = {}
@@ -237,6 +245,25 @@ async def execute_streaming_with_tools(
                         restream_kwargs = {}  # Drop tools to prevent further attempts
                         continue
 
+                    # Enforce online search limit
+                    if (
+                        tool_name in online_tool_names
+                        and max_online_searches is not None
+                        and online_search_count >= max_online_searches
+                    ):
+                        tool_messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": tool_id,
+                                "content": (
+                                    f"Online search limit reached ({max_online_searches} "
+                                    "per message). Please answer using the information "
+                                    "already gathered without additional online searches."
+                                ),
+                            }
+                        )
+                        continue
+
                     # Parse tool arguments with error recovery
                     try:
                         args = json.loads(tc_data["arguments"])
@@ -273,6 +300,9 @@ async def execute_streaming_with_tools(
                     except Exception as exc:
                         logger.error(f"Tool handler {tool_name} failed: {exc}")
                         result = {"error": f"Tool execution failed: {exc}"}
+
+                    if tool_name in online_tool_names:
+                        online_search_count += 1
 
                     tool_calls_log.append(
                         {

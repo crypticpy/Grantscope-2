@@ -186,6 +186,7 @@ class GrantAssistantContext:
     tool_handlers: Dict[str, Callable[..., Awaitable[Dict[str, Any]]]]
     user_profile: Dict[str, Any]
     online_enabled: bool = False
+    online_tool_names: set = field(default_factory=set)
 
 
 async def build_grant_assistant_context(
@@ -259,4 +260,5 @@ async def build_grant_assistant_context(
         tool_handlers=tool_handlers,
         user_profile=user_profile,
         online_enabled=online_enabled,
+        online_tool_names=registry.get_online_tool_names(),
     )
