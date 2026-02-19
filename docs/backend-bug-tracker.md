@@ -16,10 +16,13 @@ Scope: backend modules + data operations
 | P1 | Fixed | Collaboration role integrity: collaborator API could assign `owner` role and did not block removing true app owner. | `/Users/aiml/Projects/grantscope-2/backend/app/services/collaboration_service.py:49`, `/Users/aiml/Projects/grantscope-2/backend/app/services/collaboration_service.py:103` |
 | P1 | Fixed | Comments integrity/permissions: no role gate, weak proposal/parent validation. | `/Users/aiml/Projects/grantscope-2/backend/app/routers/collaboration.py:547`, `/Users/aiml/Projects/grantscope-2/backend/app/routers/collaboration.py:662` |
 | P2 | Fixed | Checklist update could not clear nullable fields/attachment due `is not None` checks; now supports explicit nulling for nullable fields and validates non-nullables. | `/Users/aiml/Projects/grantscope-2/backend/app/routers/checklist.py:228`, `/Users/aiml/Projects/grantscope-2/backend/app/routers/checklist.py:255` |
+| P0 | Fixed | Migration runner no longer suppresses failures; now uses strict execution (`ON_ERROR_STOP=1`), top-level-only file loading (archive-safe), and exits non-zero on real failures. | `/Users/aiml/Projects/grantscope-2/infra/migrate.sh:46`, `/Users/aiml/Projects/grantscope-2/infra/migrate.sh:70`, `/Users/aiml/Projects/grantscope-2/infra/migrate.sh:101` |
+| P1 | Fixed | `run_migration.py` no longer claims to apply SQL; now explicit deprecated no-op with canonical runner instruction. | `/Users/aiml/Projects/grantscope-2/backend/run_migration.py:2`, `/Users/aiml/Projects/grantscope-2/backend/run_migration.py:14` |
 
 Commits:
 - `c5f2374` backend: enforce app-scoped access and workflow integrity
-- (next commit will include this tracker + checklist nullability fix)
+- `bf8e257` backend: track bug backlog and fix checklist nullable updates
+- (next commit will include migration tooling hardening)
 
 ## Deferred To Auth/Login Sprint
 
@@ -31,8 +34,6 @@ Commits:
 
 | Priority | Status | Bug | File(s) |
 |---|---|---|---|
-| P0 | Open | Migration runner masks SQL errors (`ON_ERROR_STOP=0`) and continues on warnings, which can hide partial/failed migrations. | `/Users/aiml/Projects/grantscope-2/infra/migrate.sh:60`, `/Users/aiml/Projects/grantscope-2/infra/migrate.sh:65`, `/Users/aiml/Projects/grantscope-2/infra/migrate.sh:71` |
-| P1 | Open | `run_migration.py` is operationally misleading: says it applies migration but only prints SQL. | `/Users/aiml/Projects/grantscope-2/backend/run_migration.py:4`, `/Users/aiml/Projects/grantscope-2/backend/run_migration.py:119` |
 | P1 | Open | Dual migration systems are present (Supabase SQL + Alembic) without a single source-of-truth process documented for runtime use. | `/Users/aiml/Projects/grantscope-2/README.md:86`, `/Users/aiml/Projects/grantscope-2/backend/alembic/env.py:1` |
 | P2 | Open | Delete-path consistency still has transactional edge case potential (blob delete and DB commit are not atomic). | `/Users/aiml/Projects/grantscope-2/backend/app/services/attachment_service.py:265`, `/Users/aiml/Projects/grantscope-2/backend/app/services/attachment_service.py:269` |
 
@@ -43,7 +44,7 @@ Commits:
 3. Move old/superseded SQL files into `archive/` only after they are applied in every active environment.
 4. Keep `infra/migrate.sh` targeting only top-level `supabase/migrations/*.sql` so archived files are ignored.
 5. Add a migration ledger table (`schema_migrations`) and switch runner to apply only unapplied files with `ON_ERROR_STOP=1`.
-6. Remove or rename `/Users/aiml/Projects/grantscope-2/backend/run_migration.py` to avoid accidental usage.
+6. Keep `/Users/aiml/Projects/grantscope-2/backend/run_migration.py` deprecated/no-op (or remove it) to avoid accidental usage.
 7. Decide one source of truth: either fully SQL-file-driven migrations, or Alembic-driven; do not run both independently.
 
 ## Verification Run

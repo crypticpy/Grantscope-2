@@ -43,34 +43,46 @@ if [ ! -d "$MIGRATIONS_DIR" ]; then
     exit 1
 fi
 
-# Count migrations
-MIGRATION_COUNT=$(ls "$MIGRATIONS_DIR"/*.sql 2>/dev/null | wc -l | tr -d ' ')
-echo "Found $MIGRATION_COUNT migration files"
+# Load top-level migration files only (archive subfolders are ignored)
+mapfile -t MIGRATION_FILES < <(
+    find "$MIGRATIONS_DIR" -maxdepth 1 -type f -name "*.sql" | sort
+)
+MIGRATION_COUNT="${#MIGRATION_FILES[@]}"
+
+echo "Found $MIGRATION_COUNT migration files (top-level only)"
 echo ""
+
+if [ "$MIGRATION_COUNT" -eq 0 ]; then
+    echo "No migration files found in $MIGRATIONS_DIR"
+    exit 0
+fi
 
 # Apply migrations in sorted order
 APPLIED=0
 SKIPPED=0
 FAILED=0
 
-for migration in "$MIGRATIONS_DIR"/*.sql; do
+for migration in "${MIGRATION_FILES[@]}"; do
     filename=$(basename "$migration")
     printf "  Applying: %-60s" "$filename"
 
-    if psql "$DB_URL" -v ON_ERROR_STOP=0 -f "$migration" >/dev/null 2>&1; then
+    set +e
+    OUTPUT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$migration" 2>&1)
+    EXIT_CODE=$?
+    set -e
+
+    if [ "$EXIT_CODE" -eq 0 ]; then
         echo "[OK]"
         ((APPLIED++))
     else
-        # Try again with error output to see what happened
-        ERROR_OUTPUT=$(psql "$DB_URL" -v ON_ERROR_STOP=0 -f "$migration" 2>&1 || true)
-
-        if echo "$ERROR_OUTPUT" | grep -qi "already exists\|duplicate\|already a member"; then
+        # Treat common idempotency collisions as skip; everything else is failure
+        if echo "$OUTPUT" | grep -qi "already exists\|duplicate\|already a member"; then
             echo "[SKIP]"
             ((SKIPPED++))
         else
-            echo "[WARN]"
+            echo "[FAIL]"
             # Show first line of error for debugging
-            FIRST_ERROR=$(echo "$ERROR_OUTPUT" | grep -i "error" | head -1)
+            FIRST_ERROR=$(echo "$OUTPUT" | grep -i "error" | head -1)
             if [ -n "$FIRST_ERROR" ]; then
                 echo "         $FIRST_ERROR"
             fi
@@ -83,13 +95,14 @@ echo ""
 echo "=== Migration Summary ==="
 echo "  Applied:  $APPLIED"
 echo "  Skipped:  $SKIPPED (already applied)"
-echo "  Warnings: $FAILED"
+echo "  Failed:   $FAILED"
 echo "  Total:    $MIGRATION_COUNT"
 
 if [ "$FAILED" -gt 0 ]; then
     echo ""
-    echo "Some migrations had warnings. This is normal for idempotent migrations"
-    echo "that use IF NOT EXISTS or CREATE OR REPLACE."
+    echo "Migration run completed with failures."
+    echo "Fix the failing migration(s) before continuing."
+    exit 1
 fi
 
 echo ""
