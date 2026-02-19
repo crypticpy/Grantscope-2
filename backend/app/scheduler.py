@@ -484,6 +484,32 @@ async def scan_grants():
 # ---------------------------------------------------------------------------
 
 
+async def _apply_persisted_job_settings():
+    """Pause APScheduler jobs that admins have disabled via the admin panel.
+
+    Called as a fire-and-forget task right after ``scheduler.start()`` so
+    that the persisted disabled state survives process restarts.
+    """
+    if async_session_factory is None:
+        return
+    try:
+        async with async_session_factory() as db:
+            settings = await get_setting(db, "scheduler_jobs", {})
+            if not isinstance(settings, dict):
+                return
+            for job_id, enabled in settings.items():
+                if not enabled:
+                    job = scheduler.get_job(job_id)
+                    if job:
+                        scheduler.pause_job(job_id)
+                        logger.info(
+                            "Paused disabled job '%s' on startup (persisted setting)",
+                            job_id,
+                        )
+    except Exception as exc:
+        logger.warning("Failed to reapply scheduler job settings on startup: %s", exc)
+
+
 def start_scheduler():
     """Start the APScheduler for background jobs."""
     try:
@@ -607,6 +633,16 @@ def start_scheduler():
         "weekly discovery Sundays at 2:00 AM UTC, "
         "grant scan every 6 hours"
     )
+
+    # Reapply persisted enable/disable state so that admin-disabled jobs
+    # are paused in APScheduler immediately (not just checked at runtime).
+    import asyncio
+
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(_apply_persisted_job_settings())
+    except RuntimeError:
+        pass  # No running loop (shouldn't happen in lifespan context)
 
 
 def shutdown_scheduler():
