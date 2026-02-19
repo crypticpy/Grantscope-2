@@ -246,6 +246,48 @@ class DiscoveryConfig:
             self.search_topics = DEFAULT_SEARCH_TOPICS.copy()
 
 
+async def apply_admin_settings(
+    config: DiscoveryConfig, db: AsyncSession
+) -> DiscoveryConfig:
+    """Apply admin-configured discovery settings from ``system_settings``.
+
+    Reads ``discovery_config`` from the database (cached 60s) and overrides
+    matching fields on the provided config.  Falls back gracefully when no
+    settings exist.
+    """
+    try:
+        from app.helpers.settings_reader import get_settings_batch
+
+        keys = [
+            "discovery.auto_approve_threshold",
+            "discovery.similarity_threshold",
+            "discovery.weak_match_threshold",
+            "discovery.max_new_cards_per_run",
+            "discovery.max_queries_per_run",
+            "discovery.total_cap",
+        ]
+        admin_cfg = await get_settings_batch(db, keys)
+
+        for key, attr, coerce in [
+            ("discovery.auto_approve_threshold", "auto_approve_threshold", float),
+            ("discovery.similarity_threshold", "similarity_threshold", float),
+            ("discovery.weak_match_threshold", "weak_match_threshold", float),
+            ("discovery.max_new_cards_per_run", "max_new_cards_per_run", int),
+            ("discovery.max_queries_per_run", "max_queries_per_run", int),
+            ("discovery.total_cap", "max_sources_total", int),
+        ]:
+            val = admin_cfg.get(key)
+            if val is not None:
+                try:
+                    setattr(config, attr, coerce(val))
+                except (TypeError, ValueError):
+                    logger.warning("discovery: invalid %s value: %r", key, val)
+    except Exception as exc:
+        logger.warning("discovery: failed to read admin settings: %s", exc)
+
+    return config
+
+
 def apply_source_preferences(
     config: DiscoveryConfig, source_prefs: dict
 ) -> DiscoveryConfig:
@@ -863,6 +905,9 @@ class DiscoveryService:
         Returns:
             DiscoveryResult with complete statistics
         """
+        # Apply admin-configurable settings (cached, 60s TTL)
+        config = await apply_admin_settings(config, self.db)
+
         start_time = datetime.now(timezone.utc)
 
         # Use existing run_id if provided, otherwise create new record

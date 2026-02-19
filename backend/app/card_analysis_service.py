@@ -259,6 +259,7 @@ async def execute_card_analysis(
                 search_query,
                 max_results_per_source=3,
                 include_academic=False,
+                db=db,
             )
             web_results = [
                 {

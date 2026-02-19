@@ -888,6 +888,7 @@ async def _handle_search_all_sources(
             query,
             max_results_per_source=max_per_source,
             **include_flags,
+            db=db,
         )
 
         # Format results for the chat assistant
