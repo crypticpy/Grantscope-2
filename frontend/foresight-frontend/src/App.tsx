@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, lazy } from "react";
+import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -11,6 +11,8 @@ import { TooltipProvider } from "@radix-ui/react-tooltip";
 import Header from "./components/Header";
 import { AuthContextProvider } from "./hooks/useAuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { AdminRoute } from "./components/AdminRoute";
+import { PageLoadingSpinner } from "./components/PageLoadingSpinner";
 import { API_BASE_URL } from "./lib/config";
 
 // Synchronous imports for critical path components (login + landing page)
@@ -53,6 +55,23 @@ const Feeds = lazy(() => import("./pages/Feeds"));
 const GuideSignals = lazy(() => import("./pages/GuideSignals"));
 const GuideDiscover = lazy(() => import("./pages/GuideDiscover"));
 const GuideWorkstreams = lazy(() => import("./pages/GuideWorkstreams"));
+
+// Admin pages - lazy-loaded, admin-only
+const AdminLayout = lazy(() => import("./pages/Admin"));
+const AdminDashboard = lazy(() => import("./pages/Admin/AdminDashboard"));
+const AdminUsers = lazy(() => import("./pages/Admin/AdminUsers"));
+const AdminTaxonomy = lazy(() => import("./pages/Admin/AdminTaxonomy"));
+const AdminContent = lazy(() => import("./pages/Admin/AdminContent"));
+const AdminDiscovery = lazy(() => import("./pages/Admin/AdminDiscovery"));
+const AdminSources = lazy(() => import("./pages/Admin/AdminSources"));
+const AdminAI = lazy(() => import("./pages/Admin/AdminAI"));
+const AdminJobs = lazy(() => import("./pages/Admin/AdminJobs"));
+const AdminScheduler = lazy(() => import("./pages/Admin/AdminScheduler"));
+const AdminQuality = lazy(() => import("./pages/Admin/AdminQuality"));
+const AdminNotifications = lazy(
+  () => import("./pages/Admin/AdminNotifications"),
+);
+const AdminSettings = lazy(() => import("./pages/Admin/AdminSettings"));
 
 // ---------------------------------------------------------------------------
 // Custom user type
@@ -518,6 +537,198 @@ function App() {
                     />
                   }
                 />
+
+                {/* Admin panel - lazy-loaded, admin-only */}
+                <Route
+                  path="/admin"
+                  element={
+                    <AdminRoute
+                      element={<AdminLayout />}
+                      loadingMessage="Loading admin panel..."
+                    />
+                  }
+                >
+                  <Route
+                    index
+                    element={
+                      <Suspense
+                        fallback={
+                          <PageLoadingSpinner
+                            message="Loading dashboard..."
+                            size="md"
+                          />
+                        }
+                      >
+                        <AdminDashboard />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="users"
+                    element={
+                      <Suspense
+                        fallback={
+                          <PageLoadingSpinner
+                            message="Loading users..."
+                            size="md"
+                          />
+                        }
+                      >
+                        <AdminUsers />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="taxonomy"
+                    element={
+                      <Suspense
+                        fallback={
+                          <PageLoadingSpinner
+                            message="Loading taxonomy..."
+                            size="md"
+                          />
+                        }
+                      >
+                        <AdminTaxonomy />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="content"
+                    element={
+                      <Suspense
+                        fallback={
+                          <PageLoadingSpinner
+                            message="Loading content..."
+                            size="md"
+                          />
+                        }
+                      >
+                        <AdminContent />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="discovery"
+                    element={
+                      <Suspense
+                        fallback={
+                          <PageLoadingSpinner
+                            message="Loading discovery..."
+                            size="md"
+                          />
+                        }
+                      >
+                        <AdminDiscovery />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="sources"
+                    element={
+                      <Suspense
+                        fallback={
+                          <PageLoadingSpinner
+                            message="Loading sources..."
+                            size="md"
+                          />
+                        }
+                      >
+                        <AdminSources />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="ai"
+                    element={
+                      <Suspense
+                        fallback={
+                          <PageLoadingSpinner
+                            message="Loading AI settings..."
+                            size="md"
+                          />
+                        }
+                      >
+                        <AdminAI />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="jobs"
+                    element={
+                      <Suspense
+                        fallback={
+                          <PageLoadingSpinner
+                            message="Loading jobs..."
+                            size="md"
+                          />
+                        }
+                      >
+                        <AdminJobs />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="scheduler"
+                    element={
+                      <Suspense
+                        fallback={
+                          <PageLoadingSpinner
+                            message="Loading scheduler..."
+                            size="md"
+                          />
+                        }
+                      >
+                        <AdminScheduler />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="quality"
+                    element={
+                      <Suspense
+                        fallback={
+                          <PageLoadingSpinner
+                            message="Loading quality..."
+                            size="md"
+                          />
+                        }
+                      >
+                        <AdminQuality />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="notifications"
+                    element={
+                      <Suspense
+                        fallback={
+                          <PageLoadingSpinner
+                            message="Loading notifications..."
+                            size="md"
+                          />
+                        }
+                      >
+                        <AdminNotifications />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="settings"
+                    element={
+                      <Suspense
+                        fallback={
+                          <PageLoadingSpinner
+                            message="Loading settings..."
+                            size="md"
+                          />
+                        }
+                      >
+                        <AdminSettings />
+                      </Suspense>
+                    }
+                  />
+                </Route>
 
                 {/* 404 catch-all - redirect to home */}
                 <Route path="*" element={<Navigate to="/" replace />} />
