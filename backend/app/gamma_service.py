@@ -94,13 +94,14 @@ COA_COLORS = {
     "black": "#000000",
 }
 
+# DEPRECATED: Use PIPELINE_STATUSES from taxonomy.py for new code.
 HORIZON_NAMES = {
     "H1": "Mainstream (0-3 years)",
     "H2": "Transitional (3-7 years)",
     "H3": "Transformative (7-15+ years)",
 }
 
-# Extended horizon definitions for backup slides
+# DEPRECATED: Use PIPELINE_STATUSES from taxonomy.py for new code.
 HORIZON_DEFINITIONS = {
     "H1": {
         "name": "Mainstream",
@@ -143,6 +144,7 @@ HORIZON_DEFINITIONS = {
     },
 }
 
+# DEPRECATED: Use PIPELINE_STATUSES from taxonomy.py for new code.
 STAGE_NAMES = {
     1: "Concept",
     2: "Exploring",
@@ -154,7 +156,7 @@ STAGE_NAMES = {
     8: "Declining",
 }
 
-# Extended stage definitions for backup slides
+# DEPRECATED: Use PIPELINE_STATUSES from taxonomy.py for new code.
 STAGE_DEFINITIONS = {
     1: {
         "name": "Concept",

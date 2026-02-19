@@ -120,7 +120,7 @@ function formatDate(dateString: string): string {
 
 function getFileExtension(filename: string): string {
   const parts = filename.split(".");
-  return parts.length > 1 ? parts[parts.length - 1].toUpperCase() : "";
+  return parts.length > 1 ? (parts[parts.length - 1] ?? "").toUpperCase() : "";
 }
 
 // =============================================================================
@@ -628,9 +628,8 @@ export const CardDocuments: React.FC<{ cardId: string }> = ({ cardId }) => {
           </p>
 
           {documents.map((doc) => {
-            const typeColors =
-              DOCUMENT_TYPE_COLORS[doc.document_type] ||
-              DOCUMENT_TYPE_COLORS.other;
+            const typeColors = DOCUMENT_TYPE_COLORS[doc.document_type] ??
+              DOCUMENT_TYPE_COLORS["other"] ?? { bg: "", text: "" };
             const isDeleting = deletingId === doc.id;
             const isDownloading = downloadingId === doc.id;
 

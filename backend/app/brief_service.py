@@ -134,6 +134,7 @@ Name: {card_name}
 Summary: {summary}
 Description: {description}
 Category: {pillar}
+Pipeline Status: {pipeline_status}
 Horizon: {horizon}
 Stage: {stage}
 Scores: Novelty={novelty}/100, Impact={impact}/100, Relevance={relevance}/100, Risk={risk}/100
@@ -286,6 +287,7 @@ class PortfolioBrief:
     pillar_id: str
     horizon: str
     stage_id: str
+    pipeline_status: str
     brief_summary: str
     brief_content_markdown: str
     impact_score: int
@@ -917,6 +919,7 @@ class ExecutiveBriefService:
             summary=card.get("summary", "No summary available"),
             description=card.get("description", "No description available"),
             pillar=get_pillar_name(card.get("pillar_id")),
+            pipeline_status=card.get("pipeline_status", "discovered"),
             horizon=card.get("horizon", "Unknown"),
             stage=get_stage_name(card.get("stage_id")),
             novelty=card.get("novelty_score", 0) or 0,
@@ -1082,11 +1085,17 @@ class ExecutiveBriefService:
             pillar_name = get_pillar_name(brief.pillar_id)
             horizon_name = f"H{brief.horizon[-1]}" if brief.horizon else "Unknown"
             stage_name = get_stage_name(brief.stage_id)
+            pipeline_label = (
+                brief.pipeline_status.replace("_", " ").title()
+                if brief.pipeline_status
+                else "Discovered"
+            )
 
             card_summaries.append(
                 f"""
 ### Card {i}: {brief.card_name}
 - **Pillar**: {pillar_name} ({brief.pillar_id})
+- **Pipeline Status**: {pipeline_label}
 - **Horizon**: {horizon_name}
 - **Stage**: {stage_name}
 - **Impact Score**: {brief.impact_score}/100
@@ -1288,6 +1297,7 @@ Respond with ONLY the JSON object, no markdown formatting or explanation."""
             "pillar_id": card.pillar_id,
             "horizon": card.horizon,
             "stage_id": card.stage_id,
+            "pipeline_status": getattr(card, "pipeline_status", None),
             "novelty_score": card.novelty_score,
             "impact_score": card.impact_score,
             "relevance_score": card.relevance_score,

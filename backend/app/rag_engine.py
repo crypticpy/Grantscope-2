@@ -467,6 +467,7 @@ class RAGEngine:
                         Card.pillar_id,
                         Card.horizon,
                         Card.stage_id,
+                        Card.pipeline_status,
                         Card.impact_score,
                         Card.relevance_score,
                         Card.velocity_score,
@@ -482,6 +483,7 @@ class RAGEngine:
                         "pillar_id": r.pillar_id,
                         "horizon": r.horizon,
                         "stage_id": r.stage_id,
+                        "pipeline_status": getattr(r, "pipeline_status", None),
                         "impact_score": r.impact_score,
                         "relevance_score": r.relevance_score,
                         "velocity_score": (
@@ -796,6 +798,7 @@ class RAGEngine:
                     parts.append(f"Description: {card['description']}")
                 parts.append(
                     f"Pillar: {card.get('pillar_id', 'N/A')} | "
+                    f"Pipeline Status: {card.get('pipeline_status', 'N/A')} | "
                     f"Horizon: {card.get('horizon', 'N/A')} | "
                     f"Stage: {card.get('stage_id', 'N/A')}"
                 )
@@ -1062,9 +1065,14 @@ class RAGEngine:
                     parts.append(f"Summary: {data['summary']}")
                 if data.get("description"):
                     parts.append(f"Description: {data['description'][:800]}")
-                if data.get("pillar_id") or data.get("horizon"):
+                if (
+                    data.get("pillar_id")
+                    or data.get("horizon")
+                    or data.get("pipeline_status")
+                ):
                     parts.append(
                         f"Pillar: {data.get('pillar_id', 'N/A')} | "
+                        f"Pipeline Status: {data.get('pipeline_status', 'N/A')} | "
                         f"Horizon: {data.get('horizon', 'N/A')} | "
                         f"Stage: {data.get('stage_id', 'N/A')}"
                     )
@@ -1151,6 +1159,7 @@ class RAGEngine:
                         Card.pillar_id,
                         Card.horizon,
                         Card.stage_id,
+                        Card.pipeline_status,
                         Card.impact_score,
                         Card.relevance_score,
                     ).where(Card.id == card_id)
@@ -1170,6 +1179,7 @@ class RAGEngine:
                         Card.pillar_id,
                         Card.horizon,
                         Card.stage_id,
+                        Card.pipeline_status,
                         Card.impact_score,
                         Card.relevance_score,
                     )
@@ -1299,6 +1309,7 @@ def _card_to_dict(card: Card) -> Dict[str, Any]:
         "pillar_id": card.pillar_id,
         "horizon": card.horizon,
         "stage_id": card.stage_id,
+        "pipeline_status": getattr(card, "pipeline_status", None),
         "impact_score": card.impact_score,
         "relevance_score": card.relevance_score,
         "velocity_score": float(card.velocity_score) if card.velocity_score else None,
@@ -1319,6 +1330,7 @@ def _row_to_card_dict(row) -> Dict[str, Any]:
         "pillar_id": row.pillar_id,
         "horizon": row.horizon,
         "stage_id": row.stage_id,
+        "pipeline_status": getattr(row, "pipeline_status", None),
         "impact_score": row.impact_score,
         "relevance_score": row.relevance_score,
     }

@@ -15,7 +15,7 @@ Endpoints:
 from typing import Optional, List
 from pydantic import BaseModel, Field, validator
 
-from app.taxonomy import VALID_PILLAR_CODES
+from app.taxonomy import VALID_PILLAR_CODES, VALID_PIPELINE_STATUSES
 
 
 # ============================================================================
@@ -195,6 +195,9 @@ class ManualCardCreateRequest(BaseModel):
     source_preferences: Optional[SourcePreferences] = Field(
         None, description="Optional source discovery preferences"
     )
+    pipeline_status: Optional[str] = Field(
+        "discovered", description="Pipeline status for the card (default: discovered)"
+    )
     research_depth: Optional[str] = Field(
         None, description="Research depth: 'quick' or 'deep'"
     )
@@ -247,6 +250,16 @@ class ManualCardCreateRequest(BaseModel):
                     raise ValueError(
                         f"Invalid URL: {url}. Must start with http:// or https://"
                     )
+        return v
+
+    @validator("pipeline_status")
+    def validate_pipeline_status(cls, v):
+        """Validate pipeline_status value if provided."""
+        if v is not None and v not in VALID_PIPELINE_STATUSES:
+            raise ValueError(
+                f'Invalid pipeline_status "{v}". '
+                f'Must be one of: {", ".join(sorted(VALID_PIPELINE_STATUSES))}'
+            )
         return v
 
 

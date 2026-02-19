@@ -498,6 +498,7 @@ async def _handle_get_grant_details(
             "pillar_id": card.pillar_id,
             "stage_id": card.stage_id,
             "horizon": card.horizon,
+            "pipeline_status": getattr(card, "pipeline_status", None),
             "status": card.status,
             "grantor": card.grantor,
             "grant_type": card.grant_type,

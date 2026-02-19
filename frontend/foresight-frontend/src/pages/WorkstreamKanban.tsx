@@ -76,8 +76,7 @@ import {
   type WorkstreamScanStatusResponse,
 } from "../lib/workstream-api";
 import { PillarBadgeGroup } from "../components/PillarBadge";
-import { HorizonBadge } from "../components/HorizonBadge";
-import { StageBadge } from "../components/StageBadge";
+import { PipelineBadge } from "../components/PipelineBadge";
 import { WorkstreamForm, type Workstream } from "../components/WorkstreamForm";
 import { WorkstreamChatPanel } from "../components/WorkstreamChatPanel";
 import { useWorkstreamScanPolling } from "../hooks/useWorkstreamScanPolling";
@@ -209,56 +208,15 @@ function KeywordTag({ keyword }: { keyword: string }) {
 }
 
 /**
- * Stage range display for multiple stages
+ * Pipeline status display for multiple statuses
  */
-function StageRangeDisplay({ stageIds }: { stageIds: string[] }) {
-  if (stageIds.length === 0) return null;
-
-  const stageNumbers = stageIds
-    .map((id) => parseInt(id, 10))
-    .filter((n) => !isNaN(n))
-    .sort((a, b) => a - b);
-
-  if (stageNumbers.length === 0) return null;
-
-  if (stageNumbers.length <= 2) {
-    return (
-      <div className="flex items-center gap-1 flex-wrap">
-        {stageNumbers.map((stage) => (
-          <StageBadge
-            key={stage}
-            stage={stage}
-            size="sm"
-            showName={false}
-            variant="minimal"
-          />
-        ))}
-      </div>
-    );
-  }
-
-  const isConsecutive = stageNumbers.every(
-    (n, i) => i === 0 || n === (stageNumbers[i - 1] ?? 0) + 1,
-  );
-
-  if (isConsecutive) {
-    return (
-      <span className="text-sm text-gray-600 dark:text-gray-400">
-        Stages {stageNumbers[0]} - {stageNumbers[stageNumbers.length - 1]}
-      </span>
-    );
-  }
+function PipelineStatusDisplay({ statusIds }: { statusIds: string[] }) {
+  if (statusIds.length === 0) return null;
 
   return (
     <div className="flex items-center gap-1 flex-wrap">
-      {stageNumbers.map((stage) => (
-        <StageBadge
-          key={stage}
-          stage={stage}
-          size="sm"
-          showName={false}
-          variant="minimal"
-        />
+      {statusIds.map((statusId) => (
+        <PipelineBadge key={statusId} status={statusId} size="sm" />
       ))}
     </div>
   );
@@ -2115,28 +2073,18 @@ const WorkstreamKanban: React.FC = () => {
               </div>
             )}
 
-            {/* Horizon */}
-            {workstream.horizon && workstream.horizon !== "ALL" && (
-              <div className="flex items-center gap-2">
-                <span className="text-gray-600 dark:text-gray-400">
-                  Horizon:
-                </span>
-                <HorizonBadge
-                  horizon={workstream.horizon as "H1" | "H2" | "H3"}
-                  size="sm"
-                />
-              </div>
-            )}
-
-            {/* Stages */}
-            {workstream.stage_ids && workstream.stage_ids.length > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="text-gray-600 dark:text-gray-400">
-                  Stages:
-                </span>
-                <StageRangeDisplay stageIds={workstream.stage_ids} />
-              </div>
-            )}
+            {/* Pipeline Statuses */}
+            {workstream.pipeline_statuses &&
+              workstream.pipeline_statuses.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-600 dark:text-gray-400">
+                    Statuses:
+                  </span>
+                  <PipelineStatusDisplay
+                    statusIds={workstream.pipeline_statuses}
+                  />
+                </div>
+              )}
 
             {/* Keywords */}
             {workstream.keywords && workstream.keywords.length > 0 && (
@@ -2159,8 +2107,8 @@ const WorkstreamKanban: React.FC = () => {
 
             {/* No filters */}
             {(!workstream.pillar_ids || workstream.pillar_ids.length === 0) &&
-              (!workstream.horizon || workstream.horizon === "ALL") &&
-              (!workstream.stage_ids || workstream.stage_ids.length === 0) &&
+              (!workstream.pipeline_statuses ||
+                workstream.pipeline_statuses.length === 0) &&
               (!workstream.keywords || workstream.keywords.length === 0) && (
                 <p className="text-gray-500 dark:text-gray-400 italic">
                   No filters configured

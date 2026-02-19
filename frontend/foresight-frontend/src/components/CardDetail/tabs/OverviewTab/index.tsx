@@ -158,8 +158,8 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   scoreHistoryLoading,
   scoreHistoryError,
   onRetryScoreHistory,
-  stageHistory,
-  stageHistoryLoading,
+  stageHistory: _stageHistory,
+  stageHistoryLoading: _stageHistoryLoading,
   researchHistory,
   onRequestDeepResearch,
   canRequestDeepResearch,
@@ -192,11 +192,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
         />
 
         {/* Classification Section */}
-        <CardClassification
-          card={card}
-          stageHistory={stageHistory}
-          stageHistoryLoading={stageHistoryLoading}
-        />
+        <CardClassification card={card} />
 
         {/* Score Timeline Chart */}
         <ScoreTimelineChart
@@ -237,7 +233,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
         {/* Maturity Score Panel */}
         <MaturityScorePanel
           maturityScore={card.maturity_score}
-          stageId={card.stage_id}
+          pipelineStatus={card.pipeline_status ?? undefined}
         />
 
         {/* Activity Stats Panel */}

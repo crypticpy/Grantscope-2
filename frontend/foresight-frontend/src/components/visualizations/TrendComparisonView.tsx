@@ -45,8 +45,8 @@ import { useAuthContext } from "../../hooks/useAuthContext";
 
 // Badge components for card metadata
 import { PillarBadge } from "../PillarBadge";
-import { HorizonBadge } from "../HorizonBadge";
-import { StageBadge } from "../StageBadge";
+import { PipelineBadge } from "../PipelineBadge";
+import { DeadlineUrgencyBadge } from "../DeadlineUrgencyBadge";
 
 // API and types
 import {
@@ -302,8 +302,6 @@ interface CardHeaderProps {
 }
 
 function CardHeader({ card, label, onCardClick }: CardHeaderProps) {
-  const stageNumber = parseStageNumber(card.stage_id);
-
   return (
     <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-4">
       <div className="flex items-start justify-between mb-3">
@@ -335,8 +333,11 @@ function CardHeader({ card, label, onCardClick }: CardHeaderProps) {
 
       <div className="flex items-center flex-wrap gap-2 mt-3">
         {card.pillar_id && <PillarBadge pillarId={card.pillar_id} size="sm" />}
-        {card.horizon && <HorizonBadge horizon={card.horizon} size="sm" />}
-        {stageNumber && <StageBadge stage={stageNumber} size="sm" showName />}
+        <PipelineBadge
+          status={card.pipeline_status || "discovered"}
+          size="sm"
+        />
+        <DeadlineUrgencyBadge deadline={card.deadline} size="sm" />
       </div>
     </div>
   );

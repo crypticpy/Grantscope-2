@@ -46,6 +46,7 @@ from app.helpers.search_utils import (
     _apply_score_filters,
     _extract_highlights,
 )
+from app.taxonomy import VALID_PIPELINE_STATUSES
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +99,7 @@ async def get_cards(
     pillar_id: Optional[str] = None,
     stage_id: Optional[str] = None,
     horizon: Optional[str] = None,
+    pipeline_status: Optional[str] = None,
     search: Optional[str] = None,
     grant_type: Optional[str] = None,
     sort_by: Optional[str] = None,
@@ -110,6 +112,12 @@ async def get_cards(
 
     Returns { cards: [...], total_count, limit, offset, has_more }.
     """
+    if pipeline_status and pipeline_status not in VALID_PIPELINE_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid pipeline_status '{pipeline_status}'. Must be one of: {', '.join(sorted(VALID_PIPELINE_STATUSES))}",
+        )
+
     try:
         active_status = status or "active"
         base = select(Card).where(Card.status == active_status)
@@ -118,6 +126,8 @@ async def get_cards(
             base = base.where(Card.slug == slug)
         if pillar_id:
             base = base.where(Card.pillar_id == pillar_id)
+        if pipeline_status:
+            base = base.where(Card.pipeline_status == pipeline_status)
         if stage_id:
             base = base.where(Card.stage_id == stage_id)
         if horizon:
@@ -287,6 +297,7 @@ async def compare_cards(
                 goal_id=card_dict.get("goal_id"),
                 stage_id=card_dict.get("stage_id"),
                 horizon=card_dict.get("horizon"),
+                pipeline_status=card_dict.get("pipeline_status"),
                 maturity_score=card_dict.get("maturity_score"),
                 velocity_score=(
                     int(card_dict["velocity_score"])
@@ -435,6 +446,8 @@ async def create_card(
             anchor_id=card_dict.get("anchor_id"),
             stage_id=card_dict.get("stage_id"),
             horizon=card_dict.get("horizon"),
+            pipeline_status=card_dict.get("pipeline_status", "discovered"),
+            pipeline_status_changed_at=datetime.now(timezone.utc),
             grant_type=card_dict.get("grant_type"),
             funding_amount_min=card_dict.get("funding_amount_min"),
             funding_amount_max=card_dict.get("funding_amount_max"),
@@ -588,6 +601,7 @@ async def search_cards(
                 anchor_id=item.get("anchor_id"),
                 stage_id=item.get("stage_id"),
                 horizon=item.get("horizon"),
+                pipeline_status=item.get("pipeline_status"),
                 novelty_score=item.get("novelty_score"),
                 maturity_score=item.get("maturity_score"),
                 impact_score=item.get("impact_score"),
@@ -775,6 +789,10 @@ async def preview_filter_count(
 
         if filters.horizon and filters.horizon != "ALL":
             stmt = stmt.where(Card.horizon == filters.horizon)
+
+        # Apply pipeline_status filter if present
+        if hasattr(filters, "pipeline_statuses") and filters.pipeline_statuses:
+            stmt = stmt.where(Card.pipeline_status.in_(filters.pipeline_statuses))
 
         # Fetch cards (limit to reasonable amount for performance)
         stmt = stmt.order_by(Card.created_at.desc()).limit(500)

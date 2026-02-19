@@ -24,13 +24,18 @@ import {
 import { useAuthContext } from "../hooks/useAuthContext";
 import { useDebouncedValue } from "../hooks/useDebounce";
 import { PillarBadge } from "../components/PillarBadge";
-import { HorizonBadge } from "../components/HorizonBadge";
-import { StageBadge } from "../components/StageBadge";
+import { PipelineBadge } from "../components/PipelineBadge";
+import { DeadlineUrgencyBadge } from "../components/DeadlineUrgencyBadge";
 import { QualityScoreBadge } from "../components/QualityScoreBadge";
 import { Top25Badge } from "../components/Top25Badge";
 import { VelocityBadge, type VelocityTrend } from "../components/VelocityBadge";
 import { TrendBadge, type TrendDirection } from "../components/TrendBadge";
-import { parseStageNumber } from "../lib/stage-utils";
+import {
+  pipelineStatuses,
+  getPipelinePhase,
+  pipelinePhases,
+  type PipelinePhase,
+} from "../data/taxonomy";
 import { CreateSignalModal } from "../components/CreateSignal";
 import { VirtualizedGrid } from "../components/VirtualizedGrid";
 import { VirtualizedList } from "../components/VirtualizedList";
@@ -83,7 +88,7 @@ type SortOption =
   | "date_followed"
   | "quality_desc"
   | "name_asc";
-type GroupBy = "none" | "pillar" | "horizon" | "workstream";
+type GroupBy = "none" | "pillar" | "pipeline_phase" | "workstream";
 
 // ---------------------------------------------------------------------------
 // API helper
@@ -155,7 +160,7 @@ const Signals: React.FC = () => {
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedPillar, setSelectedPillar] = useState("");
-  const [selectedHorizon, setSelectedHorizon] = useState("");
+  const [selectedPipelineStatus, setSelectedPipelineStatus] = useState("");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("");
   const [qualityMin, setQualityMin] = useState(0);
   const [sortOption, setSortOption] = useState<SortOption>("recently_updated");
@@ -186,7 +191,8 @@ const Signals: React.FC = () => {
       const params: Record<string, string> = {};
       if (debouncedSearch) params.search = debouncedSearch;
       if (selectedPillar) params.pillar = selectedPillar;
-      if (selectedHorizon) params.horizon = selectedHorizon;
+      if (selectedPipelineStatus)
+        params.pipeline_status = selectedPipelineStatus;
       if (sourceFilter) params.source = sourceFilter;
       if (qualityMin > 0) params.quality_min = String(qualityMin);
       // Map frontend sort values to backend sort_by parameter
@@ -215,7 +221,7 @@ const Signals: React.FC = () => {
   }, [
     debouncedSearch,
     selectedPillar,
-    selectedHorizon,
+    selectedPipelineStatus,
     sourceFilter,
     qualityMin,
     sortOption,
@@ -283,8 +289,9 @@ const Signals: React.FC = () => {
       let keys: string[] = [];
       if (groupBy === "pillar") {
         keys = [signal.pillar_id || "Unknown"];
-      } else if (groupBy === "horizon") {
-        keys = [signal.horizon || "Unknown"];
+      } else if (groupBy === "pipeline_phase") {
+        const phase = getPipelinePhase(signal.pipeline_status || "discovered");
+        keys = [phase];
       } else if (groupBy === "workstream") {
         keys =
           signal.workstream_names.length > 0
@@ -313,14 +320,14 @@ const Signals: React.FC = () => {
   const hasActiveFilters =
     searchTerm !== "" ||
     selectedPillar !== "" ||
-    selectedHorizon !== "" ||
+    selectedPipelineStatus !== "" ||
     sourceFilter !== "" ||
     qualityMin > 0;
 
   const clearFilters = () => {
     setSearchTerm("");
     setSelectedPillar("");
-    setSelectedHorizon("");
+    setSelectedPipelineStatus("");
     setSourceFilter("");
     setQualityMin(0);
   };
@@ -484,24 +491,26 @@ const Signals: React.FC = () => {
             </select>
           </div>
 
-          {/* Horizon */}
+          {/* Pipeline Status */}
           <div>
             <label
-              htmlFor="signal-horizon"
+              htmlFor="signal-pipeline-status"
               className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
             >
-              Horizon
+              Status
             </label>
             <select
-              id="signal-horizon"
+              id="signal-pipeline-status"
               className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
-              value={selectedHorizon}
-              onChange={(e) => setSelectedHorizon(e.target.value)}
+              value={selectedPipelineStatus}
+              onChange={(e) => setSelectedPipelineStatus(e.target.value)}
             >
-              <option value="">All Horizons</option>
-              <option value="H1">H1 (0-2 years)</option>
-              <option value="H2">H2 (2-5 years)</option>
-              <option value="H3">H3 (5+ years)</option>
+              <option value="">All Statuses</option>
+              {pipelineStatuses.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -593,7 +602,7 @@ const Signals: React.FC = () => {
               >
                 <option value="none">No Grouping</option>
                 <option value="pillar">Pillar</option>
-                <option value="horizon">Horizon</option>
+                <option value="pipeline_phase">Pipeline Phase</option>
                 <option value="workstream">Workstream</option>
               </select>
             </div>
@@ -879,9 +888,10 @@ const SignalGroup: React.FC<SignalGroupProps> = ({
           />
           {groupBy === "pillar" ? (
             <PillarBadge pillarId={label} size="sm" disableTooltip />
-          ) : groupBy === "horizon" &&
-            (label === "H1" || label === "H2" || label === "H3") ? (
-            <HorizonBadge horizon={label} size="sm" disableTooltip />
+          ) : groupBy === "pipeline_phase" ? (
+            <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+              {pipelinePhases[label as PipelinePhase]?.label || label}
+            </span>
           ) : (
             <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
               {label}
@@ -978,8 +988,6 @@ interface SignalCardProps {
 
 const SignalCard: React.FC<SignalCardProps> = React.memo(
   ({ signal, onTogglePin }) => {
-    const stageNumber = parseStageNumber(signal.stage_id);
-
     return (
       <div className="relative bg-white dark:bg-dark-surface rounded-xl shadow-sm hover:-translate-y-1 hover:shadow-lg transition-all duration-200 overflow-hidden group">
         {/* Gradient accent bar */}
@@ -1033,8 +1041,11 @@ const SignalCard: React.FC<SignalCardProps> = React.memo(
             {/* Taxonomy badges */}
             <div className="flex flex-wrap items-center gap-2 mb-3">
               <PillarBadge pillarId={signal.pillar_id} size="sm" />
-              <HorizonBadge horizon={signal.horizon} size="sm" />
-              {stageNumber && <StageBadge stage={stageNumber} size="sm" />}
+              <PipelineBadge
+                status={signal.pipeline_status || "discovered"}
+                size="sm"
+              />
+              <DeadlineUrgencyBadge deadline={signal.deadline} size="sm" />
               {signal.top25_relevance && signal.top25_relevance.length > 0 && (
                 <Top25Badge priorities={signal.top25_relevance} size="sm" />
               )}
@@ -1079,8 +1090,6 @@ SignalCard.displayName = "SignalCard";
 
 const SignalListItem: React.FC<SignalCardProps> = React.memo(
   ({ signal, onTogglePin }) => {
-    const stageNumber = parseStageNumber(signal.stage_id);
-
     return (
       <div className="flex items-center gap-4 bg-white dark:bg-dark-surface rounded-xl shadow-sm p-4 hover:shadow-lg transition-all duration-200 group">
         {/* Pin */}
@@ -1144,8 +1153,11 @@ const SignalListItem: React.FC<SignalCardProps> = React.memo(
         {/* Taxonomy badges */}
         <div className="hidden sm:flex items-center gap-2 shrink-0">
           <PillarBadge pillarId={signal.pillar_id} size="sm" />
-          <HorizonBadge horizon={signal.horizon} size="sm" />
-          {stageNumber && <StageBadge stage={stageNumber} size="sm" />}
+          <PipelineBadge
+            status={signal.pipeline_status || "discovered"}
+            size="sm"
+          />
+          <DeadlineUrgencyBadge deadline={signal.deadline} size="sm" />
           {signal.top25_relevance && signal.top25_relevance.length > 0 && (
             <Top25Badge priorities={signal.top25_relevance} size="sm" />
           )}

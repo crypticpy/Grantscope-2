@@ -74,6 +74,8 @@ class Card(BaseModel):
     anchor_id: Optional[str] = None
     stage_id: Optional[str] = None
     horizon: Optional[str] = None
+    pipeline_status: Optional[str] = "discovered"
+    pipeline_status_changed_at: Optional[datetime] = None
     novelty_score: Optional[int] = None
     maturity_score: Optional[int] = None
     impact_score: Optional[int] = None
@@ -122,6 +124,10 @@ class CardCreate(BaseModel):
     horizon: Optional[str] = Field(
         None, pattern=r"^H[123]$", description="Horizon (H1, H2, H3)"
     )
+    pipeline_status: Optional[str] = Field(
+        None,
+        description="Pipeline status (discovered, evaluating, applying, submitted, awarded, active, closed, declined, expired)",
+    )
     # Grant-specific fields
     grant_type: Optional[str] = Field(
         None, description="Grant type (federal, state, foundation, local, other)"
@@ -146,6 +152,18 @@ class CardCreate(BaseModel):
         if not v or not v.strip():
             raise ValueError("Name cannot be empty or whitespace")
         return v.strip()
+
+    @validator("pipeline_status")
+    def validate_pipeline_status(cls, v):
+        if v is not None:
+            from app.taxonomy import VALID_PIPELINE_STATUSES
+
+            if v not in VALID_PIPELINE_STATUSES:
+                raise ValueError(
+                    f'Invalid pipeline_status "{v}". '
+                    f"Valid values: {sorted(VALID_PIPELINE_STATUSES)}"
+                )
+        return v
 
 
 class SimilarCard(BaseModel):

@@ -37,6 +37,11 @@ import type {
   TaxonomyItem,
   TaxonomyGoal,
 } from "../../lib/admin-api";
+import {
+  pipelineStatuses,
+  pipelinePhases,
+  getPipelinePhase,
+} from "../../data/taxonomy";
 
 // ============================================================================
 // Types
@@ -49,7 +54,8 @@ type TaxonomyTab =
   | "priorities"
   | "categories"
   | "anchors"
-  | "stages";
+  | "stages"
+  | "pipeline_statuses";
 
 interface TabConfig {
   id: TaxonomyTab;
@@ -107,7 +113,13 @@ const TABS: TabConfig[] = [
   {
     id: "stages",
     label: "Stages",
-    description: "Maturity lifecycle stages for signals",
+    description: "Maturity lifecycle stages for signals (legacy)",
+    editable: false,
+  },
+  {
+    id: "pipeline_statuses",
+    label: "Pipeline Statuses",
+    description: "Grant pipeline workflow statuses",
     editable: false,
   },
 ];
@@ -928,6 +940,70 @@ export default function AdminTaxonomy() {
     );
   };
 
+  const renderPipelineStatusesTable = () => {
+    const phaseColorMap: Record<string, string> = {
+      pipeline:
+        "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+      pursuing:
+        "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+      active:
+        "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+      archived: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300",
+    };
+
+    return (
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+            <th className="text-left px-4 py-3 font-medium text-gray-500 dark:text-gray-400">
+              Status
+            </th>
+            <th className="text-left px-4 py-3 font-medium text-gray-500 dark:text-gray-400">
+              ID
+            </th>
+            <th className="text-left px-4 py-3 font-medium text-gray-500 dark:text-gray-400">
+              Phase
+            </th>
+            <th className="text-left px-4 py-3 font-medium text-gray-500 dark:text-gray-400">
+              Description
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {pipelineStatuses.map((status) => {
+            const phase = getPipelinePhase(status.id);
+            const phaseLabel = pipelinePhases[phase]?.label || phase;
+            return (
+              <tr
+                key={status.id}
+                className="border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
+              >
+                <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
+                  {status.name}
+                </td>
+                <td className="px-4 py-3">
+                  <span className="inline-flex px-2 py-0.5 text-xs font-mono font-semibold rounded-full bg-brand-blue/10 text-brand-blue">
+                    {status.id}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  <span
+                    className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${phaseColorMap[phase] || ""}`}
+                  >
+                    {phaseLabel}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-gray-600 dark:text-gray-400 max-w-md">
+                  {status.description || "--"}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    );
+  };
+
   const renderReadOnlyPlaceholder = () => (
     <div className="px-4 py-12 text-center">
       <Tags className="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
@@ -971,6 +1047,8 @@ export default function AdminTaxonomy() {
         return renderAnchorsTable();
       case "stages":
         return renderStagesTable();
+      case "pipeline_statuses":
+        return renderPipelineStatusesTable();
       default:
         return renderReadOnlyPlaceholder();
     }
@@ -989,7 +1067,8 @@ export default function AdminTaxonomy() {
             Taxonomy Management
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Manage strategic pillars, goals, anchors, and maturity stages.
+            Manage strategic pillars, goals, anchors, pipeline statuses, and
+            maturity stages.
           </p>
         </div>
         {currentTab.editable && (

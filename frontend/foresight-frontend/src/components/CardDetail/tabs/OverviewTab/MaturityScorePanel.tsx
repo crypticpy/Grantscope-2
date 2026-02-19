@@ -8,17 +8,14 @@
  * @module CardDetail/tabs/OverviewTab/MaturityScorePanel
  */
 
-import React from 'react';
-import { Info } from 'lucide-react';
+import React from "react";
+import { Info } from "lucide-react";
 
 // UI Components
-import { Tooltip } from '../../../ui/Tooltip';
+import { Tooltip } from "../../../ui/Tooltip";
 
 // Badge Components
-import { StageBadge } from '../../../StageBadge';
-
-// Utilities
-import { parseStageNumber } from '../../utils';
+import { PipelineBadge } from "../../../PipelineBadge";
 
 /**
  * Props for the MaturityScorePanel component
@@ -31,10 +28,10 @@ export interface MaturityScorePanelProps {
   maturityScore: number;
 
   /**
-   * Stage identifier (e.g., "1_concept", "3_prototype").
-   * Used to display the stage badge below the maturity score.
+   * Pipeline status (e.g., "discovered", "evaluating", "awarded").
+   * Used to display the pipeline badge below the maturity score.
    */
-  stageId?: string;
+  pipelineStatus?: string;
 
   /**
    * Optional custom CSS class name for the container
@@ -47,15 +44,15 @@ export interface MaturityScorePanelProps {
  */
 const getMaturityInterpretation = (score: number): string => {
   if (score >= 81) {
-    return 'Mature & Mainstream - Well-established with proven track record';
+    return "Mature & Mainstream - Well-established with proven track record";
   }
   if (score >= 61) {
-    return 'Established - Gaining broad adoption and validation';
+    return "Established - Gaining broad adoption and validation";
   }
   if (score >= 31) {
-    return 'Emerging - Actively developing with growing interest';
+    return "Emerging - Actively developing with growing interest";
   }
-  return 'Early Stage - Experimental or recently introduced';
+  return "Early Stage - Experimental or recently introduced";
 };
 
 /**
@@ -89,30 +86,46 @@ const getMaturityInterpretation = (score: number): string => {
  */
 export const MaturityScorePanel: React.FC<MaturityScorePanelProps> = ({
   maturityScore,
-  stageId,
-  className = '',
+  pipelineStatus,
+  className = "",
 }) => {
-  // Parse stage number from stage_id string (e.g., "1_concept" -> 1)
-  const stageNumber = stageId ? parseStageNumber(stageId) : null;
-
   return (
-    <div className={`bg-white dark:bg-dark-surface rounded-lg shadow p-4 sm:p-6 ${className}`}>
+    <div
+      className={`bg-white dark:bg-dark-surface rounded-lg shadow p-4 sm:p-6 ${className}`}
+    >
       {/* Header with info tooltip */}
       <div className="flex items-center gap-2 mb-4">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Maturity</h3>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+          Maturity
+        </h3>
         <Tooltip
           content={
             <div className="space-y-2 max-w-full sm:max-w-xs">
-              <div className="font-semibold text-gray-900 dark:text-white">Maturity Score</div>
+              <div className="font-semibold text-gray-900 dark:text-white">
+                Maturity Score
+              </div>
               <p className="text-sm text-gray-600 dark:text-gray-300">
-                Indicates how developed and established this technology or trend is. Higher scores mean more mature,
-                proven solutions with established best practices and widespread adoption.
+                Indicates how developed and established this technology or trend
+                is. Higher scores mean more mature, proven solutions with
+                established best practices and widespread adoption.
               </p>
               <div className="text-xs text-gray-500 dark:text-gray-400 pt-1 border-t border-gray-200 dark:border-gray-600">
-                <div className="flex justify-between"><span>0-30:</span><span>Early/Experimental</span></div>
-                <div className="flex justify-between"><span>31-60:</span><span>Emerging/Developing</span></div>
-                <div className="flex justify-between"><span>61-80:</span><span>Established</span></div>
-                <div className="flex justify-between"><span>81-100:</span><span>Mature/Mainstream</span></div>
+                <div className="flex justify-between">
+                  <span>0-30:</span>
+                  <span>Early/Experimental</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>31-60:</span>
+                  <span>Emerging/Developing</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>61-80:</span>
+                  <span>Established</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>81-100:</span>
+                  <span>Mature/Mainstream</span>
+                </div>
               </div>
             </div>
           }
@@ -135,18 +148,16 @@ export const MaturityScorePanel: React.FC<MaturityScorePanelProps> = ({
             </span>
           </div>
         </Tooltip>
-        <p className="text-sm text-gray-500 dark:text-gray-400">Maturity Score</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          Maturity Score
+        </p>
       </div>
 
-      {/* Stage badge */}
-      {stageNumber && (
+      {/* Pipeline status badge */}
+      {pipelineStatus && (
         <div className="mt-4 pt-4 border-t border-gray-200">
           <div className="text-center">
-            <StageBadge
-              stage={stageNumber}
-              variant="progress"
-              size="md"
-            />
+            <PipelineBadge status={pipelineStatus} size="md" />
           </div>
         </div>
       )}

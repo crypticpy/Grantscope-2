@@ -312,9 +312,10 @@ You help city leaders, analysts, and decision-makers understand emerging trends,
 - If asked about topics outside the provided context, acknowledge the limitation and supplement with general knowledge where appropriate.
 {web_search_instructions}
 ## Strategic Framework Reference
-- Pillars: CH (Community Health), MC (Mobility), HS (Housing), EC (Economic), ES (Environmental), CE (Cultural)
-- Horizons: H1 (Mainstream), H2 (Transitional/Pilots), H3 (Weak Signals/Emerging)
-- Stages: 1-Concept, 2-Emerging, 3-Prototype, 4-Pilot, 5-Municipal Pilot, 6-Early Adoption, 7-Mainstream, 8-Mature
+- Pillars: CH (Community Health & Sustainability), MC (Mobility & Critical Infrastructure), HH (Homelessness & Housing), EW (Economic & Workforce Development), HG (High-Performing Government), PS (Public Safety)
+- Grant Categories: HS (Health & Social Services), PS (Public Safety), HD (Housing & Development), IN (Infrastructure), EN (Environment), CE (Culture & Education), TG (Technology & Government), EQ (Equity & Engagement)
+- Pipeline Statuses: discovered, evaluating, applying, submitted, awarded, active, closed, declined, expired
+- Pipeline Phases: pipeline (discovered/evaluating), pursuing (applying/submitted), active (awarded/active), archived (closed/declined/expired)
 
 ## Context
 {context_text}

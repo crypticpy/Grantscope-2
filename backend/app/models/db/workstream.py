@@ -73,6 +73,9 @@ class Workstream(Base):
     )
     min_stage: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     max_stage: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    pipeline_statuses: Mapped[Optional[list[str]]] = mapped_column(
+        ARRAY(Text), server_default="{}", nullable=True
+    )
     notification_enabled: Mapped[Optional[bool]] = mapped_column(
         Boolean, server_default="true", nullable=True
     )

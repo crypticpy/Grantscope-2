@@ -20,6 +20,7 @@ export interface Workstream {
   goal_ids: string[];
   stage_ids: string[];
   horizon: string;
+  pipeline_statuses?: string[];
   keywords: string[];
   is_active: boolean;
   auto_add: boolean;
@@ -59,6 +60,7 @@ export interface FormData {
   goal_ids: string[];
   stage_ids: string[];
   horizon: string;
+  pipeline_statuses?: string[];
   keywords: string[];
   is_active: boolean;
   analyze_now: boolean;
@@ -100,6 +102,7 @@ export async function fetchFilterPreview(
     goal_ids: string[];
     stage_ids: string[];
     horizon: string;
+    pipeline_statuses?: string[];
     keywords: string[];
     category_ids?: string[];
   },
@@ -115,6 +118,9 @@ export async function fetchFilterPreview(
       goal_ids: filters.goal_ids,
       stage_ids: filters.stage_ids,
       horizon: filters.horizon === "ALL" ? null : filters.horizon,
+      ...(filters.pipeline_statuses && filters.pipeline_statuses.length > 0
+        ? { pipeline_statuses: filters.pipeline_statuses }
+        : {}),
       keywords: filters.keywords,
       ...(filters.category_ids && filters.category_ids.length > 0
         ? { category_ids: filters.category_ids }
@@ -146,6 +152,7 @@ export interface WorkstreamTemplate {
     goal_ids: string[];
     stage_ids: string[];
     horizon: string;
+    pipeline_statuses?: string[];
     keywords: string[];
     // Optional grant-specific template fields
     category_ids?: string[];

@@ -304,6 +304,7 @@ async def enrich_signal_profiles(
             Card.description,
             Card.pillar_id,
             Card.horizon,
+            Card.pipeline_status,
         )
         .where(Card.status == "active")
         .order_by(Card.created_at.desc())
@@ -322,6 +323,7 @@ async def enrich_signal_profiles(
             "description": row.description,
             "pillar_id": row.pillar_id,
             "horizon": row.horizon,
+            "pipeline_status": getattr(row, "pipeline_status", None),
         }
         for row in all_cards_rows
     ]

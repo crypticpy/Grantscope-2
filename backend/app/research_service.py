@@ -1139,6 +1139,8 @@ class ResearchService:
             summary=analysis.summary,
             horizon=analysis.horizon,
             stage_id=_stage_number_to_id(analysis.suggested_stage),
+            pipeline_status="discovered",
+            pipeline_status_changed_at=datetime.now(timezone.utc),
             pillar_id=analysis.pillars[0] if analysis.pillars else None,
             goal_id=analysis.goals[0] if analysis.goals else None,
             # Scoring (convert AI scale to 0-100 and clamp)

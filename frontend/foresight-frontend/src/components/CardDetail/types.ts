@@ -71,6 +71,9 @@ export interface Card {
     | "unknown"
     | null;
 
+  /** Pipeline status for grant tracking (e.g., "discovered", "evaluating", "awarded") */
+  pipeline_status?: string | null;
+
   // Grant-specific fields
   deadline?: string | null;
   funding_amount_min?: number | null;

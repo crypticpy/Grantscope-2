@@ -36,6 +36,8 @@ export const FILTER_EXPLANATIONS: Record<string, string> = {
     "Austin's strategic priority areas. Each grant is tagged with the city priority it best supports.",
   maturityStage:
     "How far along a grant opportunity is in the review process, from initial discovery to fully vetted.",
+  pipelineStatus:
+    "Where an opportunity stands in the grant pipeline: Discovered, Evaluating, Applying, Submitted, Awarded, Active, or Closed.",
   horizon:
     "When the funding would likely be available. H1 = now to 2 years, H2 = 2-5 years, H3 = 5+ years.",
   semanticSearch:

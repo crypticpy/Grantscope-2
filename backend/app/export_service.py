@@ -76,13 +76,20 @@ from .models.export import (
 )
 
 # Import classification definitions from gamma_service for backup slides
+# DEPRECATED: HORIZON_*/STAGE_* - use PIPELINE_STATUSES for new code
 from .gamma_service import (
     HORIZON_NAMES,
     HORIZON_DEFINITIONS,
     STAGE_NAMES,
     STAGE_DEFINITIONS,
 )
-from .taxonomy import PILLAR_COLORS, PILLAR_DEFINITIONS, PILLAR_NAMES
+from .taxonomy import (
+    PILLAR_COLORS,
+    PILLAR_DEFINITIONS,
+    PILLAR_NAMES,
+    PIPELINE_STATUSES,
+    get_pipeline_phase,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -220,7 +227,7 @@ PDF_COLORS = {
 
 # PILLAR_COLORS imported from taxonomy.py (canonical source of truth)
 
-# Horizon colors matching the frontend
+# DEPRECATED: Horizon colors - use PIPELINE_STATUSES[status]["color"] for new code.
 HORIZON_COLORS = {
     "H1": {
         "name": "Mainstream",
@@ -245,7 +252,7 @@ HORIZON_COLORS = {
     },
 }
 
-# Stage definitions matching the frontend
+# DEPRECATED: Stage definitions - use PIPELINE_STATUSES for new code.
 STAGE_INFO = {
     1: {
         "name": "Concept",
@@ -1037,6 +1044,19 @@ def create_classification_badges(
         else:
             badge_parts.append(f"<b>Pillar:</b> {pillar_code}")
 
+    # Pipeline status badge (preferred over horizon/stage)
+    pipeline_status = classification.get("pipeline_status", "")
+    if pipeline_status and pipeline_status in PIPELINE_STATUSES:
+        ps_info = PIPELINE_STATUSES[pipeline_status]
+        badge_parts.append(
+            f'<font color="{ps_info["color"]}"><b>{ps_info["label"]}</b></font>'
+        )
+    elif pipeline_status:
+        badge_parts.append(
+            f"<b>Status:</b> {pipeline_status.replace('_', ' ').title()}"
+        )
+
+    # Legacy horizon badge (kept for backward compatibility)
     if horizon_code := classification.get("horizon", "").upper():
         if horizon_code in HORIZON_COLORS:
             horizon_info = HORIZON_COLORS[horizon_code]
@@ -1046,7 +1066,7 @@ def create_classification_badges(
         else:
             badge_parts.append(f"<b>Horizon:</b> {horizon_code}")
 
-    # Stage badge
+    # Legacy stage badge (kept for backward compatibility)
     stage_raw = classification.get("stage", "")
     stage_num = None
 
@@ -1170,6 +1190,29 @@ def create_classification_appendix(styles: Dict[str, ParagraphStyle]) -> List[An
         elements.append(
             Paragraph(
                 f'<font color="{horizon_color}"><b>Stage {stage_num}: {info["name"]}</b></font> ({info["horizon"]}) - {info["description"]}',
+                styles.get("AppendixBody", styles["BodyText"]),
+            )
+        )
+    elements.append(Spacer(1, 12))
+
+    # Pipeline Statuses section
+    elements.append(
+        Paragraph(
+            "Grant Pipeline Statuses",
+            styles.get("AppendixHeading", styles["SubsectionHeading"]),
+        )
+    )
+    elements.append(
+        Paragraph(
+            "Pipeline statuses track a grant opportunity through its lifecycle:",
+            styles.get("AppendixBody", styles["BodyText"]),
+        )
+    )
+
+    for ps_key, ps_info in PIPELINE_STATUSES.items():
+        elements.append(
+            Paragraph(
+                f'<font color="{ps_info["color"]}"><b>{ps_info["label"]}</b></font> - {ps_info["description"]}',
                 styles.get("AppendixBody", styles["BodyText"]),
             )
         )

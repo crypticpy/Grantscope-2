@@ -143,9 +143,9 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = "" }) => {
 
   // Trend visualization state
   const [scoreHistory, setScoreHistory] = useState<ScoreHistory[]>([]);
-  const [stageHistory, setStageHistory] = useState<StageHistory[]>([]);
+  const [, setStageHistory] = useState<StageHistory[]>([]);
   const [scoreHistoryLoading, setScoreHistoryLoading] = useState(false);
-  const [stageHistoryLoading, setStageHistoryLoading] = useState(false);
+  const [, setStageHistoryLoading] = useState(false);
   const [scoreHistoryError, setScoreHistoryError] = useState<string | null>(
     null,
   );
@@ -692,11 +692,7 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = "" }) => {
               cardId={card.id}
               onRestore={loadCardDetail}
             />
-            <CardClassification
-              card={card}
-              stageHistory={stageHistory}
-              stageHistoryLoading={stageHistoryLoading}
-            />
+            <CardClassification card={card} />
             {/* Deep Research Panel - Prominent placement */}
             <DeepResearchPanel
               researchTasks={researchHistory}
@@ -724,7 +720,7 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = "" }) => {
             />
             <MaturityScorePanel
               maturityScore={card.maturity_score}
-              stageId={card.stage_id}
+              pipelineStatus={card.pipeline_status ?? undefined}
             />
             <ActivityStatsPanel
               sourcesCount={sources.length}

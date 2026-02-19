@@ -56,7 +56,13 @@ from app.models.db.analytics import (
 from app.models.db.workstream import Workstream, WorkstreamCard
 from app.models.db.search import SearchHistory
 from app.models.db.user import User
-from app.taxonomy import PILLAR_NAMES
+from app.taxonomy import (
+    PILLAR_NAMES,
+    PIPELINE_STATUSES,
+    VALID_PIPELINE_STATUSES,
+    get_pipeline_phase,
+    PIPELINE_PHASE_DISPLAY,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["analytics"])
@@ -68,7 +74,7 @@ router = APIRouter(prefix="/api/v1", tags=["analytics"])
 # Pillar definitions for analytics (canonical source: taxonomy.py)
 ANALYTICS_PILLAR_DEFINITIONS = PILLAR_NAMES
 
-# Stage name mapping
+# DEPRECATED: Stage name mapping - use PIPELINE_STATUSES from taxonomy.py for new code.
 STAGE_NAMES = {
     "1": "Concept",
     "2": "Exploring",
@@ -80,7 +86,7 @@ STAGE_NAMES = {
     "8": "Declining",
 }
 
-# Horizon labels
+# DEPRECATED: Horizon labels - use PIPELINE_STATUSES from taxonomy.py for new code.
 HORIZON_LABELS = {
     "H1": "Near-term (0-2 years)",
     "H2": "Mid-term (2-5 years)",
@@ -367,6 +373,9 @@ async def get_pillar_coverage(
     ),
     end_date: Optional[str] = Query(None, description="End date filter (ISO format)"),
     stage_id: Optional[str] = Query(None, description="Filter by maturity stage"),
+    pipeline_status: Optional[str] = Query(
+        None, description="Filter by pipeline status"
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -378,11 +387,18 @@ async def get_pillar_coverage(
     Args:
         start_date: Optional start date filter (ISO format)
         end_date: Optional end date filter (ISO format)
-        stage_id: Optional maturity stage filter
+        stage_id: Optional maturity stage filter (deprecated)
+        pipeline_status: Optional pipeline status filter
 
     Returns:
         PillarCoverageResponse with pillar distribution data
     """
+    if pipeline_status and pipeline_status not in VALID_PIPELINE_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid pipeline_status '{pipeline_status}'. Must be one of: {', '.join(sorted(VALID_PIPELINE_STATUSES))}",
+        )
+
     try:
         # Build query for active cards with velocity_score for avg calculation
         stmt = select(Card.pillar_id, Card.velocity_score).where(
@@ -395,9 +411,11 @@ async def get_pillar_coverage(
         if end_date:
             stmt = stmt.where(Card.created_at <= end_date)
 
-        # Apply stage filter if provided
+        # Apply stage filter if provided (deprecated - use pipeline_status)
         if stage_id:
             stmt = stmt.where(Card.stage_id == stage_id)
+        if pipeline_status:
+            stmt = stmt.where(Card.pipeline_status == pipeline_status)
 
         result = await db.execute(stmt)
         cards_data = result.all()
@@ -750,6 +768,7 @@ async def get_analytics_insights(
 async def get_trend_velocity(
     pillar_id: Optional[str] = None,
     stage_id: Optional[str] = None,
+    pipeline_status: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     current_user: dict = Depends(get_current_user_hardcoded),
@@ -772,6 +791,12 @@ async def get_trend_velocity(
     Returns:
         VelocityResponse with time-series velocity data
     """
+    if pipeline_status and pipeline_status not in VALID_PIPELINE_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid pipeline_status '{pipeline_status}'. Must be one of: {', '.join(sorted(VALID_PIPELINE_STATUSES))}",
+        )
+
     try:
         # Default to last 30 days if no date range specified
         if not end_date:
@@ -814,6 +839,8 @@ async def get_trend_velocity(
 
         if stage_id:
             stmt = stmt.where(Card.stage_id == stage_id)
+        if pipeline_status:
+            stmt = stmt.where(Card.pipeline_status == pipeline_status)
 
         # Filter by date range on created_at
         stmt = stmt.where(Card.created_at >= f"{start_date}T00:00:00")
@@ -1032,6 +1059,39 @@ async def get_system_wide_stats(
                 HorizonDistribution(
                     horizon=horizon, label=label, count=count, percentage=round(pct, 1)
                 )
+            )
+
+        # -------------------------------------------------------------------------
+        # Cards by Pipeline Status
+        # -------------------------------------------------------------------------
+        pipeline_result = await db.execute(
+            select(Card.pipeline_status).where(Card.status == "active")
+        )
+        pipeline_data = pipeline_result.all()
+
+        pipeline_counts = Counter()
+        for row in pipeline_data:
+            ps = row[0]
+            if ps:
+                pipeline_counts[ps] += 1
+
+        cards_by_pipeline_status = []
+        for ps_key, ps_info in PIPELINE_STATUSES.items():
+            count = pipeline_counts.get(ps_key, 0)
+            pct = (count / active_cards * 100) if active_cards > 0 else 0
+            phase = get_pipeline_phase(ps_key)
+            cards_by_pipeline_status.append(
+                {
+                    "status": ps_key,
+                    "label": ps_info["label"],
+                    "color": ps_info["color"],
+                    "phase": phase,
+                    "phase_label": PIPELINE_PHASE_DISPLAY.get(phase, {}).get(
+                        "label", phase
+                    ),
+                    "count": count,
+                    "percentage": round(pct, 1),
+                }
             )
 
         # -------------------------------------------------------------------------
@@ -1289,6 +1349,7 @@ async def get_system_wide_stats(
             cards_by_pillar=cards_by_pillar,
             cards_by_stage=cards_by_stage,
             cards_by_horizon=cards_by_horizon,
+            cards_by_pipeline_status=cards_by_pipeline_status,
             trending_pillars=trending_pillars,
             hot_topics=hot_topics,
             source_stats=source_stats,

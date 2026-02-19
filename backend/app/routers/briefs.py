@@ -427,6 +427,7 @@ async def export_brief(
             "pillar": card_row.pillar_id,
             "horizon": card_row.horizon,
             "stage": card_row.stage_id,
+            "pipeline_status": getattr(card_row, "pipeline_status", None),
         }
 
     # Generate export using ExportService
@@ -672,6 +673,7 @@ async def bulk_brief_export(
                 pillar_id=card_data.get("pillar_id", ""),
                 horizon=card_data.get("horizon", ""),
                 stage_id=card_data.get("stage_id", ""),
+                pipeline_status=card_data.get("pipeline_status", "discovered"),
                 brief_summary=brief.get("summary", ""),
                 brief_content_markdown=brief.get("content_markdown", ""),
                 impact_score=card_data.get("impact_score", 50),

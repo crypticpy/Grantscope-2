@@ -33,9 +33,9 @@ import { format, subDays, subMonths, startOfMonth, parseISO } from "date-fns";
 import { cn } from "../../lib/utils";
 import {
   pillars,
-  stages,
-  horizons,
-  type MaturityStage,
+  pipelineStatuses,
+  pipelinePhases,
+  type PipelinePhase,
 } from "../../data/taxonomy";
 
 // ============================================================================
@@ -45,8 +45,10 @@ import {
 export interface AnalyticsFiltersState {
   /** Selected pillar codes (e.g., ['CH', 'MC']) */
   selectedPillars: string[];
-  /** Selected stage numbers (e.g., [1, 2, 3]) */
+  /** Selected stage numbers (e.g., [1, 2, 3]) - @deprecated use selectedPipelineStatuses */
   selectedStages: number[];
+  /** Selected pipeline status IDs (e.g., ['discovered', 'evaluating']) */
+  selectedPipelineStatuses: string[];
   /** Time range preset or 'custom' */
   timeRange: TimeRangePreset;
   /** Custom date range (only used when timeRange is 'custom') */
@@ -200,28 +202,8 @@ function getPillarColorClasses(pillarCode: string): {
 }
 
 /**
- * Get stage/horizon color classes
+ * @deprecated - Horizon colors are no longer used. Use pipeline phase colors instead.
  */
-function getHorizonColorClasses(horizonCode: string): {
-  bg: string;
-  text: string;
-} {
-  const colorMap: Record<string, { bg: string; text: string }> = {
-    H1: {
-      bg: "bg-green-100 dark:bg-green-900/30",
-      text: "text-green-800 dark:text-green-200",
-    },
-    H2: {
-      bg: "bg-amber-100 dark:bg-amber-900/30",
-      text: "text-amber-800 dark:text-amber-200",
-    },
-    H3: {
-      bg: "bg-purple-100 dark:bg-purple-900/30",
-      text: "text-purple-800 dark:text-purple-200",
-    },
-  };
-  return colorMap[horizonCode] || { bg: "bg-gray-100", text: "text-gray-800" };
-}
 
 // ============================================================================
 // Default Filter State
@@ -230,6 +212,7 @@ function getHorizonColorClasses(horizonCode: string): {
 export const DEFAULT_ANALYTICS_FILTERS: AnalyticsFiltersState = {
   selectedPillars: [],
   selectedStages: [],
+  selectedPipelineStatuses: [],
   timeRange: "30d",
   customDateRange: { start: null, end: null },
 };
@@ -410,33 +393,41 @@ const PillarFilterDropdown: React.FC<PillarFilterDropdownProps> = ({
 };
 
 // ============================================================================
-// Stage Filter Dropdown
+// Pipeline Status Filter Dropdown
 // ============================================================================
 
-interface StageFilterDropdownProps {
-  selectedStages: number[];
-  onToggleStage: (stageNum: number) => void;
+interface PipelineStatusFilterDropdownProps {
+  selectedStatuses: string[];
+  onToggleStatus: (statusId: string) => void;
   onClearAll: () => void;
   disabled?: boolean;
 }
 
-const StageFilterDropdown: React.FC<StageFilterDropdownProps> = ({
-  selectedStages,
-  onToggleStage,
-  onClearAll,
-  disabled,
-}) => {
+const PipelineStatusFilterDropdown: React.FC<
+  PipelineStatusFilterDropdownProps
+> = ({ selectedStatuses, onToggleStatus, onClearAll, disabled }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const hasSelection = selectedStages.length > 0;
+  const hasSelection = selectedStatuses.length > 0;
 
-  // Group stages by horizon
-  const stagesByHorizon = useMemo(() => {
-    const grouped: Record<string, MaturityStage[]> = { H3: [], H2: [], H1: [] };
-    stages.forEach((stage) => {
-      grouped[stage.horizon]?.push(stage);
-    });
-    return grouped;
-  }, []);
+  // Phase color mapping
+  const phaseColorMap: Record<string, { bg: string; text: string }> = {
+    pipeline: {
+      bg: "bg-blue-100 dark:bg-blue-900/30",
+      text: "text-blue-800 dark:text-blue-200",
+    },
+    pursuing: {
+      bg: "bg-amber-100 dark:bg-amber-900/30",
+      text: "text-amber-800 dark:text-amber-200",
+    },
+    active: {
+      bg: "bg-green-100 dark:bg-green-900/30",
+      text: "text-green-800 dark:text-green-200",
+    },
+    archived: {
+      bg: "bg-gray-100 dark:bg-gray-800/50",
+      text: "text-gray-700 dark:text-gray-300",
+    },
+  };
 
   return (
     <Dropdown
@@ -455,10 +446,10 @@ const StageFilterDropdown: React.FC<StageFilterDropdownProps> = ({
             disabled && "opacity-50 cursor-not-allowed",
           )}
         >
-          <span>Stages</span>
+          <span>Pipeline Status</span>
           {hasSelection && (
             <span className="inline-flex items-center justify-center h-5 min-w-5 px-1.5 rounded-full bg-brand-blue text-white text-xs">
-              {selectedStages.length}
+              {selectedStatuses.length}
             </span>
           )}
           <ChevronDown
@@ -473,7 +464,7 @@ const StageFilterDropdown: React.FC<StageFilterDropdownProps> = ({
       {/* Header with clear action */}
       <div className="flex items-center justify-between px-3 pb-2 mb-2 border-b border-gray-200 dark:border-gray-700">
         <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-          Maturity Stages
+          Pipeline Statuses
         </span>
         {hasSelection && (
           <button
@@ -488,28 +479,31 @@ const StageFilterDropdown: React.FC<StageFilterDropdownProps> = ({
         )}
       </div>
 
-      {/* Stages grouped by horizon */}
-      {(["H3", "H2", "H1"] as const).map((horizonCode) => {
-        const horizon = horizons.find((h) => h.code === horizonCode);
-        const horizonStages = stagesByHorizon[horizonCode] ?? [];
-        const colors = getHorizonColorClasses(horizonCode);
+      {/* Statuses grouped by phase */}
+      {(Object.keys(pipelinePhases) as PipelinePhase[]).map((phaseKey) => {
+        const phase = pipelinePhases[phaseKey];
+        const phaseStatuses = pipelineStatuses.filter((s) =>
+          (phase.statuses as readonly string[]).includes(s.id),
+        );
+        const colors = phaseColorMap[phaseKey] ??
+          phaseColorMap["archived"] ?? { bg: "", text: "" };
 
-        if (horizonStages.length === 0) return null;
+        if (phaseStatuses.length === 0) return null;
 
         return (
-          <div key={horizonCode} className="mb-2">
+          <div key={phaseKey} className="mb-2">
             <div className={cn("px-3 py-1 text-xs font-medium", colors.text)}>
-              {horizon?.name} ({horizon?.timeframe})
+              {phase.label}
             </div>
-            {horizonStages.map((stage) => {
-              const isSelected = selectedStages.includes(stage.stage);
+            {phaseStatuses.map((status) => {
+              const isSelected = selectedStatuses.includes(status.id);
 
               return (
                 <button
-                  key={stage.stage}
+                  key={status.id}
                   onClick={(e) => {
                     e.stopPropagation();
-                    onToggleStage(stage.stage);
+                    onToggleStatus(status.id);
                   }}
                   className={cn(
                     "w-full flex items-center gap-3 px-3 py-1.5 text-left transition-colors",
@@ -519,13 +513,13 @@ const StageFilterDropdown: React.FC<StageFilterDropdownProps> = ({
                 >
                   <span
                     className={cn(
-                      "flex items-center justify-center w-5 h-5 rounded text-xs font-semibold border",
+                      "flex items-center justify-center w-5 h-5 rounded border",
                       isSelected
                         ? cn(colors.bg, colors.text, "border-current")
                         : "border-gray-300 dark:border-gray-600 text-gray-500",
                     )}
                   >
-                    {isSelected ? <Check className="h-3 w-3" /> : stage.stage}
+                    {isSelected && <Check className="h-3 w-3" />}
                   </span>
                   <span
                     className={cn(
@@ -535,7 +529,7 @@ const StageFilterDropdown: React.FC<StageFilterDropdownProps> = ({
                         : "text-gray-700 dark:text-gray-300",
                     )}
                   >
-                    {stage.name}
+                    {status.name}
                   </span>
                 </button>
               );
@@ -723,18 +717,19 @@ const TimeRangeFilter: React.FC<TimeRangeFilterProps> = ({
 interface ActiveFiltersProps {
   filters: AnalyticsFiltersState;
   onRemovePillar: (pillarCode: string) => void;
-  onRemoveStage: (stageNum: number) => void;
+  onRemovePipelineStatus: (statusId: string) => void;
   onClearAll: () => void;
 }
 
 const ActiveFilters: React.FC<ActiveFiltersProps> = ({
   filters,
   onRemovePillar,
-  onRemoveStage,
+  onRemovePipelineStatus,
   onClearAll,
 }) => {
   const hasActiveFilters =
-    filters.selectedPillars.length > 0 || filters.selectedStages.length > 0;
+    filters.selectedPillars.length > 0 ||
+    filters.selectedPipelineStatuses.length > 0;
 
   if (!hasActiveFilters) return null;
 
@@ -764,25 +759,22 @@ const ActiveFilters: React.FC<ActiveFiltersProps> = ({
         );
       })}
 
-      {/* Stage chips */}
-      {filters.selectedStages.map((stageNum) => {
-        const stage = stages.find((s) => s.stage === stageNum);
-        const colors = stage
-          ? getHorizonColorClasses(stage.horizon)
-          : { bg: "bg-gray-100", text: "text-gray-800" };
+      {/* Pipeline status chips */}
+      {filters.selectedPipelineStatuses.map((statusId) => {
+        const status = pipelineStatuses.find((s) => s.id === statusId);
 
         return (
           <button
-            key={stageNum}
-            onClick={() => onRemoveStage(stageNum)}
+            key={statusId}
+            onClick={() => onRemovePipelineStatus(statusId)}
             className={cn(
               "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-colors",
-              colors.bg,
-              colors.text,
+              "bg-blue-100 dark:bg-blue-900/30",
+              "text-blue-800 dark:text-blue-200",
               "hover:opacity-80",
             )}
           >
-            S{stageNum}: {stage?.name || "Unknown"}
+            {status?.name || statusId}
             <X className="h-3 w-3" />
           </button>
         );
@@ -826,18 +818,19 @@ export const AnalyticsFilters: React.FC<AnalyticsFiltersProps> = ({
     onFiltersChange({ ...filters, selectedPillars: [] });
   }, [filters, onFiltersChange]);
 
-  const handleToggleStage = useCallback(
-    (stageNum: number) => {
-      const newSelection = filters.selectedStages.includes(stageNum)
-        ? filters.selectedStages.filter((s) => s !== stageNum)
-        : [...filters.selectedStages, stageNum];
-      onFiltersChange({ ...filters, selectedStages: newSelection });
+  const handleTogglePipelineStatus = useCallback(
+    (statusId: string) => {
+      const current = filters.selectedPipelineStatuses || [];
+      const newSelection = current.includes(statusId)
+        ? current.filter((s) => s !== statusId)
+        : [...current, statusId];
+      onFiltersChange({ ...filters, selectedPipelineStatuses: newSelection });
     },
     [filters, onFiltersChange],
   );
 
-  const handleClearStages = useCallback(() => {
-    onFiltersChange({ ...filters, selectedStages: [] });
+  const handleClearPipelineStatuses = useCallback(() => {
+    onFiltersChange({ ...filters, selectedPipelineStatuses: [] });
   }, [filters, onFiltersChange]);
 
   const handleTimeRangeChange = useCallback(
@@ -876,11 +869,13 @@ export const AnalyticsFilters: React.FC<AnalyticsFiltersProps> = ({
     [filters, onFiltersChange],
   );
 
-  const handleRemoveStage = useCallback(
-    (stageNum: number) => {
+  const handleRemovePipelineStatus = useCallback(
+    (statusId: string) => {
       onFiltersChange({
         ...filters,
-        selectedStages: filters.selectedStages.filter((s) => s !== stageNum),
+        selectedPipelineStatuses: (
+          filters.selectedPipelineStatuses || []
+        ).filter((s) => s !== statusId),
       });
     },
     [filters, onFiltersChange],
@@ -910,11 +905,11 @@ export const AnalyticsFilters: React.FC<AnalyticsFiltersProps> = ({
           disabled={disabled}
         />
 
-        {/* Stage filter */}
-        <StageFilterDropdown
-          selectedStages={filters.selectedStages}
-          onToggleStage={handleToggleStage}
-          onClearAll={handleClearStages}
+        {/* Pipeline Status filter */}
+        <PipelineStatusFilterDropdown
+          selectedStatuses={filters.selectedPipelineStatuses || []}
+          onToggleStatus={handleTogglePipelineStatus}
+          onClearAll={handleClearPipelineStatuses}
           disabled={disabled}
         />
 
@@ -936,7 +931,7 @@ export const AnalyticsFilters: React.FC<AnalyticsFiltersProps> = ({
         <ActiveFilters
           filters={filters}
           onRemovePillar={handleRemovePillar}
-          onRemoveStage={handleRemoveStage}
+          onRemovePipelineStatus={handleRemovePipelineStatus}
           onClearAll={handleClearAll}
         />
       )}

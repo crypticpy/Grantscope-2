@@ -363,7 +363,8 @@ class CardAction(Enum):
     FILTERED = "filtered"  # Filtered by triage
 
 
-# Stage number to ID mapping (matches stages table)
+# DEPRECATED: Use PIPELINE_STATUSES from taxonomy.py for new code.
+# Stage number to ID mapping (matches stages table) - kept for backward compatibility.
 STAGE_NUMBER_TO_ID = {
     1: "1_concept",
     2: "2_exploring",
@@ -3458,6 +3459,8 @@ class DiscoveryService:
                 summary=analysis.summary,
                 horizon=analysis.horizon,
                 stage_id=stage_id,
+                pipeline_status="discovered",
+                pipeline_status_changed_at=datetime.now(timezone.utc),
                 pillar_id=(
                     convert_pillar_id(analysis.pillars[0]) if analysis.pillars else None
                 ),

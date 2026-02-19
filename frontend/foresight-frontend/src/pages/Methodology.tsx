@@ -394,9 +394,9 @@ const Methodology: React.FC = () => {
               <AccordionContent>
                 <p className="mb-4">
                   We use GPT-4 to classify content across multiple dimensions
-                  including strategic pillar alignment, maturity stage, time
-                  horizon, and multi-factor scoring for impact, relevance,
-                  velocity, novelty, opportunity, and risk.
+                  including strategic pillar alignment, pipeline status,
+                  deadline urgency, and multi-factor scoring for impact,
+                  relevance, velocity, novelty, opportunity, and risk.
                 </p>
 
                 <div className="grid sm:grid-cols-2 gap-6">
@@ -515,8 +515,8 @@ const Methodology: React.FC = () => {
                   </li>
                   <li>
                     <span className="font-medium">Manual form</span> &mdash;
-                    fill out structured fields for pillar, stage, summary, and
-                    scores
+                    fill out structured fields for pillar, pipeline status,
+                    summary, and scores
                   </li>
                 </ul>
 

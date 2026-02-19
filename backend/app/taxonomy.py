@@ -7,7 +7,7 @@ discovery, scanning, classification, export, and presentation services.
 Canonical pillar codes: CH, EW, HG, HH, MC, PS
 """
 
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 
 # ============================================================================
@@ -339,10 +339,10 @@ def convert_pillar_id(ai_pillar: str) -> Optional[str]:
 
 
 # ============================================================================
-# Maturity Stages
+# Maturity Stages  [DEPRECATED - use PIPELINE_STATUSES instead]
 # ============================================================================
 
-# Stage number to database stage_id mapping
+# DEPRECATED: Use PIPELINE_STATUSES for new code. Kept for backward compatibility.
 STAGE_NUMBER_TO_ID = {
     1: "1_concept",
     2: "2_exploring",
@@ -354,10 +354,10 @@ STAGE_NUMBER_TO_ID = {
     8: "8_declining",
 }
 
-# Stage ID to number (reverse mapping)
+# DEPRECATED: Use PIPELINE_STATUSES for new code. Kept for backward compatibility.
 STAGE_ID_TO_NUMBER = {v: k for k, v in STAGE_NUMBER_TO_ID.items()}
 
-# Stage names for display
+# DEPRECATED: Use PIPELINE_STATUSES[status]["label"] for display names.
 STAGE_NAMES = {
     1: "Concept",
     2: "Exploring",
@@ -372,6 +372,8 @@ STAGE_NAMES = {
 
 def convert_stage_to_id(stage_number: int) -> str:
     """
+    DEPRECATED: Use pipeline_status directly instead.
+
     Convert stage number to database stage_id.
 
     Args:
@@ -443,9 +445,10 @@ def convert_goal_id(ai_goal: str) -> str:
 
 
 # ============================================================================
-# Horizons
+# Horizons  [DEPRECATED - use PIPELINE_STATUSES / PIPELINE_PHASES instead]
 # ============================================================================
 
+# DEPRECATED: Use PIPELINE_STATUSES for new code. Kept for backward compatibility.
 HORIZON_DEFINITIONS = {
     "H1": {
         "name": "Mainstream",
@@ -536,7 +539,7 @@ PIPELINE_STATUSES: Dict[str, Dict[str, str]] = {
     "discovered": {
         "label": "Discovered",
         "description": "New grant opportunity identified by system",
-        "color": "#94a3b8",
+        "color": "#3b82f6",
     },
     "evaluating": {
         "label": "Evaluating",
@@ -557,6 +560,16 @@ PIPELINE_STATUSES: Dict[str, Dict[str, str]] = {
         "label": "Awarded",
         "description": "Grant awarded",
         "color": "#22c55e",
+    },
+    "active": {
+        "label": "Active",
+        "description": "Grant in performance period, drawing funds",
+        "color": "#10b981",
+    },
+    "closed": {
+        "label": "Closed",
+        "description": "Grant completed or opportunity passed",
+        "color": "#6b7280",
     },
     "declined": {
         "label": "Declined",
@@ -587,9 +600,51 @@ ALL_WORKSTREAM_CARD_STATUSES: Set[str] = {
     "applying",
     "submitted",
     "awarded",
+    "active",
+    "closed",
     "declined",
     "expired",
 }
+
+# Pipeline phases -- derived grouping of statuses
+PIPELINE_PHASES: Dict[str, List[str]] = {
+    "pipeline": ["discovered", "evaluating"],
+    "pursuing": ["applying", "submitted"],
+    "active": ["awarded", "active"],
+    "archived": ["closed", "declined", "expired"],
+}
+
+PIPELINE_PHASE_DISPLAY: Dict[str, Dict[str, str]] = {
+    "pipeline": {
+        "label": "Pipeline",
+        "color": "#3b82f6",
+        "description": "Opportunities being tracked",
+    },
+    "pursuing": {
+        "label": "Pursuing",
+        "color": "#f59e0b",
+        "description": "Actively being applied for",
+    },
+    "active": {
+        "label": "Active",
+        "color": "#22c55e",
+        "description": "Funded grants in performance",
+    },
+    "archived": {
+        "label": "Archived",
+        "color": "#6b7280",
+        "description": "Completed, declined, or expired",
+    },
+}
+
+
+def get_pipeline_phase(status: str) -> str:
+    """Return the pipeline phase for a given status."""
+    for phase, statuses in PIPELINE_PHASES.items():
+        if status in statuses:
+            return phase
+    return "pipeline"  # default
+
 
 # ============================================================================
 # Deadline Urgency Tiers

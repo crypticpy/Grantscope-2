@@ -12,22 +12,18 @@
 
 import React from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Clock, DollarSign, Building2 } from "lucide-react";
+import { ArrowLeft, DollarSign, Building2 } from "lucide-react";
 
 // Badge Components
 import { PillarBadge } from "../PillarBadge";
-import { HorizonBadge } from "../HorizonBadge";
-import { StageBadge } from "../StageBadge";
+import { PipelineBadge } from "../PipelineBadge";
+import { DeadlineUrgencyBadge } from "../DeadlineUrgencyBadge";
 import { AnchorBadge } from "../AnchorBadge";
 import { Top25Badge } from "../Top25Badge";
 import { TrendBadge, type TrendDirection } from "../TrendBadge";
 
 // Types
 import type { Card } from "./types";
-
-// Utilities
-import { parseStageNumber } from "./utils";
-import { getDeadlineUrgency } from "../../data/taxonomy";
 
 /**
  * Props for the CardDetailHeader component
@@ -66,20 +62,6 @@ export const CardDetailHeader: React.FC<CardDetailHeaderProps> = ({
   backLinkText = "Back to Discover",
   children,
 }) => {
-  // Parse stage number from stage_id string
-  const stageNumber = parseStageNumber(card.stage_id);
-
-  // Deadline urgency for grant cards
-  const deadlineUrgency = card.deadline
-    ? getDeadlineUrgency(card.deadline)
-    : undefined;
-  const daysUntilDeadline = card.deadline
-    ? Math.ceil(
-        (new Date(card.deadline).getTime() - new Date().getTime()) /
-          (1000 * 60 * 60 * 24),
-      )
-    : null;
-
   // Format funding range
   const hasFunding =
     card.funding_amount_min != null || card.funding_amount_max != null;
@@ -129,7 +111,7 @@ export const CardDetailHeader: React.FC<CardDetailHeaderProps> = ({
               />
             </div>
             <div className="transition-transform hover:scale-105">
-              <HorizonBadge horizon={card.horizon} showIcon size="lg" />
+              <DeadlineUrgencyBadge deadline={card.deadline} size="lg" />
             </div>
             {card.top25_relevance && card.top25_relevance.length > 0 && (
               <div className="transition-transform hover:scale-105">
@@ -154,16 +136,12 @@ export const CardDetailHeader: React.FC<CardDetailHeaderProps> = ({
 
           {/* Secondary Info Row - Stage, Anchor, Created Date */}
           <div className="flex items-center flex-wrap gap-3 sm:gap-4 pt-3 border-t border-gray-200/60 dark:border-gray-700/50">
-            {stageNumber && (
-              <div className="transition-transform hover:scale-105">
-                <StageBadge
-                  stage={stageNumber}
-                  variant="badge"
-                  showName
-                  size="md"
-                />
-              </div>
-            )}
+            <div className="transition-transform hover:scale-105">
+              <PipelineBadge
+                status={card.pipeline_status || "discovered"}
+                size="md"
+              />
+            </div>
             {card.anchor_id && (
               <div className="transition-transform hover:scale-105">
                 <AnchorBadge anchor={card.anchor_id} size="md" abbreviated />
@@ -178,22 +156,8 @@ export const CardDetailHeader: React.FC<CardDetailHeaderProps> = ({
           </div>
 
           {/* Grant Quick Info Row */}
-          {(deadlineUrgency || hasFunding || card.grantor) && (
+          {(hasFunding || card.grantor) && (
             <div className="flex items-center flex-wrap gap-3 sm:gap-4 pt-3 mt-3 border-t border-gray-200/60 dark:border-gray-700/50">
-              {deadlineUrgency &&
-                daysUntilDeadline != null &&
-                daysUntilDeadline >= 0 && (
-                  <span
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
-                    style={{
-                      backgroundColor: deadlineUrgency.colorLight,
-                      color: deadlineUrgency.color,
-                    }}
-                  >
-                    <Clock className="h-3.5 w-3.5" />
-                    {deadlineUrgency.name}: {daysUntilDeadline}d left
-                  </span>
-                )}
               {fundingDisplay && (
                 <span className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">
                   <DollarSign className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />

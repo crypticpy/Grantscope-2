@@ -88,6 +88,13 @@ def _filter_cards_dicts(workstream_dict: dict, cards: list[dict]) -> list[dict]:
             c for c in filtered if _stage_num(c.get("stage_id") or "") in ws_stage_ids
         ]
 
+    # Filter by pipeline_statuses (new pipeline lifecycle filter)
+    ws_pipeline_statuses = workstream_dict.get("pipeline_statuses") or []
+    if ws_pipeline_statuses:
+        filtered = [
+            c for c in filtered if c.get("pipeline_status") in ws_pipeline_statuses
+        ]
+
     ws_keywords = [k.lower() for k in (workstream_dict.get("keywords") or [])]
     if ws_keywords:
 
@@ -506,6 +513,10 @@ async def get_workstream_feed(
     if workstream.get("horizon") and workstream["horizon"] != "ALL":
         stmt = stmt.where(CardORM.horizon == workstream["horizon"])
 
+    # Filter by pipeline_statuses (new pipeline lifecycle filter)
+    if workstream.get("pipeline_statuses"):
+        stmt = stmt.where(CardORM.pipeline_status.in_(workstream["pipeline_statuses"]))
+
     stmt = stmt.order_by(CardORM.created_at.desc()).offset(offset).limit(limit)
 
     try:
@@ -624,6 +635,10 @@ async def auto_populate_workstream(
 
     if workstream.get("horizon") and workstream["horizon"] != "ALL":
         stmt = stmt.where(CardORM.horizon == workstream["horizon"])
+
+    # Filter by pipeline_statuses (new pipeline lifecycle filter)
+    if workstream.get("pipeline_statuses"):
+        stmt = stmt.where(CardORM.pipeline_status.in_(workstream["pipeline_statuses"]))
 
     # Fetch more cards than limit to account for filtering
     fetch_limit = min(limit * 3, 100)

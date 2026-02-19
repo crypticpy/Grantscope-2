@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
@@ -156,6 +157,8 @@ async def create_manual_card(
             quality_breakdown={},
             horizon=body.horizon or "H1",
             stage_id=body.stage or "1",
+            pipeline_status=body.pipeline_status or "discovered",
+            pipeline_status_changed_at=datetime.now(timezone.utc),
         )
 
         if primary_pillar:

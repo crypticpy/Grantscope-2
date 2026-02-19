@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import { PillarBadge } from "./PillarBadge";
-import { pillars, stages, horizons, getGoalsByPillar } from "../data/taxonomy";
+import { pillars, pipelineStatuses, getGoalsByPillar } from "../data/taxonomy";
 import { useWorkstreamForm } from "../hooks/useWorkstreamForm";
 import { FormSection } from "./workstream/FormSection";
 import { KeywordTag } from "./workstream/KeywordTag";
@@ -237,62 +237,29 @@ export function WorkstreamForm({
         </FormSection>
       )}
 
-      {/* Stages Selection */}
+      {/* Pipeline Status Selection */}
       <FormSection
-        title="Maturity Stages"
-        description="Filter by technology maturity stage (1-8)"
+        title="Pipeline Statuses"
+        description="Filter by grant pipeline status"
       >
         <div className="flex flex-wrap gap-2">
-          {stages.map((stage) => (
+          {pipelineStatuses.map((status) => (
             <button
-              key={stage.stage}
+              key={status.id}
               type="button"
-              onClick={() => form.handleStageToggle(stage.stage)}
+              onClick={() => form.handlePipelineStatusToggle(status.id)}
               className={cn(
                 "px-3 py-1.5 text-sm font-medium rounded-md border transition-colors",
-                form.formData.stage_ids.includes(stage.stage.toString())
+                form.formData.pipeline_statuses?.includes(status.id)
                   ? "bg-brand-light-blue dark:bg-brand-blue/20 border-brand-blue text-brand-dark-blue dark:text-brand-light-blue"
                   : "bg-white dark:bg-dark-surface-elevated border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-dark-surface-hover",
               )}
-              aria-pressed={form.formData.stage_ids.includes(
-                stage.stage.toString(),
-              )}
-              title={`${stage.name}: ${stage.description}`}
+              aria-pressed={
+                form.formData.pipeline_statuses?.includes(status.id) || false
+              }
+              title={status.description}
             >
-              {stage.stage}. {stage.name}
-            </button>
-          ))}
-        </div>
-      </FormSection>
-
-      {/* Horizon Selection */}
-      <FormSection
-        title="Horizon"
-        description="Filter by strategic planning horizon"
-      >
-        <div className="flex flex-wrap gap-2">
-          {[
-            { code: "ALL", name: "All Horizons", timeframe: "" },
-            ...horizons,
-          ].map((h) => (
-            <button
-              key={h.code}
-              type="button"
-              onClick={() => form.handleHorizonChange(h.code)}
-              className={cn(
-                "px-3 py-1.5 text-sm font-medium rounded-md border transition-colors",
-                form.formData.horizon === h.code
-                  ? "bg-brand-light-blue dark:bg-brand-blue/20 border-brand-blue text-brand-dark-blue dark:text-brand-light-blue"
-                  : "bg-white dark:bg-dark-surface-elevated border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-dark-surface-hover",
-              )}
-              aria-pressed={form.formData.horizon === h.code}
-            >
-              {h.code === "ALL" ? "All" : h.code}
-              {h.code !== "ALL" && (
-                <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">
-                  ({(h as (typeof horizons)[0]).timeframe})
-                </span>
-              )}
+              {status.name}
             </button>
           ))}
         </div>

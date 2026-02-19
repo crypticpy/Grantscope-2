@@ -17,6 +17,8 @@ All individual scores are in the range [0.0, 1.0].
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 
+from app.taxonomy import get_pipeline_phase
+
 
 # ============================================================================
 # SCORING WEIGHTS (configurable)
@@ -157,6 +159,20 @@ def calculate_workstream_relevance(
             and ws_horizon == card_horizon
         ):
             ws_score += 0.3
+
+        # Pipeline phase matching: +0.3 if card's pipeline_status is in
+        # any of the workstream's desired pipeline_statuses
+        ws_pipeline_statuses = ws.get("pipeline_statuses") or []
+        card_pipeline_status = card.get("pipeline_status", "")
+        if ws_pipeline_statuses and card_pipeline_status:
+            if card_pipeline_status in ws_pipeline_statuses:
+                ws_score += 0.3
+            else:
+                # Partial credit if same phase
+                card_phase = get_pipeline_phase(card_pipeline_status)
+                ws_phases = {get_pipeline_phase(s) for s in ws_pipeline_statuses}
+                if card_phase in ws_phases:
+                    ws_score += 0.15
 
         # Cap individual workstream score at 1.0
         workstream_scores.append(min(1.0, ws_score))

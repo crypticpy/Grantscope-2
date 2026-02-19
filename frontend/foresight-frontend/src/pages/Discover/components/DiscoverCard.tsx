@@ -19,8 +19,8 @@ import {
   Scan,
 } from "lucide-react";
 import { PillarBadge } from "../../../components/PillarBadge";
-import { HorizonBadge } from "../../../components/HorizonBadge";
-import { StageBadge } from "../../../components/StageBadge";
+import { PipelineBadge } from "../../../components/PipelineBadge";
+import { DeadlineUrgencyBadge } from "../../../components/DeadlineUrgencyBadge";
 import { Top25Badge } from "../../../components/Top25Badge";
 import { QualityBadge } from "../../../components/QualityBadge";
 import {
@@ -28,7 +28,6 @@ import {
   type VelocityTrend,
 } from "../../../components/VelocityBadge";
 import { highlightText } from "../../../lib/highlight-utils";
-import { parseStageNumber } from "../../../lib/stage-utils";
 import type { Card } from "../types";
 import { getScoreColorClasses, formatCardDate } from "../utils";
 
@@ -60,8 +59,6 @@ export const DiscoverCard = React.memo(function DiscoverCard({
   onToggleCompare,
   onToggleFollow,
 }: DiscoverCardProps) {
-  const stageNumber = parseStageNumber(card.stage_id);
-
   return (
     <div
       onClick={
@@ -122,10 +119,11 @@ export const DiscoverCard = React.memo(function DiscoverCard({
               </span>
             )}
             <PillarBadge pillarId={card.pillar_id} showIcon size="sm" />
-            <HorizonBadge horizon={card.horizon} size="sm" />
-            {stageNumber !== null && (
-              <StageBadge stage={stageNumber} size="sm" variant="minimal" />
-            )}
+            <PipelineBadge
+              status={card.pipeline_status || "discovered"}
+              size="sm"
+            />
+            <DeadlineUrgencyBadge deadline={card.deadline} size="sm" />
             {card.top25_relevance && card.top25_relevance.length > 0 && (
               <Top25Badge
                 priorities={card.top25_relevance}

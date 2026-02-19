@@ -271,6 +271,7 @@ class DigestService:
                         Card.pillar_id,
                         Card.horizon,
                         Card.stage_id,
+                        Card.pipeline_status,
                     )
                     .join(Card, Card.id == WorkstreamCard.card_id)
                     .where(WorkstreamCard.workstream_id.in_(ws_ids))
@@ -287,6 +288,8 @@ class DigestService:
                             "pillar": wc.pillar_id or "",
                             "horizon": wc.horizon or "",
                             "stage": wc.stage_id or "",
+                            "pipeline_status": getattr(wc, "pipeline_status", None)
+                            or "",
                             "workstream": ws_map.get(str(wc.workstream_id), ""),
                             "added_at": wc.added_at.isoformat() if wc.added_at else "",
                         }

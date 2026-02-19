@@ -53,20 +53,15 @@ const PILLAR_OPTIONS = [
   { code: "PS", label: "Public Safety" },
 ] as const;
 
-/** Horizon options mapping display labels to API values */
-const HORIZON_OPTIONS = [
-  { value: "H1", label: "Near-term (H1)" },
-  { value: "H2", label: "Mid-term (H2)" },
-  { value: "H3", label: "Long-term (H3)" },
-] as const;
-
-/** Maturity stage options */
-const STAGE_OPTIONS = [
-  { value: "1", label: "Concept" },
-  { value: "2", label: "Exploring" },
-  { value: "3", label: "Pilot" },
-  { value: "4", label: "Implementing" },
-  { value: "5", label: "Scaling" },
+/** Pipeline status options for signal creation */
+const PIPELINE_STATUS_OPTIONS = [
+  { value: "discovered", label: "Discovered" },
+  { value: "evaluating", label: "Evaluating" },
+  { value: "applying", label: "Applying" },
+  { value: "submitted", label: "Submitted" },
+  { value: "awarded", label: "Awarded" },
+  { value: "active", label: "Active" },
+  { value: "closed", label: "Closed" },
 ] as const;
 
 // =============================================================================
@@ -83,8 +78,7 @@ export function ManualCreateTab({ onCreated }: ManualCreateTabProps) {
   const [description, setDescription] = useState("");
   const [selectedPillars, setSelectedPillars] = useState<string[]>([]);
   const [isExploratory, setIsExploratory] = useState(false);
-  const [horizon, setHorizon] = useState("H2");
-  const [stage, setStage] = useState("1");
+  const [pipelineStatus, setPipelineStatus] = useState("discovered");
   const [seedUrls, setSeedUrls] = useState<string[]>([]);
 
   // Async state
@@ -136,8 +130,7 @@ export function ManualCreateTab({ onCreated }: ManualCreateTabProps) {
         description: description.trim(),
         pillar_ids: isExploratory ? [] : selectedPillars,
         is_exploratory: isExploratory,
-        horizon,
-        stage_id: parseInt(stage, 10),
+        pipeline_status: pipelineStatus,
         seed_urls: seedUrls.length > 0 ? seedUrls : undefined,
       };
 
@@ -175,8 +168,7 @@ export function ManualCreateTab({ onCreated }: ManualCreateTabProps) {
     description,
     selectedPillars,
     isExploratory,
-    horizon,
-    stage,
+    pipelineStatus,
     seedUrls,
     isValid,
     onCreated,
@@ -190,8 +182,7 @@ export function ManualCreateTab({ onCreated }: ManualCreateTabProps) {
     setDescription("");
     setSelectedPillars([]);
     setIsExploratory(false);
-    setHorizon("H2");
-    setStage("1");
+    setPipelineStatus("discovered");
     setSeedUrls([]);
     setCreatedCard(null);
     setError(null);
@@ -371,55 +362,18 @@ export function ManualCreateTab({ onCreated }: ManualCreateTabProps) {
         )}
       </div>
 
-      {/* Horizon */}
+      {/* Pipeline Status */}
       <div>
         <label
-          htmlFor="manual-create-horizon"
+          htmlFor="manual-create-pipeline-status"
           className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
         >
-          Horizon
-        </label>
-        <div
-          className="flex gap-2"
-          role="radiogroup"
-          aria-label="Horizon selection"
-        >
-          {HORIZON_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => setHorizon(option.value)}
-              disabled={isSubmitting}
-              role="radio"
-              aria-checked={horizon === option.value}
-              className={cn(
-                "flex-1 px-3 py-2 text-sm font-medium rounded-md border",
-                "transition-colors duration-200",
-                "focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2",
-                "disabled:opacity-50 disabled:cursor-not-allowed",
-                horizon === option.value
-                  ? "bg-brand-blue text-white border-brand-blue"
-                  : "bg-white dark:bg-dark-surface text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:border-brand-blue/50",
-              )}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Stage */}
-      <div>
-        <label
-          htmlFor="manual-create-stage"
-          className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
-        >
-          Maturity Stage
+          Pipeline Status
         </label>
         <select
-          id="manual-create-stage"
-          value={stage}
-          onChange={(e) => setStage(e.target.value)}
+          id="manual-create-pipeline-status"
+          value={pipelineStatus}
+          onChange={(e) => setPipelineStatus(e.target.value)}
           disabled={isSubmitting}
           className={cn(
             "w-full px-3 py-2.5 text-sm rounded-md border",
@@ -430,7 +384,7 @@ export function ManualCreateTab({ onCreated }: ManualCreateTabProps) {
             "disabled:opacity-50 disabled:cursor-not-allowed",
           )}
         >
-          {STAGE_OPTIONS.map((option) => (
+          {PIPELINE_STATUS_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>

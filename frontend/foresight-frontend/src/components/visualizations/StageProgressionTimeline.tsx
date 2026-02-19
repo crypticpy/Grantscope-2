@@ -1,6 +1,10 @@
 /**
  * StageProgressionTimeline Component
  *
+ * @deprecated This component uses the legacy stage/horizon model.
+ * New code should use pipeline_status-based visualizations.
+ * Kept for backward compatibility with existing stage history data.
+ *
  * Visualizes stage transitions over time for a card, showing:
  * - Stage transitions with dates
  * - Stage labels 1-8 with horizon-based coloring

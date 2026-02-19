@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import { useAuthContext } from "../hooks/useAuthContext";
 import { PillarBadge } from "../components/PillarBadge";
-import { HorizonBadge } from "../components/HorizonBadge";
+import { PipelineBadge } from "../components/PipelineBadge";
 import TopDomainsLeaderboard from "../components/analytics/TopDomainsLeaderboard";
 import { API_BASE_URL } from "../lib/config";
 
@@ -50,9 +50,12 @@ interface PillarCoverageItem {
   trend_direction?: "up" | "down" | "stable";
 }
 
-interface StageDistribution {
-  stage_id: string;
-  stage_name: string;
+interface PipelineStatusDistribution {
+  status: string;
+  label: string;
+  color: string;
+  phase: string;
+  phase_label: string;
   count: number;
   percentage: number;
 }
@@ -111,8 +114,14 @@ interface SystemWideStats {
   cards_this_week: number;
   cards_this_month: number;
   cards_by_pillar: PillarCoverageItem[];
-  cards_by_stage: StageDistribution[];
+  cards_by_stage: Array<{
+    stage_id: string;
+    stage_name: string;
+    count: number;
+    percentage: number;
+  }>;
   cards_by_horizon: HorizonDistribution[];
+  cards_by_pipeline_status: PipelineStatusDistribution[];
   trending_pillars: TrendingTopic[];
   hot_topics: TrendingTopic[];
   source_stats: SourceStats;
@@ -141,6 +150,7 @@ interface PopularCard {
   summary: string;
   pillar_id: string | null;
   horizon: string | null;
+  pipeline_status?: string | null;
   velocity_score: number | null;
   follower_count: number;
   is_followed_by_user: boolean;
@@ -385,47 +395,46 @@ const PillarDistribution: React.FC<{ data: PillarCoverageItem[] }> = ({
   );
 };
 
-const StageDistributionChart: React.FC<{ data: StageDistribution[] }> = ({
+const PipelineStatusChart: React.FC<{ data: PipelineStatusDistribution[] }> = ({
   data,
 }) => {
   const maxCount = Math.max(...data.map((d) => d.count), 1);
-  const stageColors = [
-    "#3B82F6",
-    "#8B5CF6",
-    "#EC4899",
-    "#F59E0B",
-    "#10B981",
-    "#06B6D4",
-    "#6366F1",
-    "#EF4444",
-  ];
+  const statusColors: Record<string, string> = {
+    discovered: "#3b82f6",
+    evaluating: "#f59e0b",
+    applying: "#8b5cf6",
+    submitted: "#6366f1",
+    awarded: "#22c55e",
+    active: "#10b981",
+    closed: "#6b7280",
+    declined: "#ef4444",
+    expired: "#9ca3af",
+  };
 
   return (
     <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-6">
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
         <Target className="h-5 w-5 text-extended-purple" />
-        Opportunities by Maturity Stage
+        Opportunities by Pipeline Status
       </h3>
       <div className="space-y-2">
-        {data.map((stage, idx) => (
-          <div key={stage.stage_id} className="flex items-center gap-3">
-            <div
-              className="w-20 text-xs text-gray-500 dark:text-gray-400 truncate"
-              title={stage.stage_name}
-            >
-              {stage.stage_name}
+        {data.map((status) => (
+          <div key={status.status} className="flex items-center gap-3">
+            <div className="w-24 shrink-0">
+              <PipelineBadge status={status.status} size="sm" disableTooltip />
             </div>
             <div className="flex-1 h-5 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden">
               <div
                 className="h-full rounded transition-all duration-500"
                 style={{
-                  width: `${(stage.count / maxCount) * 100}%`,
-                  backgroundColor: stageColors[idx % stageColors.length],
+                  width: `${(status.count / maxCount) * 100}%`,
+                  backgroundColor:
+                    status.color || statusColors[status.status] || "#6b7280",
                 }}
               />
             </div>
             <div className="w-16 text-xs text-right text-gray-500 dark:text-gray-400">
-              {stage.count} ({stage.percentage}%)
+              {status.count} ({status.percentage}%)
             </div>
           </div>
         ))}
@@ -647,11 +656,8 @@ const PopularCardsSection: React.FC<{
                   {card.pillar_id && (
                     <PillarBadge pillarId={card.pillar_id} size="sm" />
                   )}
-                  {card.horizon && (
-                    <HorizonBadge
-                      horizon={card.horizon as "H1" | "H2" | "H3"}
-                      size="sm"
-                    />
+                  {card.pipeline_status && (
+                    <PipelineBadge status={card.pipeline_status} size="sm" />
                   )}
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
@@ -868,7 +874,9 @@ const AnalyticsV2: React.FC = () => {
           {/* Distribution Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <PillarDistribution data={systemStats.cards_by_pillar} />
-            <StageDistributionChart data={systemStats.cards_by_stage} />
+            <PipelineStatusChart
+              data={systemStats.cards_by_pipeline_status || []}
+            />
           </div>
 
           {/* Trending & Hot Topics */}

@@ -25,8 +25,8 @@ import {
   MoreHorizontal,
 } from "lucide-react";
 import { PillarBadge } from "./PillarBadge";
-import { HorizonBadge } from "./HorizonBadge";
-import { StageBadge } from "./StageBadge";
+import { PipelineBadge } from "./PipelineBadge";
+import { DeadlineUrgencyBadge } from "./DeadlineUrgencyBadge";
 import { ConfidenceBadge } from "./ConfidenceBadge";
 import { Tooltip } from "./ui/Tooltip";
 import { cn } from "../lib/utils";
@@ -53,14 +53,6 @@ const SWIPE_CONFIG = {
   /** Damping factor for card movement (0-1, lower = more resistance) */
   damping: 0.4,
 } as const;
-
-/**
- * Parse stage number from stage_id string
- */
-const parseStageNumber = (stageId: string): number | null => {
-  const match = stageId.match(/^(\d+)/);
-  return match?.[1] ? parseInt(match[1], 10) : null;
-};
 
 /**
  * Format date for display
@@ -517,8 +509,6 @@ export const DiscoveryQueueCard = memo(function DiscoveryQueueCard({
   onDismissWithReason,
   onDefer,
 }: DiscoveryQueueCardProps) {
-  const stageNumber = parseStageNumber(card.stage_id);
-
   return (
     <SwipeableCardWrapper
       cardId={card.id}
@@ -569,14 +559,11 @@ export const DiscoveryQueueCard = memo(function DiscoveryQueueCard({
                     showIcon={!isMobile}
                     size="sm"
                   />
-                  <HorizonBadge horizon={card.horizon} size="sm" />
-                  {stageNumber !== null && (
-                    <StageBadge
-                      stage={stageNumber}
-                      size="sm"
-                      variant="minimal"
-                    />
-                  )}
+                  <PipelineBadge
+                    status={card.pipeline_status || "discovered"}
+                    size="sm"
+                  />
+                  <DeadlineUrgencyBadge deadline={card.deadline} size="sm" />
                   <ConfidenceBadge confidence={card.ai_confidence} size="sm" />
                   <ImpactScoreBadge score={card.impact_score} size="sm" />
                 </div>

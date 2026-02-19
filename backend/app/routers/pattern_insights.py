@@ -113,6 +113,7 @@ async def get_pattern_insight_by_id(
                     "pillar_id": c.pillar_id,
                     "stage_id": c.stage_id,
                     "horizon": c.horizon,
+                    "pipeline_status": getattr(c, "pipeline_status", None),
                 }
                 for c in cards
             ]

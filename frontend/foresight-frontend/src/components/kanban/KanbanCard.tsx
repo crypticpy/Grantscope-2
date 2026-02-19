@@ -31,8 +31,8 @@ import {
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { PillarBadge } from "../PillarBadge";
-import { HorizonBadge } from "../HorizonBadge";
-import { StageBadge } from "../StageBadge";
+import { PipelineBadge } from "../PipelineBadge";
+import { DeadlineUrgencyBadge } from "../DeadlineUrgencyBadge";
 import { Top25Badge } from "../Top25Badge";
 import { QualityBadge } from "../QualityBadge";
 import { VelocityBadge, type VelocityTrend } from "../VelocityBadge";
@@ -88,27 +88,21 @@ function formatFundingRange(min?: number | null, max?: number | null): string {
 
 /**
  * Get color class for the card's left border accent.
- * Based on the card's horizon for visual grouping.
+ * Based on the card's pipeline status phase for visual grouping.
  */
-function getAccentBorderClass(horizon: "H1" | "H2" | "H3"): string {
-  const accentMap: Record<string, string> = {
-    H1: "border-l-green-500",
-    H2: "border-l-amber-500",
-    H3: "border-l-purple-500",
+function getAccentBorderClass(pipelineStatus?: string): string {
+  const phaseMap: Record<string, string> = {
+    discovered: "border-l-blue-500",
+    evaluating: "border-l-amber-500",
+    applying: "border-l-purple-500",
+    submitted: "border-l-indigo-500",
+    awarded: "border-l-green-500",
+    active: "border-l-emerald-500",
+    closed: "border-l-gray-400",
+    declined: "border-l-red-400",
+    expired: "border-l-gray-300",
   };
-  return accentMap[horizon] || "border-l-gray-400";
-}
-
-/**
- * Parse stage number from stage_id if needed.
- * Handles both number and string formats (e.g., "1_concept" -> 1).
- */
-function parseStageNumber(stageId: number | string): number | null {
-  if (typeof stageId === "number") {
-    return stageId;
-  }
-  const match = String(stageId).match(/^(\d+)/);
-  return match?.[1] ? parseInt(match[1], 10) : null;
+  return phaseMap[pipelineStatus || "discovered"] || "border-l-blue-500";
 }
 
 /**
@@ -145,11 +139,11 @@ function AddedFromTooltipContent({
               </span>
             </div>
           )}
-          {card.horizon && (
+          {card.pipeline_status && (
             <div className="flex items-center gap-1.5">
-              <span className="text-gray-500 dark:text-gray-400">Horizon:</span>
+              <span className="text-gray-500 dark:text-gray-400">Status:</span>
               <span className="text-gray-700 dark:text-gray-300">
-                {card.horizon}
+                {card.pipeline_status}
               </span>
             </div>
           )}
@@ -234,7 +228,6 @@ export const KanbanCard = memo(function KanbanCard({
 
   // Extract card data
   const { card: embeddedCard } = card;
-  const stageNumber = parseStageNumber(embeddedCard.stage_id);
   const hasNotes = card.notes && card.notes.trim().length > 0;
   const hasReminder = card.reminder_at !== null;
 
@@ -286,7 +279,7 @@ export const KanbanCard = memo(function KanbanCard({
         "group relative bg-white dark:bg-dark-surface rounded-lg shadow-sm",
         "border border-gray-200 dark:border-gray-700",
         "border-l-4",
-        getAccentBorderClass(embeddedCard.horizon),
+        getAccentBorderClass(embeddedCard.pipeline_status),
         // Hover and interaction states
         "transition-all duration-200",
         "hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600",
@@ -348,19 +341,16 @@ export const KanbanCard = memo(function KanbanCard({
             disableTooltip={isDragOverlay}
           />
           {embeddedCard.is_exploratory && <ExploratoryBadge size="sm" />}
-          <HorizonBadge
-            horizon={embeddedCard.horizon}
+          <PipelineBadge
+            status={embeddedCard.pipeline_status || "discovered"}
             size="sm"
             disableTooltip={isDragOverlay}
           />
-          {stageNumber !== null && (
-            <StageBadge
-              stage={stageNumber}
-              size="sm"
-              variant="minimal"
-              disableTooltip={isDragOverlay}
-            />
-          )}
+          <DeadlineUrgencyBadge
+            deadline={embeddedCard.deadline}
+            size="sm"
+            disableTooltip={isDragOverlay}
+          />
           {embeddedCard.signal_quality_score != null && (
             <QualityBadge score={embeddedCard.signal_quality_score} size="sm" />
           )}

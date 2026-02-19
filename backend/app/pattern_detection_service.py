@@ -67,6 +67,7 @@ class CardSignal:
     pillar_id: str
     stage_id: Optional[str] = None
     horizon: Optional[str] = None
+    pipeline_status: Optional[str] = None
     embedding: Optional[List[float]] = None
 
 
@@ -235,6 +236,7 @@ class PatternDetectionService:
                     pillar_id=row.pillar_id or "",
                     stage_id=row.stage_id,
                     horizon=row.horizon,
+                    pipeline_status=getattr(row, "pipeline_status", None),
                     embedding=embedding,
                 )
             )

@@ -29,12 +29,11 @@ import {
 import { useAuthContext } from "../hooks/useAuthContext";
 import { API_BASE_URL } from "../lib/config";
 import { PillarBadge } from "./PillarBadge";
-import { HorizonBadge } from "./HorizonBadge";
-import { StageBadge } from "./StageBadge";
+import { PipelineBadge } from "./PipelineBadge";
+import { DeadlineUrgencyBadge } from "./DeadlineUrgencyBadge";
 import { Top25Badge } from "./Top25Badge";
 import { Tooltip } from "./ui/Tooltip";
 import { cn } from "../lib/utils";
-import { parseStageNumber } from "../lib/stage-utils";
 import {
   fetchPersonalizedDiscoveryQueue,
   dismissCard,
@@ -546,8 +545,6 @@ export function PersonalizedQueue({
       {/* Cards grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {cards.map((card) => {
-          const stageNumber = parseStageNumber(card.stage_id);
-
           return (
             <div
               key={card.id}
@@ -581,14 +578,11 @@ export function PersonalizedQueue({
                       size="sm"
                     />
                     <PillarBadge pillarId={card.pillar_id} showIcon size="sm" />
-                    <HorizonBadge horizon={card.horizon} size="sm" />
-                    {stageNumber !== null && (
-                      <StageBadge
-                        stage={stageNumber}
-                        size="sm"
-                        variant="minimal"
-                      />
-                    )}
+                    <PipelineBadge
+                      status={card.pipeline_status || "discovered"}
+                      size="sm"
+                    />
+                    <DeadlineUrgencyBadge deadline={card.deadline} size="sm" />
                     {card.top25_relevance &&
                       card.top25_relevance.length > 0 && (
                         <Top25Badge

@@ -17,14 +17,13 @@ import {
 } from "lucide-react";
 import { useAuthContext } from "../hooks/useAuthContext";
 import { PillarBadge } from "../components/PillarBadge";
-import { HorizonBadge } from "../components/HorizonBadge";
-import { StageBadge } from "../components/StageBadge";
+import { PipelineBadge } from "../components/PipelineBadge";
+import { DeadlineUrgencyBadge } from "../components/DeadlineUrgencyBadge";
 import { Top25Badge } from "../components/Top25Badge";
 import { QualityBadge } from "../components/QualityBadge";
 import { VelocityBadge, type VelocityTrend } from "../components/VelocityBadge";
 import { PatternInsightsSection } from "../components/PatternInsightsSection";
 import { AskGrantScopeBar } from "../components/Chat/AskGrantScopeBar";
-import { parseStageNumber } from "../lib/stage-utils";
 import { logger } from "../lib/logger";
 import { getDeadlineUrgency } from "../data/taxonomy";
 import { OnboardingDialog } from "../components/onboarding/OnboardingDialog";
@@ -684,7 +683,6 @@ const Dashboard: React.FC = () => {
         {followingCards.length > 0 ? (
           <div className="grid gap-4">
             {followingCards.slice(0, 3).map((following, index) => {
-              const stageNum = parseStageNumber(following.cards.stage_id);
               return (
                 <div
                   key={following.id}
@@ -712,18 +710,16 @@ const Dashboard: React.FC = () => {
                           showIcon={true}
                           size="sm"
                         />
-                        <HorizonBadge
-                          horizon={following.cards.horizon}
+                        <PipelineBadge
+                          status={
+                            following.cards.pipeline_status || "discovered"
+                          }
                           size="sm"
                         />
-                        {stageNum && (
-                          <StageBadge
-                            stage={stageNum}
-                            size="sm"
-                            showName={false}
-                            variant="minimal"
-                          />
-                        )}
+                        <DeadlineUrgencyBadge
+                          deadline={following.cards.deadline}
+                          size="sm"
+                        />
                         <VelocityBadge
                           trend={
                             following.cards.velocity_trend as VelocityTrend
@@ -816,7 +812,6 @@ const Dashboard: React.FC = () => {
         </div>
         <div className="grid gap-4">
           {recentCards.map((card, index) => {
-            const stageNum = parseStageNumber(card.stage_id);
             return (
               <div
                 key={card.id}
@@ -847,15 +842,14 @@ const Dashboard: React.FC = () => {
                         showIcon={true}
                         size="sm"
                       />
-                      <HorizonBadge horizon={card.horizon} size="sm" />
-                      {stageNum && (
-                        <StageBadge
-                          stage={stageNum}
-                          size="sm"
-                          showName={false}
-                          variant="minimal"
-                        />
-                      )}
+                      <PipelineBadge
+                        status={card.pipeline_status || "discovered"}
+                        size="sm"
+                      />
+                      <DeadlineUrgencyBadge
+                        deadline={card.deadline}
+                        size="sm"
+                      />
                       <VelocityBadge
                         trend={card.velocity_trend as VelocityTrend}
                         score={card.velocity_score}

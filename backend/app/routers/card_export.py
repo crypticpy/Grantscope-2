@@ -142,6 +142,7 @@ async def export_card(
             stage_id=card_obj.stage_id,
             stage_name=stage_name,
             horizon=card_obj.horizon,
+            pipeline_status=getattr(card_obj, "pipeline_status", None),
             novelty_score=card_obj.novelty_score,
             maturity_score=card_obj.maturity_score,
             impact_score=card_obj.impact_score,

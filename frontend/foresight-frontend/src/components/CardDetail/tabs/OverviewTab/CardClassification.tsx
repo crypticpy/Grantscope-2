@@ -5,34 +5,27 @@
  * - Pillar with PillarBadge
  * - Goal code and name
  * - Anchor with AnchorBadge
- * - Stage with StageBadge, StageProgress, and StageProgressionTimeline
- * - Horizon with HorizonBadge
+ * - Pipeline status with PipelineBadge and PipelineProgress
+ * - Deadline with DeadlineUrgencyBadge
  * - Top 25 priorities with Top25List
  *
  * This component is used in the Overview tab of CardDetail.
  */
 
-import React from 'react';
+import React from "react";
 
 // Badge Components
-import { PillarBadge } from '../../../PillarBadge';
-import { HorizonBadge } from '../../../HorizonBadge';
-import { StageBadge, StageProgress } from '../../../StageBadge';
-import { AnchorBadge } from '../../../AnchorBadge';
-import { Top25List } from '../../../Top25Badge';
-
-// Visualization Components
-import { StageProgressionTimeline } from '../../../visualizations/StageProgressionTimeline';
+import { PillarBadge } from "../../../PillarBadge";
+import { PipelineBadge, PipelineProgress } from "../../../PipelineBadge";
+import { DeadlineUrgencyBadge } from "../../../DeadlineUrgencyBadge";
+import { AnchorBadge } from "../../../AnchorBadge";
+import { Top25List } from "../../../Top25Badge";
 
 // Types
-import type { Card } from '../../types';
-import type { StageHistory } from '../../../../lib/discovery-api';
-
-// Utilities
-import { parseStageNumber } from '../../utils';
+import type { Card } from "../../types";
 
 // Taxonomy helpers
-import { getGoalByCode, type Goal } from '../../../../data/taxonomy';
+import { getGoalByCode, type Goal } from "../../../../data/taxonomy";
 
 /**
  * Props for the CardClassification component
@@ -40,10 +33,6 @@ import { getGoalByCode, type Goal } from '../../../../data/taxonomy';
 export interface CardClassificationProps {
   /** The card data to display */
   card: Card;
-  /** Stage history data for the timeline visualization */
-  stageHistory?: StageHistory[];
-  /** Whether stage history is currently loading */
-  stageHistoryLoading?: boolean;
 }
 
 /**
@@ -56,7 +45,10 @@ interface ClassificationRowProps {
   children: React.ReactNode;
 }
 
-const ClassificationRow: React.FC<ClassificationRowProps> = ({ label, children }) => (
+const ClassificationRow: React.FC<ClassificationRowProps> = ({
+  label,
+  children,
+}) => (
   <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4">
     <div className="w-auto sm:w-24 text-xs sm:text-sm font-medium text-gray-500 shrink-0">
       {label}
@@ -86,14 +78,11 @@ const ClassificationRow: React.FC<ClassificationRowProps> = ({ label, children }
  */
 export const CardClassification: React.FC<CardClassificationProps> = ({
   card,
-  stageHistory = [],
-  stageHistoryLoading = false,
 }) => {
-  // Parse stage number from stage_id string (e.g., "1_concept" -> 1)
-  const stageNumber = parseStageNumber(card.stage_id);
-
   // Get goal information from taxonomy
-  const goal: Goal | undefined = card.goal_id ? getGoalByCode(card.goal_id) : undefined;
+  const goal: Goal | undefined = card.goal_id
+    ? getGoalByCode(card.goal_id)
+    : undefined;
 
   return (
     <div className="bg-white dark:bg-dark-surface rounded-lg shadow p-4 sm:p-6">
@@ -132,47 +121,25 @@ export const CardClassification: React.FC<CardClassificationProps> = ({
           )}
         </ClassificationRow>
 
-        {/* Stage */}
-        <ClassificationRow label="Stage">
+        {/* Pipeline Status */}
+        <ClassificationRow label="Pipeline">
           <div className="space-y-2">
-            {stageNumber ? (
-              <>
-                <StageBadge
-                  stage={stageNumber}
-                  variant="badge"
-                  showName
-                  size="md"
-                />
-                <div className="max-w-full sm:max-w-xs">
-                  <StageProgress stage={stageNumber} showLabels />
-                </div>
-                {/* Stage Progression Timeline */}
-                {(stageHistory.length > 0 || stageHistoryLoading) && (
-                  <div className="mt-4 w-full max-w-md">
-                    <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
-                      Stage History
-                    </h4>
-                    {stageHistoryLoading ? (
-                      <div className="animate-pulse bg-gray-100 dark:bg-dark-surface rounded-lg h-24" />
-                    ) : (
-                      <StageProgressionTimeline
-                        stageHistory={stageHistory}
-                        currentStage={stageNumber}
-                        compact
-                      />
-                    )}
-                  </div>
-                )}
-              </>
-            ) : (
-              <span className="text-sm text-gray-400 italic">Not assigned</span>
-            )}
+            <PipelineBadge
+              status={card.pipeline_status || "discovered"}
+              size="md"
+            />
+            <div className="max-w-full sm:max-w-xs">
+              <PipelineProgress
+                status={card.pipeline_status || "discovered"}
+                showLabels
+              />
+            </div>
           </div>
         </ClassificationRow>
 
-        {/* Horizon */}
-        <ClassificationRow label="Horizon">
-          <HorizonBadge horizon={card.horizon} showIcon size="md" />
+        {/* Deadline */}
+        <ClassificationRow label="Deadline">
+          <DeadlineUrgencyBadge deadline={card.deadline} size="md" />
         </ClassificationRow>
 
         {/* Top 25 */}

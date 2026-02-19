@@ -4,7 +4,7 @@
  * The main intelligence library browser. Features:
  * - Virtualized grid/list views for large card counts
  * - Semantic (AI) and text-based search
- * - Multi-dimensional filtering (pillar, stage, horizon, scores, dates)
+ * - Multi-dimensional filtering (pillar, stage, pipeline status, scores, dates)
  * - Card comparison mode
  * - Follow functionality
  * - Saved searches and search history
@@ -71,7 +71,13 @@ import {
   type AdvancedSearchRequest,
   type SavedSearchQueryConfig,
 } from "../../lib/discovery-api";
-import { grantCategories } from "../../data/taxonomy";
+import {
+  grantCategories,
+  pipelineStatuses,
+  pipelinePhases,
+  getPipelinePhase,
+  type PipelinePhase,
+} from "../../data/taxonomy";
 import { cn } from "../../lib/utils";
 import { InfoTooltip } from "../../components/onboarding/InfoTooltip";
 import {
@@ -151,6 +157,7 @@ const Discover: React.FC = () => {
   const [selectedPillar, setSelectedPillar] = useState("");
   const [selectedStage, setSelectedStage] = useState("");
   const [selectedHorizon, setSelectedHorizon] = useState("");
+  const [selectedPipelineStatus, setSelectedPipelineStatus] = useState("");
   const [sortOption, setSortOption] = useState<SortOption>("recently_updated");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [followedCardIds, setFollowedCardIds] = useState<Set<string>>(
@@ -319,6 +326,8 @@ const Discover: React.FC = () => {
     if (selectedStage) filters.stage_ids = [selectedStage];
     if (selectedHorizon)
       filters.horizon = selectedHorizon as "H1" | "H2" | "H3";
+    if (selectedPipelineStatus)
+      filters.pipeline_status = selectedPipelineStatus;
     if (dateFrom || dateTo) {
       filters.date_range = {
         ...(dateFrom && { start: dateFrom }),
@@ -343,6 +352,7 @@ const Discover: React.FC = () => {
     selectedPillar,
     selectedStage,
     selectedHorizon,
+    selectedPipelineStatus,
     dateFrom,
     dateTo,
     impactMin,
@@ -388,6 +398,7 @@ const Discover: React.FC = () => {
     selectedPillar,
     selectedStage,
     selectedHorizon,
+    selectedPipelineStatus,
     quickFilter,
     dateFrom,
     dateTo,
@@ -427,8 +438,8 @@ const Discover: React.FC = () => {
       // API may return array of card objects or card IDs
       if (Array.isArray(data)) {
         const ids = data.map(
-          (item: { id?: string; card_id?: string }) =>
-            item.card_id || item.id || item,
+          (item: string | { id?: string; card_id?: string }) =>
+            typeof item === "string" ? item : item.card_id || item.id || "",
         );
         setFollowedCardIds(new Set(ids.filter(Boolean)));
       }
@@ -457,6 +468,8 @@ const Discover: React.FC = () => {
           if (selectedPillar) params.append("pillar_id", selectedPillar);
           if (selectedStage) params.append("stage_id", selectedStage);
           if (selectedHorizon) params.append("horizon", selectedHorizon);
+          if (selectedPipelineStatus)
+            params.append("pipeline_status", selectedPipelineStatus);
           if (debouncedFilters.searchTerm)
             params.append("search", debouncedFilters.searchTerm);
           if (debouncedFilters.grantType)
@@ -616,6 +629,8 @@ const Discover: React.FC = () => {
       if (selectedPillar) params.append("pillar_id", selectedPillar);
       if (selectedStage) params.append("stage_id", selectedStage);
       if (selectedHorizon) params.append("horizon", selectedHorizon);
+      if (selectedPipelineStatus)
+        params.append("pipeline_status", selectedPipelineStatus);
       if (debouncedFilters.searchTerm)
         params.append("search", debouncedFilters.searchTerm);
       if (debouncedFilters.impactMin > 0)
@@ -703,6 +718,8 @@ const Discover: React.FC = () => {
       if (selectedPillar) params.append("pillar_id", selectedPillar);
       if (selectedStage) params.append("stage_id", selectedStage);
       if (selectedHorizon) params.append("horizon", selectedHorizon);
+      if (selectedPipelineStatus)
+        params.append("pipeline_status", selectedPipelineStatus);
       if (debouncedFilters.searchTerm)
         params.append("search", debouncedFilters.searchTerm);
       if (debouncedFilters.grantType)
@@ -793,6 +810,9 @@ const Discover: React.FC = () => {
       setSelectedHorizon(
         filters.horizon && filters.horizon !== "ALL" ? filters.horizon : "",
       );
+      setSelectedPipelineStatus(
+        ((filters as Record<string, unknown>).pipeline_status as string) ?? "",
+      );
       setDateFrom(filters.date_range?.start ?? "");
       setDateTo(filters.date_range?.end ?? "");
       setImpactMin(filters.score_thresholds?.impact_score?.min ?? 0);
@@ -824,6 +844,7 @@ const Discover: React.FC = () => {
     if (selectedPillar) count++;
     if (selectedStage) count++;
     if (selectedHorizon) count++;
+    if (selectedPipelineStatus) count++;
     if (impactMin > 0) count++;
     if (relevanceMin > 0) count++;
     if (noveltyMin > 0) count++;
@@ -836,6 +857,7 @@ const Discover: React.FC = () => {
     selectedPillar,
     selectedStage,
     selectedHorizon,
+    selectedPipelineStatus,
     impactMin,
     relevanceMin,
     noveltyMin,
@@ -1436,25 +1458,38 @@ const Discover: React.FC = () => {
                   </select>
                 </div>
 
-                {/* Horizon Filter */}
+                {/* Pipeline Status Filter */}
                 <div>
                   <label
-                    htmlFor="horizon"
+                    htmlFor="pipelineStatus"
                     className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
                   >
-                    Horizon{" "}
-                    <InfoTooltip content={FILTER_EXPLANATIONS.horizon} />
+                    Pipeline Status{" "}
+                    <InfoTooltip content={FILTER_EXPLANATIONS.pipelineStatus} />
                   </label>
                   <select
-                    id="horizon"
+                    id="pipelineStatus"
                     className="block w-full border-gray-300 dark:border-gray-600 dark:bg-dark-surface-elevated dark:text-gray-100 rounded-md shadow-sm focus:ring-brand-blue focus:border-brand-blue sm:text-sm"
-                    value={selectedHorizon}
-                    onChange={(e) => setSelectedHorizon(e.target.value)}
+                    value={selectedPipelineStatus}
+                    onChange={(e) => setSelectedPipelineStatus(e.target.value)}
                   >
-                    <option value="">All Horizons</option>
-                    <option value="H1">H1 (0-2 years)</option>
-                    <option value="H2">H2 (2-5 years)</option>
-                    <option value="H3">H3 (5+ years)</option>
+                    <option value="">All Statuses</option>
+                    {(Object.keys(pipelinePhases) as PipelinePhase[]).map(
+                      (phase) => (
+                        <optgroup
+                          key={phase}
+                          label={pipelinePhases[phase].label}
+                        >
+                          {pipelineStatuses
+                            .filter((s) => getPipelinePhase(s.id) === phase)
+                            .map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.name}
+                              </option>
+                            ))}
+                        </optgroup>
+                      ),
+                    )}
                   </select>
                 </div>
 

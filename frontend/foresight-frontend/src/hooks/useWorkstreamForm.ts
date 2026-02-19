@@ -11,7 +11,6 @@
  */
 
 import { useState, useEffect, useCallback, KeyboardEvent } from "react";
-import { useAuthContext } from "./useAuthContext";
 import { useWorkstreamPreview } from "./useWorkstreamPreview";
 import { useKeywordSuggestions } from "./useKeywordSuggestions";
 import { getGoalsByPillar } from "../data/taxonomy";
@@ -35,7 +34,6 @@ export function useWorkstreamForm({
   onSuccess,
   onCreatedWithZeroMatches,
 }: UseWorkstreamFormProps) {
-  const { user } = useAuthContext();
   const isEditMode = Boolean(workstream);
 
   // Form state
@@ -46,6 +44,7 @@ export function useWorkstreamForm({
     goal_ids: workstream?.goal_ids || [],
     stage_ids: workstream?.stage_ids || [],
     horizon: workstream?.horizon || "ALL",
+    pipeline_statuses: workstream?.pipeline_statuses || [],
     keywords: workstream?.keywords || [],
     is_active: workstream?.is_active ?? true,
     analyze_now: false,
@@ -82,6 +81,7 @@ export function useWorkstreamForm({
     formData.goal_ids.length > 0 ||
     formData.stage_ids.length > 0 ||
     formData.horizon !== "ALL" ||
+    (formData.pipeline_statuses?.length ?? 0) > 0 ||
     formData.keywords.length > 0 ||
     formData.category_ids.length > 0;
 
@@ -212,6 +212,18 @@ export function useWorkstreamForm({
     }
   };
 
+  const handlePipelineStatusToggle = (statusId: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      pipeline_statuses: (prev.pipeline_statuses || []).includes(statusId)
+        ? (prev.pipeline_statuses || []).filter((id) => id !== statusId)
+        : [...(prev.pipeline_statuses || []), statusId],
+    }));
+    if (errors.filters) {
+      setErrors((prev) => ({ ...prev, filters: undefined }));
+    }
+  };
+
   const handleKeywordAdd = () => {
     const trimmed = keywordInput.trim();
     if (trimmed && !formData.keywords.includes(trimmed)) {
@@ -267,6 +279,7 @@ export function useWorkstreamForm({
       goal_ids: template.config.goal_ids,
       stage_ids: template.config.stage_ids,
       horizon: template.config.horizon,
+      pipeline_statuses: template.config.pipeline_statuses || [],
       keywords: template.config.keywords,
       // Apply grant-specific template fields if present
       ...(template.config.category_ids
@@ -316,6 +329,7 @@ export function useWorkstreamForm({
         goal_ids: formData.goal_ids,
         stage_ids: formData.stage_ids,
         horizon: formData.horizon,
+        pipeline_statuses: formData.pipeline_statuses || [],
         keywords: formData.keywords,
         is_active: formData.is_active,
         ...(formData.auto_scan ? { auto_scan: true } : {}),
@@ -434,6 +448,7 @@ export function useWorkstreamForm({
     handleGoalToggle,
     handleStageToggle,
     handleHorizonChange,
+    handlePipelineStatusToggle,
     handleKeywordAdd,
     handleKeywordInputKeyDown,
     handleKeywordRemove,

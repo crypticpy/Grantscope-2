@@ -47,6 +47,13 @@ def _filter_cards_for_workstream(
             c for c in filtered if _stage_num((c.get("stage_id") or "")) in ws_stage_ids
         ]
 
+    # Filter by pipeline_statuses (new pipeline lifecycle filter)
+    ws_pipeline_statuses = workstream.get("pipeline_statuses") or []
+    if ws_pipeline_statuses:
+        filtered = [
+            c for c in filtered if c.get("pipeline_status") in ws_pipeline_statuses
+        ]
+
     ws_keywords = [k.lower() for k in (workstream.get("keywords") or [])]
     if ws_keywords:
 

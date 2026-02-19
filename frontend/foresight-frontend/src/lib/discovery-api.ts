@@ -55,6 +55,8 @@ export interface Card {
   top25_relevance?: string[];
   /** Card lifecycle status (e.g., 'active', 'pending_review', 'archived') */
   status: string;
+  /** Pipeline status for grant tracking workflow */
+  pipeline_status?: string | null;
 
   // Grant-specific fields
   deadline?: string | null;
@@ -291,6 +293,8 @@ export interface SearchFilters {
   score_thresholds?: ScoreThresholds;
   /** Filter by card lifecycle status */
   status?: string;
+  /** Filter by pipeline status (e.g., "discovered", "evaluating", "applying") */
+  pipeline_status?: string;
 }
 
 /**
@@ -1047,6 +1051,8 @@ export interface CardData {
   goal_id?: string | null;
   stage_id?: string | null;
   horizon?: "H1" | "H2" | "H3" | null;
+  pipeline_status?: string | null;
+  deadline?: string | null;
   // Current scores for comparison (0-100)
   maturity_score: number | null;
   velocity_score: number | null;

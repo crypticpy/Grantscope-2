@@ -168,6 +168,7 @@ async def review_card(
             "anchor_id",
             "stage_id",
             "horizon",
+            "pipeline_status",
             "novelty_score",
             "maturity_score",
             "impact_score",
@@ -180,6 +181,10 @@ async def review_card(
         }
         for field, value in filtered_updates.items():
             setattr(card, field, value)
+
+        # Update pipeline_status_changed_at when pipeline_status changes
+        if "pipeline_status" in filtered_updates:
+            card.pipeline_status_changed_at = now
 
         # Update slug if name changed
         if "name" in filtered_updates:
@@ -224,6 +229,7 @@ async def review_card(
             "anchor_id",
             "stage_id",
             "horizon",
+            "pipeline_status",
             "novelty_score",
             "maturity_score",
             "impact_score",
@@ -618,41 +624,75 @@ async def _record_stage_history_sa(
     trigger: str = "manual",
     reason: Optional[str] = None,
 ) -> None:
-    """Record stage transition to card_timeline using SQLAlchemy."""
+    """Record stage/pipeline_status transition to card_timeline using SQLAlchemy."""
     old_stage = old_card_data.get("stage_id")
     new_stage = new_card_data.get("stage_id")
     old_horizon = old_card_data.get("horizon")
     new_horizon = new_card_data.get("horizon")
+    old_pipeline = old_card_data.get("pipeline_status")
+    new_pipeline = new_card_data.get("pipeline_status")
 
-    if old_stage == new_stage and old_horizon == new_horizon:
-        logger.debug("No stage/horizon changes detected for card %s", card_id)
+    if (
+        old_stage == new_stage
+        and old_horizon == new_horizon
+        and old_pipeline == new_pipeline
+    ):
+        logger.debug("No stage/horizon/pipeline changes detected for card %s", card_id)
         return
 
     try:
         now = datetime.now(timezone.utc)
-        timeline_entry = CardTimeline(
-            card_id=uuid.UUID(card_id),
-            event_type="stage_changed",
-            title="Stage changed",
-            description=f"Stage changed from {old_stage or 'none'} to {new_stage or 'none'}",
-            created_by=uuid.UUID(user_id) if user_id else None,
-            metadata_={
-                "old_stage_id": old_stage,
-                "new_stage_id": new_stage,
-                "old_horizon": old_horizon,
-                "new_horizon": new_horizon,
-                "trigger": trigger,
-                "reason": reason,
-            },
-            created_at=now,
-        )
-        db.add(timeline_entry)
+
+        # Record pipeline_status change if it changed
+        if old_pipeline != new_pipeline:
+            pipeline_entry = CardTimeline(
+                card_id=uuid.UUID(card_id),
+                event_type="pipeline_status_changed",
+                title="Pipeline status changed",
+                description=f"Pipeline status changed from {old_pipeline or 'none'} to {new_pipeline or 'none'}",
+                created_by=uuid.UUID(user_id) if user_id else None,
+                metadata_={
+                    "old_pipeline_status": old_pipeline,
+                    "new_pipeline_status": new_pipeline,
+                    "trigger": trigger,
+                    "reason": reason,
+                },
+                created_at=now,
+            )
+            db.add(pipeline_entry)
+            logger.info(
+                "Recorded pipeline status transition for card %s: %s -> %s",
+                card_id,
+                old_pipeline,
+                new_pipeline,
+            )
+
+        # Record legacy stage/horizon change if it changed
+        if old_stage != new_stage or old_horizon != new_horizon:
+            timeline_entry = CardTimeline(
+                card_id=uuid.UUID(card_id),
+                event_type="stage_changed",
+                title="Stage changed",
+                description=f"Stage changed from {old_stage or 'none'} to {new_stage or 'none'}",
+                created_by=uuid.UUID(user_id) if user_id else None,
+                metadata_={
+                    "old_stage_id": old_stage,
+                    "new_stage_id": new_stage,
+                    "old_horizon": old_horizon,
+                    "new_horizon": new_horizon,
+                    "trigger": trigger,
+                    "reason": reason,
+                },
+                created_at=now,
+            )
+            db.add(timeline_entry)
+            logger.info(
+                "Recorded stage transition for card %s: %s -> %s",
+                card_id,
+                old_stage,
+                new_stage,
+            )
+
         await db.flush()
-        logger.info(
-            "Recorded stage transition for card %s: %s -> %s",
-            card_id,
-            old_stage,
-            new_stage,
-        )
     except Exception as e:
         logger.error("Failed to record stage history for card %s: %s", card_id, e)

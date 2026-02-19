@@ -31,6 +31,7 @@ export function useWorkstreamPreview(formData: FormData, hasFilters: boolean) {
         goal_ids: formData.goal_ids,
         stage_ids: formData.stage_ids,
         horizon: formData.horizon,
+        pipeline_statuses: formData.pipeline_statuses,
         keywords: formData.keywords,
         category_ids: formData.category_ids,
       });
@@ -47,6 +48,7 @@ export function useWorkstreamPreview(formData: FormData, hasFilters: boolean) {
     formData.goal_ids,
     formData.stage_ids,
     formData.horizon,
+    formData.pipeline_statuses,
     formData.keywords,
     formData.category_ids,
   ]);

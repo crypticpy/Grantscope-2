@@ -46,6 +46,9 @@ from app.taxonomy import (
     PILLAR_NAMES,
     STAGE_NUMBER_TO_ID as STAGE_ID_MAP,
     VALID_PILLAR_IDS,
+    VALID_PIPELINE_STATUSES,
+    PIPELINE_PHASES,
+    get_pipeline_phase,
 )
 
 logger = logging.getLogger(__name__)
@@ -55,7 +58,7 @@ logger = logging.getLogger(__name__)
 # Constants
 # =============================================================================
 
-VALID_HORIZONS = {"H1", "H2", "H3"}
+VALID_HORIZONS = {"H1", "H2", "H3"}  # Kept for backward compat
 
 MAX_AGENT_ITERATIONS = 25
 
@@ -217,11 +220,20 @@ def _define_tools() -> List[Dict[str, Any]]:
                             "enum": ["CH", "EW", "HG", "HH", "MC", "PS"],
                             "description": "Primary strategic pillar.",
                         },
+                        "pipeline_status": {
+                            "type": "string",
+                            "enum": list(VALID_PIPELINE_STATUSES),
+                            "description": (
+                                "Grant pipeline status: discovered, evaluating, applying, "
+                                "submitted, awarded, active, closed, declined, expired. "
+                                "Default to 'discovered' for newly found opportunities."
+                            ),
+                        },
                         "horizon": {
                             "type": "string",
                             "enum": ["H1", "H2", "H3"],
                             "description": (
-                                "Time horizon. H1=now-2yr, H2=2-5yr, H3=5-10yr."
+                                "Time horizon (legacy, kept for compat). H1=now-2yr, H2=2-5yr, H3=5-10yr."
                             ),
                         },
                         "stage": {
@@ -229,7 +241,7 @@ def _define_tools() -> List[Dict[str, Any]]:
                             "minimum": 1,
                             "maximum": 8,
                             "description": (
-                                "Maturity stage: 1=Concept, 2=Exploring, 3=Pilot, "
+                                "Maturity stage (legacy, kept for compat): 1=Concept, 2=Exploring, 3=Pilot, "
                                 "4=PoC, 5=Implementing, 6=Scaling, 7=Mature, 8=Declining."
                             ),
                         },
@@ -287,8 +299,7 @@ def _define_tools() -> List[Dict[str, Any]]:
                         "signal_summary",
                         "source_indices",
                         "pillar_id",
-                        "horizon",
-                        "stage",
+                        "pipeline_status",
                         "impact_score",
                         "relevance_score",
                         "novelty_score",
@@ -1041,6 +1052,10 @@ class SignalAgentService:
         if pillar_id not in VALID_PILLAR_IDS:
             pillar_id = "HG"  # Default to High-Performing Government
 
+        pipeline_status = args.get("pipeline_status", "discovered")
+        if pipeline_status not in VALID_PIPELINE_STATUSES:
+            pipeline_status = "discovered"
+
         horizon = args.get("horizon", "H2")
         if horizon not in VALID_HORIZONS:
             horizon = "H2"
@@ -1069,6 +1084,7 @@ class SignalAgentService:
             signal_summary=signal_summary[:2000] if signal_summary else None,
             signal_properties={
                 "pillar_id": pillar_id,
+                "pipeline_status": pipeline_status,
                 "horizon": horizon,
                 "stage_id": STAGE_ID_MAP.get(stage, "4_proof"),
                 "impact_score": _clamp_score(args.get("impact_score", 50)),
@@ -1245,7 +1261,7 @@ class SignalAgentService:
     # -------------------------------------------------------------------------
 
     def _tool_list_strategic_context(self) -> Tuple[Dict, None]:
-        """Return static pillar, priority, and stage data."""
+        """Return static pillar, priority, pipeline status, and stage data."""
         return {
             "pillars": {
                 code: {
@@ -1253,6 +1269,10 @@ class SignalAgentService:
                     "id": code,
                 }
                 for code, name in PILLAR_NAMES.items()
+            },
+            "pipeline_statuses": list(VALID_PIPELINE_STATUSES),
+            "pipeline_phases": {
+                phase: statuses for phase, statuses in PIPELINE_PHASES.items()
             },
             "stages": {num: stage_id for num, stage_id in STAGE_ID_MAP.items()},
             "horizons": {
@@ -1410,6 +1430,8 @@ class SignalAgentService:
                 summary=action.signal_summary or "",
                 horizon=props.get("horizon", "H2"),
                 stage_id=props.get("stage_id", "4_proof"),
+                pipeline_status=props.get("pipeline_status", "discovered"),
+                pipeline_status_changed_at=datetime.now(timezone.utc),
                 pillar_id=props.get("pillar_id", "HG"),
                 impact_score=props.get("impact_score", 50),
                 relevance_score=props.get("relevance_score", 50),
@@ -1563,9 +1585,13 @@ class SignalAgentService:
         # Get card metadata for the profile prompt
         pillar_id = None
         horizon = "H2"
+        pipeline_status = "discovered"
         if action.signal_properties:
             pillar_id = action.signal_properties.get("pillar_id")
             horizon = action.signal_properties.get("horizon", "H2")
+            pipeline_status = action.signal_properties.get(
+                "pipeline_status", "discovered"
+            )
 
         profile = await ai_service.generate_signal_profile(
             signal_name=action.signal_name,
@@ -1573,6 +1599,7 @@ class SignalAgentService:
             pillar_id=pillar_id or "",
             horizon=horizon,
             source_analyses=source_analyses,
+            pipeline_status=pipeline_status,
         )
 
         if profile and len(profile) > 100:

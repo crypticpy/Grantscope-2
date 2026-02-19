@@ -26,8 +26,8 @@ import {
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { PillarBadge } from "./PillarBadge";
-import { HorizonBadge } from "./HorizonBadge";
-import { StageBadge } from "./StageBadge";
+import { PipelineBadge } from "./PipelineBadge";
+import { DeadlineUrgencyBadge } from "./DeadlineUrgencyBadge";
 import { Top25Badge } from "./Top25Badge";
 import { highlightText } from "../lib/highlight-utils";
 import { cn } from "../lib/utils";
@@ -55,16 +55,9 @@ export interface DiscoverCardData {
   anchor_id?: string;
   top25_relevance?: string[];
   search_relevance?: number;
+  pipeline_status?: string | null;
+  deadline?: string | null;
 }
-
-/**
- * Parse stage number from stage_id string
- * e.g., "1_concept" -> 1, "2_emerging" -> 2
- */
-const parseStageNumber = (stageId: string): number | null => {
-  const match = stageId.match(/^(\d+)/);
-  return match?.[1] ? parseInt(match[1], 10) : null;
-};
 
 /**
  * Get color classes for score values
@@ -147,8 +140,6 @@ export const DiscoverCard = memo(function DiscoverCard({
   onFollowToggle,
   onCompareToggle,
 }: DiscoverCardProps) {
-  const stageNumber = parseStageNumber(card.stage_id);
-
   return (
     <div
       onClick={compareMode ? onCompareToggle : undefined}
@@ -204,10 +195,11 @@ export const DiscoverCard = memo(function DiscoverCard({
               </span>
             )}
             <PillarBadge pillarId={card.pillar_id} showIcon size="sm" />
-            <HorizonBadge horizon={card.horizon} size="sm" />
-            {stageNumber !== null && (
-              <StageBadge stage={stageNumber} size="sm" variant="minimal" />
-            )}
+            <PipelineBadge
+              status={card.pipeline_status || "discovered"}
+              size="sm"
+            />
+            <DeadlineUrgencyBadge deadline={card.deadline} size="sm" />
             {card.top25_relevance && card.top25_relevance.length > 0 && (
               <Top25Badge
                 priorities={card.top25_relevance}

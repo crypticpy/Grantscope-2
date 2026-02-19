@@ -17,7 +17,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { CardDetail } from "../CardDetail";
-import type { Card, ResearchTask, Source, TimelineEvent, Note } from "../types";
+import type { Card, ResearchTask } from "../types";
 
 // ============================================================================
 // Test Data Factories
@@ -48,44 +48,6 @@ const mockCardData: Card = {
   deep_research_at: "2024-01-10T00:00:00Z",
   deep_research_count_today: 0,
 };
-
-const mockSources: Source[] = [
-  {
-    id: "source-1",
-    title: "Test Source 1",
-    url: "https://example.com/source1",
-    ai_summary: "Summary of the first test source.",
-    key_excerpts: ["Important excerpt from source 1"],
-    publication: "Test Publication",
-    relevance_to_card: 4,
-    api_source: "gpt_researcher",
-    ingested_at: "2024-01-05T00:00:00Z",
-  },
-];
-
-const mockTimeline: TimelineEvent[] = [
-  {
-    id: "event-1",
-    event_type: "deep_research",
-    title: "Deep Research Completed",
-    description: "Successfully completed deep research analysis.",
-    created_at: "2024-01-10T00:00:00Z",
-    metadata: {
-      sources_found: 10,
-      sources_relevant: 5,
-      sources_added: 3,
-    },
-  },
-];
-
-const mockNotes: Note[] = [
-  {
-    id: "note-1",
-    content: "This is a public note.",
-    is_private: false,
-    created_at: "2024-01-08T00:00:00Z",
-  },
-];
 
 const mockScoreHistory = [
   {

@@ -5,6 +5,9 @@
  * using React Flow. Cards are represented as nodes with horizon-based coloring,
  * and relationships are shown as labeled edges with configurable thickness.
  *
+ * NOTE: Node coloring still uses horizon for backward compatibility with
+ * existing data. Future iteration may switch to pipeline_status-based coloring.
+ *
  * Features:
  * - Interactive pan and zoom
  * - Clickable nodes that navigate to card detail

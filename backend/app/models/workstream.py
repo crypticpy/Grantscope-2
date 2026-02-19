@@ -320,6 +320,9 @@ class FilterPreviewRequest(BaseModel):
     horizon: Optional[str] = Field(
         default=None, description="Horizon filter (H1, H2, H3, or ALL)"
     )
+    pipeline_statuses: List[str] = Field(
+        default=[], description="List of pipeline statuses to filter by"
+    )
     keywords: List[str] = Field(
         default=[], description="Keywords to match in card content"
     )

@@ -75,6 +75,14 @@ class Card(Base):
     stage_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     horizon: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # ── Pipeline lifecycle (20260220) ──────────────────────────────────
+    pipeline_status: Mapped[Optional[str]] = mapped_column(
+        Text, server_default="discovered", nullable=True
+    )
+    pipeline_status_changed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     # ── AI-generated scores ──────────────────────────────────────────────
     # novelty/impact/relevance are NUMERIC(3,2) in prod DB (002_schema_fixes)
     novelty_score: Mapped[Optional[Decimal]] = mapped_column(

@@ -54,10 +54,14 @@ export interface CardDetails {
   summary: string;
   /** UUID of the pillar this card belongs to */
   pillar_id: string;
-  /** Numeric stage identifier (1-8) representing maturity */
+  /** Numeric stage identifier (1-8) representing maturity @deprecated Use pipeline_status */
   stage_id: number;
-  /** Innovation horizon classification */
+  /** Innovation horizon classification @deprecated Use deadline for urgency */
   horizon: "H1" | "H2" | "H3";
+  /** Pipeline status (e.g., "discovered", "evaluating", "applying") */
+  pipeline_status?: string | null;
+  /** Application deadline (ISO date string) */
+  deadline?: string | null;
   /** Novelty score (0-100) indicating how new/unique the concept is */
   novelty_score: number;
   /** Maturity score (0-100) indicating development stage */

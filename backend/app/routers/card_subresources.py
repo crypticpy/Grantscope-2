@@ -26,6 +26,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import get_db, get_current_user_hardcoded, _safe_error
+from app.taxonomy import VALID_PIPELINE_STATUSES
 from app.models.db.card import Card
 from app.models.db.card_extras import (
     CardFollow,
@@ -464,6 +465,7 @@ async def get_related_cards(
                     pillar_id=card_data.pillar_id,
                     stage_id=card_data.stage_id,
                     horizon=card_data.horizon,
+                    pipeline_status=getattr(card_data, "pipeline_status", None),
                     relationship_type=rel.relationship_type,
                     relationship_strength=(
                         float(rel.strength) if rel.strength is not None else None
@@ -611,7 +613,10 @@ async def get_my_signals(
     ),
     search: Optional[str] = Query(None, description="Search term"),
     pillar: Optional[str] = Query(None, description="Filter by pillar"),
-    horizon: Optional[str] = Query(None, description="Filter by horizon"),
+    horizon: Optional[str] = Query(None, description="Filter by horizon (deprecated)"),
+    pipeline_status: Optional[str] = Query(
+        None, description="Filter by pipeline status"
+    ),
     source: Optional[str] = Query(
         None, description="Filter by: followed, created, workstream"
     ),
@@ -620,6 +625,12 @@ async def get_my_signals(
     db: AsyncSession = Depends(get_db),
 ):
     """Get user's personal intelligence hub: followed, created, and workstream signals."""
+    if pipeline_status and pipeline_status not in VALID_PIPELINE_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid pipeline_status '{pipeline_status}'. Must be one of: {', '.join(sorted(VALID_PIPELINE_STATUSES))}",
+        )
+
     user_id = current_user["id"]
 
     try:
@@ -709,6 +720,8 @@ async def get_my_signals(
             cards_stmt = cards_stmt.where(Card.pillar_id == pillar)
         if horizon:
             cards_stmt = cards_stmt.where(Card.horizon == horizon)
+        if pipeline_status:
+            cards_stmt = cards_stmt.where(Card.pipeline_status == pipeline_status)
         if quality_min is not None and quality_min > 0:
             cards_stmt = cards_stmt.where(Card.signal_quality_score >= quality_min)
 

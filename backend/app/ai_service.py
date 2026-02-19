@@ -172,7 +172,7 @@ class AnalysisResult:
     steep_categories: List[str]
     anchors: List[str]
 
-    # Horizon & Stage
+    # Horizon & Stage (kept for backward compat)
     horizon: str
     suggested_stage: int
     triage_score: int  # 1, 3, or 5
@@ -193,6 +193,9 @@ class AnalysisResult:
     # Card suggestions
     suggested_card_name: str
     is_new_concept: bool
+
+    # Pipeline lifecycle
+    pipeline_status: str = "discovered"
 
     # Entities for graph
     entities: List[ExtractedEntity] = field(default_factory=list)
@@ -452,6 +455,7 @@ Respond with JSON:
   "urgency_score": 0-100,
   "probability_score": 0-100,
 
+  "pipeline_status": "discovered",
   "horizon": "H1|H2|H3",
   "suggested_stage": 1-8,
   "triage_score": 1|3|5,
@@ -482,8 +486,7 @@ Generate an in-depth grant opportunity assessment for "{card_name}" for the City
 CURRENT CARD INFORMATION:
 Summary: {current_summary}
 Description: {current_description}
-Horizon: {horizon}
-Stage: {stage}
+Pipeline Status: {pipeline_status}
 Pillar: {pillar}
 
 GPT RESEARCHER FINDINGS:
@@ -616,7 +619,7 @@ Generate a comprehensive signal profile for the following emerging trend/signal.
 SIGNAL: {signal_name}
 INITIAL ASSESSMENT: {signal_summary}
 STRATEGIC PILLAR: {pillar_name}
-HORIZON: {horizon}
+PIPELINE STATUS: {pipeline_status}
 
 SOURCE EVIDENCE ({source_count} sources):
 {source_details}
@@ -813,6 +816,7 @@ Respond with ONLY the title text, nothing else."""
                 horizon="H2",
                 suggested_stage=4,
                 triage_score=3,
+                pipeline_status="discovered",
                 credibility=3.0,
                 novelty=3.0,
                 likelihood=5.0,
@@ -902,6 +906,7 @@ Respond with ONLY the title text, nothing else."""
             horizon=result.get("horizon", "H2"),
             suggested_stage=result.get("suggested_stage", 4),
             triage_score=result.get("triage_score", 3),
+            pipeline_status=result.get("pipeline_status", "discovered"),
             credibility=clamped_credibility,
             novelty=clamped_novelty,
             likelihood=clamped_likelihood,
@@ -1138,8 +1143,9 @@ Respond with JSON:
         signal_name: str,
         signal_summary: str,
         pillar_id: str,
-        horizon: str,
-        source_analyses: List[Dict],
+        horizon: str = "",
+        source_analyses: List[Dict] = None,
+        pipeline_status: str = "discovered",
     ) -> str:
         """
         Generate a rich signal profile from existing source analyses.
@@ -1149,12 +1155,15 @@ Respond with JSON:
             signal_name: Name of the signal/card
             signal_summary: Brief summary from signal agent
             pillar_id: Strategic pillar code (CH, EW, HG, etc.)
-            horizon: H1, H2, or H3
+            horizon: H1, H2, or H3 (kept for backward compat)
             source_analyses: List of dicts with keys: title, url, summary, key_excerpts, content
+            pipeline_status: Pipeline lifecycle status (discovered, evaluating, etc.)
 
         Returns:
             Markdown formatted profile (500-800 words)
         """
+        if source_analyses is None:
+            source_analyses = []
         pillar_name = PILLAR_NAMES.get(pillar_id, pillar_id or "General")
 
         # Build source details for the prompt
@@ -1188,7 +1197,7 @@ Respond with JSON:
             signal_name=signal_name,
             signal_summary=signal_summary or "No initial summary provided.",
             pillar_name=pillar_name,
-            horizon=horizon or "H2",
+            pipeline_status=pipeline_status or "discovered",
             source_count=len(source_analyses),
             source_details=source_details,
         )
@@ -1449,6 +1458,7 @@ Respond as JSON:
         gpt_researcher_report: str,
         source_analyses: List[Dict[str, Any]],
         entities: List[Dict[str, str]],
+        pipeline_status: str = "discovered",
     ) -> str:
         """
         Generate a comprehensive strategic intelligence report for deep research.
@@ -1518,8 +1528,7 @@ Respond as JSON:
             card_name=card_name,
             current_summary=current_summary or "No current summary",
             current_description=current_description or "No current description",
-            horizon=horizon or "H2",
-            stage=stage or 4,
+            pipeline_status=pipeline_status or "discovered",
             pillar=pillar or "Not specified",
             gpt_researcher_report=(
                 gpt_researcher_report[:8000]
@@ -1549,7 +1558,7 @@ Respond as JSON:
         report_with_header = f"""# Deep Research Report: {card_name}
 
 **Generated:** {__import__('datetime').datetime.now(__import__('datetime').timezone.utc).strftime('%B %d, %Y at %I:%M %p')}
-**Classification:** Horizon {horizon} | Stage {stage} | {pillar}
+**Classification:** Pipeline Status: {pipeline_status} | {pillar}
 **Sources Analyzed:** {len(source_analyses)}
 
 ---

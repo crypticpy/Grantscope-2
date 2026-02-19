@@ -29,9 +29,8 @@ import { useAuthContext } from "../hooks/useAuthContext";
 import { API_BASE_URL } from "../lib/config";
 import { cn } from "../lib/utils";
 import { PillarBadge, PillarBadgeGroup } from "../components/PillarBadge";
-import { HorizonBadge } from "../components/HorizonBadge";
-import { StageBadge } from "../components/StageBadge";
-import { parseStageNumber } from "../lib/stage-utils";
+import { PipelineBadge } from "../components/PipelineBadge";
+import { DeadlineUrgencyBadge } from "../components/DeadlineUrgencyBadge";
 import { Top25Badge } from "../components/Top25Badge";
 import { WorkstreamForm } from "../components/WorkstreamForm";
 import { WorkstreamChatPanel } from "../components/WorkstreamChatPanel";
@@ -48,6 +47,7 @@ interface Workstream {
   goal_ids: string[];
   stage_ids: string[];
   horizon: string;
+  pipeline_statuses?: string[];
   keywords: string[];
   is_active: boolean;
   auto_add: boolean;
@@ -63,6 +63,8 @@ interface Card {
   pillar_id: string;
   stage_id: string;
   horizon: "H1" | "H2" | "H3";
+  pipeline_status?: string;
+  deadline?: string;
   novelty_score: number;
   maturity_score: number;
   impact_score: number;
@@ -111,62 +113,15 @@ function KeywordTag({ keyword }: { keyword: string }) {
 }
 
 /**
- * Stage range display for multiple stages
+ * Pipeline status display for multiple statuses
  */
-function StageRangeDisplay({ stageIds }: { stageIds: string[] }) {
-  if (stageIds.length === 0) return null;
+function PipelineStatusDisplay({ statusIds }: { statusIds: string[] }) {
+  if (statusIds.length === 0) return null;
 
-  // Parse stage numbers
-  const stageNumbers = stageIds
-    .map((id) => parseInt(id, 10))
-    .filter((n) => !isNaN(n))
-    .sort((a, b) => a - b);
-
-  if (stageNumbers.length === 0) return null;
-
-  // If single stage or non-consecutive, show individual badges
-  if (stageNumbers.length <= 2) {
-    return (
-      <div className="flex items-center gap-1 flex-wrap">
-        {stageNumbers.map((stage) => (
-          <StageBadge
-            key={stage}
-            stage={stage}
-            size="sm"
-            showName={false}
-            variant="minimal"
-          />
-        ))}
-      </div>
-    );
-  }
-
-  // Check if consecutive
-  const isConsecutive = stageNumbers.every(
-    (n, i) => i === 0 || n === (stageNumbers[i - 1] ?? 0) + 1,
-  );
-
-  if (isConsecutive) {
-    const min = stageNumbers[0];
-    const max = stageNumbers[stageNumbers.length - 1];
-    return (
-      <span className="text-sm text-gray-600 dark:text-gray-400">
-        Stages {min} - {max}
-      </span>
-    );
-  }
-
-  // Show individual badges for non-consecutive
   return (
     <div className="flex items-center gap-1 flex-wrap">
-      {stageNumbers.map((stage) => (
-        <StageBadge
-          key={stage}
-          stage={stage}
-          size="sm"
-          showName={false}
-          variant="minimal"
-        />
+      {statusIds.map((statusId) => (
+        <PipelineBadge key={statusId} status={statusId} size="sm" />
       ))}
     </div>
   );
@@ -204,13 +159,11 @@ function CardItem({
           </h3>
           <div className="flex items-center gap-2 flex-wrap mb-3">
             <PillarBadge pillarId={card.pillar_id} size="sm" />
-            <HorizonBadge horizon={card.horizon} size="sm" />
-            <StageBadge
-              stage={parseStageNumber(card.stage_id) ?? 1}
+            <PipelineBadge
+              status={card.pipeline_status || "discovered"}
               size="sm"
-              showName={false}
-              variant="minimal"
             />
+            <DeadlineUrgencyBadge deadline={card.deadline} size="sm" />
             {card.top25_relevance && card.top25_relevance.length > 0 && (
               <Top25Badge
                 priorities={card.top25_relevance}
@@ -402,16 +355,12 @@ const WorkstreamFeed: React.FC = () => {
         }
       }
 
-      if (workstream.horizon && workstream.horizon !== "ALL") {
-        params.set("horizon", workstream.horizon);
-      }
-
-      if (workstream.stage_ids && workstream.stage_ids.length > 0) {
-        const stageNumbers = workstream.stage_ids
-          .map((s) => parseInt(s, 10))
-          .filter((n) => !isNaN(n));
-        for (const stage of stageNumbers) {
-          params.append("stage_id", String(stage));
+      if (
+        workstream.pipeline_statuses &&
+        workstream.pipeline_statuses.length > 0
+      ) {
+        for (const status of workstream.pipeline_statuses) {
+          params.append("pipeline_status", status);
         }
       }
 
@@ -837,28 +786,18 @@ const WorkstreamFeed: React.FC = () => {
             </div>
           )}
 
-          {/* Horizon */}
-          {workstream.horizon && workstream.horizon !== "ALL" && (
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 w-20 shrink-0">
-                Horizon:
-              </span>
-              <HorizonBadge
-                horizon={workstream.horizon as "H1" | "H2" | "H3"}
-                size="sm"
-              />
-            </div>
-          )}
-
-          {/* Stages */}
-          {workstream.stage_ids && workstream.stage_ids.length > 0 && (
-            <div className="flex items-start gap-3">
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 w-20 shrink-0 pt-0.5">
-                Stages:
-              </span>
-              <StageRangeDisplay stageIds={workstream.stage_ids} />
-            </div>
-          )}
+          {/* Pipeline Statuses */}
+          {workstream.pipeline_statuses &&
+            workstream.pipeline_statuses.length > 0 && (
+              <div className="flex items-start gap-3">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300 w-20 shrink-0 pt-0.5">
+                  Statuses:
+                </span>
+                <PipelineStatusDisplay
+                  statusIds={workstream.pipeline_statuses}
+                />
+              </div>
+            )}
 
           {/* Keywords */}
           {workstream.keywords && workstream.keywords.length > 0 && (
@@ -876,8 +815,8 @@ const WorkstreamFeed: React.FC = () => {
 
           {/* No filters */}
           {(!workstream.pillar_ids || workstream.pillar_ids.length === 0) &&
-            (!workstream.horizon || workstream.horizon === "ALL") &&
-            (!workstream.stage_ids || workstream.stage_ids.length === 0) &&
+            (!workstream.pipeline_statuses ||
+              workstream.pipeline_statuses.length === 0) &&
             (!workstream.keywords || workstream.keywords.length === 0) && (
               <p className="text-sm text-gray-500 dark:text-gray-400 italic">
                 No filters configured. Showing all opportunities.

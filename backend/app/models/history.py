@@ -26,7 +26,14 @@ import re
 VALID_HORIZONS = {"H1", "H2", "H3"}
 
 # Valid relationship types for card relationships
-VALID_RELATIONSHIP_TYPES = {"related", "similar", "derived", "dependent", "parent", "child"}
+VALID_RELATIONSHIP_TYPES = {
+    "related",
+    "similar",
+    "derived",
+    "dependent",
+    "parent",
+    "child",
+}
 
 
 class ScoreHistory(BaseModel):
@@ -36,60 +43,36 @@ class ScoreHistory(BaseModel):
     Used for trend visualization showing how card scores have changed
     over time. Each record captures all 7 score dimensions.
     """
-    id: str = Field(
-        ...,
-        description="UUID of the score history record"
-    )
-    card_id: str = Field(
-        ...,
-        description="UUID of the card this history belongs to"
-    )
+
+    id: str = Field(..., description="UUID of the score history record")
+    card_id: str = Field(..., description="UUID of the card this history belongs to")
     recorded_at: datetime = Field(
-        ...,
-        description="Timestamp when this score snapshot was recorded"
+        ..., description="Timestamp when this score snapshot was recorded"
     )
     # All 7 score dimensions (0-100 range)
     maturity_score: Optional[int] = Field(
-        None,
-        ge=0,
-        le=100,
-        description="Maturity score at this point in time (0-100)"
+        None, ge=0, le=100, description="Maturity score at this point in time (0-100)"
     )
     velocity_score: Optional[int] = Field(
-        None,
-        ge=0,
-        le=100,
-        description="Velocity score at this point in time (0-100)"
+        None, ge=0, le=100, description="Velocity score at this point in time (0-100)"
     )
     novelty_score: Optional[int] = Field(
-        None,
-        ge=0,
-        le=100,
-        description="Novelty score at this point in time (0-100)"
+        None, ge=0, le=100, description="Novelty score at this point in time (0-100)"
     )
     impact_score: Optional[int] = Field(
-        None,
-        ge=0,
-        le=100,
-        description="Impact score at this point in time (0-100)"
+        None, ge=0, le=100, description="Impact score at this point in time (0-100)"
     )
     relevance_score: Optional[int] = Field(
-        None,
-        ge=0,
-        le=100,
-        description="Relevance score at this point in time (0-100)"
+        None, ge=0, le=100, description="Relevance score at this point in time (0-100)"
     )
     risk_score: Optional[int] = Field(
-        None,
-        ge=0,
-        le=100,
-        description="Risk score at this point in time (0-100)"
+        None, ge=0, le=100, description="Risk score at this point in time (0-100)"
     )
     opportunity_score: Optional[int] = Field(
         None,
         ge=0,
         le=100,
-        description="Opportunity score at this point in time (0-100)"
+        description="Opportunity score at this point in time (0-100)",
     )
 
 
@@ -100,51 +83,28 @@ class ScoreHistoryCreate(BaseModel):
     Internal use - typically called when card scores are updated
     to track changes over time.
     """
-    card_id: str = Field(
-        ...,
-        description="UUID of the card to record history for"
-    )
+
+    card_id: str = Field(..., description="UUID of the card to record history for")
     maturity_score: Optional[int] = Field(
-        None,
-        ge=0,
-        le=100,
-        description="Maturity score (0-100)"
+        None, ge=0, le=100, description="Maturity score (0-100)"
     )
     velocity_score: Optional[int] = Field(
-        None,
-        ge=0,
-        le=100,
-        description="Velocity score (0-100)"
+        None, ge=0, le=100, description="Velocity score (0-100)"
     )
     novelty_score: Optional[int] = Field(
-        None,
-        ge=0,
-        le=100,
-        description="Novelty score (0-100)"
+        None, ge=0, le=100, description="Novelty score (0-100)"
     )
     impact_score: Optional[int] = Field(
-        None,
-        ge=0,
-        le=100,
-        description="Impact score (0-100)"
+        None, ge=0, le=100, description="Impact score (0-100)"
     )
     relevance_score: Optional[int] = Field(
-        None,
-        ge=0,
-        le=100,
-        description="Relevance score (0-100)"
+        None, ge=0, le=100, description="Relevance score (0-100)"
     )
     risk_score: Optional[int] = Field(
-        None,
-        ge=0,
-        le=100,
-        description="Risk score (0-100)"
+        None, ge=0, le=100, description="Risk score (0-100)"
     )
     opportunity_score: Optional[int] = Field(
-        None,
-        ge=0,
-        le=100,
-        description="Opportunity score (0-100)"
+        None, ge=0, le=100, description="Opportunity score (0-100)"
     )
 
 
@@ -154,32 +114,27 @@ class ScoreHistoryResponse(BaseModel):
 
     Returns a list of score snapshots for trend visualization.
     """
+
     history: List[ScoreHistory] = Field(
         default_factory=list,
-        description="List of score history records ordered by recorded_at"
+        description="List of score history records ordered by recorded_at",
     )
-    card_id: str = Field(
-        ...,
-        description="UUID of the card this history belongs to"
-    )
+    card_id: str = Field(..., description="UUID of the card this history belongs to")
     total_count: int = Field(
-        default=0,
-        ge=0,
-        description="Total number of history records for this card"
+        default=0, ge=0, description="Total number of history records for this card"
     )
     start_date: Optional[datetime] = Field(
-        None,
-        description="Start date filter applied to the query"
+        None, description="Start date filter applied to the query"
     )
     end_date: Optional[datetime] = Field(
-        None,
-        description="End date filter applied to the query"
+        None, description="End date filter applied to the query"
     )
 
 
 # ============================================================================
 # Stage History Models
 # ============================================================================
+
 
 class StageHistory(BaseModel):
     """
@@ -189,74 +144,65 @@ class StageHistory(BaseModel):
     the transition from one maturity stage to another with
     associated horizon changes.
     """
-    id: str = Field(
-        ...,
-        description="UUID of the stage history record"
-    )
-    card_id: str = Field(
-        ...,
-        description="UUID of the card this history belongs to"
-    )
+
+    id: str = Field(..., description="UUID of the stage history record")
+    card_id: str = Field(..., description="UUID of the card this history belongs to")
     changed_at: datetime = Field(
-        ...,
-        description="Timestamp when the stage transition occurred"
+        ..., description="Timestamp when the stage transition occurred"
     )
     old_stage_id: Optional[int] = Field(
         None,
         ge=1,
         le=8,
-        description="Previous maturity stage ID (1-8), null for first record"
+        description="Previous maturity stage ID (1-8), null for first record",
     )
     new_stage_id: int = Field(
-        ...,
-        ge=1,
-        le=8,
-        description="New maturity stage ID (1-8)"
+        ..., ge=1, le=8, description="New maturity stage ID (1-8)"
     )
     old_horizon: Optional[str] = Field(
         None,
         pattern=r"^H[123]$",
-        description="Previous horizon (H1, H2, or H3), null for first record"
+        description="Previous horizon (H1, H2, or H3), null for first record",
     )
     new_horizon: str = Field(
-        ...,
-        pattern=r"^H[123]$",
-        description="New horizon (H1, H2, or H3)"
+        ..., pattern=r"^H[123]$", description="New horizon (H1, H2, or H3)"
     )
     trigger: Optional[str] = Field(
         None,
         max_length=100,
-        description="What triggered the stage change (e.g., 'manual', 'auto-calculated', 'score_update')"
+        description="What triggered the stage change (e.g., 'manual', 'auto-calculated', 'score_update')",
     )
     reason: Optional[str] = Field(
-        None,
-        max_length=1000,
-        description="Optional explanation for the stage change"
+        None, max_length=1000, description="Optional explanation for the stage change"
     )
 
-    @validator('card_id')
+    @validator("card_id")
     def validate_card_uuid(cls, v):
         """Validate that card_id is a valid UUID format."""
         uuid_pattern = re.compile(
-            r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-            re.IGNORECASE
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            re.IGNORECASE,
         )
         if not uuid_pattern.match(v):
-            raise ValueError('Invalid UUID format for card_id')
+            raise ValueError("Invalid UUID format for card_id")
         return v
 
-    @validator('new_horizon')
+    @validator("new_horizon")
     def validate_new_horizon(cls, v):
         """Validate that new_horizon is a known horizon value."""
         if v not in VALID_HORIZONS:
-            raise ValueError(f'Invalid horizon. Must be one of: {", ".join(sorted(VALID_HORIZONS))}')
+            raise ValueError(
+                f'Invalid horizon. Must be one of: {", ".join(sorted(VALID_HORIZONS))}'
+            )
         return v
 
-    @validator('old_horizon')
+    @validator("old_horizon")
     def validate_old_horizon(cls, v):
         """Validate that old_horizon is a known horizon value if provided."""
         if v is not None and v not in VALID_HORIZONS:
-            raise ValueError(f'Invalid horizon. Must be one of: {", ".join(sorted(VALID_HORIZONS))}')
+            raise ValueError(
+                f'Invalid horizon. Must be one of: {", ".join(sorted(VALID_HORIZONS))}'
+            )
         return v
 
 
@@ -266,52 +212,36 @@ class StageHistoryCreate(BaseModel):
 
     Used internally when recording stage transitions during card updates.
     """
-    card_id: str = Field(
-        ...,
-        description="UUID of the card"
-    )
+
+    card_id: str = Field(..., description="UUID of the card")
     old_stage_id: Optional[int] = Field(
-        None,
-        ge=1,
-        le=8,
-        description="Previous maturity stage ID (1-8)"
+        None, ge=1, le=8, description="Previous maturity stage ID (1-8)"
     )
     new_stage_id: int = Field(
-        ...,
-        ge=1,
-        le=8,
-        description="New maturity stage ID (1-8)"
+        ..., ge=1, le=8, description="New maturity stage ID (1-8)"
     )
     old_horizon: Optional[str] = Field(
-        None,
-        pattern=r"^H[123]$",
-        description="Previous horizon (H1, H2, or H3)"
+        None, pattern=r"^H[123]$", description="Previous horizon (H1, H2, or H3)"
     )
     new_horizon: str = Field(
-        ...,
-        pattern=r"^H[123]$",
-        description="New horizon (H1, H2, or H3)"
+        ..., pattern=r"^H[123]$", description="New horizon (H1, H2, or H3)"
     )
     trigger: Optional[str] = Field(
-        "manual",
-        max_length=100,
-        description="What triggered the stage change"
+        "manual", max_length=100, description="What triggered the stage change"
     )
     reason: Optional[str] = Field(
-        None,
-        max_length=1000,
-        description="Optional explanation for the stage change"
+        None, max_length=1000, description="Optional explanation for the stage change"
     )
 
-    @validator('card_id')
+    @validator("card_id")
     def validate_card_uuid(cls, v):
         """Validate that card_id is a valid UUID format."""
         uuid_pattern = re.compile(
-            r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-            re.IGNORECASE
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            re.IGNORECASE,
         )
         if not uuid_pattern.match(v):
-            raise ValueError('Invalid UUID format for card_id')
+            raise ValueError("Invalid UUID format for card_id")
         return v
 
 
@@ -321,23 +251,21 @@ class StageHistoryList(BaseModel):
 
     Returns chronologically ordered stage transitions for a card.
     """
+
     history: List[StageHistory] = Field(
         default_factory=list,
-        description="List of stage transition records, ordered by changed_at DESC"
+        description="List of stage transition records, ordered by changed_at DESC",
     )
     total_count: int = Field(
-        default=0,
-        description="Total number of stage transitions for this card"
+        default=0, description="Total number of stage transitions for this card"
     )
-    card_id: str = Field(
-        ...,
-        description="UUID of the card these records belong to"
-    )
+    card_id: str = Field(..., description="UUID of the card these records belong to")
 
 
 # ============================================================================
 # Card Relationship Models
 # ============================================================================
+
 
 class CardRelationship(BaseModel):
     """
@@ -347,45 +275,40 @@ class CardRelationship(BaseModel):
     connecting a source card to a target card with relationship
     metadata for visualization.
     """
-    id: str = Field(
-        ...,
-        description="UUID of the relationship record"
-    )
+
+    id: str = Field(..., description="UUID of the relationship record")
     source_card_id: str = Field(
-        ...,
-        description="UUID of the source card (edge origin)"
+        ..., description="UUID of the source card (edge origin)"
     )
     target_card_id: str = Field(
-        ...,
-        description="UUID of the target card (edge destination)"
+        ..., description="UUID of the target card (edge destination)"
     )
     relationship_type: str = Field(
         ...,
-        description="Type of relationship (related, similar, derived, dependent, parent, child)"
+        description="Type of relationship (related, similar, derived, dependent, parent, child)",
     )
     strength: Optional[float] = Field(
         None,
         ge=0.0,
         le=1.0,
-        description="Relationship strength weight (0-1) for edge visualization"
+        description="Relationship strength weight (0-1) for edge visualization",
     )
     created_at: datetime = Field(
-        ...,
-        description="Timestamp when the relationship was created"
+        ..., description="Timestamp when the relationship was created"
     )
 
-    @validator('source_card_id', 'target_card_id')
+    @validator("source_card_id", "target_card_id")
     def validate_uuid(cls, v):
         """Validate that card IDs are valid UUID format."""
         uuid_pattern = re.compile(
-            r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-            re.IGNORECASE
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            re.IGNORECASE,
         )
         if not uuid_pattern.match(v):
-            raise ValueError('Invalid UUID format for card_id')
+            raise ValueError("Invalid UUID format for card_id")
         return v
 
-    @validator('relationship_type')
+    @validator("relationship_type")
     def validate_relationship_type(cls, v):
         """Validate that relationship_type is a known type."""
         if v not in VALID_RELATIONSHIP_TYPES:
@@ -402,44 +325,33 @@ class CardRelationshipCreate(BaseModel):
     Used when establishing a new relationship between two cards
     in the concept network.
     """
-    source_card_id: str = Field(
-        ...,
-        description="UUID of the source card"
-    )
-    target_card_id: str = Field(
-        ...,
-        description="UUID of the target card"
-    )
-    relationship_type: str = Field(
-        ...,
-        description="Type of relationship"
-    )
+
+    source_card_id: str = Field(..., description="UUID of the source card")
+    target_card_id: str = Field(..., description="UUID of the target card")
+    relationship_type: str = Field(..., description="Type of relationship")
     strength: Optional[float] = Field(
-        None,
-        ge=0.0,
-        le=1.0,
-        description="Relationship strength (0-1)"
+        None, ge=0.0, le=1.0, description="Relationship strength (0-1)"
     )
 
-    @validator('source_card_id', 'target_card_id')
+    @validator("source_card_id", "target_card_id")
     def validate_uuid(cls, v):
         """Validate that card IDs are valid UUID format."""
         uuid_pattern = re.compile(
-            r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-            re.IGNORECASE
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            re.IGNORECASE,
         )
         if not uuid_pattern.match(v):
-            raise ValueError('Invalid UUID format for card_id')
+            raise ValueError("Invalid UUID format for card_id")
         return v
 
-    @validator('target_card_id')
+    @validator("target_card_id")
     def validate_not_self_reference(cls, v, values):
         """Validate that source and target are different cards."""
-        if 'source_card_id' in values and v == values['source_card_id']:
-            raise ValueError('Cannot create self-referential relationship')
+        if "source_card_id" in values and v == values["source_card_id"]:
+            raise ValueError("Cannot create self-referential relationship")
         return v
 
-    @validator('relationship_type')
+    @validator("relationship_type")
     def validate_relationship_type(cls, v):
         """Validate that relationship_type is a known type."""
         if v not in VALID_RELATIONSHIP_TYPES:
@@ -456,49 +368,23 @@ class RelatedCard(BaseModel):
     Used in concept network visualization to display related cards
     with their relationship context.
     """
-    id: str = Field(
-        ...,
-        description="UUID of the related card"
-    )
-    name: str = Field(
-        ...,
-        description="Card display name"
-    )
-    slug: str = Field(
-        ...,
-        description="URL-friendly card identifier"
-    )
-    summary: Optional[str] = Field(
-        None,
-        description="Brief card summary"
-    )
-    pillar_id: Optional[str] = Field(
-        None,
-        description="Strategic pillar code"
-    )
-    stage_id: Optional[str] = Field(
-        None,
-        description="Maturity stage ID"
-    )
-    horizon: Optional[str] = Field(
-        None,
-        description="Planning horizon (H1, H2, H3)"
-    )
+
+    id: str = Field(..., description="UUID of the related card")
+    name: str = Field(..., description="Card display name")
+    slug: str = Field(..., description="URL-friendly card identifier")
+    summary: Optional[str] = Field(None, description="Brief card summary")
+    pillar_id: Optional[str] = Field(None, description="Strategic pillar code")
+    stage_id: Optional[str] = Field(None, description="Maturity stage ID (deprecated)")
+    horizon: Optional[str] = Field(None, description="Planning horizon (deprecated)")
+    pipeline_status: Optional[str] = Field(None, description="Grant pipeline status")
     # Relationship context
     relationship_type: str = Field(
-        ...,
-        description="Type of relationship to the source card"
+        ..., description="Type of relationship to the source card"
     )
     relationship_strength: Optional[float] = Field(
-        None,
-        ge=0.0,
-        le=1.0,
-        description="Strength of the relationship (0-1)"
+        None, ge=0.0, le=1.0, description="Strength of the relationship (0-1)"
     )
-    relationship_id: str = Field(
-        ...,
-        description="UUID of the relationship record"
-    )
+    relationship_id: str = Field(..., description="UUID of the relationship record")
 
 
 class RelatedCardsList(BaseModel):
@@ -507,17 +393,13 @@ class RelatedCardsList(BaseModel):
 
     Returns cards connected to a source card in the concept network.
     """
+
     related_cards: List[RelatedCard] = Field(
-        default_factory=list,
-        description="List of cards related to the source card"
+        default_factory=list, description="List of cards related to the source card"
     )
-    total_count: int = Field(
-        default=0,
-        description="Total number of related cards"
-    )
+    total_count: int = Field(default=0, description="Total number of related cards")
     source_card_id: str = Field(
-        ...,
-        description="UUID of the card these relationships are for"
+        ..., description="UUID of the card these relationships are for"
     )
 
 
@@ -525,30 +407,49 @@ class RelatedCardsList(BaseModel):
 # Card Comparison Models
 # ============================================================================
 
+
 class CardData(BaseModel):
     """
     Basic card data for comparison view.
 
     Contains essential card metadata for side-by-side comparison.
     """
+
     id: str = Field(..., description="UUID of the card")
     name: str = Field(..., description="Card display name")
     slug: str = Field(..., description="URL-friendly card identifier")
     summary: Optional[str] = Field(None, description="Brief card summary")
     pillar_id: Optional[str] = Field(None, description="Strategic pillar code")
     goal_id: Optional[str] = Field(None, description="Goal ID")
-    stage_id: Optional[str] = Field(None, description="Maturity stage ID")
-    horizon: Optional[str] = Field(None, description="Planning horizon (H1, H2, H3)")
+    stage_id: Optional[str] = Field(None, description="Maturity stage ID (deprecated)")
+    horizon: Optional[str] = Field(None, description="Planning horizon (deprecated)")
+    pipeline_status: Optional[str] = Field(None, description="Grant pipeline status")
     # Current scores for comparison
-    maturity_score: Optional[int] = Field(None, ge=0, le=100, description="Current maturity score")
-    velocity_score: Optional[int] = Field(None, ge=0, le=100, description="Current velocity score")
-    novelty_score: Optional[int] = Field(None, ge=0, le=100, description="Current novelty score")
-    impact_score: Optional[int] = Field(None, ge=0, le=100, description="Current impact score")
-    relevance_score: Optional[int] = Field(None, ge=0, le=100, description="Current relevance score")
-    risk_score: Optional[int] = Field(None, ge=0, le=100, description="Current risk score")
-    opportunity_score: Optional[int] = Field(None, ge=0, le=100, description="Current opportunity score")
+    maturity_score: Optional[int] = Field(
+        None, ge=0, le=100, description="Current maturity score"
+    )
+    velocity_score: Optional[int] = Field(
+        None, ge=0, le=100, description="Current velocity score"
+    )
+    novelty_score: Optional[int] = Field(
+        None, ge=0, le=100, description="Current novelty score"
+    )
+    impact_score: Optional[int] = Field(
+        None, ge=0, le=100, description="Current impact score"
+    )
+    relevance_score: Optional[int] = Field(
+        None, ge=0, le=100, description="Current relevance score"
+    )
+    risk_score: Optional[int] = Field(
+        None, ge=0, le=100, description="Current risk score"
+    )
+    opportunity_score: Optional[int] = Field(
+        None, ge=0, le=100, description="Current opportunity score"
+    )
     created_at: Optional[datetime] = Field(None, description="Card creation timestamp")
-    updated_at: Optional[datetime] = Field(None, description="Card last update timestamp")
+    updated_at: Optional[datetime] = Field(
+        None, description="Card last update timestamp"
+    )
 
 
 class CardComparisonItem(BaseModel):
@@ -558,14 +459,15 @@ class CardComparisonItem(BaseModel):
     Includes card metadata, score history, and stage history
     for comprehensive trend comparison visualization.
     """
+
     card: CardData = Field(..., description="Card metadata and current scores")
     score_history: List[ScoreHistory] = Field(
         default_factory=list,
-        description="Historical score snapshots for timeline chart"
+        description="Historical score snapshots for timeline chart",
     )
     stage_history: List[StageHistory] = Field(
         default_factory=list,
-        description="Stage transition history for progression visualization"
+        description="Stage transition history for progression visualization",
     )
 
 
@@ -576,9 +478,9 @@ class CardComparisonResponse(BaseModel):
     Returns parallel data for two cards to enable synchronized
     timeline charts and comparative metrics visualization.
     """
+
     card1: CardComparisonItem = Field(..., description="First card's comparison data")
     card2: CardComparisonItem = Field(..., description="Second card's comparison data")
     comparison_generated_at: datetime = Field(
-        ...,
-        description="Timestamp when comparison data was generated"
+        ..., description="Timestamp when comparison data was generated"
     )

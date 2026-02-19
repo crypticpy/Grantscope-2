@@ -31,12 +31,11 @@ import { API_BASE_URL } from "../lib/config";
 import { useIsMobile } from "../hooks/use-mobile";
 import { useScrollRestoration } from "../hooks/useScrollRestoration";
 import { PillarBadge } from "../components/PillarBadge";
-import { HorizonBadge } from "../components/HorizonBadge";
-import { StageBadge } from "../components/StageBadge";
+import { PipelineBadge } from "../components/PipelineBadge";
+import { DeadlineUrgencyBadge } from "../components/DeadlineUrgencyBadge";
 import { ConfidenceBadge } from "../components/ConfidenceBadge";
 import { Tooltip } from "../components/ui/Tooltip";
 import { cn } from "../lib/utils";
-import { parseStageNumber } from "../lib/stage-utils";
 import {
   VirtualizedList,
   VirtualizedListHandle,
@@ -1700,7 +1699,6 @@ const DiscoveryQueue: React.FC = () => {
           ariaLabel="Discovery queue opportunities"
           scrollContainerClassName="h-[calc(100vh-280px)] sm:h-[calc(100vh-300px)]"
           renderItem={(card, _index) => {
-            const stageNumber = parseStageNumber(card.stage_id);
             const isSelected = selectedCards.has(card.id);
             const isLoading = actionLoading === card.id;
             const isDropdownOpen = openDropdown === card.id;
@@ -1756,14 +1754,14 @@ const DiscoveryQueue: React.FC = () => {
                               showIcon={!isMobile}
                               size="sm"
                             />
-                            <HorizonBadge horizon={card.horizon} size="sm" />
-                            {stageNumber !== null && (
-                              <StageBadge
-                                stage={stageNumber}
-                                size="sm"
-                                variant="minimal"
-                              />
-                            )}
+                            <PipelineBadge
+                              status={card.pipeline_status || "discovered"}
+                              size="sm"
+                            />
+                            <DeadlineUrgencyBadge
+                              deadline={card.deadline}
+                              size="sm"
+                            />
                             <ConfidenceBadge
                               confidence={card.ai_confidence}
                               size="sm"

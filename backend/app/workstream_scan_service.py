@@ -1139,6 +1139,8 @@ Example: ["query 1", "query 2", ...]"""
                 summary=analysis.summary,
                 horizon=analysis.horizon,
                 stage_id=stage_id,
+                pipeline_status="discovered",
+                pipeline_status_changed_at=datetime.now(timezone.utc),
                 pillar_id=(
                     convert_pillar_id(analysis.pillars[0]) if analysis.pillars else None
                 ),

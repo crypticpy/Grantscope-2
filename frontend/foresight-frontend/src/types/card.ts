@@ -30,6 +30,8 @@ export interface BaseCard {
   pillar_id: string;
   stage_id: string;
   horizon: Horizon;
+  pipeline_status?: string;
+  pipeline_status_changed_at?: string;
   novelty_score: number;
   maturity_score: number;
   impact_score: number;

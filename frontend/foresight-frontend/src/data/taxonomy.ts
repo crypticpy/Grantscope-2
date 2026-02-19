@@ -104,6 +104,7 @@ export interface PipelineStatus {
   description: string;
   icon: string;
   color: string;
+  colorLight?: string;
 }
 
 export interface Department {
@@ -353,6 +354,7 @@ export const anchors: Anchor[] = [
 // Maturity Stages (8)
 // ============================================================================
 
+/** @deprecated Use pipelineStatuses instead. Will be removed in a future release. */
 export const stages: MaturityStage[] = [
   {
     stage: 1,
@@ -416,6 +418,7 @@ export const stages: MaturityStage[] = [
 // Horizons (3)
 // ============================================================================
 
+/** @deprecated Use pipelineStatuses instead. Will be removed in a future release. */
 export const horizons: Horizon[] = [
   {
     code: "H1",
@@ -561,18 +564,18 @@ export const steepCategories: SteepCategory[] = [
 export const triageScores: TriageScore[] = [
   {
     score: 1,
-    name: "Confirming",
-    description: "Confirms what we already know (baseline)",
+    name: "Routine",
+    description: "Recurring annual cycle or routine opportunity",
   },
   {
     score: 3,
-    name: "Resolving",
-    description: "Provides evidence for one of known alternatives",
+    name: "Notable",
+    description: "Good fit, standard process, worth pursuing",
   },
   {
     score: 5,
-    name: "Novel",
-    description: "Suggests new possibility not previously considered",
+    name: "Exceptional",
+    description: "High value, strong fit, rare or new program",
   },
 ];
 
@@ -760,6 +763,7 @@ export const goalMap: Record<string, Goal> = goals.reduce(
 
 /**
  * Map of stage numbers to stages for quick lookup
+ * @deprecated Use pipelineStatuses instead. Will be removed in a future release.
  */
 export const stageMap: Record<number, MaturityStage> = stages.reduce(
   (acc, stage) => {
@@ -771,6 +775,7 @@ export const stageMap: Record<number, MaturityStage> = stages.reduce(
 
 /**
  * Map of horizon codes to horizons for quick lookup
+ * @deprecated Use pipelineStatuses instead. Will be removed in a future release.
  */
 export const horizonMap: Record<string, Horizon> = horizons.reduce(
   (acc, horizon) => {
@@ -931,7 +936,7 @@ export const deadlineUrgencyTiers: DeadlineUrgency[] = [
 ];
 
 // ============================================================================
-// Pipeline Statuses (7)
+// Pipeline Statuses (9)
 // ============================================================================
 
 export const pipelineStatuses: PipelineStatus[] = [
@@ -969,6 +974,22 @@ export const pipelineStatuses: PipelineStatus[] = [
     description: "Grant awarded",
     icon: "Trophy",
     color: "#22c55e",
+  },
+  {
+    id: "active",
+    name: "Active",
+    description: "Grant in performance period, drawing funds",
+    icon: "Activity",
+    color: "#10b981",
+    colorLight: "#d1fae5",
+  },
+  {
+    id: "closed",
+    name: "Closed",
+    description: "Grant completed or opportunity passed",
+    icon: "Archive",
+    color: "#6b7280",
+    colorLight: "#f3f4f6",
   },
   {
     id: "declined",
@@ -1050,6 +1071,50 @@ export function getDeadlineUrgency(
  */
 export function getPipelineStatusById(id: string): PipelineStatus | undefined {
   return pipelineStatuses.find((s) => s.id === id);
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline Phases (derived grouping of statuses)
+// ---------------------------------------------------------------------------
+export const pipelinePhases = {
+  pipeline: {
+    label: "Pipeline",
+    statuses: ["discovered", "evaluating"],
+    color: "#3b82f6",
+    colorLight: "#dbeafe",
+    description: "Opportunities being tracked",
+  },
+  pursuing: {
+    label: "Pursuing",
+    statuses: ["applying", "submitted"],
+    color: "#f59e0b",
+    colorLight: "#fef3c7",
+    description: "Actively being applied for",
+  },
+  active: {
+    label: "Active",
+    statuses: ["awarded", "active"],
+    color: "#22c55e",
+    colorLight: "#dcfce7",
+    description: "Funded grants in performance",
+  },
+  archived: {
+    label: "Archived",
+    statuses: ["closed", "declined", "expired"],
+    color: "#6b7280",
+    colorLight: "#f3f4f6",
+    description: "Completed, declined, or expired",
+  },
+} as const;
+
+export type PipelinePhase = keyof typeof pipelinePhases;
+
+export function getPipelinePhase(status: string): PipelinePhase {
+  for (const [phase, def] of Object.entries(pipelinePhases)) {
+    if ((def.statuses as readonly string[]).includes(status))
+      return phase as PipelinePhase;
+  }
+  return "pipeline";
 }
 
 // ============================================================================
