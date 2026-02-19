@@ -80,7 +80,6 @@ async def get_current_user_profile(
 PROFILE_FIELDS = {
     "display_name",
     "department",
-    "role",
     "preferences",
     "department_id",
     "title",
