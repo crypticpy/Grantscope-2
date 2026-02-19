@@ -279,6 +279,9 @@ export default function AskGrantScope() {
         scope: "grant_assistant",
       });
       setActiveConversationScope("grant_assistant");
+      // Clear any stale conversation from a different scope
+      setActiveConversationId(null);
+      setForceNewChat(true);
     }
     // Only run on mount — intentionally excludes searchParams from deps
     // eslint-disable-next-line react-hooks/exhaustive-deps

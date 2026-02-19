@@ -27,8 +27,12 @@ def sse_token(content: str) -> str:
 
 
 def sse_error(message: str) -> str:
-    """Format an error event."""
-    return f"data: {json.dumps({'type': 'error', 'content': message})}\n\n"
+    """Format an error event.
+
+    Uses the ``data`` key for consistency with all other non-token event
+    types and to match the frontend's primary read path.
+    """
+    return f"data: {json.dumps({'type': 'error', 'data': message})}\n\n"
 
 
 def sse_progress(step: str, detail: str) -> str:

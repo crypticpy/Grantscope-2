@@ -164,18 +164,19 @@ async def chat_endpoint(
     Main chat endpoint for Ask GrantScope NLQ feature.
 
     Streams an AI-powered response using Server-Sent Events (SSE).
-    Supports four scopes:
+    Supports five scopes:
     - signal: Q&A about a specific card and its sources
     - workstream: Analysis across cards in a workstream
     - global: Broad strategic intelligence search
     - wizard: Grant application advisor interview
+    - grant_assistant: AI-powered grant discovery and search
 
     Returns streaming SSE events:
     - {"type": "token", "content": "..."} -- incremental response tokens
     - {"type": "citation", "data": {...}} -- resolved source citations
     - {"type": "suggestions", "data": [...]} -- follow-up question suggestions
     - {"type": "done", "data": {"conversation_id": "...", "message_id": "..."}}
-    - {"type": "error", "content": "..."} -- error messages
+    - {"type": "error", "data": "..."} -- error messages
     """
     user_id = current_user["id"]
 

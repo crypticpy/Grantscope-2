@@ -7,7 +7,7 @@ SAM.gov, and the web for grant opportunities.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import select
@@ -109,7 +109,16 @@ async def _handle_search_internal_grants(
             if deadline_after and card.deadline:
                 try:
                     cutoff = datetime.fromisoformat(deadline_after)
-                    if card.deadline.replace(tzinfo=None) < cutoff.replace(tzinfo=None):
+                    # Normalise both to UTC-aware datetimes for safe comparison
+                    card_dl = (
+                        card.deadline
+                        if card.deadline.tzinfo
+                        else card.deadline.replace(tzinfo=timezone.utc)
+                    )
+                    cutoff = (
+                        cutoff if cutoff.tzinfo else cutoff.replace(tzinfo=timezone.utc)
+                    )
+                    if card_dl < cutoff:
                         continue
                 except (ValueError, TypeError):
                     pass

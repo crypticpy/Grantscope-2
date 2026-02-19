@@ -3,7 +3,7 @@
  *
  * Manages chat state including messages, streaming responses, conversation
  * lifecycle, and suggested questions. Designed for use with the ChatPanel
- * component across global, signal, and workstream scopes.
+ * component across global, signal, workstream, wizard, and grant_assistant scopes.
  *
  * @module hooks/useChat
  */

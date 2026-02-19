@@ -6,10 +6,12 @@ profile and for crawling a URL to extract structured grant data.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
 import uuid as _uuid
 from typing import Any, Dict, Optional
+from urllib.parse import urlparse
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -209,6 +211,33 @@ registry.register(
 # ---------------------------------------------------------------------------
 
 
+def _is_safe_url(url: str) -> bool:
+    """Block SSRF attempts to internal networks."""
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        # Block common internal hostnames
+        if hostname in (
+            "localhost",
+            "127.0.0.1",
+            "0.0.0.0",
+            "metadata.google.internal",
+        ):
+            return False
+        # Block internal IP ranges
+        try:
+            ip = ipaddress.ip_address(hostname)
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                return False
+        except ValueError:
+            pass  # hostname is not an IP, that's fine
+        return True
+    except Exception:
+        return False
+
+
 async def _handle_analyze_url(db: AsyncSession, user_id: str, **kwargs: Any) -> dict:
     """Crawl a URL and extract structured grant information.
 
@@ -232,6 +261,14 @@ async def _handle_analyze_url(db: AsyncSession, user_id: str, **kwargs: Any) -> 
         # Basic URL validation
         if not url.startswith(("http://", "https://")):
             return {"error": "URL must start with http:// or https://"}
+
+        if len(url) > 2048:
+            return {"error": "URL is too long. Please provide a shorter URL."}
+
+        if not _is_safe_url(url):
+            return {
+                "error": "This URL cannot be accessed. Please provide a public URL."
+            }
 
         from app.wizard_service import WizardService
 

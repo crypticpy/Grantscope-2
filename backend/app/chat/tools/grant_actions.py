@@ -11,7 +11,7 @@ import uuid as _uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import select, and_
+from sqlalchemy import func, select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.chat.tools import ToolDefinition, registry
@@ -58,14 +58,11 @@ async def _handle_create_opportunity_card(
         eligibility_text: Optional[str] = kwargs.get("eligibility_text")
         source_url: Optional[str] = kwargs.get("source_url")
 
-        # Check for existing card with similar name (case-insensitive)
-        escaped_name = (
-            name.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        )
+        # Check for existing card with exact name (case-insensitive)
         existing_result = await db.execute(
             select(Card)
             .where(
-                Card.name.ilike(f"%{escaped_name}%"),
+                func.lower(Card.name) == name.lower(),
                 Card.status == "active",
             )
             .limit(1)

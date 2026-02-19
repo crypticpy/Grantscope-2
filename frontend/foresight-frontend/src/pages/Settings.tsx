@@ -45,6 +45,7 @@ const Settings: React.FC = () => {
   // Admin settings state
   const [onlineSearchEnabled, setOnlineSearchEnabled] = useState(false);
   const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
 
   // Determine if user is admin
   const isAdmin = user?.role === "admin" || user?.role === "service_role";
@@ -84,6 +85,7 @@ const Settings: React.FC = () => {
   // Toggle handler for online search setting
   const toggleOnlineSearch = async (checked: boolean) => {
     setSettingsLoading(true);
+    setSettingsError(null);
     try {
       const token = localStorage.getItem("gs2_token");
       if (!token) return;
@@ -100,9 +102,12 @@ const Settings: React.FC = () => {
       );
       if (res.ok) {
         setOnlineSearchEnabled(checked);
+      } else {
+        setSettingsError("Failed to update setting. Please try again.");
       }
     } catch (e) {
       console.error("Failed to update setting:", e);
+      setSettingsError("Failed to update setting. Please try again.");
     } finally {
       setSettingsLoading(false);
     }
@@ -796,6 +801,7 @@ const Settings: React.FC = () => {
                 } ${settingsLoading ? "opacity-50" : ""}`}
                 role="switch"
                 aria-checked={onlineSearchEnabled}
+                aria-label="Toggle online search"
               >
                 <span
                   className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
@@ -804,6 +810,11 @@ const Settings: React.FC = () => {
                 />
               </button>
             </div>
+            {settingsError && (
+              <p className="text-sm text-red-600 dark:text-red-400 mt-1">
+                {settingsError}
+              </p>
+            )}
           </div>
         )}
       </div>

@@ -123,12 +123,13 @@ async def get_conversation_history(
     result = await db.execute(
         select(ChatMessage.role, ChatMessage.content)
         .where(ChatMessage.conversation_id == conversation_id)
-        .order_by(ChatMessage.created_at)
+        .order_by(ChatMessage.created_at.desc())
         .limit(MAX_CONVERSATION_MESSAGES)
     )
     rows = result.all()
 
-    return [{"role": msg.role, "content": msg.content} for msg in rows]
+    # Reverse so the most recent N messages are in chronological order for the LLM
+    return [{"role": msg.role, "content": msg.content} for msg in reversed(rows)]
 
 
 async def store_message(

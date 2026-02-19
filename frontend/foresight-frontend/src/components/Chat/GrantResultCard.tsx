@@ -53,6 +53,7 @@ function getDeadlineUrgency(
   deadline: string,
 ): "urgent" | "soon" | "normal" | "past" {
   const d = new Date(deadline);
+  if (isNaN(d.getTime())) return "normal";
   const now = new Date();
   const daysUntil = Math.ceil(
     (d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
@@ -190,6 +191,7 @@ export default function GrantResultCard({
       {onTrack && (
         <div className="mt-2 pt-2 border-t border-gray-100 dark:border-dark-border">
           <button
+            type="button"
             onClick={onTrack}
             className="text-xs text-brand-blue hover:text-brand-blue/80 font-medium"
           >

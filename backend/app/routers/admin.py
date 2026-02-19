@@ -691,17 +691,24 @@ async def list_settings(
     current_user: dict = Depends(require_admin),
 ):
     """List all system settings. Admin only."""
-    result = await db.execute(select(SystemSetting).order_by(SystemSetting.key))
-    settings = result.scalars().all()
-    return [
-        {
-            "key": s.key,
-            "value": s.value,
-            "description": s.description,
-            "updated_at": s.updated_at.isoformat() if s.updated_at else None,
-        }
-        for s in settings
-    ]
+    try:
+        result = await db.execute(select(SystemSetting).order_by(SystemSetting.key))
+        settings = result.scalars().all()
+        return [
+            {
+                "key": s.key,
+                "value": s.value,
+                "description": s.description,
+                "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+            }
+            for s in settings
+        ]
+    except Exception as e:
+        logger.error(f"Failed to list system settings: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("system settings retrieval", e),
+        ) from e
 
 
 @router.get("/admin/settings/{key}")
@@ -720,15 +727,24 @@ async def get_setting(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to read this setting",
         )
-    result = await db.execute(select(SystemSetting).where(SystemSetting.key == key))
-    setting = result.scalar_one_or_none()
-    if not setting:
-        raise HTTPException(status_code=404, detail=f"Setting '{key}' not found")
-    return {
-        "key": setting.key,
-        "value": setting.value,
-        "description": setting.description,
-    }
+    try:
+        result = await db.execute(select(SystemSetting).where(SystemSetting.key == key))
+        setting = result.scalar_one_or_none()
+        if not setting:
+            raise HTTPException(status_code=404, detail=f"Setting '{key}' not found")
+        return {
+            "key": setting.key,
+            "value": setting.value,
+            "description": setting.description,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get setting '{key}': {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("system setting retrieval", e),
+        ) from e
 
 
 @router.put("/admin/settings/{key}")

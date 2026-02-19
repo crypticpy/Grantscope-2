@@ -217,15 +217,19 @@ async def build_wizard_system_prompt(
                 e,
             )
 
+    def _escape_braces(text: str) -> str:
+        """Escape curly braces in user data to prevent str.format() KeyError."""
+        return text.replace("{", "{{").replace("}", "}}")
+
     if entry_path == "build_program":
         return PROGRAM_FIRST_INTERVIEW_PROMPT.format(
-            profile_context=profile_context,
-            interview_data=interview_data,
+            profile_context=_escape_braces(profile_context),
+            interview_data=_escape_braces(interview_data),
         )
 
     return WIZARD_INTERVIEW_PROMPT.format(
-        grant_context=grant_context,
-        interview_data=interview_data,
+        grant_context=_escape_braces(grant_context),
+        interview_data=_escape_braces(interview_data),
     )
 
 

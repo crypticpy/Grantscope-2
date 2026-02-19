@@ -11,6 +11,7 @@ Handles:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
@@ -197,27 +198,33 @@ async def execute_streaming_with_tools(
                 tool_messages: List[Dict[str, Any]] = []
                 restream_kwargs = dict(**api_kwargs)
 
+                # Build ONE assistant message with ALL tool_calls
+                all_tool_calls_for_assistant = []
+                for t_idx in sorted(accumulated_tool_calls.keys()):
+                    tc_data = accumulated_tool_calls[t_idx]
+                    all_tool_calls_for_assistant.append(
+                        {
+                            "id": tc_data["id"],
+                            "type": "function",
+                            "function": {
+                                "name": tc_data["name"],
+                                "arguments": tc_data["arguments"],
+                            },
+                        }
+                    )
+
+                tool_messages.append(
+                    {
+                        "role": "assistant",
+                        "tool_calls": all_tool_calls_for_assistant,
+                    }
+                )
+
+                # Process each tool call individually (result messages only)
                 for t_idx in sorted(accumulated_tool_calls.keys()):
                     tc_data = accumulated_tool_calls[t_idx]
                     tool_name = tc_data["name"]
                     tool_id = tc_data["id"]
-
-                    # Build the assistant tool_call message
-                    tool_messages.append(
-                        {
-                            "role": "assistant",
-                            "tool_calls": [
-                                {
-                                    "id": tool_id,
-                                    "type": "function",
-                                    "function": {
-                                        "name": tool_name,
-                                        "arguments": tc_data["arguments"],
-                                    },
-                                }
-                            ],
-                        }
-                    )
 
                     # Check if we know how to handle this tool
                     if tool_name not in tool_handlers:
@@ -293,13 +300,21 @@ async def execute_streaming_with_tools(
                             f"Executing {tool_name}...",
                         )
 
-                    # Dispatch to handler
+                    # Dispatch to handler with timeout
                     try:
                         handler = tool_handlers[tool_name]
-                        result = await handler(db=db, user_id=user_id, **args)
+                        result = await asyncio.wait_for(
+                            handler(db=db, user_id=user_id, **args),
+                            timeout=30.0,
+                        )
+                    except asyncio.TimeoutError:
+                        logger.warning("Tool handler %s timed out after 30s", tool_name)
+                        result = {
+                            "error": "This operation timed out. Please try again."
+                        }
                     except Exception as exc:
                         logger.error(f"Tool handler {tool_name} failed: {exc}")
-                        result = {"error": f"Tool execution failed: {exc}"}
+                        result = {"error": "Tool execution failed. Please try again."}
 
                     if tool_name in online_tool_names:
                         online_search_count += 1

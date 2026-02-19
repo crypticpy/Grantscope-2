@@ -70,8 +70,8 @@ Assistant's response (excerpt): {last_response[:600]}
 
 Context: {scope_hints.get(scope, scope_hints['global'])}
 
-Return a JSON array of exactly 3 short questions (max 80 chars each).
-Example: ["What are the implementation costs?", "Which cities have adopted this?", "What are the equity implications?"]
+Return a JSON object with a "suggestions" array of exactly 3 short questions (max 80 chars each).
+Example: {{"suggestions": ["What are the implementation costs?", "Which cities have adopted this?", "What are the equity implications?"]}}
 """
 
     try:
@@ -80,7 +80,7 @@ Example: ["What are the implementation costs?", "Which cities have adopted this?
             messages=[
                 {
                     "role": "system",
-                    "content": "You suggest follow-up questions. Respond with a JSON array only.",
+                    "content": 'You suggest follow-up questions. Respond with a JSON object: {"suggestions": ["q1", "q2", "q3"]}',
                 },
                 {"role": "user", "content": prompt},
             ],

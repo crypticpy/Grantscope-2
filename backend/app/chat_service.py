@@ -212,7 +212,7 @@ async def chat(
     - {"type": "citation", "data": {...}} for each resolved citation
     - {"type": "suggestions", "data": [...]} for follow-up questions
     - {"type": "done", "data": {"conversation_id": "...", "message_id": "..."}}
-    - {"type": "error", "content": "..."} on errors
+    - {"type": "error", "data": "..."} on errors
     """
     try:
         # 1. Rate limiting
@@ -364,7 +364,7 @@ async def chat(
                 model=model_used,
                 temperature=0.7,
                 max_tokens=8192,
-                max_tool_rounds=2,
+                max_tool_rounds=3,
                 max_online_searches=max_online_searches,
                 online_tool_names=online_tool_names,
                 db=db,
@@ -424,8 +424,7 @@ async def chat(
                                     "source_type": "web_search",
                                 }
                             # Emit web search progress
-                            query_text = event.result.get("content", "")[:80]
-                            yield sse_progress("web_search", f"Web search completed")
+                            yield sse_progress("web_search", "Web search completed")
 
                 elif isinstance(event, CompletionEvent):
                     full_response = event.full_response
