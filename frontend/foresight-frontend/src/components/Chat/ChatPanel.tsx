@@ -518,9 +518,14 @@ export function ChatPanel({
   );
 
   const handleEditResend = useCallback(
-    ({ editedContent }: { originalMessageId?: string; editedContent: string }) => {
+    ({
+      editedContent,
+    }: {
+      originalMessageId?: string;
+      editedContent: string;
+    }): boolean => {
       const trimmed = editedContent.trim();
-      if (!trimmed || isStreaming) return;
+      if (!trimmed || isStreaming) return false;
       sendMessage(trimmed);
       setShowForkNotice(false);
       userHasSentMessage.current = true;
@@ -529,6 +534,7 @@ export function ChatPanel({
         clearTimeout(bannerTimerRef.current);
         bannerTimerRef.current = null;
       }
+      return true;
     },
     [isStreaming, sendMessage],
   );
@@ -576,9 +582,13 @@ export function ChatPanel({
       "",
       `- Exported: ${timestamp}`,
       `- Scope: ${scopeDisplayLabel(scope)}`,
-      scopeId ? `- Scope ID: ${scopeId}` : "",
-      "",
-    ].filter(Boolean);
+    ];
+
+    if (scopeId) {
+      lines.push(`- Scope ID: ${scopeId}`);
+    }
+
+    lines.push("");
 
     messages.forEach((message) => {
       const role = message.role === "assistant" ? "Assistant" : "User";
@@ -941,6 +951,7 @@ export function ChatPanel({
               onCitationClick={onCitationClick}
               onEditResend={handleEditResend}
               onForkConversation={handleForkConversation}
+              isConversationStreaming={isStreaming}
             />
           </div>
         ))}

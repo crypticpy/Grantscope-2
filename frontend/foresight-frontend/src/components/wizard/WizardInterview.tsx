@@ -21,8 +21,6 @@ import {
   Clock,
   Calendar,
   X,
-  Copy,
-  Pencil,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useWizardInterview } from "../../hooks/useWizardInterview";
@@ -33,6 +31,7 @@ import {
   type GrantContext,
 } from "../../lib/wizard-api";
 import { DownloadButton } from "./DownloadButton";
+import { WizardMessageBubble } from "./WizardMessageBubble";
 
 // ============================================================================
 // Auth Helper
@@ -92,128 +91,6 @@ const TOPIC_ORDER = [
 ] as const;
 
 const TOTAL_TOPICS = TOPIC_ORDER.length;
-
-// ============================================================================
-// Sub-Components
-// ============================================================================
-
-/**
- * Renders simple markdown: bold, bullet lists, paragraphs.
- * Avoids pulling in a full markdown library.
- */
-function SimpleMarkdown({ content }: { content: string }) {
-  const lines = content.split("\n");
-  const elements: React.ReactNode[] = [];
-  let listItems: string[] = [];
-
-  const flushList = () => {
-    if (listItems.length > 0) {
-      elements.push(
-        <ul
-          key={`list-${elements.length}`}
-          className="list-disc list-inside space-y-1 my-2"
-        >
-          {listItems.map((item, i) => (
-            <li key={i}>{renderInline(item)}</li>
-          ))}
-        </ul>,
-      );
-      listItems = [];
-    }
-  };
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i] ?? "";
-    const trimmed = line.trim();
-
-    // Bullet point
-    if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
-      listItems.push(trimmed.slice(2));
-      continue;
-    }
-
-    // Numbered list
-    if (/^\d+\.\s/.test(trimmed)) {
-      listItems.push(trimmed.replace(/^\d+\.\s/, ""));
-      continue;
-    }
-
-    flushList();
-
-    // Empty line = paragraph break
-    if (!trimmed) {
-      elements.push(<br key={`br-${i}`} />);
-      continue;
-    }
-
-    // Heading-like lines (### or ##)
-    if (trimmed.startsWith("### ")) {
-      elements.push(
-        <p key={`h3-${i}`} className="font-semibold mt-3 mb-1">
-          {renderInline(trimmed.slice(4))}
-        </p>,
-      );
-      continue;
-    }
-    if (trimmed.startsWith("## ")) {
-      elements.push(
-        <p key={`h2-${i}`} className="font-bold mt-3 mb-1">
-          {renderInline(trimmed.slice(3))}
-        </p>,
-      );
-      continue;
-    }
-
-    // Regular paragraph
-    elements.push(
-      <p key={`p-${i}`} className="my-1">
-        {renderInline(trimmed)}
-      </p>,
-    );
-  }
-
-  flushList();
-
-  return <div className="text-sm leading-relaxed">{elements}</div>;
-}
-
-/**
- * Renders inline formatting: **bold** and *italic*.
- */
-function renderInline(text: string): React.ReactNode {
-  const parts: React.ReactNode[] = [];
-  // Match **bold** or *italic*
-  const regex = /(\*\*(.+?)\*\*|\*(.+?)\*)/g;
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = regex.exec(text)) !== null) {
-    // Text before the match
-    if (match.index > lastIndex) {
-      parts.push(text.slice(lastIndex, match.index));
-    }
-
-    if (match[2]) {
-      // **bold**
-      parts.push(
-        <strong key={match.index} className="font-semibold">
-          {match[2]}
-        </strong>,
-      );
-    } else if (match[3]) {
-      // *italic*
-      parts.push(<em key={match.index}>{match[3]}</em>);
-    }
-
-    lastIndex = match.index + match[0].length;
-  }
-
-  if (lastIndex < text.length) {
-    parts.push(text.slice(lastIndex));
-  }
-
-  return parts.length > 0 ? parts : text;
-}
 
 /**
  * Grant context summary card (collapsible).
@@ -339,9 +216,6 @@ const WizardInterview: React.FC<WizardInterviewProps> = ({
   const [mobileProgressOpen, setMobileProgressOpen] = useState(false);
   const [summaryDownloading, setSummaryDownloading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
-  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
-  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-  const [editingValue, setEditingValue] = useState("");
 
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -377,34 +251,6 @@ const WizardInterview: React.FC<WizardInterviewProps> = ({
     setInputValue("");
     sendMessage(trimmed);
   }, [inputValue, isStreaming, sendMessage]);
-
-  const handleCopyMessage = useCallback(async (id: string, content: string) => {
-    try {
-      await navigator.clipboard.writeText(content);
-      setCopiedMessageId(id);
-      setTimeout(() => setCopiedMessageId((current) => (current === id ? null : current)), 1800);
-    } catch {
-      // Clipboard API unavailable
-    }
-  }, []);
-
-  const handleStartEdit = useCallback((id: string, content: string) => {
-    setEditingMessageId(id);
-    setEditingValue(content);
-  }, []);
-
-  const handleCancelEdit = useCallback(() => {
-    setEditingMessageId(null);
-    setEditingValue("");
-  }, []);
-
-  const handleResendEdited = useCallback(() => {
-    const trimmed = editingValue.trim();
-    if (!trimmed || isStreaming) return;
-    sendMessage(trimmed);
-    setEditingMessageId(null);
-    setEditingValue("");
-  }, [editingValue, isStreaming, sendMessage]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -616,132 +462,29 @@ const WizardInterview: React.FC<WizardInterviewProps> = ({
           {conversationId && messages.length > 0 && <WelcomeBackBanner />}
 
           {messages.map((msg) => (
-            <div
+            <WizardMessageBubble
               key={msg.id}
-              className={cn(
-                "flex",
-                msg.role === "user" ? "justify-end" : "justify-start",
-              )}
-            >
-              <div
-                className={cn(
-                  "relative group max-w-[85%] rounded-lg px-4 py-3 select-text",
-                  msg.role === "user"
-                    ? "bg-brand-blue text-white"
-                    : "bg-gray-50 dark:bg-dark-surface-deep text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700",
-                )}
-              >
-                {msg.role === "assistant" ? (
-                  <div className="select-text selection:bg-brand-blue/25">
-                    <SimpleMarkdown content={msg.content} />
-                  </div>
-                ) : editingMessageId === msg.id ? (
-                  <div className="space-y-2">
-                    <textarea
-                      value={editingValue}
-                      onChange={(e) => setEditingValue(e.target.value)}
-                      rows={3}
-                      maxLength={4000}
-                      className={cn(
-                        "w-full resize-y min-h-[70px] max-h-56 rounded-md",
-                        "px-2.5 py-2 text-sm leading-relaxed",
-                        "bg-white/95 text-gray-900",
-                        "border border-white/80",
-                        "focus:outline-none focus:ring-2 focus:ring-white/80",
-                      )}
-                      aria-label="Edit message content"
-                    />
-                    <div className="flex items-center justify-end gap-1.5">
-                      <button
-                        type="button"
-                        onClick={handleCancelEdit}
-                        className="px-2 py-1 text-xs font-medium rounded-md bg-white/20 hover:bg-white/30 text-white transition-colors"
-                        title="Cancel edit"
-                        aria-label="Cancel edit"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleResendEdited}
-                        disabled={!editingValue.trim() || isStreaming}
-                        className="px-2 py-1 text-xs font-medium rounded-md bg-white text-brand-blue hover:bg-gray-100 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-                        title="Resend edited message"
-                        aria-label="Resend edited message"
-                      >
-                        Resend
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-sm whitespace-pre-wrap select-text selection:bg-white/35 selection:text-white">
-                    {msg.content}
-                  </p>
-                )}
-
-                <div
-                  className={cn(
-                    "absolute -top-2",
-                    msg.role === "user" ? "-left-2" : "-right-2",
-                    "flex items-center gap-1",
-                    "opacity-0 group-hover:opacity-100 transition-opacity",
-                  )}
-                >
-                  {msg.role === "user" && editingMessageId !== msg.id && (
-                    <button
-                      type="button"
-                      onClick={() => handleStartEdit(msg.id, msg.content)}
-                      className={cn(
-                        "inline-flex items-center justify-center w-7 h-7 rounded-md",
-                        "bg-white dark:bg-dark-surface border border-gray-200 dark:border-gray-600",
-                        "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300",
-                        "shadow-sm",
-                        "focus:outline-none focus:ring-2 focus:ring-brand-blue",
-                      )}
-                      title="Edit and resend"
-                      aria-label="Edit and resend"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => handleCopyMessage(msg.id, msg.content)}
-                    className={cn(
-                      "inline-flex items-center justify-center w-7 h-7 rounded-md",
-                      "bg-white dark:bg-dark-surface border border-gray-200 dark:border-gray-600",
-                      "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300",
-                      "shadow-sm",
-                      "focus:outline-none focus:ring-2 focus:ring-brand-blue",
-                    )}
-                    title={
-                      copiedMessageId === msg.id ? "Copied" : "Copy message"
-                    }
-                    aria-label={
-                      copiedMessageId === msg.id ? "Copied" : "Copy message"
-                    }
-                  >
-                    {copiedMessageId === msg.id ? (
-                      <Check className="h-3.5 w-3.5 text-brand-green" />
-                    ) : (
-                      <Copy className="h-3.5 w-3.5" />
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
+              message={msg}
+              isConversationStreaming={isStreaming}
+              onResendEdited={(editedContent) => {
+                if (isStreaming) return false;
+                sendMessage(editedContent.trim());
+                return true;
+              }}
+            />
           ))}
 
           {/* Streaming content */}
           {isStreaming && streamingContent && (
-            <div className="flex justify-start">
-              <div className="max-w-[85%] rounded-lg px-4 py-3 bg-gray-50 dark:bg-dark-surface-deep text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700 select-text">
-                <div className="select-text selection:bg-brand-blue/25">
-                  <SimpleMarkdown content={streamingContent} />
-                </div>
-                <span className="inline-block w-1.5 h-4 bg-brand-blue animate-pulse ml-0.5 align-text-bottom" />
-              </div>
-            </div>
+            <WizardMessageBubble
+              message={{
+                id: "streaming-assistant",
+                role: "assistant",
+                content: streamingContent,
+              }}
+              isConversationStreaming={isStreaming}
+              isStreamingMessage
+            />
           )}
 
           {/* Streaming with no content yet (loading indicator) */}

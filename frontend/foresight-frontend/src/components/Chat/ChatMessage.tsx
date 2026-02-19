@@ -16,13 +16,13 @@ import {
   ExternalLink,
   FileText,
   Pencil,
-  Send,
   GitFork,
-  X,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { ChatCitation } from "./ChatCitation";
 import { ChatMessageActions } from "./ChatMessageActions";
+import { UserMessageEditor } from "./UserMessageEditor";
+import { useEditableMessage, type EditResendHandler } from "./useEditableMessage";
 import GrantResultCard from "./GrantResultCard";
 import type { Citation, ToolResult } from "../../lib/chat-api";
 
@@ -54,12 +54,11 @@ export interface ChatMessageProps {
   /** Callback when a citation is clicked */
   onCitationClick?: (citation: Citation) => void;
   /** Callback when a user message is edited and re-sent */
-  onEditResend?: (payload: {
-    originalMessageId?: string;
-    editedContent: string;
-  }) => void;
+  onEditResend?: EditResendHandler;
   /** Callback to fork a new conversation from an assistant response */
   onForkConversation?: (assistantContent: string) => void;
+  /** Whether the overall chat conversation is currently streaming */
+  isConversationStreaming?: boolean;
 }
 
 // ============================================================================
@@ -646,6 +645,122 @@ function extractGrantCards(toolResults: ToolResult[]): NormalizedGrant[] {
   return grants;
 }
 
+interface MessageActionButtonsProps {
+  isUser: boolean;
+  isStreaming: boolean;
+  isEditing: boolean;
+  copied: boolean;
+  canEdit: boolean;
+  canFork: boolean;
+  content: string;
+  messageId?: string;
+  onStartEdit: () => void;
+  onCopy: () => void;
+  onForkConversation: () => void;
+}
+
+function MessageActionButtons({
+  isUser,
+  isStreaming,
+  isEditing,
+  copied,
+  canEdit,
+  canFork,
+  content,
+  messageId,
+  onStartEdit,
+  onCopy,
+  onForkConversation,
+}: MessageActionButtonsProps) {
+  if (isStreaming) return null;
+
+  return (
+    <>
+      <div
+        className={cn(
+          "absolute -top-2",
+          isUser ? "-left-2" : "-right-2",
+          "flex items-center gap-0.5",
+          "opacity-0 pointer-events-none",
+          "group-hover:opacity-100 group-hover:pointer-events-auto",
+          "group-focus-within:opacity-100 group-focus-within:pointer-events-auto",
+          "transition-all duration-200",
+        )}
+      >
+        {!isUser && <ChatMessageActions content={content} messageId={messageId} />}
+        {isUser && !isEditing && canEdit && (
+          <button
+            type="button"
+            onClick={onStartEdit}
+            className={cn(
+              "inline-flex items-center justify-center",
+              "w-7 h-7 rounded-md",
+              "bg-white dark:bg-dark-surface-elevated",
+              "border border-gray-200 dark:border-gray-600",
+              "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300",
+              "shadow-sm",
+              "focus:outline-none focus:ring-2 focus:ring-brand-blue",
+              "transition-colors duration-200",
+            )}
+            title="Edit and resend"
+            aria-label="Edit and resend"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onCopy}
+          className={cn(
+            "inline-flex items-center justify-center",
+            "w-7 h-7 rounded-md",
+            "bg-white dark:bg-dark-surface-elevated",
+            "border border-gray-200 dark:border-gray-600",
+            "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300",
+            "shadow-sm",
+            "focus:outline-none focus:ring-2 focus:ring-brand-blue",
+            "transition-colors duration-200",
+          )}
+          aria-label={copied ? "Copied to clipboard" : "Copy message"}
+          title={copied ? "Copied" : "Copy message"}
+        >
+          {copied ? (
+            <Check className="h-3.5 w-3.5 text-brand-green" />
+          ) : (
+            <Copy className="h-3.5 w-3.5" />
+          )}
+        </button>
+      </div>
+
+      {!isUser && canFork && (
+        <button
+          type="button"
+          onClick={onForkConversation}
+          className={cn(
+            "absolute -bottom-3 right-1",
+            "inline-flex items-center gap-1 px-2 py-1 rounded-md",
+            "text-[11px] font-medium",
+            "bg-white dark:bg-dark-surface-elevated",
+            "border border-gray-200 dark:border-gray-600",
+            "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200",
+            "shadow-sm",
+            "opacity-0 pointer-events-none",
+            "group-hover:opacity-100 group-hover:pointer-events-auto",
+            "group-focus-within:opacity-100 group-focus-within:pointer-events-auto",
+            "transition-all duration-200",
+            "focus:outline-none focus:ring-2 focus:ring-brand-blue",
+          )}
+          title="Fork conversation from this reply"
+          aria-label="Fork conversation from this reply"
+        >
+          <GitFork className="h-3.5 w-3.5" />
+          Fork
+        </button>
+      )}
+    </>
+  );
+}
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -656,12 +771,25 @@ export function ChatMessage({
   onCitationClick,
   onEditResend,
   onForkConversation,
+  isConversationStreaming = false,
 }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
   const [showTimestamp, setShowTimestamp] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [draftContent, setDraftContent] = useState("");
   const isUser = message.role === "user";
+
+  const {
+    isEditing,
+    draftContent,
+    isSubmitting,
+    setDraftContent,
+    startEditing,
+    cancelEditing,
+    submitEdit,
+  } = useEditableMessage({
+    messageId: message.id,
+    messageContent: message.content,
+    onEditResend,
+  });
 
   // Format timestamp for display
   const formattedTime = useMemo(() => {
@@ -687,25 +815,9 @@ export function ChatMessage({
     }
   }, [message.content]);
 
-  const handleStartEdit = useCallback(() => {
-    setDraftContent(message.content);
-    setIsEditing(true);
-  }, [message.content]);
-
-  const handleCancelEdit = useCallback(() => {
-    setDraftContent("");
-    setIsEditing(false);
-  }, []);
-
-  const handleResendEdited = useCallback(() => {
-    const editedContent = draftContent.trim();
-    if (!editedContent) return;
-    onEditResend?.({
-      originalMessageId: message.id,
-      editedContent,
-    });
-    setIsEditing(false);
-  }, [draftContent, onEditResend, message.id]);
+  const handleResendEdited = useCallback(async () => {
+    await submitEdit();
+  }, [submitEdit]);
 
   const handleForkConversation = useCallback(() => {
     onForkConversation?.(message.content);
@@ -775,54 +887,15 @@ export function ChatMessage({
         >
           {/* Message content */}
           {isUser && isEditing ? (
-            <div className="space-y-2">
-              <textarea
-                value={draftContent}
-                onChange={(e) => setDraftContent(e.target.value)}
-                rows={3}
-                maxLength={4000}
-                className={cn(
-                  "w-full resize-y min-h-[70px] max-h-56 rounded-lg",
-                  "px-2.5 py-2 text-sm leading-relaxed",
-                  "bg-white/95 text-gray-900",
-                  "border border-white/80",
-                  "focus:outline-none focus:ring-2 focus:ring-white/80",
-                )}
-                aria-label="Edit message content"
-              />
-              <div className="flex items-center justify-end gap-1.5">
-                <button
-                  type="button"
-                  onClick={handleCancelEdit}
-                  className={cn(
-                    "inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium",
-                    "bg-white/20 hover:bg-white/30 text-white",
-                    "focus:outline-none focus:ring-2 focus:ring-white/70",
-                  )}
-                  title="Cancel edit"
-                  aria-label="Cancel edit"
-                >
-                  <X className="h-3 w-3" />
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleResendEdited}
-                  disabled={!draftContent.trim()}
-                  className={cn(
-                    "inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium",
-                    "bg-white text-brand-blue hover:bg-gray-100",
-                    "disabled:opacity-60 disabled:cursor-not-allowed",
-                    "focus:outline-none focus:ring-2 focus:ring-white/70",
-                  )}
-                  title="Resend edited message"
-                  aria-label="Resend edited message"
-                >
-                  <Send className="h-3 w-3" />
-                  Resend
-                </button>
-              </div>
-            </div>
+            <UserMessageEditor
+              value={draftContent}
+              onChange={setDraftContent}
+              onCancel={cancelEditing}
+              onSubmit={handleResendEdited}
+              submitDisabled={
+                !draftContent.trim() || isConversationStreaming || isSubmitting
+              }
+            />
           ) : isUser ? (
             <p className="text-sm leading-relaxed whitespace-pre-wrap select-text selection:bg-white/35 selection:text-white">
               {message.content}
@@ -904,91 +977,19 @@ export function ChatMessage({
           </div>
         )}
 
-        {/* Action buttons (hover) */}
-        {!isStreaming && (
-          <div
-            className={cn(
-              "absolute -top-2",
-              isUser ? "-left-2" : "-right-2",
-              "flex items-center gap-0.5",
-              "opacity-0 group-hover:opacity-100",
-              "transition-all duration-200",
-            )}
-          >
-            {!isUser && (
-              <ChatMessageActions
-                content={message.content}
-                messageId={message.id}
-              />
-            )}
-            {isUser && !isEditing && (
-              <button
-                type="button"
-                onClick={handleStartEdit}
-                className={cn(
-                  "inline-flex items-center justify-center",
-                  "w-7 h-7 rounded-md",
-                  "bg-white dark:bg-dark-surface-elevated",
-                  "border border-gray-200 dark:border-gray-600",
-                  "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300",
-                  "shadow-sm",
-                  "focus:outline-none focus:ring-2 focus:ring-brand-blue",
-                  "transition-colors duration-200",
-                )}
-                title="Edit and resend"
-                aria-label="Edit and resend"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={handleCopy}
-              className={cn(
-                "inline-flex items-center justify-center",
-                "w-7 h-7 rounded-md",
-                "bg-white dark:bg-dark-surface-elevated",
-                "border border-gray-200 dark:border-gray-600",
-                "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300",
-                "shadow-sm",
-                "focus:outline-none focus:ring-2 focus:ring-brand-blue",
-                "transition-colors duration-200",
-              )}
-              aria-label={copied ? "Copied to clipboard" : "Copy message"}
-              title={copied ? "Copied" : "Copy message"}
-            >
-              {copied ? (
-                <Check className="h-3.5 w-3.5 text-brand-green" />
-              ) : (
-                <Copy className="h-3.5 w-3.5" />
-              )}
-            </button>
-          </div>
-        )}
-
-        {/* Fork conversation action for assistant replies */}
-        {!isUser && !isStreaming && onForkConversation && (
-          <button
-            type="button"
-            onClick={handleForkConversation}
-            className={cn(
-              "absolute -bottom-3 right-1",
-              "inline-flex items-center gap-1 px-2 py-1 rounded-md",
-              "text-[11px] font-medium",
-              "bg-white dark:bg-dark-surface-elevated",
-              "border border-gray-200 dark:border-gray-600",
-              "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200",
-              "shadow-sm",
-              "opacity-0 group-hover:opacity-100 transition-all duration-200",
-              "focus:outline-none focus:ring-2 focus:ring-brand-blue",
-            )}
-            title="Fork conversation from this reply"
-            aria-label="Fork conversation from this reply"
-          >
-            <GitFork className="h-3.5 w-3.5" />
-            Fork
-          </button>
-        )}
+        <MessageActionButtons
+          isUser={isUser}
+          isStreaming={isStreaming}
+          isEditing={isEditing}
+          copied={copied}
+          canEdit={Boolean(onEditResend)}
+          canFork={Boolean(onForkConversation)}
+          content={message.content}
+          messageId={message.id}
+          onStartEdit={startEditing}
+          onCopy={handleCopy}
+          onForkConversation={handleForkConversation}
+        />
 
         {/* Timestamp on hover */}
         {showTimestamp && formattedTime && (
