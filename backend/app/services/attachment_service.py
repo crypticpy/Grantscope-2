@@ -4,12 +4,13 @@ Handles file validation, upload/download orchestration via Azure Blob Storage,
 and CRUD operations against the application_attachments table.
 """
 
+import asyncio
 import logging
 import uuid
 from typing import Optional
 
 from fastapi import HTTPException, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.db.attachment import ApplicationAttachment
@@ -133,6 +134,29 @@ async def _validate_file(file: UploadFile) -> tuple[str, int, bytes]:
 
 class AttachmentService:
     """Manages attachment lifecycle: upload, download, replace, delete, list."""
+
+    @staticmethod
+    async def _delete_blob_best_effort(
+        blob_path: str,
+        attachment_id: uuid.UUID,
+        user_id: str,
+    ) -> None:
+        """Delete blob outside the DB transaction after commit."""
+        try:
+            await attachment_storage.delete(blob_path)
+            logger.info(
+                "Deleted attachment blob %s for attachment %s by user %s",
+                blob_path,
+                attachment_id,
+                user_id,
+            )
+        except Exception as e:
+            logger.warning(
+                "Attachment row %s deleted, but blob cleanup failed (%s): %s",
+                attachment_id,
+                blob_path,
+                e,
+            )
 
     async def upload(
         self,
@@ -262,17 +286,28 @@ class AttachmentService:
                 detail="Attachment not found",
             )
 
-        # Delete from blob storage
-        await attachment_storage.delete(attachment.blob_path)
+        blob_path = attachment.blob_path
+        loop = asyncio.get_running_loop()
 
-        # Delete DB record
+        def _after_commit(_session) -> None:
+            loop.create_task(
+                self._delete_blob_best_effort(
+                    blob_path=blob_path,
+                    attachment_id=attachment_id,
+                    user_id=user_id,
+                )
+            )
+
+        event.listen(db.sync_session, "after_commit", _after_commit, once=True)
+
+        # Delete DB record first; blob cleanup runs after commit.
         await db.delete(attachment)
         await db.flush()
 
         logger.info(
-            "Deleted attachment %s (blob: %s) by user %s",
+            "Deleted attachment row %s (blob cleanup scheduled: %s) by user %s",
             attachment_id,
-            attachment.blob_path,
+            blob_path,
             user_id,
         )
 

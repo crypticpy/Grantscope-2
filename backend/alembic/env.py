@@ -2,6 +2,10 @@
 
 Reads DATABASE_URL from environment, configures the async engine, and
 runs migrations in either 'offline' (SQL-only) or 'online' (live DB) mode.
+
+Note: The repository's canonical runtime migration path is
+``supabase/migrations`` + ``infra/migrate.sh``. Alembic is retained for
+local/experimental workflows only.
 """
 
 import asyncio

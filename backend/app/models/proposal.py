@@ -25,6 +25,7 @@ class Proposal(BaseModel):
     version: int = 1
     status: str = "draft"
     sections: Dict[str, Any] = {}
+    section_approvals: Dict[str, Any] = {}
     ai_model: Optional[str] = None
     ai_generation_metadata: Dict[str, Any] = {}
     reviewer_id: Optional[str] = None

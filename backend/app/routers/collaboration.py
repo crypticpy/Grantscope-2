@@ -296,9 +296,14 @@ async def submit_for_review(
             user_id=uuid.UUID(current_user["id"]),
         )
     except ValueError as e:
+        error_msg = str(e)
+        if "not found" in error_msg.lower():
+            code = status.HTTP_404_NOT_FOUND
+        else:
+            code = status.HTTP_400_BAD_REQUEST
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
+            status_code=code,
+            detail=error_msg,
         ) from e
     except Exception as e:
         raise HTTPException(

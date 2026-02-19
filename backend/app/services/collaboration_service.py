@@ -4,7 +4,7 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import delete, select, text
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.db.collaboration import ApplicationCollaborator, ApplicationComment
@@ -191,16 +191,17 @@ class CollaborationService:
         Raises:
             ValueError: If the application is not found.
         """
-        result = await db.execute(
-            select(GrantApplication).where(GrantApplication.id == application_id)
-        )
-        application = result.scalar_one_or_none()
-        if application is None:
-            raise ValueError("Application not found")
+        # Reuse canonical transition logic so status history is always recorded.
+        from app.services.application_service import ApplicationService
 
-        application.status = "under_review"
-        await db.flush()
-        return "under_review"
+        application = await ApplicationService.update_status(
+            db=db,
+            application_id=application_id,
+            new_status="under_review",
+            changed_by=user_id,
+            reason="Submitted for review",
+        )
+        return application.status
 
     @staticmethod
     async def approve_section(
@@ -239,20 +240,10 @@ class CollaborationService:
             "reviewed_at": now_iso,
         }
 
-        # Update the section_approvals JSONB
-        # Use raw SQL for JSONB key update since the column may not be on the ORM yet
-        await db.execute(
-            text(
-                "UPDATE proposals "
-                "SET section_approvals = COALESCE(section_approvals, '{}'::jsonb) || :patch, "
-                "    updated_at = NOW() "
-                "WHERE id = :pid"
-            ),
-            {
-                "patch": {section_name: approval_entry},
-                "pid": proposal_id,
-            },
-        )
+        section_approvals = dict(proposal.section_approvals or {})
+        section_approvals[section_name] = approval_entry
+        proposal.section_approvals = section_approvals
+        proposal.updated_at = datetime.now(timezone.utc)
         await db.flush()
 
         return {
@@ -303,18 +294,10 @@ class CollaborationService:
         if notes:
             revision_entry["notes"] = notes
 
-        await db.execute(
-            text(
-                "UPDATE proposals "
-                "SET section_approvals = COALESCE(section_approvals, '{}'::jsonb) || :patch, "
-                "    updated_at = NOW() "
-                "WHERE id = :pid"
-            ),
-            {
-                "patch": {section_name: revision_entry},
-                "pid": proposal_id,
-            },
-        )
+        section_approvals = dict(proposal.section_approvals or {})
+        section_approvals[section_name] = revision_entry
+        proposal.section_approvals = section_approvals
+        proposal.updated_at = datetime.now(timezone.utc)
         await db.flush()
 
         return {

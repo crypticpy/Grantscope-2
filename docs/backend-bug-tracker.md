@@ -18,11 +18,18 @@ Scope: backend modules + data operations
 | P2 | Fixed | Checklist update could not clear nullable fields/attachment due `is not None` checks; now supports explicit nulling for nullable fields and validates non-nullables. | `/Users/aiml/Projects/grantscope-2/backend/app/routers/checklist.py:228`, `/Users/aiml/Projects/grantscope-2/backend/app/routers/checklist.py:255` |
 | P0 | Fixed | Migration runner no longer suppresses failures; now uses strict execution (`ON_ERROR_STOP=1`), top-level-only file loading (archive-safe), and exits non-zero on real failures. | `/Users/aiml/Projects/grantscope-2/infra/migrate.sh:46`, `/Users/aiml/Projects/grantscope-2/infra/migrate.sh:70`, `/Users/aiml/Projects/grantscope-2/infra/migrate.sh:101` |
 | P1 | Fixed | `run_migration.py` no longer claims to apply SQL; now explicit deprecated no-op with canonical runner instruction. | `/Users/aiml/Projects/grantscope-2/backend/run_migration.py:2`, `/Users/aiml/Projects/grantscope-2/backend/run_migration.py:14` |
+| P0 | Fixed | Grant application status domain mismatch resolved via additive migration; DB constraint now matches backend transition states. | `/Users/aiml/Projects/grantscope-2/supabase/migrations/20260219000001_grant_application_status_alignment.sql:1`, `/Users/aiml/Projects/grantscope-2/backend/app/services/application_service.py:22` |
+| P0 | Fixed | `submit_for_review` now uses canonical status transition service, preserving transition validation and status history logging. | `/Users/aiml/Projects/grantscope-2/backend/app/services/collaboration_service.py:174`, `/Users/aiml/Projects/grantscope-2/backend/app/services/application_service.py:122`, `/Users/aiml/Projects/grantscope-2/backend/app/routers/collaboration.py:298` |
+| P0 | Fixed | Added missing `proposals.section_approvals` schema column and ORM field used by collaboration approve/revise flows. | `/Users/aiml/Projects/grantscope-2/supabase/migrations/20260219000002_proposals_section_approvals.sql:1`, `/Users/aiml/Projects/grantscope-2/backend/app/models/db/proposal.py:55`, `/Users/aiml/Projects/grantscope-2/backend/app/services/collaboration_service.py:237` |
+| P1 | Fixed | Migration source-of-truth ambiguity reduced by explicit policy docs: runtime schema path is `supabase/migrations` via `infra/migrate.sh`; Alembic marked local/experimental. | `/Users/aiml/Projects/grantscope-2/README.md:86`, `/Users/aiml/Projects/grantscope-2/backend/alembic/env.py:1` |
+| P1 | Fixed | Attachment delete consistency hardened: blob deletion now runs post-commit best-effort, avoiding dangling DB pointers when DB commit fails. | `/Users/aiml/Projects/grantscope-2/backend/app/services/attachment_service.py:130`, `/Users/aiml/Projects/grantscope-2/backend/app/services/attachment_service.py:268` |
 
 Commits:
 - `c5f2374` backend: enforce app-scoped access and workflow integrity
 - `bf8e257` backend: track bug backlog and fix checklist nullable updates
-- (next commit will include migration tooling hardening)
+- `0409a61` infra: harden migration runner and deprecate legacy script
+- `00488b4` docs: record remaining high-priority backend/db bugs
+- (next commit will include final backend/db bug closure batch)
 
 ## Deferred To Auth/Login Sprint
 
@@ -32,13 +39,7 @@ Commits:
 
 ## Open Issues Remaining
 
-| Priority | Status | Bug | File(s) |
-|---|---|---|---|
-| P0 | Open | Grant application status domain mismatch: service transitions use `under_review`, `pending_decision`, `expired`, but DB CHECK constraint does not allow these values. This can cause write failures on valid app flows. | `/Users/aiml/Projects/grantscope-2/backend/app/services/application_service.py:22`, `/Users/aiml/Projects/grantscope-2/backend/app/services/collaboration_service.py:201`, `/Users/aiml/Projects/grantscope-2/supabase/migrations/20260216000002_grant_schema.sql:49` |
-| P0 | Open | `submit_for_review` bypasses canonical status transition service/history logging and writes status directly, creating inconsistent state/audit trail behavior. | `/Users/aiml/Projects/grantscope-2/backend/app/services/collaboration_service.py:201`, `/Users/aiml/Projects/grantscope-2/backend/app/services/application_service.py:160` |
-| P0 | Open | Collaboration section-approval endpoints write to `proposals.section_approvals`, but schema migration does not create that column. Runtime updates likely fail. | `/Users/aiml/Projects/grantscope-2/backend/app/services/collaboration_service.py:247`, `/Users/aiml/Projects/grantscope-2/backend/app/services/collaboration_service.py:309`, `/Users/aiml/Projects/grantscope-2/supabase/migrations/20260216000003_proposals.sql:11` |
-| P1 | Open | Dual migration systems are present (Supabase SQL + Alembic) without a single source-of-truth process documented for runtime use. | `/Users/aiml/Projects/grantscope-2/README.md:86`, `/Users/aiml/Projects/grantscope-2/backend/alembic/env.py:1` |
-| P2 | Open | Delete-path consistency still has transactional edge case potential (blob delete and DB commit are not atomic). | `/Users/aiml/Projects/grantscope-2/backend/app/services/attachment_service.py:265`, `/Users/aiml/Projects/grantscope-2/backend/app/services/attachment_service.py:269` |
+No open backend/data-operation bugs remain from this pass.
 
 ## Migration Cleanup Guidance (Archive, Do Not Delete)
 

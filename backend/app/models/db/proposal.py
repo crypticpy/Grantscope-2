@@ -52,6 +52,9 @@ class Proposal(Base):
     reviewer_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), nullable=True
     )
+    section_approvals: Mapped[Optional[dict]] = mapped_column(
+        JSONB, server_default="{}", nullable=True
+    )
     review_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     reviewed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True

@@ -83,9 +83,14 @@ This starts 7 services — see [Architecture](#architecture) for details.
 ### 2. Run Migrations
 
 ```bash
-# Apply database migrations
+# Canonical migration path (applies top-level SQL files in supabase/migrations)
 ./infra/migrate.sh
 ```
+
+Migration policy:
+- `supabase/migrations/*.sql` is the source of truth for runtime schema changes.
+- `supabase/migrations/archive/` is for archived historical files (not auto-applied).
+- `backend/alembic/` is kept for local/experimental tooling and is not part of the default deploy path.
 
 ### 3. Frontend Setup
 
