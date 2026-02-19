@@ -187,7 +187,8 @@ async def db_stats(
             try:
                 cnt = (await db.execute(row_sql)).scalar_one()
             except Exception:
-                # Table might not exist yet
+                # Table might not exist yet — rollback aborted transaction
+                await db.rollback()
                 cnt = 0
 
             size_sql = text(
@@ -202,6 +203,7 @@ async def db_stats(
                 total_size = srow.total_size
                 index_size = srow.index_size
             except Exception:
+                await db.rollback()
                 total_size = "N/A"
                 index_size = "N/A"
 

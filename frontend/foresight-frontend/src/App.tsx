@@ -73,6 +73,20 @@ const AdminNotifications = lazy(
 );
 const AdminSettings = lazy(() => import("./pages/Admin/AdminSettings"));
 
+function AdminLazyRoute({
+  children,
+  message,
+}: {
+  children: React.ReactNode;
+  message: string;
+}) {
+  return (
+    <Suspense fallback={<PageLoadingSpinner message={message} size="md" />}>
+      {children}
+    </Suspense>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Custom user type
 // ---------------------------------------------------------------------------
@@ -551,181 +565,97 @@ function App() {
                   <Route
                     index
                     element={
-                      <Suspense
-                        fallback={
-                          <PageLoadingSpinner
-                            message="Loading dashboard..."
-                            size="md"
-                          />
-                        }
-                      >
+                      <AdminLazyRoute message="Loading dashboard...">
                         <AdminDashboard />
-                      </Suspense>
+                      </AdminLazyRoute>
                     }
                   />
                   <Route
                     path="users"
                     element={
-                      <Suspense
-                        fallback={
-                          <PageLoadingSpinner
-                            message="Loading users..."
-                            size="md"
-                          />
-                        }
-                      >
+                      <AdminLazyRoute message="Loading users...">
                         <AdminUsers />
-                      </Suspense>
+                      </AdminLazyRoute>
                     }
                   />
                   <Route
                     path="taxonomy"
                     element={
-                      <Suspense
-                        fallback={
-                          <PageLoadingSpinner
-                            message="Loading taxonomy..."
-                            size="md"
-                          />
-                        }
-                      >
+                      <AdminLazyRoute message="Loading taxonomy...">
                         <AdminTaxonomy />
-                      </Suspense>
+                      </AdminLazyRoute>
                     }
                   />
                   <Route
                     path="content"
                     element={
-                      <Suspense
-                        fallback={
-                          <PageLoadingSpinner
-                            message="Loading content..."
-                            size="md"
-                          />
-                        }
-                      >
+                      <AdminLazyRoute message="Loading content...">
                         <AdminContent />
-                      </Suspense>
+                      </AdminLazyRoute>
                     }
                   />
                   <Route
                     path="discovery"
                     element={
-                      <Suspense
-                        fallback={
-                          <PageLoadingSpinner
-                            message="Loading discovery..."
-                            size="md"
-                          />
-                        }
-                      >
+                      <AdminLazyRoute message="Loading discovery...">
                         <AdminDiscovery />
-                      </Suspense>
+                      </AdminLazyRoute>
                     }
                   />
                   <Route
                     path="sources"
                     element={
-                      <Suspense
-                        fallback={
-                          <PageLoadingSpinner
-                            message="Loading sources..."
-                            size="md"
-                          />
-                        }
-                      >
+                      <AdminLazyRoute message="Loading sources...">
                         <AdminSources />
-                      </Suspense>
+                      </AdminLazyRoute>
                     }
                   />
                   <Route
                     path="ai"
                     element={
-                      <Suspense
-                        fallback={
-                          <PageLoadingSpinner
-                            message="Loading AI settings..."
-                            size="md"
-                          />
-                        }
-                      >
+                      <AdminLazyRoute message="Loading AI settings...">
                         <AdminAI />
-                      </Suspense>
+                      </AdminLazyRoute>
                     }
                   />
                   <Route
                     path="jobs"
                     element={
-                      <Suspense
-                        fallback={
-                          <PageLoadingSpinner
-                            message="Loading jobs..."
-                            size="md"
-                          />
-                        }
-                      >
+                      <AdminLazyRoute message="Loading jobs...">
                         <AdminJobs />
-                      </Suspense>
+                      </AdminLazyRoute>
                     }
                   />
                   <Route
                     path="scheduler"
                     element={
-                      <Suspense
-                        fallback={
-                          <PageLoadingSpinner
-                            message="Loading scheduler..."
-                            size="md"
-                          />
-                        }
-                      >
+                      <AdminLazyRoute message="Loading scheduler...">
                         <AdminScheduler />
-                      </Suspense>
+                      </AdminLazyRoute>
                     }
                   />
                   <Route
                     path="quality"
                     element={
-                      <Suspense
-                        fallback={
-                          <PageLoadingSpinner
-                            message="Loading quality..."
-                            size="md"
-                          />
-                        }
-                      >
+                      <AdminLazyRoute message="Loading quality...">
                         <AdminQuality />
-                      </Suspense>
+                      </AdminLazyRoute>
                     }
                   />
                   <Route
                     path="notifications"
                     element={
-                      <Suspense
-                        fallback={
-                          <PageLoadingSpinner
-                            message="Loading notifications..."
-                            size="md"
-                          />
-                        }
-                      >
+                      <AdminLazyRoute message="Loading notifications...">
                         <AdminNotifications />
-                      </Suspense>
+                      </AdminLazyRoute>
                     }
                   />
                   <Route
                     path="settings"
                     element={
-                      <Suspense
-                        fallback={
-                          <PageLoadingSpinner
-                            message="Loading settings..."
-                            size="md"
-                          />
-                        }
-                      >
+                      <AdminLazyRoute message="Loading settings...">
                         <AdminSettings />
-                      </Suspense>
+                      </AdminLazyRoute>
                     }
                   />
                 </Route>

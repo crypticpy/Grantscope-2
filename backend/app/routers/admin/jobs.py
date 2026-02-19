@@ -1,7 +1,8 @@
 """Background jobs admin endpoints -- list, inspect, retry, cancel research tasks."""
 
 import logging
-from datetime import datetime, timezone
+import uuid as _uuid
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -161,7 +162,9 @@ async def list_jobs(
     task_type: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    since: Optional[str] = Query(None, description="ISO date string, e.g. 2026-02-01"),
+    since: Optional[date] = Query(
+        None, description="Filter tasks created on or after this date"
+    ),
 ):
     """List research tasks with filters and pagination, including card name when available."""
     try:
@@ -189,10 +192,12 @@ async def list_jobs(
             count_sql += " AND rt.task_type = :task_type"
             params["task_type"] = task_type
 
-        if since:
-            base_sql += " AND rt.created_at >= :since::timestamptz"
-            count_sql += " AND rt.created_at >= :since::timestamptz"
-            params["since"] = since
+        if since is not None:
+            base_sql += " AND rt.created_at >= :since"
+            count_sql += " AND rt.created_at >= :since"
+            params["since"] = datetime.combine(
+                since, datetime.min.time(), tzinfo=timezone.utc
+            )
 
         # Total count
         total = (await db.execute(text(count_sql), params)).scalar_one()
@@ -245,6 +250,14 @@ async def get_job(
 ):
     """Get full detail for a single research task, including card name if linked."""
     try:
+        try:
+            _uuid.UUID(task_id)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid task ID format: {task_id}",
+            )
+
         result = await db.execute(
             select(ResearchTask).where(ResearchTask.id == task_id)
         )
@@ -296,6 +309,14 @@ async def retry_job(
     - status is 'processing' and started_at is more than 5 minutes ago (stale)
     """
     try:
+        try:
+            _uuid.UUID(task_id)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid task ID format: {task_id}",
+            )
+
         result = await db.execute(
             select(ResearchTask).where(ResearchTask.id == task_id)
         )
@@ -309,11 +330,13 @@ async def retry_job(
 
         now = datetime.now(timezone.utc)
         is_failed = task.status == "failed"
+        started_at = task.started_at
+        if started_at is not None and started_at.tzinfo is None:
+            started_at = started_at.replace(tzinfo=timezone.utc)
         is_stale = (
             task.status == "processing"
-            and task.started_at is not None
-            and (now - task.started_at.replace(tzinfo=timezone.utc)).total_seconds()
-            > 300
+            and started_at is not None
+            and (now - started_at).total_seconds() > 300
         )
 
         if not (is_failed or is_stale):
@@ -354,6 +377,14 @@ async def cancel_job(
 ):
     """Cancel a queued or processing task."""
     try:
+        try:
+            _uuid.UUID(task_id)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid task ID format: {task_id}",
+            )
+
         result = await db.execute(
             select(ResearchTask).where(ResearchTask.id == task_id)
         )
