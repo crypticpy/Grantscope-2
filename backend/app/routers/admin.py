@@ -728,7 +728,7 @@ async def get_description_quality(
 @limiter.limit("2/minute")
 async def trigger_enrich_descriptions(
     request: Request,
-    max_cards: int = Query(10, ge=1, le=50),
+    max_cards: int = Query(10, ge=1, le=500),
     threshold_chars: int = Query(1600, ge=100, le=5000),
     current_user: dict = Depends(get_current_user_hardcoded),
     db: AsyncSession = Depends(get_db),
