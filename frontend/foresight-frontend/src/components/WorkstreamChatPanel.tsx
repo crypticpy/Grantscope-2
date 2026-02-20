@@ -117,6 +117,7 @@ export function WorkstreamChatPanel({
         {/* Chat content */}
         <div className="h-[calc(100%-3.5rem)]">
           <ChatPanel
+            key={`workstream-chat:${workstreamId}`}
             scope="workstream"
             scopeId={workstreamId}
             compact

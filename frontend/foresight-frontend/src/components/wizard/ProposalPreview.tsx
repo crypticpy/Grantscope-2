@@ -106,22 +106,30 @@ export const ProposalPreview: React.FC<ProposalPreviewProps> = ({
 
   const tabsRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const proposalRequestRef = useRef(0);
 
   // ---- Generate proposal if needed ----
-  const generateAndLoad = useCallback(async () => {
+  const generateAndLoad = useCallback(async (requestId: number) => {
     const token = await getToken();
     if (!token) {
-      setError("Not authenticated");
-      setLoading(false);
+      if (requestId === proposalRequestRef.current) {
+        setError("Not authenticated");
+        setLoading(false);
+      }
       return;
     }
 
+    let progressInterval: ReturnType<typeof setInterval> | null = null;
+
     try {
-      setGenerating(true);
-      setGenerationProgress(0);
+      if (requestId === proposalRequestRef.current) {
+        setGenerating(true);
+        setGenerationProgress(0);
+      }
 
       // Simulate progress while generation runs
-      const progressInterval = setInterval(() => {
+      progressInterval = setInterval(() => {
+        if (requestId !== proposalRequestRef.current) return;
         setGenerationProgress((prev) => {
           if (prev >= 90) return prev;
           return prev + Math.random() * 15;
@@ -130,7 +138,12 @@ export const ProposalPreview: React.FC<ProposalPreviewProps> = ({
 
       // Generate proposal via wizard API
       const updatedSession = await generateWizardProposal(token, sessionId);
-      clearInterval(progressInterval);
+      if (progressInterval) {
+        clearInterval(progressInterval);
+        progressInterval = null;
+      }
+      if (requestId !== proposalRequestRef.current) return;
+
       setGenerationProgress(100);
 
       const newProposalId = updatedSession.proposal_id;
@@ -140,47 +153,65 @@ export const ProposalPreview: React.FC<ProposalPreviewProps> = ({
         );
       }
 
+      // Trigger the follow-up load effect for the generated proposal.
       setProposalId(newProposalId);
-
-      // Fetch the full proposal
-      const proposalData = await getProposal(token, newProposalId);
-      setProposal(proposalData);
       setGenerating(false);
-      setLoading(false);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to generate proposal",
-      );
-      setGenerating(false);
-      setLoading(false);
+      if (requestId === proposalRequestRef.current) {
+        setError(
+          err instanceof Error ? err.message : "Failed to generate proposal",
+        );
+        setGenerating(false);
+        setLoading(false);
+      }
+    } finally {
+      if (progressInterval) {
+        clearInterval(progressInterval);
+      }
     }
   }, [sessionId]);
 
-  const loadExistingProposal = useCallback(async (id: string) => {
+  const loadExistingProposal = useCallback(async (id: string, requestId: number) => {
     const token = await getToken();
     if (!token) {
-      setError("Not authenticated");
-      setLoading(false);
+      if (requestId === proposalRequestRef.current) {
+        setError("Not authenticated");
+        setLoading(false);
+      }
       return;
     }
 
     try {
       const proposalData = await getProposal(token, id);
-      setProposal(proposalData);
-      setLoading(false);
+      if (requestId === proposalRequestRef.current) {
+        setProposal(proposalData);
+        setLoading(false);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load proposal");
-      setLoading(false);
+      if (requestId === proposalRequestRef.current) {
+        setError(err instanceof Error ? err.message : "Failed to load proposal");
+        setLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
+    if (!initialProposalId) return;
+    setProposalId((prev) => (prev === initialProposalId ? prev : initialProposalId));
+  }, [initialProposalId]);
+
+  useEffect(() => {
+    const requestId = ++proposalRequestRef.current;
+    setError(null);
+    setLoading(true);
+
     if (proposalId) {
-      loadExistingProposal(proposalId);
+      loadExistingProposal(proposalId, requestId);
     } else {
-      generateAndLoad();
+      setProposal(null);
+      generateAndLoad(requestId);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [proposalId, loadExistingProposal, generateAndLoad]);
 
   // ---- Focus textarea when editing starts ----
   useEffect(() => {

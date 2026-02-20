@@ -45,6 +45,7 @@ export function ChatTabContent({
 }: ChatTabContentProps) {
   return (
     <ChatPanel
+      key={`signal-chat:${cardId}`}
       scope="signal"
       scopeId={cardId}
       compact
