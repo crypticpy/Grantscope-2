@@ -415,8 +415,65 @@ const Discover: React.FC = () => {
 
   // Load initial data
   useEffect(() => {
-    loadDiscoverData();
-    loadFollowedCards();
+    let cancelled = false;
+
+    const loadInitialData = async () => {
+      try {
+        const token = localStorage.getItem("gs2_token");
+        if (!token) return;
+
+        const response = await fetch(`${API_BASE_URL}/api/v1/taxonomy`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error(`API error: ${response.status}`);
+        const taxonomy = await response.json();
+
+        if (!cancelled) {
+          setPillars(taxonomy.pillars || []);
+          setStages(taxonomy.stages || []);
+        }
+      } catch (error) {
+        console.error("Error loading discover data:", error);
+      }
+
+      if (!user?.id) {
+        if (!cancelled) {
+          setFollowedCardIds(new Set());
+        }
+        return;
+      }
+
+      try {
+        const token = localStorage.getItem("gs2_token");
+        if (!token) {
+          if (!cancelled) {
+            setFollowedCardIds(new Set());
+          }
+          return;
+        }
+
+        const response = await fetch(`${API_BASE_URL}/api/v1/me/following`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error(`API error: ${response.status}`);
+        const data = await response.json();
+        // API may return array of card objects or card IDs
+        if (Array.isArray(data) && !cancelled) {
+          const ids = data.map(
+            (item: string | { id?: string; card_id?: string }) =>
+              typeof item === "string" ? item : item.card_id || item.id || "",
+          );
+          setFollowedCardIds(new Set(ids.filter(Boolean)));
+        }
+      } catch (error) {
+        console.error("Error loading followed cards:", error);
+      }
+    };
+
+    loadInitialData();
+    return () => {
+      cancelled = true;
+    };
   }, [user?.id]);
 
   // Load cards when filters change
@@ -447,48 +504,6 @@ const Discover: React.FC = () => {
     loadCards();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quickFilter, followedCardIds, user?.id]);
-
-  const loadDiscoverData = async () => {
-    try {
-      const token = localStorage.getItem("gs2_token");
-      if (!token) return;
-
-      const response = await fetch(`${API_BASE_URL}/api/v1/taxonomy`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!response.ok) throw new Error(`API error: ${response.status}`);
-      const taxonomy = await response.json();
-
-      setPillars(taxonomy.pillars || []);
-      setStages(taxonomy.stages || []);
-    } catch (error) {
-      console.error("Error loading discover data:", error);
-    }
-  };
-
-  const loadFollowedCards = async () => {
-    if (!user?.id) return;
-    try {
-      const token = localStorage.getItem("gs2_token");
-      if (!token) return;
-
-      const response = await fetch(`${API_BASE_URL}/api/v1/me/following`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!response.ok) throw new Error(`API error: ${response.status}`);
-      const data = await response.json();
-      // API may return array of card objects or card IDs
-      if (Array.isArray(data)) {
-        const ids = data.map(
-          (item: string | { id?: string; card_id?: string }) =>
-            typeof item === "string" ? item : item.card_id || item.id || "",
-        );
-        setFollowedCardIds(new Set(ids.filter(Boolean)));
-      }
-    } catch (error) {
-      console.error("Error loading followed cards:", error);
-    }
-  };
 
   const loadCards = async () => {
     setLoading(true);

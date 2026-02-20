@@ -8,7 +8,7 @@
  * - Empty state when no cards match filters
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -268,33 +268,32 @@ const WorkstreamFeed: React.FC = () => {
 
   // Chat panel state
   const [chatOpen, setChatOpen] = useState(false);
-
-  // Load workstream data
-  useEffect(() => {
-    if (id) {
-      loadWorkstream();
-    }
-  }, [id]);
-
-  // Load cards when workstream changes
-  useEffect(() => {
-    if (workstream) {
-      loadWorkstreamFeed();
-      loadFollowedCards();
-    }
-  }, [workstream]);
+  const workstreamRequestRef = useRef(0);
+  const feedRequestRef = useRef(0);
 
   /**
    * Load workstream details
    */
-  const loadWorkstream = async () => {
+  const loadWorkstream = useCallback(async () => {
+    if (!id) {
+      setError("Workstream ID is missing.");
+      setWorkstream(null);
+      setLoading(false);
+      return;
+    }
+
+    const requestId = ++workstreamRequestRef.current;
+
     try {
       setLoading(true);
       setError(null);
 
       const token = localStorage.getItem("gs2_token");
       if (!token) {
-        setError("Authentication required.");
+        if (requestId === workstreamRequestRef.current) {
+          setError("Authentication required.");
+          setWorkstream(null);
+        }
         return;
       }
 
@@ -306,9 +305,12 @@ const WorkstreamFeed: React.FC = () => {
 
       if (!response.ok) {
         console.error("Error loading workstreams:", response.status);
-        setError(
-          "Failed to load workstream. It may not exist or you may not have access.",
-        );
+        if (requestId === workstreamRequestRef.current) {
+          setError(
+            "Failed to load workstream. It may not exist or you may not have access.",
+          );
+          setWorkstream(null);
+        }
         return;
       }
 
@@ -316,26 +318,39 @@ const WorkstreamFeed: React.FC = () => {
       const found = workstreams.find((ws) => ws.id === id);
 
       if (!found) {
-        setError(
-          "Failed to load workstream. It may not exist or you may not have access.",
-        );
+        if (requestId === workstreamRequestRef.current) {
+          setError(
+            "Failed to load workstream. It may not exist or you may not have access.",
+          );
+          setWorkstream(null);
+        }
         return;
       }
 
-      setWorkstream(found);
+      if (requestId === workstreamRequestRef.current) {
+        setWorkstream(found);
+      }
     } catch (err) {
       console.error("Error loading workstream:", err);
-      setError("An unexpected error occurred.");
+      if (requestId === workstreamRequestRef.current) {
+        setError("An unexpected error occurred.");
+        setWorkstream(null);
+      }
     } finally {
-      setLoading(false);
+      if (requestId === workstreamRequestRef.current) {
+        setLoading(false);
+      }
     }
-  };
+  }, [id]);
 
   /**
    * Load cards matching workstream filters via the backend API.
    */
-  const loadWorkstreamFeed = async () => {
+  const loadWorkstreamFeed = useCallback(async () => {
     if (!workstream) return;
+
+    const requestId = ++feedRequestRef.current;
+    const activeWorkstream = workstream;
 
     try {
       setCardsLoading(true);
@@ -349,17 +364,17 @@ const WorkstreamFeed: React.FC = () => {
       params.set("sort", "-created_at");
       params.set("limit", "200");
 
-      if (workstream.pillar_ids && workstream.pillar_ids.length > 0) {
-        for (const pillar of workstream.pillar_ids) {
+      if (activeWorkstream.pillar_ids && activeWorkstream.pillar_ids.length > 0) {
+        for (const pillar of activeWorkstream.pillar_ids) {
           params.append("pillar_id", pillar);
         }
       }
 
       if (
-        workstream.pipeline_statuses &&
-        workstream.pipeline_statuses.length > 0
+        activeWorkstream.pipeline_statuses &&
+        activeWorkstream.pipeline_statuses.length > 0
       ) {
-        for (const status of workstream.pipeline_statuses) {
+        for (const status of activeWorkstream.pipeline_statuses) {
           params.append("pipeline_status", status);
         }
       }
@@ -384,8 +399,8 @@ const WorkstreamFeed: React.FC = () => {
         : rawCardData.cards || [];
 
       // Client-side keyword filtering (if keywords exist)
-      if (workstream.keywords && workstream.keywords.length > 0) {
-        const lowercaseKeywords = workstream.keywords.map((k) =>
+      if (activeWorkstream.keywords && activeWorkstream.keywords.length > 0) {
+        const lowercaseKeywords = activeWorkstream.keywords.map((k) =>
           k.toLowerCase(),
         );
         fetchedCards = fetchedCards.filter((card) => {
@@ -396,19 +411,23 @@ const WorkstreamFeed: React.FC = () => {
         });
       }
 
-      setCards(fetchedCards);
+      if (requestId === feedRequestRef.current) {
+        setCards(fetchedCards);
+      }
     } catch (err) {
       console.error("Error loading feed:", err);
     } finally {
-      setCardsLoading(false);
+      if (requestId === feedRequestRef.current) {
+        setCardsLoading(false);
+      }
     }
-  };
+  }, [workstream]);
 
   /**
    * Load user's followed cards
    */
-  const loadFollowedCards = async () => {
-    if (!user) return;
+  const loadFollowedCards = useCallback(async () => {
+    if (!user?.id) return;
 
     try {
       const token = localStorage.getItem("gs2_token");
@@ -437,7 +456,20 @@ const WorkstreamFeed: React.FC = () => {
     } catch (err) {
       console.error("Error loading followed cards:", err);
     }
-  };
+  }, [user?.id]);
+
+  // Load workstream data
+  useEffect(() => {
+    loadWorkstream();
+  }, [loadWorkstream]);
+
+  // Load cards and follow state when workstream changes
+  useEffect(() => {
+    if (!workstream) return;
+
+    loadWorkstreamFeed();
+    loadFollowedCards();
+  }, [workstream, loadWorkstreamFeed, loadFollowedCards]);
 
   /**
    * Toggle card follow status
@@ -495,6 +527,7 @@ const WorkstreamFeed: React.FC = () => {
   const handleRefresh = () => {
     if (workstream) {
       loadWorkstreamFeed();
+      loadFollowedCards();
     }
   };
 

@@ -273,19 +273,30 @@ export default function AskGrantScope() {
   // Initialize scope from URL params (e.g. ?scope=grant_assistant)
   useEffect(() => {
     const urlScope = searchParams.get("scope");
-    if (urlScope === "grant_assistant") {
-      setSelectedScope({
-        label: "Grant Search",
-        scope: "grant_assistant",
-      });
-      setActiveConversationScope("grant_assistant");
-      // Clear any stale conversation from a different scope
-      setActiveConversationId(null);
-      setForceNewChat(true);
-    }
-    // Only run on mount — intentionally excludes searchParams from deps
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (urlScope !== "grant_assistant") return;
+
+    const alreadyInGrantScope =
+      selectedScope.scope === "grant_assistant" &&
+      activeConversationScope === "grant_assistant" &&
+      activeConversationId === null;
+
+    if (alreadyInGrantScope) return;
+
+    setSelectedScope({
+      label: "Grant Search",
+      scope: "grant_assistant",
+    });
+    setActiveConversationScope("grant_assistant");
+    setActiveConversationScopeId(undefined);
+    // Clear any stale conversation from a different scope
+    setActiveConversationId(null);
+    setForceNewChat(true);
+  }, [
+    searchParams,
+    selectedScope.scope,
+    activeConversationScope,
+    activeConversationId,
+  ]);
 
   // Fetch online_search_enabled admin setting
   useEffect(() => {

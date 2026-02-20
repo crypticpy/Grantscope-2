@@ -660,6 +660,7 @@ const Workstreams: React.FC = () => {
   >({});
   const scanPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const workstreamsRef = useRef<Workstream[]>([]);
+  const loadRequestRef = useRef(0);
 
   // Banner dismissed state (persisted in localStorage)
   const [bannerDismissed, setBannerDismissed] = useState(() => {
@@ -687,10 +688,6 @@ const Workstreams: React.FC = () => {
       // localStorage may be unavailable
     }
   };
-
-  useEffect(() => {
-    loadWorkstreams();
-  }, []);
 
   const fetchScanStatuses = useCallback(async () => {
     const wsList = workstreamsRef.current;
@@ -740,11 +737,18 @@ const Workstreams: React.FC = () => {
     }
   }, []);
 
-  const loadWorkstreams = async () => {
+  const loadWorkstreams = useCallback(async () => {
+    const requestId = ++loadRequestRef.current;
+
     try {
       const token = localStorage.getItem("gs2_token");
       if (!token) {
-        setLoading(false);
+        if (requestId === loadRequestRef.current) {
+          setWorkstreams([]);
+          workstreamsRef.current = [];
+          setScanStatuses({});
+          setLoading(false);
+        }
         return;
       }
 
@@ -764,19 +768,29 @@ const Workstreams: React.FC = () => {
         (a, b) =>
           new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
       );
+      if (requestId !== loadRequestRef.current) return;
+
       setWorkstreams(list);
       workstreamsRef.current = list;
 
       // Fetch scan statuses for all active workstreams
       if (list.length > 0) {
         fetchScanStatuses();
+      } else {
+        setScanStatuses({});
       }
     } catch (error) {
       console.error("Error loading workstreams:", error);
     } finally {
-      setLoading(false);
+      if (requestId === loadRequestRef.current) {
+        setLoading(false);
+      }
     }
-  };
+  }, [fetchScanStatuses]);
+
+  useEffect(() => {
+    loadWorkstreams();
+  }, [loadWorkstreams]);
 
   // Cleanup scan polling on unmount
   useEffect(() => {
