@@ -139,6 +139,40 @@ function getHistoryDescription(config: SavedSearchQueryConfig): string {
 }
 
 /**
+ * Combine quick-filter and explicit date filters into a single created_after
+ * lower bound, avoiding duplicate query keys that can silently override intent.
+ */
+function getEffectiveCreatedAfter(
+  quickFilter: string,
+  dateFrom: string,
+): string | undefined {
+  let quickFilterLowerBound: string | undefined;
+
+  if (quickFilter === "new") {
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    quickFilterLowerBound = oneWeekAgo.toISOString();
+  }
+
+  if (!dateFrom) {
+    return quickFilterLowerBound;
+  }
+
+  if (!quickFilterLowerBound) {
+    return dateFrom;
+  }
+
+  const dateFromMs = Date.parse(dateFrom);
+  const quickFilterMs = Date.parse(quickFilterLowerBound);
+
+  if (!Number.isNaN(dateFromMs) && !Number.isNaN(quickFilterMs)) {
+    return dateFromMs > quickFilterMs ? dateFrom : quickFilterLowerBound;
+  }
+
+  return dateFrom;
+}
+
+/**
  * Discover Page Component
  */
 const Discover: React.FC = () => {
@@ -622,10 +656,12 @@ const Discover: React.FC = () => {
       const params = new URLSearchParams();
       params.append("status", "active");
 
-      if (quickFilter === "new") {
-        const oneWeekAgo = new Date();
-        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-        params.append("created_after", oneWeekAgo.toISOString());
+      const effectiveCreatedAfter = getEffectiveCreatedAfter(
+        quickFilter,
+        dateFrom,
+      );
+      if (effectiveCreatedAfter) {
+        params.append("created_after", effectiveCreatedAfter);
       }
 
       if (quickFilter === "updated") {
@@ -647,7 +683,6 @@ const Discover: React.FC = () => {
         params.append("relevance_min", String(debouncedFilters.relevanceMin));
       if (debouncedFilters.noveltyMin > 0)
         params.append("novelty_min", String(debouncedFilters.noveltyMin));
-      if (dateFrom) params.append("created_after", dateFrom);
       if (dateTo) params.append("created_before", dateTo);
       if (debouncedFilters.grantType)
         params.append("grant_type", debouncedFilters.grantType);
@@ -724,10 +759,12 @@ const Discover: React.FC = () => {
       params.append("status", "active");
       params.append("offset", String(cards.length));
       params.append("limit", "50");
-      if (quickFilter === "new") {
-        const oneWeekAgo = new Date();
-        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-        params.append("created_after", oneWeekAgo.toISOString());
+      const effectiveCreatedAfter = getEffectiveCreatedAfter(
+        quickFilter,
+        dateFrom,
+      );
+      if (effectiveCreatedAfter) {
+        params.append("created_after", effectiveCreatedAfter);
       }
       if (quickFilter === "updated") {
         const oneWeekAgo = new Date();
@@ -747,7 +784,6 @@ const Discover: React.FC = () => {
         params.append("relevance_min", String(debouncedFilters.relevanceMin));
       if (debouncedFilters.noveltyMin > 0)
         params.append("novelty_min", String(debouncedFilters.noveltyMin));
-      if (dateFrom) params.append("created_after", dateFrom);
       if (dateTo) params.append("created_before", dateTo);
       if (debouncedFilters.grantType)
         params.append("grant_type", debouncedFilters.grantType);

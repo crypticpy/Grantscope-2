@@ -315,34 +315,56 @@ export function CreateSignalModal({
   useEffect(() => {
     if (!isOpen) return;
 
+    let cancelled = false;
+
     async function loadWorkstreams() {
+      setLoadingWorkstreams(true);
+
       try {
-        if (!user) return;
+        if (!user?.id) {
+          if (!cancelled) {
+            setWorkstreams([]);
+          }
+          return;
+        }
 
         const token = localStorage.getItem("gs2_token");
-        if (!token) return;
+        if (!token) {
+          if (!cancelled) {
+            setWorkstreams([]);
+          }
+          return;
+        }
+
         const response = await fetch(`${API_BASE_URL}/api/v1/me/workstreams`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (response.ok) {
           const data = await response.json();
           const list = Array.isArray(data) ? data : data.workstreams || [];
-          setWorkstreams(
-            list.map((ws: { id: string; name: string }) => ({
-              id: ws.id,
-              name: ws.name,
-            })),
-          );
+          if (!cancelled) {
+            setWorkstreams(
+              list.map((ws: { id: string; name: string }) => ({
+                id: ws.id,
+                name: ws.name,
+              })),
+            );
+          }
         }
       } catch {
         // Silently fail - workstream selector is optional
       } finally {
-        setLoadingWorkstreams(false);
+        if (!cancelled) {
+          setLoadingWorkstreams(false);
+        }
       }
     }
 
     loadWorkstreams();
-  }, [isOpen]);
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, user?.id]);
 
   /**
    * Handle keyboard events: Escape to close, Tab trapping.

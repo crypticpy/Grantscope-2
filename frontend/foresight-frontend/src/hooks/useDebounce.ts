@@ -48,12 +48,22 @@ export function useDebouncedValue<T>(
       return;
     }
 
-    // Check if value has actually changed
-    const hasChanged = JSON.stringify(value) !== JSON.stringify(debouncedValue);
+    // Check if value has actually changed. Fallback avoids crashes on
+    // non-serializable values (e.g., circular structures).
+    const hasChanged = (() => {
+      try {
+        return JSON.stringify(value) !== JSON.stringify(debouncedValue);
+      } catch {
+        return !Object.is(value, debouncedValue);
+      }
+    })();
 
-    if (hasChanged) {
-      setIsPending(true);
+    if (!hasChanged) {
+      setIsPending(false);
+      return;
     }
+
+    setIsPending(true);
 
     const handler = setTimeout(() => {
       setDebouncedValue(value);
@@ -63,7 +73,7 @@ export function useDebouncedValue<T>(
     return () => {
       clearTimeout(handler);
     };
-  }, [value, delay]);
+  }, [value, delay, debouncedValue]);
 
   return { debouncedValue, isPending };
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import {
   User,
@@ -44,12 +44,7 @@ const Settings: React.FC = () => {
   // Determine if user is admin
   const isAdmin = user?.role === "admin" || user?.role === "service_role";
 
-  useEffect(() => {
-    loadProfile();
-    loadNotificationPreferences();
-  }, []);
-
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     try {
       const token = localStorage.getItem("gs2_token");
       if (!token) return;
@@ -74,7 +69,7 @@ const Settings: React.FC = () => {
     } catch (error) {
       console.error("Error loading profile:", error);
     }
-  };
+  }, []);
 
   const updateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,7 +113,7 @@ const Settings: React.FC = () => {
     }
   };
 
-  const loadNotificationPreferences = async () => {
+  const loadNotificationPreferences = useCallback(async () => {
     try {
       const token = localStorage.getItem("gs2_token");
       if (!token) return;
@@ -136,14 +131,21 @@ const Settings: React.FC = () => {
           ...prev,
           ...data,
         }));
+        const accountEmail = user?.email;
         setUseAccountEmail(
-          !data.notification_email || data.notification_email === user?.email,
+          !data.notification_email ||
+            (!!accountEmail && data.notification_email === accountEmail),
         );
       }
     } catch (error) {
       console.error("Error loading notification preferences:", error);
     }
-  };
+  }, [user?.email]);
+
+  useEffect(() => {
+    loadProfile();
+    loadNotificationPreferences();
+  }, [loadProfile, loadNotificationPreferences]);
 
   const saveNotificationPreferences = async () => {
     setNotifLoading(true);
