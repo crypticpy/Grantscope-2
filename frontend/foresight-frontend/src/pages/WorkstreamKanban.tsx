@@ -491,7 +491,7 @@ const WorkstreamKanban: React.FC = () => {
     Map<string, WorkstreamResearchStatus>
   >(new Map());
   const researchPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const hasCardsRef = useRef(false);
+  const cardsRequestRef = useRef(0);
 
   // ============================================================================
   // Toast Helper Functions
@@ -641,26 +641,34 @@ const WorkstreamKanban: React.FC = () => {
   /**
    * Load Kanban cards for the workstream.
    */
-  const loadCards = useCallback(async () => {
-    if (!id) return;
+  const loadCards = useCallback(async (): Promise<boolean> => {
+    if (!id) return false;
 
     const token = await getAuthToken();
     if (!token) {
       showToast("error", "Authentication required");
-      return;
+      return false;
     }
+
+    const requestId = ++cardsRequestRef.current;
 
     try {
       setCardsLoading(true);
       const groupedCards = await fetchWorkstreamCards(token, id);
-      setCards(
-        groupedCards as unknown as Record<KanbanStatus, WorkstreamCard[]>,
-      );
+      if (requestId === cardsRequestRef.current) {
+        setCards(
+          groupedCards as unknown as Record<KanbanStatus, WorkstreamCard[]>,
+        );
+      }
+      return requestId === cardsRequestRef.current;
     } catch (err) {
       console.error("Error loading cards:", err);
       showToast("error", "Failed to load opportunities");
+      return false;
     } finally {
-      setCardsLoading(false);
+      if (requestId === cardsRequestRef.current) {
+        setCardsLoading(false);
+      }
     }
   }, [id, getAuthToken, showToast]);
 
@@ -668,12 +676,19 @@ const WorkstreamKanban: React.FC = () => {
    * Initial data load on mount.
    */
   useEffect(() => {
+    let cancelled = false;
+
     const loadData = async () => {
       setLoading(true);
       await loadWorkstream();
-      setLoading(false);
+      if (!cancelled) {
+        setLoading(false);
+      }
     };
     loadData();
+    return () => {
+      cancelled = true;
+    };
   }, [loadWorkstream]);
 
   /**
@@ -682,16 +697,22 @@ const WorkstreamKanban: React.FC = () => {
   useEffect(() => {
     if (!workstream || !id) return;
 
+    let cancelled = false;
+
     const loadAndAutoPopulate = async () => {
       // 1. Load existing cards
-      await loadCards();
+      const initialLoadSucceeded = await loadCards();
+      if (!initialLoadSucceeded || cancelled) {
+        return;
+      }
 
       // 2. Auto-populate inbox with new matching cards (silently, non-blocking)
       try {
         const token = await getAuthToken();
-        if (!token) return;
+        if (!token || cancelled) return;
 
         const result = await autoPopulateWorkstream(token, id, 20);
+        if (cancelled) return;
         if (result.added > 0) {
           showToast(
             "info",
@@ -707,6 +728,9 @@ const WorkstreamKanban: React.FC = () => {
     };
 
     loadAndAutoPopulate();
+    return () => {
+      cancelled = true;
+    };
   }, [workstream, id, loadCards, getAuthToken, showToast]);
 
   /**
@@ -772,17 +796,16 @@ const WorkstreamKanban: React.FC = () => {
     startResearchPollingRef.current = startResearchPolling;
   }, [startResearchPolling]);
 
-  // Track whether cards have been loaded (avoids putting `cards` in polling deps)
-  useEffect(() => {
-    hasCardsRef.current = Object.values(cards).flat().length > 0;
-  }, [cards]);
+  const hasAnyCards = useMemo(
+    () => Object.values(cards).some((columnCards) => columnCards.length > 0),
+    [cards],
+  );
 
   /**
    * Fetch research status after cards are loaded.
-   * Uses hasCardsRef instead of cards in deps to avoid restarting polling on every card change.
    */
   useEffect(() => {
-    if (workstream && id && hasCardsRef.current) {
+    if (workstream && id && hasAnyCards) {
       startResearchPolling();
     }
 
@@ -791,8 +814,7 @@ const WorkstreamKanban: React.FC = () => {
         clearInterval(researchPollRef.current);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workstream, id, startResearchPolling]);
+  }, [workstream, id, hasAnyCards, startResearchPolling]);
 
   /**
    * Merge research statuses into cards for rendering.
@@ -1433,9 +1455,11 @@ const WorkstreamKanban: React.FC = () => {
    */
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadCards();
+    const refreshed = await loadCards();
     setRefreshing(false);
-    showToast("success", "Opportunities refreshed");
+    if (refreshed) {
+      showToast("success", "Opportunities refreshed");
+    }
   }, [loadCards, showToast]);
 
   /**

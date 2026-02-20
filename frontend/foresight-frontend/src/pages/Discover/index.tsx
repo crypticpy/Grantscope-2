@@ -290,6 +290,7 @@ const Discover: React.FC = () => {
   // Virtualized refs
   const virtualizedListRef = useRef<VirtualizedListHandle>(null);
   const virtualizedGridRef = useRef<VirtualizedGridHandle>(null);
+  const cardsQueryVersionRef = useRef(0);
 
   // Reset scroll when sort changes
   const hasMountedForSortReset = useRef(false);
@@ -506,60 +507,66 @@ const Discover: React.FC = () => {
   }, [quickFilter, followedCardIds, user?.id]);
 
   const loadCards = async () => {
+    const queryVersion = ++cardsQueryVersionRef.current;
+    const isLatestQuery = () => queryVersion === cardsQueryVersionRef.current;
+
     setLoading(true);
-    setError(null);
+    if (isLatestQuery()) {
+      setError(null);
+    }
     try {
       // Handle "following" filter
       if (quickFilter === "following") {
         if (followedCardIds.size === 0) {
-          setCards([]);
-          setLoading(false);
+          if (isLatestQuery()) {
+            setCards([]);
+            setTotalCount(0);
+            setHasMore(false);
+          }
           return;
         }
 
         // Use the cards API with followed card IDs
         const token = localStorage.getItem("gs2_token");
-        if (token) {
-          const params = new URLSearchParams();
-          params.append("status", "active");
-          if (selectedPillar) params.append("pillar_id", selectedPillar);
-          if (selectedStage) params.append("stage_id", selectedStage);
-          if (selectedHorizon) params.append("horizon", selectedHorizon);
-          if (selectedPipelineStatus)
-            params.append("pipeline_status", selectedPipelineStatus);
-          if (debouncedFilters.searchTerm)
-            params.append("search", debouncedFilters.searchTerm);
-          if (debouncedFilters.grantType)
-            params.append("grant_type", debouncedFilters.grantType);
-          if (debouncedFilters.deadlineAfter)
-            params.append("deadline_after", debouncedFilters.deadlineAfter);
-          if (debouncedFilters.deadlineBefore)
-            params.append("deadline_before", debouncedFilters.deadlineBefore);
-          if (debouncedFilters.fundingMin != null)
-            params.append("funding_min", String(debouncedFilters.fundingMin));
-          if (debouncedFilters.fundingMax != null)
-            params.append("funding_max", String(debouncedFilters.fundingMax));
-          if (debouncedFilters.grantCategory)
-            params.append("category_id", debouncedFilters.grantCategory);
-          params.append("following_only", "true");
-          const sortConfig = getSortConfig(sortOption);
-          params.append("sort_by", sortConfig.column);
-          params.append("sort_asc", String(sortConfig.ascending));
+        if (!token) throw new Error("Not authenticated");
 
-          const response = await fetch(
-            `${API_BASE_URL}/api/v1/cards?${params.toString()}`,
-            {
-              headers: { Authorization: `Bearer ${token}` },
-            },
-          );
-          if (!response.ok) throw new Error(`API error: ${response.status}`);
-          const data = await response.json();
-          const followCards = Array.isArray(data) ? data : data.cards || [];
+        const params = new URLSearchParams();
+        params.append("status", "active");
+        if (selectedPillar) params.append("pillar_id", selectedPillar);
+        if (selectedStage) params.append("stage_id", selectedStage);
+        if (selectedHorizon) params.append("horizon", selectedHorizon);
+        if (selectedPipelineStatus)
+          params.append("pipeline_status", selectedPipelineStatus);
+        if (debouncedFilters.searchTerm)
+          params.append("search", debouncedFilters.searchTerm);
+        if (debouncedFilters.grantType)
+          params.append("grant_type", debouncedFilters.grantType);
+        if (debouncedFilters.deadlineAfter)
+          params.append("deadline_after", debouncedFilters.deadlineAfter);
+        if (debouncedFilters.deadlineBefore)
+          params.append("deadline_before", debouncedFilters.deadlineBefore);
+        if (debouncedFilters.fundingMin != null)
+          params.append("funding_min", String(debouncedFilters.fundingMin));
+        if (debouncedFilters.fundingMax != null)
+          params.append("funding_max", String(debouncedFilters.fundingMax));
+        if (debouncedFilters.grantCategory)
+          params.append("category_id", debouncedFilters.grantCategory);
+        params.append("following_only", "true");
+        const sortConfig = getSortConfig(sortOption);
+        params.append("sort_by", sortConfig.column);
+        params.append("sort_asc", String(sortConfig.ascending));
+
+        const response = await fetch(`${API_BASE_URL}/api/v1/cards?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error(`API error: ${response.status}`);
+        const data = await response.json();
+        const followCards = Array.isArray(data) ? data : data.cards || [];
+        if (isLatestQuery()) {
           setCards(followCards);
           setTotalCount(data.total_count ?? followCards.length);
           setHasMore(data.has_more ?? false);
         }
-        setLoading(false);
         return;
       }
 
@@ -655,11 +662,12 @@ const Discover: React.FC = () => {
             return sortConfig.ascending ? comparison : -comparison;
           });
 
-          setCards(mappedCards);
-          setTotalCount(mappedCards.length);
-          setHasMore(false);
-          recordSearch(currentQueryConfig, mappedCards.length);
-          setLoading(false);
+          if (isLatestQuery()) {
+            setCards(mappedCards);
+            setTotalCount(mappedCards.length);
+            setHasMore(false);
+            recordSearch(currentQueryConfig, mappedCards.length);
+          }
           return;
         }
       }
@@ -726,11 +734,13 @@ const Discover: React.FC = () => {
       const data = await response.json();
       const fetchedCards = Array.isArray(data) ? data : data.cards || [];
 
-      setCards(fetchedCards);
-      setTotalCount(data.total_count ?? fetchedCards.length);
-      setHasMore(data.has_more ?? false);
+      if (isLatestQuery()) {
+        setCards(fetchedCards);
+        setTotalCount(data.total_count ?? fetchedCards.length);
+        setHasMore(data.has_more ?? false);
+      }
 
-      if (!quickFilter) {
+      if (!quickFilter && isLatestQuery()) {
         recordSearch(
           currentQueryConfig,
           data.total_count ?? fetchedCards.length,
@@ -739,6 +749,10 @@ const Discover: React.FC = () => {
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "An unexpected error occurred";
+
+      if (!isLatestQuery()) {
+        return;
+      }
 
       if (err instanceof TypeError && err.message.includes("fetch")) {
         setError("Network error: Unable to connect to the server.");
@@ -759,12 +773,15 @@ const Discover: React.FC = () => {
         setError(`Failed to load opportunities: ${errorMessage}`);
       }
     } finally {
-      setLoading(false);
+      if (isLatestQuery()) {
+        setLoading(false);
+      }
     }
   };
 
   const loadMoreCards = async () => {
     if (!hasMore || loadingMore) return;
+    const queryVersion = cardsQueryVersionRef.current;
     setLoadingMore(true);
     try {
       const token = localStorage.getItem("gs2_token");
@@ -826,8 +843,10 @@ const Discover: React.FC = () => {
       const data = await response.json();
       const moreCards = Array.isArray(data) ? data : data.cards || [];
 
-      setCards((prev) => [...prev, ...moreCards]);
-      setHasMore(data.has_more ?? false);
+      if (queryVersion === cardsQueryVersionRef.current) {
+        setCards((prev) => [...prev, ...moreCards]);
+        setHasMore(data.has_more ?? false);
+      }
     } catch (err) {
       console.error("Error loading more cards:", err);
     } finally {

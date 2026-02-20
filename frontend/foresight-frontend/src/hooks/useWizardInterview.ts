@@ -8,7 +8,7 @@
  * @module hooks/useWizardInterview
  */
 
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useChat, type UseChatReturn } from "./useChat";
 
 // ============================================================================
@@ -216,8 +216,8 @@ export function useWizardInterview(
     return coreCompleted >= 4;
   }, [completedTopics]);
 
-  // Stable reference for sendMessage (already stable from useChat, but keep explicit)
-  const sendMessage = useCallback(chat.sendMessage, [chat.sendMessage]);
+  // Forward the hook-provided sendMessage to avoid wrapping indirection.
+  const sendMessage = chat.sendMessage;
 
   return {
     // Overridden returns with markers stripped

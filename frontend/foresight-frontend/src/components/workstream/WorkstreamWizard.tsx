@@ -69,7 +69,7 @@ export function WorkstreamWizard({
       }
       return true;
     },
-    [form.formData.name, form.setErrors],
+    [form],
   );
 
   // ============================================================================
@@ -129,7 +129,7 @@ export function WorkstreamWizard({
           : [...prev.category_ids, categoryCode],
       }));
     },
-    [form.setFormData],
+    [form],
   );
 
   const handleGrantTypeToggle = useCallback(
@@ -141,14 +141,14 @@ export function WorkstreamWizard({
           : [...prev.grant_types, grantType],
       }));
     },
-    [form.setFormData],
+    [form],
   );
 
   const handleDeadlinePreferenceChange = useCallback(
     (preference: string) => {
       form.setFormData((prev) => ({ ...prev, horizon: preference }));
     },
-    [form.setFormData],
+    [form],
   );
 
   // ============================================================================
