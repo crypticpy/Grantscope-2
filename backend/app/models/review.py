@@ -14,8 +14,8 @@ class CardReviewRequest(BaseModel):
 
     action: str = Field(
         ...,
-        pattern=r"^(approve|reject|edit_approve)$",
-        description="Review action: approve, reject, or edit_approve",
+        pattern=r"^(approve|reject|edit_approve|defer)$",
+        description="Review action: approve, reject, edit_approve, or defer",
     )
     updates: Optional[Dict[str, Any]] = Field(
         None, description="Card field updates (for edit_approve action)"

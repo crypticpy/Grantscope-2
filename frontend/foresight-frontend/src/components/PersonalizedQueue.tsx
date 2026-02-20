@@ -263,7 +263,6 @@ export function PersonalizedQueue({
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
-  const [offset, setOffset] = useState(0);
   const [followedCardIds, setFollowedCardIds] = useState<Set<string>>(
     new Set(),
   );
@@ -298,7 +297,7 @@ export function PersonalizedQueue({
 
   // Load personalized queue
   const loadQueue = useCallback(
-    async (isLoadMore = false) => {
+    async (isLoadMore = false, startOffset = 0) => {
       const token = localStorage.getItem("gs2_token");
       if (!token) {
         setError("Please sign in to view your personalized queue");
@@ -314,7 +313,7 @@ export function PersonalizedQueue({
           setError(null);
         }
 
-        const currentOffset = isLoadMore ? offset : 0;
+        const currentOffset = isLoadMore ? startOffset : 0;
         const data = await fetchPersonalizedDiscoveryQueue(
           token,
           pageSize,
@@ -328,7 +327,6 @@ export function PersonalizedQueue({
         }
 
         setHasMore(data.length === pageSize);
-        setOffset(currentOffset + data.length);
       } catch (err) {
         setError(
           err instanceof Error
@@ -340,25 +338,24 @@ export function PersonalizedQueue({
         setLoadingMore(false);
       }
     },
-    [offset, pageSize],
+    [pageSize],
   );
 
   // Initial load
   useEffect(() => {
-    loadQueue();
+    loadQueue(false, 0);
     loadFollowedCards();
-  }, [user?.id]);
+  }, [loadQueue, loadFollowedCards, user?.id]);
 
   // Handle refresh
   const handleRefresh = () => {
-    setOffset(0);
-    loadQueue(false);
+    loadQueue(false, 0);
   };
 
   // Handle load more
   const handleLoadMore = () => {
     if (!loadingMore && hasMore) {
-      loadQueue(true);
+      loadQueue(true, cards.length);
     }
   };
 
@@ -376,10 +373,11 @@ export function PersonalizedQueue({
 
     try {
       await dismissCard(token, cardId, "irrelevant");
+      // After local removals, allow fetching another page to fill the gap.
+      setHasMore(true);
     } catch (_err) {
       // Revert on error by reloading
-      setOffset(0);
-      loadQueue(false);
+      loadQueue(false, 0);
     } finally {
       setDismissingCardId(null);
     }
@@ -406,15 +404,21 @@ export function PersonalizedQueue({
       const token = localStorage.getItem("gs2_token");
       if (!token) throw new Error("No token");
       if (isFollowing) {
-        await fetch(`${API_BASE_URL}/api/v1/cards/${cardId}/follow`, {
+        const response = await fetch(`${API_BASE_URL}/api/v1/cards/${cardId}/follow`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
         });
+        if (!response.ok) {
+          throw new Error(`Unfollow failed: ${response.status}`);
+        }
       } else {
-        await fetch(`${API_BASE_URL}/api/v1/cards/${cardId}/follow`, {
+        const response = await fetch(`${API_BASE_URL}/api/v1/cards/${cardId}/follow`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
         });
+        if (!response.ok) {
+          throw new Error(`Follow failed: ${response.status}`);
+        }
       }
     } catch (_err) {
       // Revert optimistic update on error

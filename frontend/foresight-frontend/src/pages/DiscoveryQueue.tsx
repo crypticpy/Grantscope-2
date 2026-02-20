@@ -45,6 +45,7 @@ import {
   reviewCard,
   bulkReviewCards,
   dismissCard,
+  undismissCard,
   type PendingCard,
   type ReviewAction,
   type DismissReason,
@@ -788,10 +789,8 @@ const DiscoveryQueue: React.FC = () => {
       // Load pending cards from backend API
       const pendingCards = await fetchPendingReviewCards(token);
       setCards(pendingCards);
-      // Set initial count for progress tracking (only if we have cards)
-      if (pendingCards.length > 0) {
-        setInitialCardCount(pendingCards.length);
-      }
+      // Keep baseline in sync with latest queue snapshot.
+      setInitialCardCount(pendingCards.length);
     } catch (err) {
       console.error("Error loading discovery queue:", err);
       setError(
@@ -939,10 +938,30 @@ const DiscoveryQueue: React.FC = () => {
   /**
    * Handle undo action from toast
    */
-  const handleUndoFromToast = useCallback(() => {
-    undoLastAction();
+  const handleUndoFromToast = useCallback(async () => {
+    const undoneAction = undoLastAction();
     dismissToast();
-  }, [undoLastAction, dismissToast]);
+    if (!undoneAction) return;
+
+    try {
+      const token = localStorage.getItem("gs2_token");
+      if (!token) throw new Error("Not authenticated");
+
+      if (undoneAction.type === "dismiss") {
+        await undismissCard(token, undoneAction.card.id);
+      } else {
+        // Revert review actions by returning card to pending review.
+        await reviewCard(token, undoneAction.card.id, "defer");
+      }
+    } catch (err) {
+      // If backend undo fails, re-hide the card and reload authoritative state.
+      setCards((prevCards) =>
+        prevCards.filter((c) => c.id !== undoneAction.card.id),
+      );
+      setError(err instanceof Error ? err.message : "Failed to undo action");
+      loadData();
+    }
+  }, [undoLastAction, dismissToast, loadData]);
 
   // Cleanup toast timer on unmount
   useEffect(() => {
@@ -1125,7 +1144,7 @@ const DiscoveryQueue: React.FC = () => {
    * Handle bulk action
    */
   const handleBulkAction = useCallback(
-    async (action: ReviewAction) => {
+    async (action: "approve" | "reject") => {
       if (!user || selectedCards.size === 0) return;
 
       try {

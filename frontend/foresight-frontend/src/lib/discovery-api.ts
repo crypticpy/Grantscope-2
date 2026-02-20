@@ -615,7 +615,7 @@ export async function reviewCard(
 export async function bulkReviewCards(
   token: string,
   cardIds: string[],
-  action: ReviewAction,
+  action: "approve" | "reject",
 ): Promise<{ processed: number; errors: string[] }> {
   return apiRequest<{ processed: number; errors: string[] }>(
     "/api/v1/cards/bulk-review",
@@ -639,6 +639,20 @@ export async function dismissCard(
   return apiRequest<void>(`/api/v1/cards/${cardId}/dismiss`, token, {
     method: "POST",
     body: JSON.stringify({ reason, notes }),
+  });
+}
+
+/**
+ * Remove a dismissal record for the current user/card pair.
+ *
+ * Used to support undo flows in review queues.
+ */
+export async function undismissCard(
+  token: string,
+  cardId: string,
+): Promise<void> {
+  return apiRequest<void>(`/api/v1/cards/${cardId}/dismiss`, token, {
+    method: "DELETE",
   });
 }
 

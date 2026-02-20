@@ -167,10 +167,33 @@ async def get_cards(
 
     Returns { cards: [...], total_count, limit, offset, has_more }.
     """
-    if pipeline_status and pipeline_status not in VALID_PIPELINE_STATUSES:
+    # Support both singular and repeated query params for filters like:
+    # ?pillar_id=a&pillar_id=b
+    # ?pipeline_status=discovered&pipeline_status=screening
+    query_params = request.query_params if request is not None else None
+    pillar_ids = (
+        [p for p in query_params.getlist("pillar_id") if p] if query_params else []
+    )
+    pipeline_statuses = (
+        [s for s in query_params.getlist("pipeline_status") if s]
+        if query_params
+        else []
+    )
+    if pillar_id and not pillar_ids:
+        pillar_ids = [pillar_id]
+    if pipeline_status and not pipeline_statuses:
+        pipeline_statuses = [pipeline_status]
+
+    invalid_pipeline_statuses = [
+        s for s in pipeline_statuses if s not in VALID_PIPELINE_STATUSES
+    ]
+    if invalid_pipeline_statuses:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid pipeline_status '{pipeline_status}'. Must be one of: {', '.join(sorted(VALID_PIPELINE_STATUSES))}",
+            detail=(
+                f"Invalid pipeline_status '{invalid_pipeline_statuses[0]}'. "
+                f"Must be one of: {', '.join(sorted(VALID_PIPELINE_STATUSES))}"
+            ),
         )
 
     try:
@@ -199,10 +222,10 @@ async def get_cards(
 
         if slug:
             base = base.where(Card.slug == slug)
-        if pillar_id:
-            base = base.where(Card.pillar_id == pillar_id)
-        if pipeline_status:
-            base = base.where(Card.pipeline_status == pipeline_status)
+        if pillar_ids:
+            base = base.where(Card.pillar_id.in_(pillar_ids))
+        if pipeline_statuses:
+            base = base.where(Card.pipeline_status.in_(pipeline_statuses))
         if stage_id:
             base = base.where(Card.stage_id == stage_id)
         if horizon:

@@ -109,6 +109,7 @@ async def review_card(
     - approve: Set review_status to 'active', card becomes live
     - reject: Set review_status to 'rejected', record rejection metadata
     - edit_approve: Apply field updates, then set to 'active'
+    - defer: Return card to pending review
 
     Args:
         card_id: UUID of the card to review
@@ -200,6 +201,18 @@ async def review_card(
         card.status = "active"
         card.reviewed_at = now
         card.reviewed_by = uuid.UUID(current_user["id"])
+        card.review_notes = review_data.reason
+        card.updated_at = now
+
+    elif review_data.action == "defer":
+        # Return the card to the pending-review queue.
+        card.review_status = "pending_review"
+        card.status = "draft"
+        card.reviewed_at = None
+        card.reviewed_by = None
+        card.rejected_at = None
+        card.rejected_by = None
+        card.rejection_reason = None
         card.review_notes = review_data.reason
         card.updated_at = now
 
@@ -571,6 +584,95 @@ async def dismiss_card(
         "card_id": card_id,
         "blocked": blocked,
         "total_dismissals": total_dismissals,
+    }
+
+
+@router.delete("/cards/{card_id}/dismiss")
+async def undismiss_card(
+    card_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user_hardcoded),
+):
+    """Undo a dismissal for the current user/card pair."""
+    card_uuid = uuid.UUID(card_id)
+    user_uuid = uuid.UUID(current_user["id"])
+
+    try:
+        card_result = await db.execute(
+            select(Card.id, Card.name).where(Card.id == card_uuid)
+        )
+        card_row = card_result.one_or_none()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_error("fetching card for undismiss", e),
+        ) from e
+
+    if card_row is None:
+        raise HTTPException(status_code=404, detail="Card not found")
+
+    card_name = card_row[1]
+
+    try:
+        dismissal_result = await db.execute(
+            select(UserCardDismissal).where(
+                UserCardDismissal.user_id == user_uuid,
+                UserCardDismissal.card_id == card_uuid,
+            )
+        )
+        dismissal = dismissal_result.scalar_one_or_none()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_error("fetching dismissal for undismiss", e),
+        ) from e
+
+    if dismissal is None:
+        raise HTTPException(status_code=404, detail="Dismissal not found")
+
+    try:
+        await db.delete(dismissal)
+        await db.flush()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_error("removing dismissal record", e),
+        ) from e
+
+    try:
+        count_result = await db.execute(
+            select(func.count(UserCardDismissal.id)).where(
+                UserCardDismissal.card_id == card_uuid
+            )
+        )
+        remaining_dismissals = count_result.scalar() or 0
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_error("counting remaining dismissals", e),
+        ) from e
+
+    unblocked = False
+    if remaining_dismissals < 3:
+        try:
+            block_result = await db.execute(
+                select(DiscoveryBlock).where(
+                    DiscoveryBlock.topic_name == card_name.lower(),
+                )
+            )
+            block = block_result.scalar_one_or_none()
+            if block is not None:
+                await db.delete(block)
+                await db.flush()
+                unblocked = True
+        except Exception as e:
+            logger.warning("Failed to remove discovery block for card %s: %s", card_id, e)
+
+    return {
+        "status": "undismissed",
+        "card_id": card_id,
+        "unblocked": unblocked,
+        "remaining_dismissals": remaining_dismissals,
     }
 
 
