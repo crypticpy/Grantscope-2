@@ -130,6 +130,7 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = "" }) => {
   const [notes, setNotes] = useState<Note[]>([]);
   const [isFollowing, setIsFollowing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<CardDetailTab>("overview");
   const [newNote, setNewNote] = useState("");
 
@@ -172,6 +173,7 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = "" }) => {
   const loadCardDetail = useCallback(async () => {
     if (!slug) return;
     try {
+      setLoadError(null);
       const token = await getAuthToken();
       if (!token) return;
 
@@ -212,11 +214,14 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = "" }) => {
               headers: { Authorization: `Bearer ${token}` },
             })
               .then((r) => (r.ok ? r.json() : []))
-              .then((tasks: ResearchTask[]) =>
-                tasks.filter(
+              .then((rawTasks) => {
+                const tasks: ResearchTask[] = Array.isArray(rawTasks)
+                  ? rawTasks
+                  : (rawTasks?.tasks ?? []);
+                return tasks.filter(
                   (t) => t.card_id === cardData.id && t.status === "completed",
-                ),
-              ),
+                );
+              }),
           ]);
 
         setSources(
@@ -228,6 +233,12 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = "" }) => {
         setNotes(Array.isArray(notesRes) ? notesRes : notesRes.notes || []);
         setResearchHistory(Array.isArray(researchRes) ? researchRes : []);
       }
+    } catch (error: unknown) {
+      console.error("Error loading card detail:", error);
+      setLoadError(
+        error instanceof Error ? error.message : "Failed to load card details",
+      );
+      setCard(null);
     } finally {
       setLoading(false);
     }
@@ -338,16 +349,22 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = "" }) => {
       const token = await getAuthToken();
       if (!token) return;
       if (isFollowing) {
-        await fetch(`${API_BASE_URL}/api/v1/cards/${card.id}/follow`, {
+        const response = await fetch(`${API_BASE_URL}/api/v1/cards/${card.id}/follow`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
         });
+        if (!response.ok) {
+          throw new Error(`Unfollow failed: ${response.status}`);
+        }
         setIsFollowing(false);
       } else {
-        await fetch(`${API_BASE_URL}/api/v1/cards/${card.id}/follow`, {
+        const response = await fetch(`${API_BASE_URL}/api/v1/cards/${card.id}/follow`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
         });
+        if (!response.ok) {
+          throw new Error(`Follow failed: ${response.status}`);
+        }
         setIsFollowing(true);
       }
     } catch (error) {
@@ -584,6 +601,40 @@ export const CardDetail: React.FC<CardDetailProps> = ({ className = "" }) => {
                 ))}
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Not found state
+  if (loadError) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            Failed to load card
+          </h1>
+          <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+            {loadError}
+          </p>
+          <div className="mt-4 flex items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setLoading(true);
+                loadCardDetail();
+              }}
+              className="inline-flex items-center px-4 py-2 rounded-md bg-brand-blue text-white hover:bg-brand-dark-blue transition-colors"
+            >
+              Retry
+            </button>
+            <Link
+              to={backLink}
+              className="text-brand-blue hover:text-brand-dark-blue transition-colors"
+            >
+              {backLinkText}
+            </Link>
           </div>
         </div>
       </div>

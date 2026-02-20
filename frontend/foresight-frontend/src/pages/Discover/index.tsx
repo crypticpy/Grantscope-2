@@ -406,6 +406,14 @@ const Discover: React.FC = () => {
     sortOption,
   ]);
 
+  // Re-run when followed IDs finish loading in "following" mode to avoid
+  // initial empty-state races on deep links like ?filter=following.
+  useEffect(() => {
+    if (quickFilter !== "following" || !user?.id) return;
+    loadCards();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quickFilter, followedCardIds, user?.id]);
+
   const loadDiscoverData = async () => {
     try {
       const token = localStorage.getItem("gs2_token");
@@ -713,8 +721,19 @@ const Discover: React.FC = () => {
       if (!token) return;
 
       const params = new URLSearchParams();
+      params.append("status", "active");
       params.append("offset", String(cards.length));
       params.append("limit", "50");
+      if (quickFilter === "new") {
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+        params.append("created_after", oneWeekAgo.toISOString());
+      }
+      if (quickFilter === "updated") {
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+        params.append("updated_after", oneWeekAgo.toISOString());
+      }
       if (selectedPillar) params.append("pillar_id", selectedPillar);
       if (selectedStage) params.append("stage_id", selectedStage);
       if (selectedHorizon) params.append("horizon", selectedHorizon);
@@ -722,8 +741,27 @@ const Discover: React.FC = () => {
         params.append("pipeline_status", selectedPipelineStatus);
       if (debouncedFilters.searchTerm)
         params.append("search", debouncedFilters.searchTerm);
+      if (debouncedFilters.impactMin > 0)
+        params.append("impact_min", String(debouncedFilters.impactMin));
+      if (debouncedFilters.relevanceMin > 0)
+        params.append("relevance_min", String(debouncedFilters.relevanceMin));
+      if (debouncedFilters.noveltyMin > 0)
+        params.append("novelty_min", String(debouncedFilters.noveltyMin));
+      if (dateFrom) params.append("created_after", dateFrom);
+      if (dateTo) params.append("created_before", dateTo);
       if (debouncedFilters.grantType)
         params.append("grant_type", debouncedFilters.grantType);
+      if (debouncedFilters.deadlineAfter)
+        params.append("deadline_after", debouncedFilters.deadlineAfter);
+      if (debouncedFilters.deadlineBefore)
+        params.append("deadline_before", debouncedFilters.deadlineBefore);
+      if (debouncedFilters.fundingMin != null)
+        params.append("funding_min", String(debouncedFilters.fundingMin));
+      if (debouncedFilters.fundingMax != null)
+        params.append("funding_max", String(debouncedFilters.fundingMax));
+      if (debouncedFilters.grantCategory)
+        params.append("category_id", debouncedFilters.grantCategory);
+      if (quickFilter === "following") params.append("following_only", "true");
 
       const sortConfig = getSortConfig(sortOption);
       params.append("sort_by", sortConfig.column);
@@ -768,18 +806,34 @@ const Discover: React.FC = () => {
         if (!token) throw new Error("Not authenticated");
 
         if (isFollowing) {
-          await fetch(`${API_BASE_URL}/api/v1/cards/${cardId}/follow`, {
-            method: "DELETE",
-            headers: { Authorization: `Bearer ${token}` },
-          });
-        } else {
-          await fetch(`${API_BASE_URL}/api/v1/cards/${cardId}/follow`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
+          const response = await fetch(
+            `${API_BASE_URL}/api/v1/cards/${cardId}/follow`,
+            {
+              method: "DELETE",
+              headers: { Authorization: `Bearer ${token}` },
             },
-          });
+          );
+          if (!response.ok) {
+            throw new Error(`Unfollow failed: ${response.status}`);
+          }
+          if (quickFilter === "following") {
+            setCards((prev) => prev.filter((c) => c.id !== cardId));
+            setTotalCount((prev) => Math.max(0, prev - 1));
+          }
+        } else {
+          const response = await fetch(
+            `${API_BASE_URL}/api/v1/cards/${cardId}/follow`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+            },
+          );
+          if (!response.ok) {
+            throw new Error(`Follow failed: ${response.status}`);
+          }
         }
       } catch (error) {
         console.error("Error toggling card follow:", error);
@@ -795,7 +849,7 @@ const Discover: React.FC = () => {
         });
       }
     },
-    [user?.id, followedCardIds],
+    [user?.id, followedCardIds, quickFilter],
   );
 
   // Apply saved search configuration

@@ -10,7 +10,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import select, func, and_, or_, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,7 +38,7 @@ from app.models.history import (
 )
 from app.models.workstream import FilterPreviewRequest, FilterPreviewResponse
 from app.models.db.card import Card
-from app.models.db.card_extras import CardScoreHistory, CardTimeline
+from app.models.db.card_extras import CardFollow, CardScoreHistory, CardTimeline
 from app.models.db.discovery import DiscoveryBlock
 from app.helpers.db_utils import vector_search_cards
 from app.helpers.search_utils import (
@@ -87,6 +87,47 @@ def _card_to_dict(card: Card) -> dict[str, Any]:
     return result
 
 
+def _parse_datetime_filter(
+    value: Optional[str], *, end_of_day: bool = False
+) -> Optional[datetime]:
+    """Parse date/datetime query filters to timezone-aware datetimes.
+
+    Accepts either full ISO datetime strings or YYYY-MM-DD dates.
+    """
+    if not value:
+        return None
+
+    # Date-only input: convert to UTC day boundary.
+    if "T" not in value:
+        parsed_date = date.fromisoformat(value)
+        if end_of_day:
+            return datetime(
+                parsed_date.year,
+                parsed_date.month,
+                parsed_date.day,
+                23,
+                59,
+                59,
+                999999,
+                tzinfo=timezone.utc,
+            )
+        return datetime(
+            parsed_date.year,
+            parsed_date.month,
+            parsed_date.day,
+            0,
+            0,
+            0,
+            0,
+            tzinfo=timezone.utc,
+        )
+
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
 # ============================================================================
 # Cards endpoints
 # ============================================================================
@@ -102,10 +143,24 @@ async def get_cards(
     pipeline_status: Optional[str] = None,
     search: Optional[str] = None,
     grant_type: Optional[str] = None,
+    category_id: Optional[str] = None,
+    created_after: Optional[str] = None,
+    created_before: Optional[str] = None,
+    updated_after: Optional[str] = None,
+    updated_before: Optional[str] = None,
+    deadline_after: Optional[str] = None,
+    deadline_before: Optional[str] = None,
+    impact_min: Optional[float] = None,
+    relevance_min: Optional[float] = None,
+    novelty_min: Optional[float] = None,
+    funding_min: Optional[float] = None,
+    funding_max: Optional[float] = None,
+    following_only: bool = False,
     sort_by: Optional[str] = None,
     sort_asc: Optional[bool] = None,
     slug: Optional[str] = None,
     status: Optional[str] = None,
+    request: Request = None,
     db: AsyncSession = Depends(get_db),
 ):
     """Get cards with filtering and pagination.
@@ -122,6 +177,26 @@ async def get_cards(
         active_status = status or "active"
         base = select(Card).where(Card.status == active_status)
 
+        # Parse date/datetime filter bounds.
+        try:
+            created_after_dt = _parse_datetime_filter(created_after)
+            created_before_dt = _parse_datetime_filter(created_before, end_of_day=True)
+            updated_after_dt = _parse_datetime_filter(updated_after)
+            updated_before_dt = _parse_datetime_filter(updated_before, end_of_day=True)
+            deadline_after_dt = _parse_datetime_filter(deadline_after)
+            deadline_before_dt = _parse_datetime_filter(deadline_before, end_of_day=True)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid date filter: {e}") from e
+
+        if following_only:
+            if request is None:
+                raise HTTPException(status_code=401, detail="Authentication required")
+            current_user = await get_current_user_hardcoded(request)
+            user_uuid = uuid.UUID(current_user["id"])
+            base = base.join(CardFollow, CardFollow.card_id == Card.id).where(
+                CardFollow.user_id == user_uuid
+            )
+
         if slug:
             base = base.where(Card.slug == slug)
         if pillar_id:
@@ -134,11 +209,35 @@ async def get_cards(
             base = base.where(Card.horizon == horizon)
         if grant_type:
             base = base.where(Card.grant_type == grant_type)
+        if category_id:
+            base = base.where(Card.category_id == category_id)
         if search:
             pattern = f"%{search}%"
             base = base.where(
                 or_(Card.name.ilike(pattern), Card.summary.ilike(pattern))
             )
+        if created_after_dt:
+            base = base.where(Card.created_at >= created_after_dt)
+        if created_before_dt:
+            base = base.where(Card.created_at <= created_before_dt)
+        if updated_after_dt:
+            base = base.where(Card.updated_at >= updated_after_dt)
+        if updated_before_dt:
+            base = base.where(Card.updated_at <= updated_before_dt)
+        if deadline_after_dt:
+            base = base.where(Card.deadline >= deadline_after_dt)
+        if deadline_before_dt:
+            base = base.where(Card.deadline <= deadline_before_dt)
+        if impact_min is not None:
+            base = base.where(Card.impact_score >= impact_min)
+        if relevance_min is not None:
+            base = base.where(Card.relevance_score >= relevance_min)
+        if novelty_min is not None:
+            base = base.where(Card.novelty_score >= novelty_min)
+        if funding_min is not None:
+            base = base.where(Card.funding_amount_max >= funding_min)
+        if funding_max is not None:
+            base = base.where(Card.funding_amount_min <= funding_max)
 
         # Total count (before pagination)
         count_result = await db.execute(
@@ -154,6 +253,10 @@ async def get_cards(
             sort_column = Card.deadline
         elif sort_by == "funding_amount_max":
             sort_column = Card.funding_amount_max
+        elif sort_by == "updated_at":
+            sort_column = Card.updated_at
+        elif sort_by == "signal_quality_score":
+            sort_column = Card.signal_quality_score
         elif sort_by == "relevance_score":
             sort_column = Card.relevance_score
         elif sort_by == "opportunity_score":

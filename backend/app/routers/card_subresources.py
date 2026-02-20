@@ -37,10 +37,12 @@ from app.models.db.card_extras import (
     Entity,
     UserSignalPreference,
 )
+from app.models.db.discovery import UserCardDismissal
 from app.models.db.source import Source
 from app.models.db.research import ResearchTask
 from app.models.db.brief import ExecutiveBrief
 from app.models.db.workstream import Workstream, WorkstreamCard
+from app.discovery_scoring import calculate_discovery_score
 from app.models.history import (
     ScoreHistory,
     ScoreHistoryResponse,
@@ -600,6 +602,84 @@ async def get_following_cards(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_safe_error("following cards retrieval", e),
+        ) from e
+
+
+@router.get("/me/discovery/queue")
+async def get_personalized_discovery_queue(
+    limit: int = Query(20, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    current_user: dict = Depends(get_current_user_hardcoded),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get personalized discovery queue ranked by multi-factor discovery score."""
+    try:
+        user_id = current_user["id"]
+
+        follows_result = await db.execute(
+            select(CardFollow).where(CardFollow.user_id == user_id)
+        )
+        follows = follows_result.scalars().all()
+        followed_ids = {str(f.card_id) for f in follows}
+
+        followed_cards: list[dict[str, Any]] = []
+        if followed_ids:
+            followed_cards_result = await db.execute(
+                select(Card).where(Card.id.in_(list(followed_ids)))
+            )
+            followed_cards = [
+                _row_to_dict(card) for card in followed_cards_result.scalars().all()
+            ]
+
+        workstreams_result = await db.execute(
+            select(Workstream).where(
+                Workstream.user_id == user_id, Workstream.is_active == True
+            )
+        )
+        workstreams = [
+            _row_to_dict(workstream) for workstream in workstreams_result.scalars().all()
+        ]
+
+        dismissed_result = await db.execute(
+            select(UserCardDismissal.card_id).where(UserCardDismissal.user_id == user_id)
+        )
+        dismissed_ids = {str(row[0]) for row in dismissed_result.all() if row[0]}
+
+        cards_stmt = select(Card).where(Card.status == "active")
+        if followed_ids:
+            cards_stmt = cards_stmt.where(~Card.id.in_(list(followed_ids)))
+        if dismissed_ids:
+            cards_stmt = cards_stmt.where(~Card.id.in_(list(dismissed_ids)))
+
+        cards_result = await db.execute(cards_stmt)
+        candidates = cards_result.scalars().all()
+
+        scored_cards: list[dict[str, Any]] = []
+        for card in candidates:
+            card_dict = _row_to_dict(card)
+            score_data = calculate_discovery_score(
+                card_dict,
+                workstreams,
+                followed_cards,
+                user_dismissed_card_ids=dismissed_ids,
+            )
+            card_dict["discovery_score"] = score_data["discovery_score"]
+            card_dict["score_breakdown"] = score_data["score_breakdown"]
+            scored_cards.append(card_dict)
+
+        scored_cards.sort(
+            key=lambda c: (
+                c.get("discovery_score", 0),
+                c.get("created_at") or "",
+            ),
+            reverse=True,
+        )
+
+        return scored_cards[offset : offset + limit]
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_safe_error("personalized discovery queue retrieval", e),
         ) from e
 
 

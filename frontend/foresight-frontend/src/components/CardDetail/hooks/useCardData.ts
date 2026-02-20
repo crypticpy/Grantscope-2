@@ -316,16 +316,22 @@ export function useCardData(
       const token = await getAuthToken();
       if (!token) return;
       if (isFollowing) {
-        await fetch(`${API_BASE_URL}/api/v1/cards/${card.id}/follow`, {
+        const response = await fetch(`${API_BASE_URL}/api/v1/cards/${card.id}/follow`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
         });
+        if (!response.ok) {
+          throw new Error(`Unfollow failed: ${response.status}`);
+        }
         setIsFollowing(false);
       } else {
-        await fetch(`${API_BASE_URL}/api/v1/cards/${card.id}/follow`, {
+        const response = await fetch(`${API_BASE_URL}/api/v1/cards/${card.id}/follow`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
         });
+        if (!response.ok) {
+          throw new Error(`Follow failed: ${response.status}`);
+        }
         setIsFollowing(true);
       }
     } catch (_err) {

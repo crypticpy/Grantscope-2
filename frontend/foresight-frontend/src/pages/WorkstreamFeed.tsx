@@ -454,12 +454,15 @@ const WorkstreamFeed: React.FC = () => {
 
       if (isCurrentlyFollowed) {
         // Unfollow
-        await fetch(`${API_BASE_URL}/api/v1/cards/${cardId}/follow`, {
+        const response = await fetch(`${API_BASE_URL}/api/v1/cards/${cardId}/follow`, {
           method: "DELETE",
           headers: {
             Authorization: `Bearer ${token}`,
           },
         });
+        if (!response.ok) {
+          throw new Error(`Unfollow failed: ${response.status}`);
+        }
 
         setFollowedCardIds((prev) => {
           const next = new Set(prev);
@@ -468,13 +471,16 @@ const WorkstreamFeed: React.FC = () => {
         });
       } else {
         // Follow
-        await fetch(`${API_BASE_URL}/api/v1/cards/${cardId}/follow`, {
+        const response = await fetch(`${API_BASE_URL}/api/v1/cards/${cardId}/follow`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
         });
+        if (!response.ok) {
+          throw new Error(`Follow failed: ${response.status}`);
+        }
 
         setFollowedCardIds((prev) => new Set([...prev, cardId]));
       }
