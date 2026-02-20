@@ -3,9 +3,9 @@
  *
  * Tests the CardDetailHeader component for:
  * - Card title rendering
- * - Primary badges display (Pillar, Horizon, Top25)
+ * - Primary badges display (Pillar, Deadline, Top25)
  * - Summary text display
- * - Quick info row (Stage, Anchor, Created date)
+ * - Quick info row (Pipeline, Anchor, Created date)
  * - Back navigation link customization
  * - Children rendering in action buttons area
  * - Accessibility features
@@ -30,18 +30,18 @@ vi.mock('../../PillarBadge', () => ({
   ),
 }));
 
-vi.mock('../../HorizonBadge', () => ({
-  HorizonBadge: ({ horizon }: { horizon: string }) => (
-    <span data-testid="horizon-badge" data-horizon={horizon}>
-      Horizon Badge
+vi.mock('../../DeadlineUrgencyBadge', () => ({
+  DeadlineUrgencyBadge: ({ deadline }: { deadline?: string }) => (
+    <span data-testid="deadline-badge" data-deadline={deadline ?? ''}>
+      Deadline Badge
     </span>
   ),
 }));
 
-vi.mock('../../StageBadge', () => ({
-  StageBadge: ({ stage }: { stage: number }) => (
-    <span data-testid="stage-badge" data-stage={stage}>
-      Stage Badge
+vi.mock('../../PipelineBadge', () => ({
+  PipelineBadge: ({ status }: { status: string }) => (
+    <span data-testid="pipeline-badge" data-status={status}>
+      Pipeline Badge
     </span>
   ),
 }));
@@ -78,6 +78,7 @@ function createMockCard(overrides: Partial<Card> = {}): Card {
     anchor_id: 'anchor-1',
     stage_id: '2_prototype',
     horizon: 'H1',
+    pipeline_status: 'discovered',
     novelty_score: 75,
     maturity_score: 60,
     impact_score: 80,
@@ -153,12 +154,12 @@ describe('CardDetailHeader', () => {
       expect(pillarBadge).toHaveAttribute('data-goal-id', 'goal-5');
     });
 
-    it('renders HorizonBadge with correct horizon', () => {
-      renderCardDetailHeader({}, { horizon: 'H2' });
+    it('renders DeadlineUrgencyBadge with correct deadline', () => {
+      renderCardDetailHeader({}, { deadline: '2026-03-15T00:00:00Z' });
 
-      const horizonBadge = screen.getByTestId('horizon-badge');
-      expect(horizonBadge).toBeInTheDocument();
-      expect(horizonBadge).toHaveAttribute('data-horizon', 'H2');
+      const deadlineBadge = screen.getByTestId('deadline-badge');
+      expect(deadlineBadge).toBeInTheDocument();
+      expect(deadlineBadge).toHaveAttribute('data-deadline', '2026-03-15T00:00:00Z');
     });
 
     it('renders Top25Badge when top25_relevance is present', () => {
@@ -196,7 +197,7 @@ describe('CardDetailHeader', () => {
 
       const summaryElement = screen.getByText(summary);
       expect(summaryElement.tagName).toBe('P');
-      expect(summaryElement).toHaveClass('text-gray-600');
+      expect(summaryElement).toHaveClass('text-gray-700');
     });
 
     it('handles long summaries with word breaking', () => {
@@ -210,18 +211,19 @@ describe('CardDetailHeader', () => {
   });
 
   describe('Quick Info Row', () => {
-    it('renders StageBadge when stage_id is valid', () => {
-      renderCardDetailHeader({}, { stage_id: '3_prototype' });
+    it('renders PipelineBadge when pipeline_status is present', () => {
+      renderCardDetailHeader({}, { pipeline_status: 'applying' });
 
-      const stageBadge = screen.getByTestId('stage-badge');
-      expect(stageBadge).toBeInTheDocument();
-      expect(stageBadge).toHaveAttribute('data-stage', '3');
+      const pipelineBadge = screen.getByTestId('pipeline-badge');
+      expect(pipelineBadge).toBeInTheDocument();
+      expect(pipelineBadge).toHaveAttribute('data-status', 'applying');
     });
 
-    it('does not render StageBadge when stage number cannot be parsed', () => {
-      renderCardDetailHeader({}, { stage_id: 'invalid_stage' });
+    it('renders discovered pipeline status when missing', () => {
+      renderCardDetailHeader({}, { pipeline_status: undefined });
 
-      expect(screen.queryByTestId('stage-badge')).not.toBeInTheDocument();
+      const pipelineBadge = screen.getByTestId('pipeline-badge');
+      expect(pipelineBadge).toHaveAttribute('data-status', 'discovered');
     });
 
     it('renders AnchorBadge when anchor_id is present', () => {
@@ -372,10 +374,10 @@ describe('CardDetailHeader', () => {
       expect(headerContainer).toHaveClass('mb-8');
     });
 
-    it('has responsive flex layout', () => {
+    it('has responsive wrapping layout', () => {
       const { container } = renderCardDetailHeader();
 
-      const flexContainer = container.querySelector('.flex.flex-col.lg\\:flex-row');
+      const flexContainer = container.querySelector('.flex.items-center.flex-wrap');
       expect(flexContainer).toBeInTheDocument();
     });
 
@@ -391,7 +393,7 @@ describe('CardDetailHeader', () => {
       renderCardDetailHeader({}, { summary });
 
       const summaryElement = screen.getByText(summary);
-      expect(summaryElement).toHaveClass('dark:text-gray-300');
+      expect(summaryElement).toHaveClass('dark:text-gray-200');
     });
 
     it('applies dark mode styling to back link', () => {
@@ -430,30 +432,29 @@ describe('CardDetailHeader', () => {
       );
     });
 
-    it('handles all horizon values', () => {
-      const horizons: ('H1' | 'H2' | 'H3')[] = ['H1', 'H2', 'H3'];
+    it('handles all pipeline statuses', () => {
+      const statuses = ['discovered', 'evaluating', 'applying'] as const;
 
-      horizons.forEach((horizon) => {
-        const { unmount } = renderCardDetailHeader({}, { horizon });
-        const horizonBadge = screen.getByTestId('horizon-badge');
-        expect(horizonBadge).toHaveAttribute('data-horizon', horizon);
+      statuses.forEach((status) => {
+        const { unmount } = renderCardDetailHeader({}, { pipeline_status: status });
+        const pipelineBadge = screen.getByTestId('pipeline-badge');
+        expect(pipelineBadge).toHaveAttribute('data-status', status);
         unmount();
       });
     });
 
-    it('handles stage_id with different formats', () => {
-      const stageFormats = [
-        { stage_id: '1_concept', expected: '1' },
-        { stage_id: '4_scaling', expected: '4' },
-        { stage_id: '5_mature', expected: '5' },
-      ];
+    it('handles missing pipeline status', () => {
+      const { unmount } = renderCardDetailHeader({}, { pipeline_status: undefined });
+      const pipelineBadge = screen.getByTestId('pipeline-badge');
+      expect(pipelineBadge).toHaveAttribute('data-status', 'discovered');
+      unmount();
+    });
 
-      stageFormats.forEach(({ stage_id, expected }) => {
-        const { unmount } = renderCardDetailHeader({}, { stage_id });
-        const stageBadge = screen.getByTestId('stage-badge');
-        expect(stageBadge).toHaveAttribute('data-stage', expected);
-        unmount();
-      });
+    it('handles cards with no deadline', () => {
+      const { unmount } = renderCardDetailHeader({}, { deadline: undefined });
+      const deadlineBadge = screen.getByTestId('deadline-badge');
+      expect(deadlineBadge).toHaveAttribute('data-deadline', '');
+      unmount();
     });
   });
 
@@ -479,8 +480,8 @@ describe('CardDetailHeader', () => {
       renderCardDetailHeader({}, { summary });
 
       const summaryElement = screen.getByText(summary);
-      // text-gray-600 provides sufficient contrast on white backgrounds
-      expect(summaryElement).toHaveClass('text-gray-600');
+      // text-gray-700 provides sufficient contrast on white backgrounds
+      expect(summaryElement).toHaveClass('text-gray-700');
     });
   });
 });

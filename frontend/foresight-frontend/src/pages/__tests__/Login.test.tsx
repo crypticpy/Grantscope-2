@@ -124,15 +124,17 @@ describe("Login", () => {
     it("renders page title", () => {
       render(<Login />);
 
-      expect(screen.getByText("GrantScope2")).toBeInTheDocument();
+      expect(screen.getAllByText("GrantScope2").length).toBeGreaterThan(0);
     });
 
     it("renders subtitle", () => {
       render(<Login />);
 
       expect(
-        screen.getByText("Strategic Research & Intelligence System"),
-      ).toBeInTheDocument();
+        screen.getAllByText(
+          "AI-Powered Grant Intelligence for the City of Austin",
+        ).length,
+      ).toBeGreaterThan(0);
     });
 
     it("renders email input with correct type", () => {

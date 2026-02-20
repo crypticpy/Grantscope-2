@@ -356,8 +356,8 @@ describe("TrendComparisonView", () => {
       renderWithRouter(<TrendComparisonView />);
 
       await waitFor(() => {
-        expect(screen.getByText("Signal A")).toBeInTheDocument();
-        expect(screen.getByText("Signal B")).toBeInTheDocument();
+        expect(screen.getAllByText("Card One").length).toBeGreaterThan(0);
+        expect(screen.getAllByText("Card Two").length).toBeGreaterThan(0);
       });
     });
 

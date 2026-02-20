@@ -65,6 +65,14 @@ export interface Citation {
   published_date?: string;
 }
 
+type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
 /**
  * A conversation session containing one or more message exchanges.
  */
@@ -641,7 +649,7 @@ export async function exportChatMessagePDF(messageId: string): Promise<Blob> {
 export async function fetchAdminSetting(
   key: string,
   token: string,
-): Promise<{ key: string; value: any; description: string } | null> {
+): Promise<{ key: string; value: JsonValue; description: string } | null> {
   try {
     const response = await fetch(
       `${API_BASE_URL}/api/v1/admin/settings/${key}`,

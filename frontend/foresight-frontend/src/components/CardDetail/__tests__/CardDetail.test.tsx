@@ -267,6 +267,61 @@ vi.mock("../../../Top25Badge", () => ({
 // Mock localStorage token
 beforeEach(() => {
   localStorage.setItem("gs2_token", "test-token");
+  mockFetch.mockImplementation((input: RequestInfo | URL) => {
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+
+    if (url.includes("/api/v1/cards?")) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ cards: [mockCardData] }),
+      });
+    }
+
+    if (url.includes("/api/v1/cards/") && url.includes("/sources")) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ sources: [] }),
+      });
+    }
+
+    if (url.includes("/api/v1/cards/") && url.includes("/timeline")) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ timeline: [] }),
+      });
+    }
+
+    if (url.includes("/api/v1/cards/") && url.includes("/notes")) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ notes: [] }),
+      });
+    }
+
+    if (url.includes("/api/v1/me/following")) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve([]),
+      });
+    }
+
+    if (url.includes("/api/v1/me/research-tasks")) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(mockResearchTasks),
+      });
+    }
+
+    return Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve(mockResearchTasks[0]),
+    });
+  });
 });
 afterEach(() => {
   localStorage.removeItem("gs2_token");
@@ -371,23 +426,16 @@ const renderCardDetail = (slug = "test-card-slug") => {
 describe("CardDetail", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(mockResearchTasks[0]),
-    });
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
   });
 
   describe("Loading State", () => {
     it("shows loading spinner initially", () => {
+      mockFetch.mockImplementationOnce(() => new Promise(() => {}));
       renderCardDetail();
 
-      // Look for the loading spinner
-      const spinner = document.querySelector(".animate-spin");
-      expect(spinner).toBeInTheDocument();
+      // Loading state uses skeleton pulse placeholders
+      const skeleton = document.querySelector(".animate-pulse");
+      expect(skeleton).toBeInTheDocument();
     });
   });
 
@@ -583,9 +631,7 @@ describe("CardDetail", () => {
 
       await waitFor(
         () => {
-          expect(
-            screen.getByText(String(mockCardData.maturity_score)),
-          ).toBeInTheDocument();
+          expect(screen.getByText(/Maturity Score/i)).toBeInTheDocument();
         },
         { timeout: 3000 },
       );
